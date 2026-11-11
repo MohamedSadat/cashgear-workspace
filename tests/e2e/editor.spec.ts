@@ -90,6 +90,8 @@ test.describe('the block editor', () => {
       .getByRole('button', { name: /^إضافة صفحة في/ })
       .first()
       .click();
+    // The new page is open once its title is empty.
+    await expect(page.getByLabel('عنوان الصفحة')).toHaveValue('');
     await page.getByLabel('عنوان الصفحة').fill('تجربة');
     await page.keyboard.press('Enter');
     await page.keyboard.type('/عنو');

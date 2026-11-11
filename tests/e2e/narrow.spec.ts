@@ -60,6 +60,9 @@ test.describe('narrow screens', () => {
       .first()
       .click();
     await closed(page);
+    // The new page is open, its title empty and focused.
+    await expect(page.getByLabel('Page title')).toHaveValue('');
+    await expect(page.getByLabel('Page title')).toBeFocused();
     await page.getByLabel('Page title').fill('Phone');
     await page.keyboard.press('Enter');
     await expect(editor(page)).toBeFocused();

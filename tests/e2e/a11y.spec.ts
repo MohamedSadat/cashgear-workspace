@@ -74,6 +74,10 @@ test.describe('accessibility', () => {
     await createWorkspace(page);
     await page.getByRole('button', { name: 'Show the sidebar' }).click();
     await expect(page.locator('#cgw-drawer')).toHaveAttribute('aria-hidden', 'false');
+    // Colours half-way through the drawer's slide are not what it shows.
+    await page.waitForFunction(() =>
+      document.getAnimations().every((animation) => animation.playState !== 'running'),
+    );
     const problems = await axe(page, 'drawer');
     expect(problems, problems.join('\n')).toEqual([]);
   });
