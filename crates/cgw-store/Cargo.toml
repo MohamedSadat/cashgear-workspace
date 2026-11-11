@@ -1,0 +1,22 @@
+[package]
+name = "cgw-store"
+description = "The desktop's LocalStore on SQLite (rusqlite, bundled, with FTS5): typed requests, bytes kept as bytes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rusqlite = { version = "=0.42.0", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bin]]
+# The same requests over stdin and stdout, so the TypeScript conformance suite can run against
+# this store outside the desktop app. Never shipped.
+name = "cgw-store-cli"
+path = "src/bin/cgw-store-cli.rs"

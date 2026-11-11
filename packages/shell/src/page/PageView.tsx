@@ -8,7 +8,10 @@ import { formatShortcut } from '../shortcuts';
 import type { WorkspaceSession } from '../session';
 import { registerBlockCommands, slashItems } from './blockCommands';
 import { editorHost, ToggleState } from './editorHost';
+import { exportAndSave } from '../exchange/DataPanel';
+import { HistoryDialog } from './HistoryDialog';
 import { PageHeader } from './PageHeader';
+import { pageEvents } from './PageMenu';
 import { usePageDoc } from './usePageDoc';
 
 export interface PageViewProps {
@@ -74,6 +77,25 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
     // Strings change with the language; the rest with the page.
     [session, page.id, page.sectionId, strings, toggles, platform, services, t],
   );
+  const [history, setHistory] = useState(false);
+  const [editor, setEditor] = useState<BlockEditor | null>(null);
+  useEffect(() => {
+    const onHistory = (event: Event) =>
+      (event as CustomEvent<string>).detail === page.id && setHistory(true);
+    const onExport = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== page.id) return;
+      void exportAndSave(session, (n, b, ty) => platform.saveFile(n, b, ty), t('page.untitled'), [
+        page.id,
+      ]).catch((error: unknown) => console.error('Export failed:', error));
+    };
+    pageEvents.addEventListener('history', onHistory);
+    pageEvents.addEventListener('export', onExport);
+    return () => {
+      pageEvents.removeEventListener('history', onHistory);
+      pageEvents.removeEventListener('export', onExport);
+    };
+  }, [page.id, session, platform, t]);
+
   // Saved text goes into the search index a moment after typing stops (M1.8).
   useEffect(() => doc.onSaved(() => session.scheduleIndex(page.id)), [doc, session, page.id]);
 
@@ -97,7 +119,14 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         session={session}
         page={page}
         readOnly={doc.readOnly}
-        onEnter={() => editorRef.current?.editor.commands.focus('start')}
+        onEnter={() => {
+          // Focus now, not on the next frame as Tiptap's focus does: a key typed at once must land
+          // in the page, not in the title.
+          const editor = editorRef.current?.editor;
+          if (!editor) return;
+          editor.view.focus();
+          editor.commands.focus('start');
+        }}
       />
       <BlockEditorView
         fragment={doc.readOnly ? undefined : doc.fragment}
@@ -108,9 +137,19 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         onEditor={(editor) => {
           editorRef.current = editor;
           services.editor.current = editor;
+          setEditor(editor);
           onEditor?.(editor, editor ? doc : null);
         }}
       />
+      {history && (
+        <HistoryDialog
+          session={session}
+          doc={doc}
+          editor={editor}
+          host={host}
+          onClose={() => setHistory(false)}
+        />
+      )}
     </article>
   );
 }

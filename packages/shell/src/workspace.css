@@ -603,3 +603,43 @@
   padding: 12px 8px;
   color: var(--cg-text-secondary);
 }
+
+/* Settings: your data; page history */
+.cgw-data-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cgw-history {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px;
+  min-block-size: 300px;
+}
+
+.cgw-history-list {
+  overflow-y: auto;
+  max-block-size: 50vh;
+  border-inline-end: 1px solid var(--cg-border);
+}
+
+.cgw-history-item {
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.cgw-history-item[aria-selected='true'],
+.cgw-history-item:hover {
+  background: color-mix(in srgb, var(--cg-text) 8%, transparent);
+}
+
+.cgw-history-preview {
+  overflow-y: auto;
+  max-block-size: 50vh;
+}
+
+.cgw-dialog:has(.cgw-history) {
+  inline-size: min(900px, calc(100vw - 32px));
+}

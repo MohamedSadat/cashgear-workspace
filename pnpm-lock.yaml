@@ -208,12 +208,21 @@ importers:
       '@cgw/shell':
         specifier: workspace:*
         version: link:../../packages/shell
+      '@cgw/store-desktop':
+        specifier: workspace:*
+        version: link:../../packages/store-desktop
+      '@cgw/store-web':
+        specifier: workspace:*
+        version: link:../../packages/store-web
       '@cgw/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
+      '@tauri-apps/plugin-opener':
+        specifier: 2.7.3
+        version: 2.7.3
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -358,6 +367,9 @@ importers:
       '@cgw/workspace':
         specifier: workspace:*
         version: link:../workspace
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       i18next:
         specifier: 27.1.1
         version: 27.1.1(typescript@6.0.3)
@@ -380,6 +392,29 @@ importers:
       '@types/react-dom':
         specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
+
+  packages/store-desktop:
+    dependencies:
+      '@cgw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+
+  packages/store-web:
+    dependencies:
+      '@cgw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      fake-indexeddb:
+        specifier: 6.2.8
+        version: 6.2.8
 
   packages/workspace:
     devDependencies:
@@ -676,6 +711,9 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@tauri-apps/plugin-opener@2.7.3':
+    resolution: {integrity: sha512-Nm+v7vLBCDzYZxrmCJhpMgtPsPsKt5myMs7SMU/aBjPOmAFI1RrHfhMz7t5KlxjMOzRcelyNq1/j0pmC9SmBVA==}
+
   '@tiptap/core@3.33.1':
     resolution: {integrity: sha512-cWSLHe0Bp44SqEsNMpfSpJeeWenG9/g4pAMRjcEpm0IZN9cmY5fq7LEYZCpjBbVqpzjaT1q7HnkvbBOPTdhbrQ==}
     peerDependencies:
@@ -942,6 +980,10 @@ packages:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
 
+  fake-indexeddb@6.2.8:
+    resolution: {integrity: sha512-mpVW/HLUqwKXJ6F/s0hMgdK1eQfM4ncTHDioNGHWL0WKV3VcZCoZq1NKgboBbAge07aRCO7L48yziKssL59XEQ==}
+    engines: {node: '>=18'}
+
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
@@ -959,6 +1001,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   file-entry-cache@11.1.5:
     resolution: {integrity: sha512-+PFTHITI08JIGhnNpGNI8T8inUpgZfk3GNEqfT9R2zZV2iFXg3CvqzSl/uEhs7TSGujYRELEANyDvS8Fj7+S7Q==}
@@ -1745,6 +1790,10 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.12.4
       '@tauri-apps/cli-win32-x64-msvc': 2.12.4
 
+  '@tauri-apps/plugin-opener@2.7.3':
+    dependencies:
+      '@tauri-apps/api': 2.12.4
+
   '@tiptap/core@3.33.1(@tiptap/pm@3.33.1)':
     dependencies:
       '@tiptap/pm': 3.33.1
@@ -2056,6 +2105,8 @@ snapshots:
 
   expect-type@1.4.0: {}
 
+  fake-indexeddb@6.2.8: {}
+
   fast-deep-equal@3.1.3: {}
 
   fast-json-stable-stringify@2.1.0: {}
@@ -2065,6 +2116,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   file-entry-cache@11.1.5:
     dependencies:

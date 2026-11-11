@@ -9,6 +9,10 @@ const checks = [
   ['format', pnpm('format:check')],
   ['lint', pnpm('lint')],
   ['typecheck', pnpm('typecheck')],
+  // The SQLite store's conformance suite runs through this binary; without Rust it is skipped.
+  ...(skipRust
+    ? []
+    : [['store cli', ['cargo', ['build', '-p', 'cgw-store', '--bin', 'cgw-store-cli']]]]),
   ['unit tests', pnpm('test')],
   ...(skipRust
     ? []

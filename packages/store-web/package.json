@@ -1,0 +1,19 @@
+{
+  "name": "@cgw/store-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The LocalStore on IndexedDB, for the browser.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cgw/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "fake-indexeddb": "6.2.8"
+  }
+}

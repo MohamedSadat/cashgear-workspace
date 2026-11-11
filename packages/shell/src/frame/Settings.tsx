@@ -3,8 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { useShell, useThemePreference } from '../context';
 import { LANGUAGES, type Language } from '../i18n';
 import type { ThemePreference } from '../theme';
+import { DataPanel } from '../exchange/DataPanel';
+import type { WorkspaceSession } from '../session';
 
-export function Settings({ onLanguage }: { onLanguage: (language: Language) => void }) {
+export function Settings({
+  onLanguage,
+  session,
+}: {
+  onLanguage: (language: Language) => void;
+  session: WorkspaceSession;
+}) {
   const { t, i18n } = useTranslation();
   const { theme, platform } = useShell();
   const preference = useThemePreference();
@@ -33,6 +41,7 @@ export function Settings({ onLanguage }: { onLanguage: (language: Language) => v
           label: <span lang={language}>{t(`language.${language}`)}</span>,
         }))}
       />
+      {session.workspaceId && <DataPanel session={session} />}
       <h2>{t('settings.about')}</h2>
       <p data-testid="host-info">
         {t(platform.kind === 'desktop' ? 'frame.platformDesktop' : 'frame.platformWeb')}{' '}

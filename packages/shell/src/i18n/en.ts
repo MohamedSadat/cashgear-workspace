@@ -222,9 +222,29 @@ export const en = {
   },
   history: {
     open: 'Page history',
+    versions: 'Versions',
+    none: 'No versions yet. One is kept after a while of editing, or now with the button below.',
+    pick: 'Choose a version to see it.',
+    preview: 'The chosen version',
+    keepNow: 'Keep a version now',
+    restore: 'Restore this version',
+    note: 'Restoring is an edit like any other: Ctrl+Z takes it back.',
   },
   exchange: {
     exportPage: 'Export this page',
+    title: 'Your data',
+    browserKept:
+      'Pages are kept in this browser on this device. Export a copy to keep them elsewhere.',
+    browserMayClear:
+      'This browser may clear your pages when it needs space. Export your workspace from Settings to keep a copy.',
+    desktopKept: 'Pages are kept on this computer. Export a copy to keep them elsewhere.',
+    exportWorkspace: 'Export workspace',
+    import: 'Import an export',
+    exported: 'Exported.',
+    exportFailed: 'The export did not finish.',
+    imported: 'Imported as a new workspace.',
+    importFailed: 'That file is not a Cash Gear Workspace export.',
+    importedSuffix: ' (imported)',
   },
   errors: {
     cycle: 'A page cannot go inside one of its own subpages.',

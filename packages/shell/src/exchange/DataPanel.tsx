@@ -1,0 +1,107 @@
+// Settings → Your data: export the workspace, import an export, and what the browser keeps.
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useShell } from '../context';
+import { navigate } from '../route';
+import type { WorkspaceSession } from '../session';
+
+export async function exportAndSave(
+  session: WorkspaceSession,
+  save: (name: string, bytes: Uint8Array, type: string) => Promise<void>,
+  untitled: string,
+  pageIds?: string[],
+) {
+  const { exportZip } = await import('./exchange');
+  await session.flushAll();
+  const { bytes, name } = await exportZip(session, { pageIds, untitled });
+  await save(name, bytes, 'application/zip');
+}
+
+export function DataPanel({ session }: { session: WorkspaceSession }) {
+  const { t } = useTranslation();
+  const { platform } = useShell();
+  const [busy, setBusy] = useState<null | 'export' | 'import'>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+  const file = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (platform.kind !== 'web') return;
+    void navigator.storage?.persisted?.().then(setPersisted, () => setPersisted(false));
+  }, [platform]);
+
+  return (
+    <section className="cgw-data" aria-labelledby="cgw-data-title">
+      <h2 id="cgw-data-title">{t('exchange.title')}</h2>
+      <p className="cgw-muted">
+        {platform.kind === 'web'
+          ? t(persisted ? 'exchange.browserKept' : 'exchange.browserMayClear')
+          : t('exchange.desktopKept')}
+      </p>
+      <div className="cgw-data-buttons">
+        <button
+          type="button"
+          className="cgw-button"
+          disabled={busy !== null || !session.workspaceId}
+          onClick={() => {
+            setBusy('export');
+            setMessage(null);
+            exportAndSave(session, (n, b, ty) => platform.saveFile(n, b, ty), t('page.untitled'))
+              .then(() => setMessage(t('exchange.exported')))
+              .catch((error: unknown) => {
+                console.error(error);
+                setMessage(t('exchange.exportFailed'));
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          {t('exchange.exportWorkspace')}
+        </button>
+        <button
+          type="button"
+          className="cgw-button"
+          disabled={busy !== null}
+          onClick={() => file.current?.click()}
+        >
+          {t('exchange.import')}
+        </button>
+        <input
+          ref={file}
+          type="file"
+          accept=".zip,application/zip"
+          hidden
+          aria-label={t('exchange.import')}
+          onChange={(event) => {
+            const chosen = event.target.files?.[0];
+            event.target.value = '';
+            if (!chosen) return;
+            setBusy('import');
+            setMessage(null);
+            void chosen
+              .arrayBuffer()
+              .then(async (buffer) => {
+                const { importZip } = await import('./exchange');
+                const first = await importZip(
+                  session,
+                  new Uint8Array(buffer),
+                  t('exchange.importedSuffix'),
+                );
+                setMessage(t('exchange.imported'));
+                if (first) navigate({ kind: 'page', pageId: first });
+              })
+              .catch((error: unknown) => {
+                console.error(error);
+                setMessage(t('exchange.importFailed'));
+              })
+              .finally(() => setBusy(null));
+          }}
+        />
+      </div>
+      {message && (
+        <p role="status" className="cgw-data-message">
+          {message}
+        </p>
+      )}
+    </section>
+  );
+}

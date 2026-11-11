@@ -29,6 +29,7 @@ describe('catalogues', () => {
       'language.en',
       'editor.linkInvalid',
       'editor.bookmarkInvalid',
+      'history.note',
       'search.shortcut',
     ]);
     for (const [key, text] of arabic) {

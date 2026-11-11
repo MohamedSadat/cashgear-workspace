@@ -189,6 +189,21 @@ function Workspace({ session }: { session: WorkspaceSession }) {
       .catch(() => undefined);
   }, [session, session.workspaceId]);
 
+  // In a browser, ask to keep the data; if refused, say so once on this device (SYNC_DESIGN.md).
+  useEffect(() => {
+    if (!services.platform.requestPersistence || !session.workspaceId) return;
+    void services.platform.requestPersistence().then((kept) => {
+      if (kept) return;
+      try {
+        if (localStorage.getItem('cgw-persist-notice')) return;
+        localStorage.setItem('cgw-persist-notice', new Date().toISOString());
+      } catch {
+        // Without storage the notice shows each time, which is the safer side.
+      }
+      setNotice(t('exchange.browserMayClear'));
+    });
+  }, [services, session, session.workspaceId, t]);
+
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(
     () =>
@@ -244,7 +259,7 @@ function Workspace({ session }: { session: WorkspaceSession }) {
         </Suspense>
       )}
       {route.kind === 'settings' ? (
-        <Settings onLanguage={setLanguage} />
+        <Settings onLanguage={setLanguage} session={session} />
       ) : route.kind === 'trash' ? (
         <TrashView session={session} onError={onError} />
       ) : page && !page.trashedAt ? (

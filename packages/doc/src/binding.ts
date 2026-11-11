@@ -74,3 +74,10 @@ export interface DocJSON {
   marks?: { type: string; attrs?: Record<string, unknown> }[];
   text?: string;
 }
+
+/** Ends the current undo group, so the next change is an undo step of its own (a restore). */
+export function stopUndoCapturing(state: EditorState): void {
+  const manager = yUndoPluginKey.getState(state)?.undoManager as
+    { stopCapturing(): void } | undefined;
+  manager?.stopCapturing();
+}

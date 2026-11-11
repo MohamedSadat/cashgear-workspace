@@ -23,33 +23,47 @@ TypeScript and talks only to this interface.
 ```ts
 interface LocalStore {
   // Documents
-  appendDocUpdates(pageId: Id, updates: LocalUpdate[]): Promise<void>;
-  loadDoc(pageId: Id): Promise<{ snapshot: Uint8Array | null; updates: StoredUpdate[] }>;
-  ackDocUpdates(pageId: Id, acks: { updateId: Id; seq: number }[]): Promise<void>;
-  applyRemoteDocUpdates(pageId: Id, epoch: number, updates: RemoteUpdate[], headSeq: number): Promise<void>;
+  loadDoc(pageId: Id): Promise<{ snapshot: Uint8Array | null; snapshotCovers: number; updates: StoredUpdate[] }>;
+  appendDocUpdates(pageId: Id, updates: LocalUpdate[]): Promise<number[]>;   // local sequences
   compactDoc(pageId: Id, snapshot: Uint8Array, coversLocalUpTo: number): Promise<void>;
-  unsentDocUpdates(limit: number): Promise<{ pageId: Id; updates: StoredUpdate[] }[]>;
+  quarantineUpdates(pageId: Id, localSeqs: number[], reason: string): Promise<void>;
+  docLogLength(pageId: Id): Promise<number>;
+  // Phase 2 adds ackDocUpdates, applyRemoteDocUpdates and unsentDocUpdates.
+
+  // Local page history
+  addHistory(pageId: Id, snapshot: Uint8Array, keep: number): Promise<HistoryEntry>;
+  listHistory(pageId: Id): Promise<HistoryEntry[]>;
+  getHistory(entryId: Id): Promise<Uint8Array | null>;
 
   // Metadata mirror and outbox, in one transaction per call
-  applyLocalOp(op: Operation): Promise<void>;          // changes the mirror and adds to the outbox
+  applyLocalOps(ops: Operation[]): Promise<void>;     // plans, changes the mirror, adds to the outbox
   nextOutboxBatch(limit: number): Promise<Operation[]>;
-  settleOps(results: OpResult[]): Promise<void>;       // removes from the outbox, fixes the mirror
-  applyChanges(workspaceId: Id, changes: Change[], cursor: number): Promise<void>;
-
-  // Reads for the UI
-  listChildren(parent: TreeParent): Promise<PageSummary[]>;
+  settleOps(results: OpResult[]): Promise<void>;
+  readMirror(workspaceId: Id | null): Promise<MirrorSnapshot>;
   getPage(pageId: Id): Promise<PageRecord | null>;
-  search(workspaceId: Id, query: string, limit: number): Promise<SearchHit[]>;
+  // Phase 2 adds applyChanges(workspaceId, changes, cursor).
 
-  // Assets
-  putAsset(asset: AssetRecord, bytes: Blob | null): Promise<void>;
-  getAssetBytes(assetId: Id): Promise<Blob | null>;
+  // Search: the caller normalises text (D25); the store indexes and matches word prefixes
+  putSearchEntry(entry: SearchEntry): Promise<void>;
+  deleteSearchEntries(pageIds: Id[]): Promise<void>;
+  search(workspaceId: Id, normalisedQuery: string, limit: number): Promise<SearchHit[]>;
+
+  // Assets and preferences kept on this device
+  putAsset(asset: AssetRecord, bytes: Uint8Array): Promise<void>;
+  getAssetBytes(assetId: Id): Promise<Uint8Array | null>;
+  getPref<T>(key: string): Promise<T | undefined>;
+  setPref(key: string, value: unknown): Promise<void>;
 
   // Housekeeping
+  purgeTrash(workspaceId: Id, before: string): Promise<Id[]>;
   schemaVersion(): Promise<number>;
-  quarantine(pageId: Id, reason: string): Promise<Id>;  // keeps a recoverable copy
+  close(): Promise<void>;
 }
 ```
+
+As built in Phase 1 (`packages/workspace/src/types.ts`). Both stores run the same operation
+planner (`planOps`), which holds the tree rules: IndexedDB inside its own transaction, the desktop
+against its in-memory mirror before it sends the plan to SQLite as one transaction.
 
 Rules for both implementations, checked by one conformance suite run against each:
 

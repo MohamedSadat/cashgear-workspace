@@ -64,6 +64,9 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
+| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 1); plans operations inside its own transaction |
+| `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
+| `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; `cgw-store-cli` for tests |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
 | `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison |
 | `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
@@ -93,6 +96,8 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm bench:webview2-host` then `pnpm bench:browser [-- --s5 --s6 --s7 --chrome --webview2]` | Browser harnesses on port 4290 |
 | `pnpm bench:sequence` | S8 on LocalDB (creates and drops `cgw_spike_s8`) |
 | `pnpm bench:sheet-embed` | S9 against Sheet's deployed app |
+| `cargo build -p cgw-store --bin cgw-store-cli` | The binary the SQLite conformance suite runs through (`pnpm check` builds it; without it the suite is skipped locally) |
+| `node scripts/kill-test.mjs --target web|desktop --runs N` | Kill the app while typing, reopen, check nothing saved was lost (web needs `pnpm build`; desktop needs the release build) |
 | `S1_OPS=10000 S1_SEEDS=3 S1_COMPARE=1 pnpm exec vitest run bench/editor/src/s1-fuzz.test.ts` | The full S1 fuzz, with the rejected configurations for comparison |
 
 ## Related repos on this machine

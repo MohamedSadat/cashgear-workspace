@@ -31,7 +31,7 @@ export async function newPage(page: Page, title = 'Scratch') {
   await expect(editor(page)).toBeFocused();
 }
 
-export const editor = (page: Page): Locator => page.locator('.cgw-editor');
+export const editor = (page: Page): Locator => page.locator('.cgw-page .cgw-editor');
 
 /** Each top-level block's id and text, in order. */
 export async function blocks(

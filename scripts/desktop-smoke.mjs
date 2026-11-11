@@ -74,6 +74,8 @@ async function launch() {
     env: {
       ...process.env,
       WEBVIEW2_USER_DATA_FOLDER: profile,
+      // The app's own store in the throwaway profile, never the user's.
+      CGW_DATA_DIR: join(profile, 'data'),
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: browserArguments,
     },
     stdio: 'inherit',

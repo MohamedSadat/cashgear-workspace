@@ -12,6 +12,10 @@ export interface WorkspacePlatform {
   openExternal(url: string): Promise<void>;
   /** The local store: IndexedDB in a browser, SQLite on the desktop (D11). */
   openStore(): Promise<LocalStore>;
+  /** Asks to keep local data from eviction; false when refused. The desktop always keeps it. */
+  requestPersistence?(): Promise<boolean>;
+  /** Saves bytes to a file the user picks (a download in a browser). */
+  saveFile(suggestedName: string, bytes: Uint8Array, type: string): Promise<void>;
   /** The desktop window is closing: `flush` runs first. */
   onCloseRequested?(flush: () => Promise<void>): () => void;
 }

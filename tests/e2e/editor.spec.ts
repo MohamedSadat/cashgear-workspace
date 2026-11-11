@@ -122,7 +122,7 @@ test.describe('the block editor', () => {
     const address = page.getByLabel('Link address');
     await address.fill('javascript:alert(1)');
     await address.press('Enter');
-    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(toolbar.getByRole('alert')).toBeVisible();
     await expect(editor(page).locator('a')).toHaveCount(0);
     await address.fill('example.com/report');
     await address.press('Enter');

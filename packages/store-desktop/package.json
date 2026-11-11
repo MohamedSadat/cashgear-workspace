@@ -1,0 +1,22 @@
+{
+  "name": "@cgw/store-desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The desktop's LocalStore: typed requests in a binary frame to crates/cgw-store over Tauri's invoke (or, in tests, the cgw-store-cli process).",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cgw/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
+  }
+}

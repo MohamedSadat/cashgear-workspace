@@ -15,6 +15,7 @@ export {
   fragmentToJSON,
   isRemoteChange,
   redoCommand,
+  stopUndoCapturing,
   undoCommand,
   undoDepth,
   writeJSON,
