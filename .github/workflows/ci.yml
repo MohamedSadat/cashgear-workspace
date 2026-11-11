@@ -59,6 +59,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      # The S3 harness calls cgw-ydoc from .NET 10 by P/Invoke.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
       - name: Ensure WebView2 Runtime
         run: ./scripts/setup-webview2.ps1
       - run: pnpm install --frozen-lockfile
@@ -75,6 +79,17 @@ jobs:
       - run: pnpm test:e2e
       - run: pnpm --filter @cgw/desktop build
       - run: pnpm desktop:smoke
+      # Phase 0's harnesses, kept (bench/README.md). pnpm test above already ran the S1 fuzz,
+      # the S1 scenarios, the S2 gate and the Yjs pending test; cargo test ran S7's server side.
+      - name: S3 – cgw-ydoc against Yjs 13, from .NET
+        run: pnpm bench:s3
+        env:
+          S3_DOCS: 300
+          S3_BIG_BYTES: 262144
+      - name: S5 and S7 – RTL checklist and hostile content (Chrome)
+        run: pnpm bench:browser -- --s5 --s7 --chrome
+      - name: S6 – editor budgets (Chrome), recorded, not gated until Phase 1
+        run: pnpm bench:browser -- --s6 --chrome
       - uses: actions/upload-artifact@v4
         if: always()
         with:
