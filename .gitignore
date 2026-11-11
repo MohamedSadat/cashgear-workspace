@@ -10,8 +10,8 @@ dist/
 apps/desktop/src-tauri/gen/
 
 # .NET spike harnesses
-bin/
-obj/
+bench/*/bin/
+bench/*/obj/
 
 # Test and benchmark output
 test-results/
