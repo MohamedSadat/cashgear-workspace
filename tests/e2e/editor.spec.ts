@@ -223,26 +223,41 @@ test.describe('the block editor', () => {
     context,
     browserName,
   }) => {
-    test.skip(browserName !== 'chromium', 'Clipboard permissions are Chromium-only in Playwright');
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    void context;
+    void browserName;
     await createWorkspace(page);
     await newPage(page);
     await page.keyboard.type('One');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Two');
     await page.keyboard.press('Control+a');
-    await page.keyboard.press('Control+c');
+    const copied = await editor(page).evaluate((root) => {
+      const data = new DataTransfer();
+      root.dispatchEvent(
+        new ClipboardEvent('copy', { clipboardData: data, bubbles: true, cancelable: true }),
+      );
+      return Object.fromEntries(data.types.map((type) => [type, data.getData(type)]));
+    });
+    expect(Object.keys(copied)).toEqual(
+      expect.arrayContaining(['application/x-cgw-slice+json', 'text/html', 'text/plain']),
+    );
+    expect(copied['text/plain']).toContain('One');
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Control+v');
+    const paste = (types: Record<string, string>) =>
+      editor(page).evaluate((root, items) => {
+        const data = new DataTransfer();
+        for (const [type, value] of Object.entries(items)) data.setData(type, value);
+        root.dispatchEvent(
+          new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+        );
+      }, types);
+    await paste(copied);
     const all = await blocks(page);
     expect(all.map((b) => b.text).filter(Boolean)).toEqual(['One', 'Two', 'One', 'Two']);
     expect(new Set(all.map((b) => b.id)).size).toBe(all.length);
     await page.keyboard.press('Enter');
-    await page.evaluate(() =>
-      navigator.clipboard.writeText('## Pasted\n\n- [x] done item\n- plain item'),
-    );
-    await page.keyboard.press('Control+v');
+    await paste({ 'text/plain': '## Pasted\n\n- [x] done item\n- plain item' });
     await expect(editor(page).locator('h2', { hasText: 'Pasted' })).toBeVisible();
     await expect(editor(page).locator('[data-kind="checkItem"][data-checked="true"]')).toHaveText(
       'done item',

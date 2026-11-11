@@ -11,6 +11,8 @@ const row = (page: Page, title: string) =>
 async function addSubpage(page: Page, parent: string, title: string) {
   await row(page, parent).hover();
   await row(page, parent).getByRole('button', { name: 'Add a page inside' }).click();
+  // The new page is open once its title is empty.
+  await expect(page.getByLabel('Page title')).toHaveValue('');
   await page.getByLabel('Page title').fill(title);
   await page.keyboard.press('Enter');
   await expect(row(page, title)).toBeVisible();
@@ -100,8 +102,10 @@ test.describe('workspaces and pages', () => {
     const firstIds = await editor(page).evaluate((root) =>
       [...root.querySelectorAll('[data-block-id]')].map((b) => b.getAttribute('data-block-id')),
     );
+    const templateUrl = page.url();
     await page.getByRole('button', { name: 'New from template' }).click();
     await page.getByRole('menuitem', { name: /Meeting notes/ }).click();
+    await expect(page).not.toHaveURL(templateUrl);
     await expect(editor(page)).toContainText('Agenda for the week');
     const copyIds = await editor(page).evaluate((root) =>
       [...root.querySelectorAll('[data-block-id]')].map((b) => b.getAttribute('data-block-id')),

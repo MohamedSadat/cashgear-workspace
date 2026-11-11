@@ -181,9 +181,12 @@ function TitleField({
     if (value !== page.title) void session.updatePage(page.id, { title: value });
   };
 
+  // Leaving the page (or the app) with a title still waiting to be saved saves it now.
+  const latest = useRef({ draft, commit });
+  latest.current = { draft, commit };
   useEffect(
     () => () => {
-      if (pending.current !== null) clearTimeout(pending.current);
+      if (pending.current !== null) latest.current.commit(latest.current.draft);
     },
     [],
   );
