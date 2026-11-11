@@ -8,6 +8,7 @@ import { formatShortcut } from '../shortcuts';
 import type { WorkspaceSession } from '../session';
 import { registerBlockCommands, slashItems } from './blockCommands';
 import { editorHost, ToggleState } from './editorHost';
+import { PageHeader } from './PageHeader';
 import { usePageDoc } from './usePageDoc';
 
 export interface PageViewProps {
@@ -73,6 +74,9 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
     // Strings change with the language; the rest with the page.
     [session, page.id, page.sectionId, strings, toggles, platform, services, t],
   );
+  // Saved text goes into the search index a moment after typing stops (M1.8).
+  useEffect(() => doc.onSaved(() => session.scheduleIndex(page.id)), [doc, session, page.id]);
+
   const readOnlyContent = useMemo(
     () =>
       doc.readOnly
@@ -88,6 +92,7 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
           {t('page.newerVersion')}
         </div>
       )}
+      <PageHeader session={session} page={page} readOnly={doc.readOnly} />
       <TitleField
         session={session}
         page={page}

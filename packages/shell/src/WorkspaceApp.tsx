@@ -12,6 +12,10 @@ import type { WorkspacePlatform } from './platform';
 import { navigate, parseRoute, useHash } from './route';
 import { WorkspaceSession } from './session';
 import { Sidebar, useMirror } from './sidebar/Sidebar';
+import { Breadcrumbs } from './page/PageHeader';
+import { PageMenu } from './page/PageMenu';
+import { Notice } from './Notice';
+import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
 import { ThemeController } from './theme';
 import { normaliseText } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
@@ -19,6 +23,7 @@ import type { PageDocument } from '@cgw/doc';
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
 // (ARCHITECTURE.md, Performance: Startup).
 const PageView = lazy(() => import('./page/PageView').then((m) => ({ default: m.PageView })));
+const Palette = lazy(() => import('./search/Palette').then((m) => ({ default: m.Palette })));
 
 export interface WorkspaceAppProps {
   platform: WorkspacePlatform;
@@ -153,6 +158,51 @@ function Workspace({ session }: { session: WorkspaceSession }) {
     if (visiting) void session.recordVisit(visiting).catch(() => undefined);
   }, [session, visiting]);
 
+  const [notice, setNotice] = useState<string | null>(null);
+  const onError = useCallback(
+    (error: unknown) => {
+      const code = (error as { code?: string })?.code;
+      console.warn('The change was refused:', error);
+      setNotice(
+        t(
+          code === 'tree.cycle'
+            ? 'errors.cycle'
+            : code === 'version.conflict'
+              ? 'errors.conflict'
+              : 'errors.generic',
+        ),
+      );
+    },
+    [t],
+  );
+
+  // Pages in the trash longer than the retention go for good when the workspace opens.
+  useEffect(() => {
+    const workspaceId = session.workspaceId;
+    if (!workspaceId) return;
+    const before = new Date(Date.now() - TRASH_RETENTION_DAYS * 86_400_000).toISOString();
+    void session.store
+      .purgeTrash(workspaceId, before)
+      .then(async (gone) => {
+        if (gone.length) session.mirror.load(await session.store.readMirror(null));
+      })
+      .catch(() => undefined);
+  }, [session, session.workspaceId]);
+
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(
+    () =>
+      services.commands.register({
+        id: 'app.search',
+        group: 'navigation',
+        label: () => t('search.open'),
+        keywords: () => [t('keywords.search')],
+        shortcut: 'Mod+KeyK',
+        run: () => setPaletteOpen(true),
+      }),
+    [services, t],
+  );
+
   // Settings stay reachable before a workspace exists (language and theme come first).
   if (!session.workspaceId && route.kind !== 'settings')
     return <FirstRun session={session} onCreated={() => rerender((n) => n + 1)} />;
@@ -161,8 +211,12 @@ function Workspace({ session }: { session: WorkspaceSession }) {
     <Frame
       sidebar={
         <div className="cgw-sidebar-inner">
-          <div className="cgw-sidebar-header">{session.current?.name}</div>
-          <Sidebar session={session} activePageId={page?.id ?? null} />
+          <Sidebar
+            session={session}
+            activePageId={page?.id ?? null}
+            onSearch={() => setPaletteOpen(true)}
+            onError={onError}
+          />
           <div className="cgw-sidebar-footer">
             <CgButton
               appearance="ghost"
@@ -175,17 +229,32 @@ function Workspace({ session }: { session: WorkspaceSession }) {
           </div>
         </div>
       }
-      topBar={<SaveStatus doc={route.kind === 'page' ? openDoc : null} />}
+      topBar={
+        <>
+          {page && !page.trashedAt && <Breadcrumbs session={session} page={page} />}
+          <SaveStatus doc={route.kind === 'page' ? openDoc : null} />
+          {page && !page.trashedAt && <PageMenu session={session} page={page} onError={onError} />}
+        </>
+      }
     >
+      {notice && <Notice text={notice} onClose={() => setNotice(null)} />}
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <Palette session={session} onClose={() => setPaletteOpen(false)} />
+        </Suspense>
+      )}
       {route.kind === 'settings' ? (
         <Settings onLanguage={setLanguage} />
+      ) : route.kind === 'trash' ? (
+        <TrashView session={session} onError={onError} />
       ) : page && !page.trashedAt ? (
         <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
           <PageView session={session} page={page} onEditor={(_, doc) => setOpenDoc(doc)} />
         </Suspense>
       ) : route.kind === 'page' ? (
         <div className="cgw-empty">
-          <h1>{t('frame.notFound')}</h1>
+          <h1>{page?.trashedAt ? t('trash.pageInTrash') : t('frame.notFound')}</h1>
+          {page?.trashedAt && <a href="#/trash">{t('trash.open')}</a>}
         </div>
       ) : (
         <div className="cgw-empty">

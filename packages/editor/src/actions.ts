@@ -6,6 +6,7 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { newBlockId, type TextKind } from '@cgw/doc';
 import { blockAt, currentBlock, firstBody, turnInto, type BlockInfo } from './blocks';
 import type { EditorHost } from './host';
+import { mentionKey } from './mention';
 
 export type BlockActionName =
   | 'paragraph'
@@ -194,8 +195,14 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
     glyph: '↗',
     turnInto: false,
     apply: (editor) => {
-      // Opens the page picker at the caret (mentions.ts).
-      editor.commands.insertContent('@');
+      // Opens the page picker at the caret (mention.ts).
+      const { from, to } = editor.state.selection;
+      editor.view.dispatch(
+        editor.state.tr
+          .insertText('@', from, to)
+          .setMeta(mentionKey, { active: true, from, query: '' }),
+      );
+      editor.commands.focus();
     },
   },
 ];

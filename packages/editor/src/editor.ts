@@ -17,6 +17,7 @@ import { BlockHandle, type HandleUi } from './handle';
 import type { EditorHost } from './host';
 import { MarkdownShortcuts } from './inputRules';
 import { BlockKeymap } from './keymap';
+import { Mentions, pageMentionView } from './mention';
 import { SlashCommands, type SlashKeys } from './slash';
 import { bookmarkView, childPageView, codeBlockView, fileView, imageView } from './nodeviews/atoms';
 import { textBodyView } from './nodeviews/textBody';
@@ -41,6 +42,7 @@ export interface BlockEditorOptions {
 /** What the overlays (menus, toolbars) hand to the editor's plugins. */
 export interface EditorUi extends HandleUi {
   slashKeys: SlashKeys | null;
+  mentionKeys: SlashKeys | null;
 }
 
 export interface BlockEditor {
@@ -61,7 +63,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
   const stats = newStats();
   const contentErrors: Error[] = [];
   const bound = !!options.fragment && !options.readOnlyContent;
-  const ui: EditorUi = { slashKeys: null, openBlockMenu: null };
+  const ui: EditorUi = { slashKeys: null, mentionKeys: null, openBlockMenu: null };
 
   const views: Record<string, (host: () => EditorHost) => ReturnType<typeof textBodyView>> = {
     textBody: textBodyView,
@@ -70,6 +72,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     file: fileView,
     bookmark: bookmarkView,
     childPage: childPageView,
+    pageMention: pageMentionView,
   };
   const schema = schemaExtensions().map((extension) => {
     const view = views[extension.name];
@@ -101,6 +104,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       StableTyping,
       MarkdownShortcuts,
       SlashCommands.configure({ keys: () => ui.slashKeys }),
+      Mentions.configure({ keys: () => ui.mentionKeys }),
       BlockSelection,
       Tables,
       Clipboard.configure({ host: getHost }),

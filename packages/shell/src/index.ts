@@ -1,4 +1,5 @@
 import './shell.css';
+import './workspace.css';
 
 export { WorkspaceApp, type WorkspaceAppProps } from './WorkspaceApp';
 export { CommandRegistry, type Command, type CommandGroup } from './commands';

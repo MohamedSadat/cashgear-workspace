@@ -1,9 +1,11 @@
-import { CgButton } from '@cashgear/ui';
-import type { PageRecord, SectionRecord } from '@cgw/workspace';
-import { useSyncExternalStore } from 'react';
+import type { Id, PageRecord } from '@cgw/workspace';
+import { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Dialog } from '../Dialog';
 import { navigate, routeHash } from '../route';
 import type { WorkspaceSession } from '../session';
+import { PageTree } from './PageTree';
+import { PointMenu } from './RowMenu';
 
 export function useMirror(session: WorkspaceSession): number {
   return useSyncExternalStore(
@@ -12,59 +14,189 @@ export function useMirror(session: WorkspaceSession): number {
   );
 }
 
-/** The workspace's sections and their pages. M1.6 replaces the list with the full tree. */
-export function Sidebar({
-  session,
-  activePageId,
-}: {
+function PageLink({ page, active }: { page: PageRecord; active: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <a
+      href={routeHash({ kind: 'page', pageId: page.id })}
+      className={`cgw-side-link${active ? ' is-active' : ''}`}
+      aria-current={active ? 'page' : undefined}
+    >
+      <span aria-hidden="true">{page.icon ?? '📄'}</span>
+      <span className="cgw-tree-title" dir="auto">
+        {page.title || t('page.untitled')}
+      </span>
+    </a>
+  );
+}
+
+export interface SidebarProps {
   session: WorkspaceSession;
-  activePageId: string | null;
-}) {
+  activePageId: Id | null;
+  onSearch: () => void;
+  onError: (error: unknown) => void;
+}
+
+/** Workspace switcher, search, favourites, recent pages, the tree, templates and the trash. */
+export function Sidebar({ session, activePageId, onSearch, onError }: SidebarProps) {
   const { t } = useTranslation();
   useMirror(session);
+  const [switcher, setSwitcher] = useState<{ x: number; y: number } | null>(null);
+  const [templates, setTemplates] = useState<{ x: number; y: number } | null>(null);
+  const [creating, setCreating] = useState(false);
   const workspaceId = session.workspaceId;
   if (!workspaceId) return null;
-  const sections = session.mirror.sectionsOf(workspaceId);
-  const addPage = async (section: SectionRecord, parent: PageRecord | null) => {
-    const page = await session.createPage({
-      sectionId: section.id,
-      parentPageId: parent?.id ?? null,
-    });
-    navigate({ kind: 'page', pageId: page.id });
-  };
-  const renderPages = (section: SectionRecord, pages: PageRecord[], depth: number) =>
-    pages.length ? (
-      <ul role={depth === 0 ? 'tree' : 'group'} aria-label={depth === 0 ? section.name : undefined}>
-        {pages.map((page) => (
-          <li key={page.id} role="treeitem" aria-selected={page.id === activePageId}>
-            <a href={routeHash({ kind: 'page', pageId: page.id })} className="cgw-tree-link">
-              <span aria-hidden="true">{page.icon ?? '📄'}</span> {page.title || t('page.untitled')}
-            </a>
-            {renderPages(section, session.mirror.childrenOf(page.id), depth + 1)}
-          </li>
-        ))}
-      </ul>
-    ) : null;
+  const favourites = session.mirror.favouritesOf(workspaceId);
+  const recent = session.mirror.recentOf(workspaceId, 5);
+  const templateList = session.mirror.templatesOf(workspaceId);
+  const trashCount = session.mirror.trash(workspaceId).length;
   return (
-    <div className="cgw-sidebar-body">
-      {sections.map((section) => (
-        <section key={section.id} className="cgw-sidebar-section">
-          <header className="cgw-sidebar-section-header">
-            <span>{section.name}</span>
-            <CgButton
-              appearance="ghost"
-              icon="add"
-              aria-label={t('workspace.addPageIn', { name: section.name })}
-              onClick={() => void addPage(section, null)}
-            >
-              <span className="cgw-visually-hidden">
-                {t('workspace.addPageIn', { name: section.name })}
-              </span>
-            </CgButton>
-          </header>
-          {renderPages(section, session.mirror.topPages(section.id), 0)}
-        </section>
-      ))}
+    <div className="cgw-sidebar-inner">
+      <button
+        type="button"
+        className="cgw-workspace-switcher"
+        aria-haspopup="menu"
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setSwitcher({ x: rect.left + 8, y: rect.bottom });
+        }}
+      >
+        <span className="cgw-workspace-name">{session.current?.name}</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      <button type="button" className="cgw-side-button" onClick={onSearch}>
+        <span aria-hidden="true">⌕</span> {t('search.open')}
+        <kbd className="cgw-kbd">{t('search.shortcut')}</kbd>
+      </button>
+      <div className="cgw-sidebar-body">
+        {favourites.length > 0 && (
+          <section className="cgw-side-group" aria-label={t('workspace.favourites')}>
+            <h2 className="cgw-side-heading">{t('workspace.favourites')}</h2>
+            {favourites.map((page) => (
+              <PageLink key={page.id} page={page} active={page.id === activePageId} />
+            ))}
+          </section>
+        )}
+        {recent.length > 0 && (
+          <section className="cgw-side-group" aria-label={t('workspace.recent')}>
+            <h2 className="cgw-side-heading">{t('workspace.recent')}</h2>
+            {recent.map((page) => (
+              <PageLink key={page.id} page={page} active={false} />
+            ))}
+          </section>
+        )}
+        <PageTree session={session} activePageId={activePageId} onError={onError} />
+      </div>
+      <div className="cgw-sidebar-tools">
+        {templateList.length > 0 && (
+          <button
+            type="button"
+            className="cgw-side-button"
+            aria-haspopup="menu"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setTemplates({ x: rect.left + 8, y: rect.top - 8 });
+            }}
+          >
+            <span aria-hidden="true">⧉</span> {t('workspace.newFromTemplate')}
+          </button>
+        )}
+        <a href={routeHash({ kind: 'trash' })} className="cgw-side-button">
+          <span aria-hidden="true">🗑</span> {t('trash.title')}
+          {trashCount > 0 && <span className="cgw-count">{trashCount}</span>}
+        </a>
+      </div>
+      {switcher && (
+        <PointMenu
+          x={switcher.x}
+          y={switcher.y}
+          label={t('workspace.switch')}
+          onClose={() => setSwitcher(null)}
+          items={[
+            ...session.workspaces().map((w) => ({
+              label: w.id === workspaceId ? `✓ ${w.name}` : w.name,
+              onSelect: () => {
+                session.switchTo(w.id);
+                navigate({ kind: 'home' });
+              },
+            })),
+            { label: t('workspace.createAnother'), onSelect: () => setCreating(true) },
+          ]}
+        />
+      )}
+      {templates && (
+        <PointMenu
+          x={templates.x}
+          y={templates.y}
+          label={t('workspace.newFromTemplate')}
+          onClose={() => setTemplates(null)}
+          items={templateList.map((template) => ({
+            label: `${template.icon ?? '📄'} ${template.title || t('page.untitled')}`,
+            onSelect: () =>
+              void session
+                .newFromTemplate(template.id)
+                .then((page) => navigate({ kind: 'page', pageId: page.id }), onError),
+          }))}
+        />
+      )}
+      {creating && (
+        <CreateWorkspaceDialog
+          onClose={() => setCreating(false)}
+          onCreate={async (name) => {
+            const { createFirstWorkspace } = await import('../gettingStarted');
+            const first = await createFirstWorkspace(
+              session,
+              {
+                workspace: name || t('workspace.defaultName'),
+                shared: t('workspace.sectionShared'),
+                private: t('workspace.sectionPrivate'),
+              },
+              document.documentElement.lang === 'ar' ? 'ar' : 'en',
+            );
+            navigate({ kind: 'page', pageId: first });
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function CreateWorkspaceDialog({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState('');
+  return (
+    <Dialog title={t('workspace.createAnother')} onClose={onClose}>
+      <form
+        className="cgw-dialog-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onCreate(name.trim()).then(onClose);
+        }}
+      >
+        <label htmlFor="cgw-new-workspace">{t('workspace.nameLabel')}</label>
+        <input
+          id="cgw-new-workspace"
+          className="cgw-input"
+          value={name}
+          autoFocus
+          placeholder={t('workspace.defaultName')}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <div className="cgw-dialog-buttons">
+          <button type="button" className="cgw-button" onClick={onClose}>
+            {t('frame.cancel')}
+          </button>
+          <button type="submit" className="cgw-button is-primary">
+            {t('workspace.create')}
+          </button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

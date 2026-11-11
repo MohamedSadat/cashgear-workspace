@@ -25,7 +25,12 @@ describe('catalogues', () => {
   it('translate every Arabic string that is not a proper name', () => {
     // A string with Latin letters in the Arabic catalogue is untranslated, except these, which
     // name a language, a product or a file format in its own script.
-    const allowed = new Set(['language.en', 'editor.linkInvalid', 'editor.bookmarkInvalid']);
+    const allowed = new Set([
+      'language.en',
+      'editor.linkInvalid',
+      'editor.bookmarkInvalid',
+      'search.shortcut',
+    ]);
     for (const [key, text] of arabic) {
       if (allowed.has(key) || key.startsWith('keywords.')) continue;
       expect(/[A-Za-z]/.test(text.replace(/\{\{\w+\}\}/g, '')), `${key}: ${text}`).toBe(false);

@@ -7,12 +7,15 @@ import {
   OpError,
   keyBetween,
   newOp,
+  normaliseText,
   planOps,
+  searchTerms,
   uuidv7,
   type Id,
   type LocalStore,
   type Operation,
   type PageRecord,
+  type SearchHit,
   type SectionRecord,
   type WorkspaceRecord,
 } from '@cgw/workspace';
@@ -240,11 +243,12 @@ export class WorkspaceSession {
     return record;
   }
 
-  updatePage(
+  async updatePage(
     pageId: Id,
     changes: Partial<Pick<PageRecord, 'title' | 'icon' | 'coverAssetId' | 'isTemplate'>>,
   ) {
-    return this.apply([newOp('page.update', this.ws(), pageId, changes)]);
+    await this.apply([newOp('page.update', this.ws(), pageId, changes)]);
+    if (changes.title !== undefined) this.scheduleIndex(pageId, 300);
   }
 
   movePage(pageId: Id, to: { sectionId: Id; parentPageId: Id | null; after?: Id | null }) {
@@ -293,6 +297,136 @@ export class WorkspaceSession {
 
   recordVisit(pageId: Id) {
     return this.apply([newOp('visit.record', this.ws(), pageId, { at: new Date().toISOString() })]);
+  }
+
+  // Search ---------------------------------------------------------------------------------------
+
+  private readonly folded = new Map<Id, { title: string; folded: string }>();
+
+  private foldedTitle(page: PageRecord): string {
+    const cached = this.folded.get(page.id);
+    if (cached?.title === page.title) return cached.folded;
+    const folded = normaliseText(page.title);
+    this.folded.set(page.id, { title: page.title, folded });
+    return folded;
+  }
+
+  /**
+   * Pages whose title or text match a normalised query (D25): titles from the mirror, so every
+   * page is found by title; text from the local store's index of the pages this device holds.
+   */
+  async search(normalisedQuery: string, limit: number): Promise<SearchHit[]> {
+    const workspaceId = this.ws();
+    const terms = searchTerms(normalisedQuery);
+    if (!terms.length) return [];
+    const hits = new Map<Id, SearchHit>();
+    for (const page of this.mirror.pages.values()) {
+      if (page.workspaceId !== workspaceId || page.trashedAt) continue;
+      const words = this.foldedTitle(page).split(' ');
+      if (terms.every((term) => words.some((word) => word.startsWith(term))))
+        hits.set(page.id, { pageId: page.id, title: page.title, snippet: '', score: 3 });
+      if (hits.size >= limit) break;
+    }
+    for (const hit of await this.store.search(workspaceId, normalisedQuery, limit)) {
+      const existing = hits.get(hit.pageId);
+      if (existing) existing.snippet ||= hit.snippet;
+      else hits.set(hit.pageId, hit);
+    }
+    return [...hits.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+
+  private indexTimers = new Map<Id, ReturnType<typeof setTimeout>>();
+
+  /** Puts a page's title and text in the store's search index, a moment after it settles. */
+  scheduleIndex(pageId: Id, delay = 1500) {
+    clearTimeout(this.indexTimers.get(pageId));
+    this.indexTimers.set(
+      pageId,
+      setTimeout(() => {
+        this.indexTimers.delete(pageId);
+        void this.indexPage(pageId).catch((error: unknown) =>
+          console.warn('Indexing failed:', error),
+        );
+      }, delay),
+    );
+  }
+
+  async indexPage(pageId: Id, json?: DocJSON): Promise<void> {
+    const page = this.mirror.pages.get(pageId);
+    if (!page) return;
+    const { plainText, PageDocument, fragmentToJSON } = await import('@cgw/doc');
+    let content = json;
+    if (!content) {
+      const open = this.docs.get(pageId);
+      const doc = open ? await open : await PageDocument.open(pageId, this.store);
+      content = fragmentToJSON(doc.fragment);
+      if (!open) await doc.close();
+    }
+    const text = plainText(content, {
+      pageTitle: (id) => this.mirror.pages.get(id)?.title,
+      assetName: (id) => this.mirror.assets.get(id)?.fileName,
+    });
+    await this.store.putSearchEntry({
+      pageId,
+      workspaceId: page.workspaceId,
+      title: normaliseText(page.title),
+      text: normaliseText(text),
+    });
+  }
+
+  /** The content a page holds now, as ProseMirror JSON (open pages flush first). */
+  async pageContent(pageId: Id): Promise<DocJSON> {
+    const open = this.docs.get(pageId);
+    if (open) await (await open).flush();
+    const { PageDocument, fragmentToJSON } = await import('@cgw/doc');
+    const doc = await PageDocument.open(pageId, this.store);
+    const json = fragmentToJSON(doc.fragment);
+    await doc.close();
+    return json;
+  }
+
+  /**
+   * "New from template": the template and its subpages copied as new pages beside it, with new
+   * page ids and new block ids, and links inside the copy pointed at the copies.
+   */
+  async newFromTemplate(templateId: Id): Promise<PageRecord> {
+    const template = this.mirror.pages.get(templateId);
+    if (!template) throw new OpError('not.found');
+    const { withNewIds, remapRefs } = await import('@cgw/doc');
+    const originals = [
+      template,
+      ...this.mirror.descendantIds(templateId).map((id) => this.mirror.pages.get(id)!),
+    ];
+    const ids = new Map(originals.map((page) => [page.id, uuidv7()]));
+    const records = originals.map((page) => {
+      const record = this.pageRecord({
+        sectionId: template.sectionId,
+        parentPageId: page.id === templateId ? template.parentPageId : ids.get(page.parentPageId!)!,
+        title: page.title,
+        icon: page.icon,
+        after: page.id === templateId ? templateId : undefined,
+      });
+      return {
+        ...record,
+        id: ids.get(page.id)!,
+        orderKey: page.id === templateId ? record.orderKey : page.orderKey,
+        coverAssetId: page.coverAssetId,
+        templateOfPageId: page.id === templateId ? templateId : null,
+      };
+    });
+    const contents = await Promise.all(originals.map((page) => this.pageContent(page.id)));
+    const { newDocumentUpdate } = await import('@cgw/doc');
+    await this.apply(
+      records.map((record) => newOp('page.create', record.workspaceId, record.id, record)),
+    );
+    for (const [i, record] of records.entries())
+      await this.store.appendDocUpdates(record.id, [
+        {
+          updateId: uuidv7(),
+          data: newDocumentUpdate(record.id, remapRefs(withNewIds(contents[i]), ids)),
+        },
+      ]);
+    return records[0];
   }
 
   // Documents ----------------------------------------------------------------------------------
