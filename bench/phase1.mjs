@@ -187,10 +187,12 @@ async function web() {
         );
         return page.evaluate(() => performance.getEntriesByName('cgw-search').at(-1).duration);
       };
-      await searchOnce('warm');
+      // One pass over every query first, not counted: the worker's first look at each prefix is
+      // the slowest, and with 16 samples one of those decided the p95 (CI run 43101522303).
+      for (const query of queries) await searchOnce(query);
       const search = [];
       const hits = {};
-      for (let r = 0; r < 2; r++)
+      for (let r = 0; r < 3; r++)
         for (const query of queries) {
           search.push(await searchOnce(query));
           hits[query] = await page
@@ -200,7 +202,12 @@ async function web() {
             .count()
             .catch(() => 0);
         }
-      log(`  search p95 ${round(percentile(search, 0.95))} ms`);
+      log(
+        `  search p95 ${round(percentile(search, 0.95))} ms (${search
+          .map(round)
+          .sort((a, b) => a - b)
+          .join(', ')})`,
+      );
       if (errors.length) throw new Error('Page errors: ' + errors.join(' | '));
       return {
         browser: browser.version(),
