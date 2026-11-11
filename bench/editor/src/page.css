@@ -1,0 +1,105 @@
+html,
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Noto Sans Arabic', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+#editor,
+#peer {
+  max-inline-size: 48rem;
+  margin-inline: auto;
+  padding: 1rem 3rem;
+}
+
+#peer {
+  border-block-start: 1px dashed #999;
+  opacity: 0.7;
+}
+
+.ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+}
+
+/* D26: top-level blocks skip layout and paint while off screen. */
+.ProseMirror > .cgw-block {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.5em;
+}
+
+.cgw-block {
+  position: relative;
+}
+
+.cgw-block > .cgw-block {
+  padding-inline-start: 1.5rem;
+}
+
+.cgw-body {
+  margin: 0.15rem 0;
+  text-align: start;
+  unicode-bidi: plaintext;
+}
+
+.cgw-handle {
+  position: absolute;
+  inset-inline-start: -1.6rem;
+  inset-block-start: 0.2rem;
+  color: #999;
+  cursor: grab;
+  user-select: none;
+}
+
+[data-kind='heading'] {
+  font-size: 1.5em;
+  font-weight: 600;
+}
+
+[data-kind='bulletItem'],
+[data-kind='numberedItem'],
+[data-kind='checkItem'] {
+  position: relative;
+  padding-inline-start: 1.5rem;
+}
+
+[data-kind='bulletItem']::before,
+[data-kind='checkItem']::before {
+  position: absolute;
+  inset-inline-start: 0.2rem;
+}
+
+[data-kind='bulletItem']::before {
+  content: '•';
+}
+
+[data-kind='checkItem']::before {
+  content: '☐';
+}
+
+[data-kind='numberedItem']::before {
+  position: absolute;
+  inset-inline-start: 0;
+  content: '#';
+}
+
+[data-kind='quote'] {
+  border-inline-start: 3px solid #999;
+  padding-inline-start: 0.75rem;
+}
+
+.cgw-codeBlock {
+  font-family: Consolas, monospace;
+  background: #f4f4f4;
+  padding: 0.5rem;
+}
+
+.cgw-table {
+  border-collapse: collapse;
+}
+
+.cgw-table td {
+  border: 1px solid #bbb;
+  padding: 0.25rem 0.5rem;
+}

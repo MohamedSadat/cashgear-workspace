@@ -1,7 +1,7 @@
 packages:
   - apps/*
   - packages/*
-  - bench/spikes/*
+  - bench/editor
 onlyBuiltDependencies:
   - esbuild
 # The CashGear component library is a git dependency: pnpm builds its dist/ on install.
