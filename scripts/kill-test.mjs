@@ -188,6 +188,13 @@ try {
           .getByRole('button', { name: /^Add a page in/ })
           .first()
           .click();
+        // The new page is open once its title is empty (CI run 43083799788 typed into the page
+        // before it).
+        await page.waitForFunction(
+          () => document.querySelector('textarea[aria-label="Page title"]')?.value === '',
+          null,
+          { timeout: 30000 },
+        );
         await page.getByLabel('Page title').fill('Kill test');
         await page.keyboard.press('Enter');
       } else {
