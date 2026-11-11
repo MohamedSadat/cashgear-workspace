@@ -33,7 +33,8 @@ import type { PageDocument } from '@cgw/doc';
 
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
 // (ARCHITECTURE.md, Performance: Startup).
-const PageView = lazy(() => import('./page/PageView').then((m) => ({ default: m.PageView })));
+const loadPageView = () => import('./page/PageView');
+const PageView = lazy(() => loadPageView().then((m) => ({ default: m.PageView })));
 
 export interface WorkspaceAppProps {
   platform: WorkspacePlatform;
@@ -56,6 +57,8 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
   useEffect(() => {
     let live = true;
     let opened: WorkspaceSession | null = null;
+    // The editor's chunk loads while the store opens, not after: the last page opens at start.
+    void loadPageView().catch(() => undefined);
     platform
       .openStore()
       .then((store) => WorkspaceSession.start(store))

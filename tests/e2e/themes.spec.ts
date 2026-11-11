@@ -26,8 +26,14 @@ async function analyse(page: Page, png: Buffer, points: { x: number; y: number }
       canvas.height = image.height;
       const context = canvas.getContext('2d')!;
       context.drawImage(image, 0, 0);
+      // Screenshot pixels per CSS pixel (a scaled screen draws more).
+      const scale = image.width / innerWidth;
       const pixel = (x: number, y: number) =>
-        [...context.getImageData(x, y, 1, 1).data.slice(0, 3)] as [number, number, number];
+        [
+          ...context
+            .getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1)
+            .data.slice(0, 3),
+        ] as [number, number, number];
       // The colour the page means at a point: the first background that is not transparent.
       const intended = (x: number, y: number): [number, number, number] => {
         let el = document.elementFromPoint(x, y) as HTMLElement | null;
@@ -56,7 +62,12 @@ async function analyse(page: Page, png: Buffer, points: { x: number; y: number }
         });
         return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
       };
-      const data2 = context.getImageData(title.x, title.y, title.width, title.height).data;
+      const data2 = context.getImageData(
+        title.x * scale,
+        title.y * scale,
+        title.width * scale,
+        title.height * scale,
+      ).data;
       let lo = 1;
       let hi = 0;
       for (let i = 0; i < data2.length; i += 4) {
@@ -96,12 +107,20 @@ test('light and dark themes draw the app in their own colours', async ({
     const png = await page.screenshot();
     shots[theme] = png;
     await testInfo.attach(`${theme}.png`, { body: png, contentType: 'image/png' });
-    // A point in the page's empty margin, in the sidebar's empty foot, and in the top bar.
-    const result = await analyse(page, png, [
-      { x: 1260, y: 700 },
-      { x: 20, y: 700 },
-      { x: 700, y: 22 },
-    ]);
+    // A point in the page's empty margin, in the sidebar's empty foot, and in the top bar above
+    // its text, from where they are drawn (the desktop window's size depends on the screen).
+    const points = await page.evaluate(() => {
+      const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+      const area = box('.cgw-page-area');
+      const side = box('.cgw-sidebar-body');
+      const top = box('.cgw-topbar');
+      return [
+        { x: Math.round(area.right - 24), y: Math.round(area.bottom - 24) },
+        { x: Math.round(side.left + 12), y: Math.round(side.bottom - 12) },
+        { x: Math.round(top.left + top.width * 0.6), y: Math.round(top.top + 3) },
+      ];
+    });
+    const result = await analyse(page, png, points);
     for (const sample of result.samples as Sample[])
       expect(
         close(sample.rendered, sample.expected),
