@@ -407,3 +407,14 @@ WASM build.
 | S9 target | Sheet's deployed web app at `proud-desert-008137810.4.azurestaticapps.net` | `sheet.cashgearerp.com` has no DNS record yet (Sheet's `PROGRESS.md`) |
 | .NET for spike harnesses | `net10.0`, built with the installed SDK 11 | D12 names .NET 10, the long-term release |
 | CI shape | As Sheet's: licence gates on `ubuntu-latest`, build and test on `windows-latest` | Same runners, same gates, same desktop smoke test |
+
+Further defaults picked while scaffolding (M0.1):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| TypeScript | 6.0.3, as Sheet | 7.0.2 is out, but `typescript-eslint` 8.72.2 supports `typescript <6.1.0` |
+| Releases younger than a day | Not taken: pnpm's minimum release age stays on with no exclusions; the previous release is pinned (Vite 8.3.7, Tiptap 3.33.0, `@tiptap/y-tiptap` 3.2.0) | A supply-chain guard; the newer ones can be taken once they age |
+| Versions during Phase 0 | `0.0.0` everywhere | From Phase 1 one version is bumped everywhere per release |
+| Local ports | Web dev 5273, preview 4273 | Sheet uses 5173 and 4173; both can run at once |
+| Desktop CSP `frame-src` | `https://sheet.cashgearerp.com` and Sheet's current Static Web Apps host | ARCHITECTURE.md names the Sheet origin; the custom domain has no DNS record yet |
+| Spike dependencies | `devDependencies` of packages under `bench/spikes/` | Spike code never ships; the licence gate still refuses denied licences in them |

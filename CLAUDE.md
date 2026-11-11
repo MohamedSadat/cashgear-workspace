@@ -3,7 +3,7 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: planning is done; no code exists yet. The next step is Phase 0.
+Status: Phase 0 (scaffold and spikes) is in progress.
 
 ## Workflow
 
@@ -48,28 +48,35 @@ The same rules cashgear-sheet works by.
 
 ## Layout
 
-Proposed; Phase 0 creates it and replaces this section with what exists.
+What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 
 | Path | What |
 | --- | --- |
-| `apps/web` | Vite + React app and PWA |
-| `apps/desktop` | Tauri 2 shell |
-| `packages/doc` | Document schema, block ids, Yjs seam, migrations |
-| `packages/editor` | The block editor |
-| `packages/workspace` | Page tree, operations, outbox, sync engine, `LocalStore` |
-| `packages/store-web` | `LocalStore` on IndexedDB |
-| `packages/shell` | App frame, sidebar, search, settings, theme, i18n, platform |
-| `packages/api` | Generated API client (Phase 2) |
-| `crates/cgw-store` | `LocalStore` on SQLite |
-| `crates/cgw-native` | Desktop helpers |
-| `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker |
-| `server/` | ASP.NET Core API and worker (Phase 2) |
+| `apps/web` (`@cgw/web`) | Vite + React app: one `@cashgear/ui` control in light, dark, English and Arabic |
+| `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json` |
+| `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
+| `tests/e2e` | Playwright specs (Chrome and Edge) |
+| `tests/license-gate` | GPL fixtures the licence self-test must reject |
+| `bench/` | Spikes (`bench/spikes/`, Phase 0 only) and benchmark harnesses; results in `bench/results/` (not committed) |
+| `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test and desktop smoke on Windows |
 | `docs/` | Plan, design, decisions, progress |
 
 ## Commands
 
-None yet. Phase 0 adds one command per standing check and one that runs them all, and lists them
-here.
+| Command | What |
+| --- | --- |
+| `pnpm check` | Every standing check below, in CI's order; stops at the first failure (`--no-rust` skips Rust) |
+| `pnpm format:check` / `pnpm format` | Prettier |
+| `pnpm lint` | ESLint, zero warnings |
+| `pnpm typecheck` | `tsc --noEmit` in every package |
+| `pnpm test` | Vitest unit tests |
+| `pnpm rust:fmt` / `pnpm rust:clippy` / `pnpm rust:test` | `cargo fmt --check`, `clippy -D warnings`, `cargo test` over the workspace |
+| `pnpm deny` | `cargo deny check licenses sources` |
+| `pnpm licenses:check` / `pnpm licenses:selftest` | npm licence gate, and proof that both gates reject a GPL dependency |
+| `pnpm build` | Web build and third-party notices |
+| `pnpm test:e2e` | Playwright against `pnpm preview` (port 4273) |
+| `pnpm desktop:build` / `pnpm desktop:smoke` | Release desktop build (`target/release/cgw-desktop.exe`), then WebView2 smoke over CDP |
+| `pnpm dev:web` / `pnpm dev:desktop` | Vite dev server on port 5273; Tauri dev window on it |
 
 ## Related repos on this machine
 
@@ -86,3 +93,14 @@ here.
 ## Gotchas
 
 Added as they are found, grouped by phase.
+
+### Phase 0
+
+- pnpm 12 refuses a release less than a day old and offers to add it to
+  `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. Do not keep that entry: pin the previous
+  release instead.
+- TypeScript stays on 6.0.x: `typescript-eslint` 8.72 supports `typescript <6.1.0`.
+- Commands started in the background may have no network (`static.crates.io` does not resolve).
+  Run `cargo fetch` in the foreground first, then build in the background with
+  `CARGO_NET_OFFLINE=true`.
+- A release desktop build takes about five minutes (LTO, one codegen unit).
