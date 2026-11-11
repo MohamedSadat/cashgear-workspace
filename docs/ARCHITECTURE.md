@@ -174,7 +174,7 @@ Package level only. Files inside are decided by the phase that creates them.
 | `packages/api` (`@cgw/api`) | Client generated from the server's OpenAPI document | 2 |
 | `packages/erp` (`@cgw/erp`) | ERP connector client | 5 |
 | `crates/cgw-store` | `LocalStore` on SQLite, with FTS5 | 1 |
-| `crates/cgw-native` | Desktop helpers: keychain, files, deep links | 1 |
+| `crates/cgw-native` | Desktop helpers without Tauri: deep links read into routes, safe file names; the keychain in Phase 2 | 1 |
 | `crates/cgw-ydoc` | Bytes-in, bytes-out Yjs functions over `yrs` | 0 (spike), 2 |
 | `server/` | .NET solution: API, worker, domain, infrastructure, tests | 2 |
 | `tests/e2e`, `tests/mocks`, `bench/`, `scripts/`, `docs/` | As in Sheet | 0 |
@@ -409,11 +409,12 @@ Targets, validated in Phase 0 and then gated in CI.
 | --- | --- | --- |
 | Cold start to an editable page, desktop | ≤ 1.5 s | Playwright against the built app, from process start to first editable paint |
 | Cold start to an editable page, web, cached | ≤ 2 s | Lighthouse and a Playwright trace on a mid-range laptop profile |
-| Open a 200-block page from the local store | ≤ 300 ms | `performance.mark` around open; p95 of 30 runs |
-| Open a 2,000-block page | ≤ 1 s | Same |
-| Keystroke to paint, typical page (200 blocks), p95 | ≤ 16 ms (missed by 1 to 3 ms in Phase 0; redefinition proposed as Q19) | Scripted typing with event timing, Chrome and WebView2 |
-| Keystroke to paint, 5,000 blocks, p95 | ≤ 50 ms | Same |
-| Heap with a 5,000-block page open | ≤ 150 MB | `performance.measureUserAgentSpecificMemory` or a heap snapshot |
+| Open a 200-block page from the local store | ≤ 300 ms | From asking for the page to its blocks painted, in the app over a seeded store; p95 of 30 runs |
+| Open a 2,000-block page | ≤ 1 s | Same, 15 runs |
+| Editor work per keystroke, typical page (200 blocks), p95 | ≤ 8 ms (Q19) | From the keydown to the end of the work it causes, scripted typing in the app |
+| Keystroke to the next frame, typical page (200 blocks), p95 | ≤ 33 ms (Q19: the 16 ms of Phase 0 was missed by 1 to 3 ms, and counts a frame the browser schedules) | From the keydown to the frame after the change is drawn |
+| Keystroke to the next frame, 5,000 blocks, p95 | ≤ 50 ms | Same |
+| Heap with a 5,000-block page open | ≤ 150 MB | The page's heap after a collection (`Runtime.getHeapUsage`), 10,000-page workspace loaded |
 | Sidebar: expand a node in a 10,000-page workspace | ≤ 100 ms | Scripted, virtualised tree |
 | Local search over 10,000 pages | ≤ 100 ms | Scripted queries in Arabic and English |
 | Edit durable locally | ≤ 1 s after the last key | Kill test |
@@ -443,6 +444,10 @@ How the budgets are met:
 
 Benchmarks live in `bench/`, use a generator that makes Arabic, English and mixed documents of a
 given size and block mix, and write results the CI compares with the last run on `main`.
+`bench/phase1.mjs` measures the budgets above that need no server, in the whole app over an
+IndexedDB store seeded with a 10,000-page workspace (`bench/editor/app.html`), plus the desktop's
+cold start and the kill tests' durability; a figure over its budget, or worse than the last run on
+`main` by half again and by more than a small margin, fails the build.
 
 ## User interface
 

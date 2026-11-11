@@ -1,4 +1,5 @@
-﻿import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 
 // Phase 1 exit criterion 10: search finds pages by title and by text, in English and Arabic,

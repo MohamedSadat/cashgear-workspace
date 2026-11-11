@@ -37,7 +37,12 @@ function snapshot(editor: Editor, focused: boolean): Snapshot {
     (!selection.empty || inLink) &&
     !selection.$from.parent.type.spec.code &&
     !slashState(state).active;
-  return { show, key: `${show}:${selection.from}:${selection.to}:${state.doc.content.size}` };
+  // Hidden, the snapshot stays the same as the caret moves: no React render per keystroke (each
+  // commit while the editor has focus reads its selection offsets, which walks the page's DOM).
+  return {
+    show,
+    key: show ? `${selection.from}:${selection.to}:${state.doc.content.size}` : 'hidden',
+  };
 }
 
 function useSelectionSnapshot(editor: Editor): Snapshot {

@@ -5,6 +5,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  # The Phase 1 budget gate compares with the last run on main's uploaded results.
+  actions: read
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -42,7 +44,7 @@ jobs:
   windows:
     name: Build and test (Windows)
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -85,6 +87,8 @@ jobs:
         run: node scripts/kill-test.mjs --target web --runs 25
       - run: pnpm --filter @cgw/desktop build
       - run: pnpm desktop:smoke
+      # The exit criteria's specs again, on the built desktop app over CDP.
+      - run: pnpm test:e2e:desktop
       - name: Kill test (desktop, SQLite)
         run: node scripts/kill-test.mjs --target desktop --runs 25
       # Phase 0's harnesses, kept (bench/README.md). pnpm test above already ran the S1 fuzz,
@@ -96,8 +100,23 @@ jobs:
           S3_BIG_BYTES: 262144
       - name: S5 and S7 – RTL checklist and hostile content (Chrome)
         run: pnpm bench:browser -- --s5 --s7 --chrome
-      - name: S6 – editor budgets (Chrome), recorded, not gated until Phase 1
+      - name: S6 – editor budgets on the editor alone (Chrome); editor work feeds the gate below
         run: pnpm bench:browser -- --s6 --chrome
+      - name: The last run on main's budget figures
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          if ($run) {
+            gh run download $run --name phase-verification --dir bench/previous-run
+            $found = Get-ChildItem bench/previous-run -Recurse -Filter phase1.json | Select-Object -First 1
+            if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName bench/previous/phase1.json }
+          }
+      - name: Phase 1 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase1 -- --desktop
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -105,4 +124,6 @@ jobs:
           path: |
             bench/results/
             playwright-report/
+            playwright-report-desktop/
             test-results/
+            test-results-desktop/

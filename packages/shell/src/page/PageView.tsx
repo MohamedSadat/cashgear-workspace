@@ -135,6 +135,9 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         label={t('page.content')}
         overlays={(editor) => <EditorOverlays editor={editor} host={host} />}
         onEditor={(editor) => {
+          // The cold-start budget's end: the first editable page (bench/phase1.mjs reads it).
+          if (editor && !performance.getEntriesByName('cgw-editable').length)
+            performance.mark('cgw-editable');
           editorRef.current = editor;
           services.editor.current = editor;
           setEditor(editor);
@@ -170,6 +173,12 @@ function TitleField({
   const [draft, setDraft] = useState(page.title);
   const pending = useRef<number | null>(null);
   const editing = useRef(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+
+  // A page just made, from the sidebar's button, its row menu or a key, starts in its title.
+  useEffect(() => {
+    if (session.takeFresh(page.id)) field.current?.focus();
+  }, [session, page.id]);
 
   useEffect(() => {
     if (!editing.current) setDraft(page.title);
@@ -193,6 +202,7 @@ function TitleField({
 
   return (
     <textarea
+      ref={field}
       className="cgw-title"
       rows={1}
       dir="auto"

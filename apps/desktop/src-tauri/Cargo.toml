@@ -16,6 +16,15 @@ tauri-plugin-dialog = "2"
 # Opens links in the system browser (WorkspacePlatform.openExternal).
 tauri-plugin-opener = "2"
 cgw-store = { path = "../../../crates/cgw-store" }
+cgw-native = { path = "../../../crates/cgw-native" }
+serde = { version = "1", features = ["derive"] }
+# cashgear-workspace:// links (crates/cgw-native reads them); the installer registers the scheme.
+tauri-plugin-deep-link = "2"
+# One app per data folder; a second start hands its deep link to the first.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# The OS certificate store (SChannel on Windows) rather than a bundled one, as Sheet does: the
+# default rustls brings webpki-root-certs, whose CDLA-Permissive-2.0 the licence gate refuses.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
 # generate_context! embeds the plugins' settings as JSON.
 serde_json = "1"
 

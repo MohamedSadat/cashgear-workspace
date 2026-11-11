@@ -35,6 +35,8 @@ export interface NewPage {
 export class WorkspaceSession {
   readonly mirror: Mirror;
   private readonly docs = new Map<Id, Promise<PageDocument>>();
+  /** Blank pages made in this session and not yet shown: their title takes focus when shown. */
+  private readonly fresh = new Set<Id>();
   private readonly order: Id[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private workspace: Id | null;
@@ -241,7 +243,13 @@ export class WorkspaceSession {
       { updateId: uuidv7(), data: newDocumentUpdate(record.id, content) },
     ]);
     if (content) void this.indexPage(record.id, content).catch(() => undefined);
+    else this.fresh.add(record.id);
     return record;
+  }
+
+  /** True once for a blank page just made here: whoever shows it first puts focus in its title. */
+  takeFresh(pageId: Id): boolean {
+    return this.fresh.delete(pageId);
   }
 
   async updatePage(

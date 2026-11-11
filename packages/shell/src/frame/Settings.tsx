@@ -5,13 +5,16 @@ import { LANGUAGES, type Language } from '../i18n';
 import type { ThemePreference } from '../theme';
 import { DataPanel } from '../exchange/DataPanel';
 import type { WorkspaceSession } from '../session';
+import { UpdateCheck, type UpdatesState } from './Updates';
 
 export function Settings({
   onLanguage,
   session,
+  updates,
 }: {
   onLanguage: (language: Language) => void;
   session: WorkspaceSession;
+  updates: UpdatesState;
 }) {
   const { t, i18n } = useTranslation();
   const { theme, platform } = useShell();
@@ -45,8 +48,9 @@ export function Settings({
       <h2>{t('settings.about')}</h2>
       <p data-testid="host-info">
         {t(platform.kind === 'desktop' ? 'frame.platformDesktop' : 'frame.platformWeb')}{' '}
-        {t('app.version', { version: __CGW_VERSION__ })}
+        {t('app.version', { version: updates.version ?? __CGW_VERSION__ })}
       </p>
+      <UpdateCheck updates={updates} />
     </section>
   );
 }

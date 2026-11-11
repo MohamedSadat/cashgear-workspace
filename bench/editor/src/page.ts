@@ -42,17 +42,29 @@ const stored = new Map<string, Uint8Array>();
 const host = document.getElementById('editor')!;
 const peerHost = document.getElementById('peer')!;
 
-// Keystroke to paint: from the keydown's timestamp to the frame after the change is drawn.
+// Keystroke to paint: from the keydown's timestamp to the frame after the change is drawn. And
+// editor work (Q19): from the keydown to the end of the transaction it caused.
 const keystrokes: number[] = [];
+const work: number[] = [];
+let keyStart: number | null = null;
 window.addEventListener(
   'keydown',
   (event) => {
     if (event.key.length !== 1) return;
     const start = event.timeStamp;
+    keyStart = start;
     void afterPaint().then(() => keystrokes.push(performance.now() - start));
   },
   true,
 );
+
+function watchWork(editor: Editor) {
+  editor.on('transaction', ({ transaction }) => {
+    if (keyStart === null || !transaction.docChanged) return;
+    work.push(performance.now() - keyStart);
+    keyStart = null;
+  });
+}
 
 function close() {
   plain?.destroy();
@@ -88,6 +100,7 @@ async function openBytes(bytes: Uint8Array, layers: Layers = {}): Promise<number
     withoutIds: layers.ids === false,
   });
   current = { doc, spike };
+  watchWork(spike.editor);
   await frame();
   await afterPaint();
   return performance.now() - started;
@@ -200,6 +213,9 @@ const spike = {
   },
   domNodes() {
     return host.getElementsByTagName('*').length;
+  },
+  editorWork() {
+    return work.splice(0);
   },
   keystrokes() {
     return keystrokes.splice(0);

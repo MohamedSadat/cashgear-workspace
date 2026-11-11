@@ -27,6 +27,30 @@ body {
   block-size: 100%;
 }
 
+/* Track U (PROGRESS.md): CgSplitter's pane scrolls as a whole, and its content box has no height
+   for ours to fill, so the top bar scrolled away and the page tree, which draws only the rows in
+   view, drew them all. Each pane is a column here and its content fills it: the sidebar's body
+   and the page area scroll. */
+.cgw-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cgw-pane > * {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+  padding: 0;
+}
+
+.cgw-pane > * > .cgw-sidebar,
+.cgw-pane > * > .cgw-main {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
 .cgw-sidebar {
   block-size: 100%;
   background: var(--cg-surface-subtle);
@@ -191,4 +215,26 @@ body {
   .cgw-page {
     padding: 24px 18px 0;
   }
+}
+
+/* Narrow screens (Frame.tsx): the sidebar is a CgDrawer over the page. */
+.cgw-drawer .cgw-sidebar {
+  block-size: 100%;
+  border-inline-end: 0;
+}
+
+.cgw-frame[data-layout='narrow'] .cgw-topbar {
+  min-block-size: 48px;
+}
+
+.cgw-frame[data-layout='narrow'] .cgw-page-area {
+  /* Room for the touch toolbar over the end of the page. */
+  padding-block-end: 64px;
+}
+
+/* Track U (listed in PROGRESS.md): @cashgear/ui's primary button keeps white text on the dark
+   theme's light accent, 2.5:1. Its own dialog actions use a dark colour there instead; the same
+   here, until the library changes. */
+[data-cg-theme='dark'] button[data-intent='primary'] {
+  --button-color: var(--cg-page-bg);
 }

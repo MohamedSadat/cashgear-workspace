@@ -5,8 +5,10 @@ import { BubbleToolbar } from './BubbleToolbar';
 import { MentionMenu } from './MentionMenu';
 import { SlashMenu } from './SlashMenu';
 import { TableMenu } from './TableMenu';
+import { TouchToolbar } from './TouchToolbar';
 
-/** Everything drawn over the editor: the slash menu, the bubble toolbar and the block menu. */
+/** Everything drawn over the editor: the slash menu, the bubble toolbar, the block menu
+ * and, on a narrow or touch screen, the touch toolbar. */
 export function EditorOverlays({ editor, host }: { editor: BlockEditor; host: EditorHost }) {
   return (
     <>
@@ -15,6 +17,7 @@ export function EditorOverlays({ editor, host }: { editor: BlockEditor; host: Ed
       <BubbleToolbar editor={editor} host={host} />
       <BlockMenu editor={editor} host={host} />
       <TableMenu editor={editor} host={host} />
+      <TouchToolbar editor={editor} host={host} />
     </>
   );
 }

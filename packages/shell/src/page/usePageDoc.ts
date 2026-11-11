@@ -7,21 +7,26 @@ export type PageDocState =
   | { status: 'ready'; doc: PageDocument }
   | { status: 'error'; error: unknown };
 
-/** Opens a page's document through the session; the session keeps a few open. */
+const LOADING: PageDocState = { status: 'loading' };
+
+/**
+ * Opens a page's document through the session; the session keeps a few open. A state counts only
+ * for the page it was loaded for: on the render that switches pages, the last page's document is
+ * never handed out under the new page.
+ */
 export function usePageDoc(session: WorkspaceSession, pageId: string): PageDocState {
-  const [state, setState] = useState<PageDocState>({ status: 'loading' });
+  const [loaded, setLoaded] = useState<{ pageId: string; state: PageDocState } | null>(null);
   useEffect(() => {
     let live = true;
-    setState({ status: 'loading' });
     session.openDoc(pageId).then(
-      (doc) => live && setState({ status: 'ready', doc }),
-      (error: unknown) => live && setState({ status: 'error', error }),
+      (doc) => live && setLoaded({ pageId, state: { status: 'ready', doc } }),
+      (error: unknown) => live && setLoaded({ pageId, state: { status: 'error', error } }),
     );
     return () => {
       live = false;
     };
   }, [session, pageId]);
-  return state;
+  return loaded?.pageId === pageId ? loaded.state : LOADING;
 }
 
 export function useSaveState(doc: PageDocument | null): SaveState | null {

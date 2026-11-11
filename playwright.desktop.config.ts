@@ -1,0 +1,27 @@
+import { defineConfig } from '@playwright/test';
+
+// The Phase 1 exit criteria on the built desktop app (pnpm test:e2e:desktop, after
+// pnpm desktop:build): the same specs, each test on target/release/cgw-desktop.exe started with
+// data of its own and driven over CDP (tests/e2e/fixtures.ts). Narrow screens and Axe are browser
+// concerns and run in Chrome and Edge only; the desktop window is at least 800 px wide.
+process.env.CGW_E2E_TARGET = 'desktop';
+export default defineConfig({
+  testDir: './tests/e2e',
+  testIgnore: ['**/narrow.spec.ts', '**/a11y.spec.ts'],
+  timeout: 90000,
+  expect: { timeout: 15000 },
+  fullyParallel: false,
+  workers: 1,
+  retries: process.env.CI ? 1 : 0,
+  globalSetup: './tests/e2e/desktop-setup.ts',
+  reporter: process.env.CI
+    ? [
+        ['github'],
+        ['html', { open: 'never', outputFolder: 'playwright-report-desktop' }],
+        ['json', { outputFile: 'bench/results/desktop-tests.json' }],
+      ]
+    : [['list'], ['json', { outputFile: 'bench/results/desktop-tests.json' }]],
+  outputDir: 'test-results-desktop',
+  use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  projects: [{ name: 'desktop' }],
+});

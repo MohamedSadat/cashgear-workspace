@@ -18,4 +18,28 @@ export interface WorkspacePlatform {
   saveFile(suggestedName: string, bytes: Uint8Array, type: string): Promise<void>;
   /** The desktop window is closing: `flush` runs first. */
   onCloseRequested?(flush: () => Promise<void>): () => void;
+  /** Desktop updates from the release feed. */
+  updates?: PlatformUpdates;
+  /**
+   * Desktop deep links (`cashgear-workspace://p/{pageId}`): `open` gets the route's hash, the
+   * link the app started with first. Returns the unsubscribe.
+   */
+  onDeepLink?(open: (hash: string) => void): () => void;
+}
+
+export interface UpdateInfo {
+  version: string;
+  notes: string | null;
+}
+
+export interface PlatformUpdates {
+  /** The installed version, as the updater compares it. */
+  version(): Promise<string>;
+  /** The newer version the feed offers, or null. */
+  check(): Promise<UpdateInfo | null>;
+  /**
+   * Downloads the update, checks its signature against the app's public key and installs it; the
+   * installer closes the app and starts the new version.
+   */
+  install(progress: (received: number, total: number | null) => void): Promise<void>;
 }

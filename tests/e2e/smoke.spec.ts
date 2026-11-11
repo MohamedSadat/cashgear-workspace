@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // The shell's smoke test: the frame renders with CashGear controls in light, dark, English and
 // Arabic; the sidebar collapses and comes back; the page is not cross-origin isolated (Workspace
@@ -18,7 +19,7 @@ test('renders the frame in both themes and both languages', async ({ page }) => 
 
   const html = page.locator('html');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.getByTestId('host-info')).toHaveText(/^Web Version \d+\.\d+\.\d+$/);
+  await expect(page.getByTestId('host-info')).toHaveText(/^(Web|Desktop) Version \d+\.\d+\.\d+$/);
   await expect(html).toHaveAttribute('data-cg-theme', 'light');
   await expect(html).toHaveAttribute('dir', 'ltr');
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(false);
@@ -38,7 +39,8 @@ test('renders the frame in both themes and both languages', async ({ page }) => 
   await expect(page.getByRole('heading', { level: 1, name: 'الإعدادات' })).toBeVisible();
   // In Arabic the sidebar is on the right.
   const sidebar = await page.getByRole('navigation', { name: 'الشريط الجانبي' }).boundingBox();
-  expect(sidebar && sidebar.x > page.viewportSize()!.width / 2).toBe(true);
+  const width = await page.evaluate(() => innerWidth);
+  expect(sidebar && sidebar.x > width / 2).toBe(true);
 
   // Ctrl+\ hides the sidebar and shows it again; the shortcut goes by key position.
   await page.keyboard.press('Control+Backslash');

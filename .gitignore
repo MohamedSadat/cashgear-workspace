@@ -15,8 +15,12 @@ bench/*/obj/
 
 # Test and benchmark output
 test-results/
+test-results-desktop/
 playwright-report/
+playwright-report-desktop/
 bench/results/
+bench/previous/
+bench/previous-run/
 coverage/
 
 # Local files

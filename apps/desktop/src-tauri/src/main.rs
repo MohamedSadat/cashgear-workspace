@@ -3,17 +3,26 @@
 //! The Cash Gear Workspace desktop shell. The webview reaches native code through typed commands
 //! only (ARCHITECTURE.md, Security): the local store takes one of a fixed set of requests in a
 //! binary frame, never SQL; saving a file opens the native dialog here, so no command takes a path
-//! from the page.
+//! from the page. A deep link (`cashgear-workspace://p/{pageId}`) can only choose one of the app's
+//! routes (crates/cgw-native).
+
+mod updates;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use cgw_store::Store;
+use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::DialogExt;
 
 struct LocalStore(Mutex<Store>);
+
+/// A route from a deep link that came before the page was listening, and whether it listens now.
+#[derive(Default)]
+struct DeepLinks(Mutex<(Option<String>, bool)>);
 
 /// Where the store lives: the app's data folder, or `CGW_DATA_DIR` (set by the end-to-end tests,
 /// read once at start).
@@ -46,8 +55,16 @@ async fn save_file(app: AppHandle, request: Request<'_>) -> Result<bool, String>
         .headers()
         .get("x-file-name")
         .and_then(|value| value.to_str().ok())
-        .map(percent_decode)
+        .map(cgw_native::file_name)
         .unwrap_or_else(|| "export.zip".into());
+    // The end-to-end tests set CGW_SAVE_DIR, as they set CGW_DATA_DIR: files go there under the
+    // safe name, with no dialog to answer.
+    if let Some(dir) = std::env::var_os("CGW_SAVE_DIR") {
+        let dir = PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+        std::fs::write(dir.join(&name), bytes).map_err(|error| error.to_string())?;
+        return Ok(true);
+    }
     let (sender, receiver) = std::sync::mpsc::channel();
     app.dialog()
         .file()
@@ -65,47 +82,93 @@ async fn save_file(app: AppHandle, request: Request<'_>) -> Result<bool, String>
     Ok(true)
 }
 
-/// Header values are ASCII; the page sends the name percent-encoded.
-fn percent_decode(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(&value[i + 1..i + 3], 16) {
-                out.push(byte);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
+/// The route a deep link asked for before the page listened, once; from now on links come as
+/// `deep-link` events.
+#[tauri::command]
+fn take_deep_link(links: State<'_, DeepLinks>) -> Option<String> {
+    let mut links = links.0.lock().ok()?;
+    links.1 = true;
+    links.0.take()
+}
+
+#[derive(Serialize)]
+struct AppInfo {
+    version: String,
+}
+
+/// The app's version from its bundle settings, which the updater compares.
+#[tauri::command]
+fn app_info(app: AppHandle) -> AppInfo {
+    AppInfo {
+        version: app.package_info().version.to_string(),
     }
-    let decoded = String::from_utf8_lossy(&out).into_owned();
-    // A file name only: no folders, no characters Windows refuses.
-    decoded
-        .chars()
-        .map(|c| {
-            if "\\/:*?\"<>|".contains(c) || c.is_control() {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect()
+}
+
+/// Brings the window forward and hands the last link that names a route to the page.
+fn open_links(app: &AppHandle, urls: impl IntoIterator<Item = String>) {
+    let Some(route) = urls
+        .into_iter()
+        .filter_map(|url| cgw_native::route(&url))
+        .last()
+    else {
+        return;
+    };
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    let state = app.state::<DeepLinks>();
+    let Ok(mut links) = state.0.lock() else {
+        return;
+    };
+    if links.1 {
+        let _ = app.emit("deep-link", route);
+    } else {
+        links.0 = Some(route);
+    }
 }
 
 fn main() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // One app per data folder, since one process owns the store: starting it again (a deep link
+    // clicked while it runs) brings this window forward, and the link comes to this instance.
+    // Tests give each run a data folder of its own and may run beside an installed app.
+    if std::env::var_os("CGW_DATA_DIR").is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(DeepLinks::default())
         .setup(|app| {
             let dir = data_dir(app.handle())?;
             let store = Store::open(&dir).map_err(|error| error.to_string())?;
             app.manage(LocalStore(Mutex::new(store)));
+            // The installer registers the scheme; a link the app was started with comes first.
+            let handle = app.handle().clone();
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                open_links(&handle, urls.into_iter().map(|url| url.to_string()));
+            }
+            app.deep_link().on_open_url(move |event| {
+                open_links(&handle, event.urls().into_iter().map(|url| url.to_string()));
+            });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![store, save_file])
+        .invoke_handler(tauri::generate_handler![
+            store,
+            save_file,
+            take_deep_link,
+            app_info,
+            updates::update_check,
+            updates::update_install
+        ])
         .run(tauri::generate_context!())
         .expect("the desktop app failed to start");
 }

@@ -286,11 +286,13 @@ async function s6(page) {
     // Typing in the middle of the page, English letters so each is a real key press.
     await call(page, 'caret', Math.floor((await call(page, 'blockCount')) / 2), 0);
     await call(page, 'keystrokes');
+    await call(page, 'editorWork');
     await page.keyboard.type('the quick brown fox jumps over the lazy dog and keeps typing', {
       delay: 35,
     });
     await page.waitForTimeout(200);
     const keys = await call(page, 'keystrokes');
+    const work = await call(page, 'editorWork');
     await cdp.send('HeapProfiler.collectGarbage');
     const heap = await cdp.send('Runtime.getHeapUsage');
     rows.push({
@@ -301,6 +303,8 @@ async function s6(page) {
       keystrokes: keys.length,
       keyP50: round(percentile(keys, 0.5)),
       keyP95: round(percentile(keys, 0.95)),
+      workP50: round(percentile(work, 0.5)),
+      workP95: round(percentile(work, 0.95)),
       heapUsedMB: round(heap.usedSize / 1048576),
       domNodes: await call(page, 'domNodes'),
     });

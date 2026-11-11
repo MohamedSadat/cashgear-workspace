@@ -1,0 +1,10 @@
+[package]
+name = "cgw-native"
+description = "Desktop helpers with no Tauri in them: deep links read into app routes, and file names made safe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]

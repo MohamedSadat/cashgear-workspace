@@ -133,8 +133,9 @@ let app;
 try {
   app = await launch();
   const { page } = app;
-  // The window starts loading the app before the debugger attaches: wait for the frame first.
-  await expect(page.locator('.cgw-frame')).toBeVisible({ timeout: 30000 });
+  // The window starts loading the app before the debugger attaches: wait for it to draw first
+  // (on new data, the first-run screen).
+  await expect(page.locator('.cgw-first-run, .cgw-frame').first()).toBeVisible({ timeout: 30000 });
   await page.evaluate(() => {
     location.hash = '#/settings';
   });

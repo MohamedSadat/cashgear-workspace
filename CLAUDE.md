@@ -67,13 +67,15 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 1); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
 | `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
 | `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; `cgw-store-cli` for tests |
+| `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
-| `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison |
+| `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison. `app.html`: the whole app over a seeded 10,000-page store, for `bench/phase1.mjs` |
 | `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
 | `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP |
 | `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
 | `bench/results/` | What runs write; not committed; CI uploads it |
-| `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test, desktop smoke and the Phase 0 harnesses on Windows |
+| `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test, desktop smoke, kill tests, Phase 1 budgets and the Phase 0 harnesses on Windows |
+| `.github/workflows/release.yml` | On a `v*` tag: release check, installer test, signed NSIS installer and update, a drafted GitHub release |
 | `docs/` | Plan, design, decisions, progress |
 
 ## Commands
@@ -91,6 +93,10 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm build` | Web build and third-party notices |
 | `pnpm test:e2e` | Playwright against `pnpm preview` (port 4273) |
 | `pnpm desktop:build` / `pnpm desktop:smoke` | Release desktop build (`target/release/cgw-desktop.exe`), then WebView2 smoke over CDP |
+| `pnpm desktop:installer` / `pnpm desktop:installer-test` | The signed NSIS installer (after `pnpm build`); install, deep links, update and uninstall of a throwaway test product (about 10 minutes) |
+| `pnpm release:check` | One version everywhere and a changelog section for it |
+| `pnpm bench:phase1 [-- --desktop]` | Phase 1's budgets, gated against the budgets and `bench/previous/phase1.json` |
+| `node scripts/updater-key.mjs` | Made the updater's key once: private half straight into the repo's secrets, public half into `tauri.conf.json`. Refuses to replace it |
 | `pnpm dev:web` / `pnpm dev:desktop` | Vite dev server on port 5273; Tauri dev window on it |
 | `pnpm bench:s3` | S3: Yjs writes a corpus, `cgw-ydoc` processes it from .NET, Yjs checks it (`S3_DOCS`, `S3_BIG_BYTES`) |
 | `pnpm bench:webview2-host` then `pnpm bench:browser [-- --s5 --s6 --s7 --chrome --webview2]` | Browser harnesses on port 4290 |
@@ -160,3 +166,17 @@ Added as they are found, grouped by phase.
   the subscription holds state (the bubble toolbar's focus).
 - Playwright's `dragTo` does not drive the block handle's HTML5 drag; use `page.mouse` down, move
   in steps, up.
+- Every React commit while the editor has focus reads the editor's selection offsets, which walks
+  its DOM: about 14 ms at 5,000 blocks. Nothing React-rendered may change per keystroke (the
+  bubble toolbar's snapshot is constant while hidden; the save status sets its own text).
+- `CgSplitter`'s pane scrolls as a whole and its content box has no height: panes carry
+  `cgw-pane` (a column whose content fills it), or the page tree cannot virtualise.
+- `CgDrawer`'s closed panel is moved off screen, not hidden: tests check `aria-hidden`.
+- A page lazily loaded behind a shortcut loses the keys typed straight after it (the palette
+  loads with the frame).
+- PowerShell's `Get-Content`/`Set-Content` mangle Arabic too: edit such files with the file tool.
+- `.gitignore`'s `bin/` hid `crates/*/src/bin`: scope ignore rules to their folders.
+- `tauri signer generate -p` reads a password starting with `-` as a flag: use `--password=`.
+- Playwright pages from `connectOverCDP` ignore `baseURL`: the desktop fixture rewrites `goto`.
+  Elevated WebView2 hosts (GitHub's runners) take the debugging port only from the policy, so the
+  desktop e2e run uses one fixed port (9334).

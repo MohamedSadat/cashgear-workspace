@@ -1,0 +1,101 @@
+name: Release
+# A version tag (v0.1.0) builds the release, as Sheet does: the web build, the installer test, and
+# the signed Windows installer with its update. With the updater's key present
+# (scripts/release-check.mjs) it drafts the GitHub release; publishing the draft is what makes
+# installed apps see the update. Without Azure Artifact Signing it signs with a throwaway
+# certificate, and the notes say so.
+#
+# Repository variables: CGW_SIGN_ENDPOINT, CGW_SIGN_ACCOUNT, CGW_SIGN_PROFILE (Azure Artifact
+# Signing). Secrets: TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD), made by scripts/updater-key.mjs;
+# AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID. The updater's public key is in
+# tauri.conf.json.
+on:
+  push:
+    tags: ['v*']
+  # Run on a branch to try the release build and installer test without drafting.
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  release:
+    name: Build, test and draft the release
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CGW_SIGN_ENDPOINT: ${{ vars.CGW_SIGN_ENDPOINT }}
+      CGW_SIGN_ACCOUNT: ${{ vars.CGW_SIGN_ACCOUNT }}
+      CGW_SIGN_PROFILE: ${{ vars.CGW_SIGN_PROFILE }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Ensure WebView2 Runtime
+        run: ./scripts/setup-webview2.ps1
+      - run: pnpm install --frozen-lockfile
+      - name: Check the release
+        id: check
+        run: pnpm release:check
+      - run: pnpm build
+      - name: Install, update and uninstall a test build
+        run: pnpm desktop:installer-test
+      - name: Code signing (Azure Artifact Signing, else a throwaway certificate)
+        shell: pwsh
+        env:
+          CLIENT_PACKAGE: https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/1.0.146/microsoft.artifactsigning.client.1.0.146.nupkg
+          CLIENT_SHA256: 7761e5d8f31e54b764da21d33cd8b0a2940e1b05526c7dfcb5e94b0431426f70
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP 'signing'
+          New-Item -ItemType Directory -Force $tools | Out-Null
+          if ($env:CGW_SIGN_ENDPOINT -and $env:CGW_SIGN_ACCOUNT -and $env:CGW_SIGN_PROFILE) {
+            $package = Join-Path $tools 'client.zip'
+            Invoke-WebRequest $env:CLIENT_PACKAGE -OutFile $package
+            if ((Get-FileHash $package -Algorithm SHA256).Hash -ne $env:CLIENT_SHA256) { throw 'The signing client is not the pinned one.' }
+            Expand-Archive $package (Join-Path $tools 'client')
+            @{ Endpoint = $env:CGW_SIGN_ENDPOINT; CodeSigningAccountName = $env:CGW_SIGN_ACCOUNT; CertificateProfileName = $env:CGW_SIGN_PROFILE } |
+              ConvertTo-Json | Set-Content (Join-Path $tools 'metadata.json')
+            "CGW_SIGN_DLIB=$(Join-Path $tools 'client/bin/x64/Azure.CodeSigning.Dlib.dll')" >> $env:GITHUB_ENV
+            "CGW_SIGN_METADATA=$(Join-Path $tools 'metadata.json')" >> $env:GITHUB_ENV
+            "CGW_SIGN_REQUIRED=1" >> $env:GITHUB_ENV
+          } else {
+            Write-Output 'Azure Artifact Signing is not set up: signing with a throwaway certificate.'
+            $lines = node scripts/test-certificate.mjs $tools
+            foreach ($line in $lines) { if ($line -match '^CGW_SIGN_') { $line >> $env:GITHUB_ENV } }
+          }
+      - name: The release installer
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: pnpm desktop:installer
+      - name: Gather the release files
+        if: steps.check.outputs.complete == 'true' && github.ref_type == 'tag'
+        run: node scripts/release-assets.mjs target/release-files "${{ steps.check.outputs.notes }}"
+      - name: Draft the GitHub release
+        if: steps.check.outputs.complete == 'true' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}" target/release-files/*
+          --draft --title "Cash Gear Workspace ${{ steps.check.outputs.version }}"
+          --notes-file "${{ steps.check.outputs.notes }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-build
+          path: |
+            target/release/bundle/nsis/
+            bench/results/

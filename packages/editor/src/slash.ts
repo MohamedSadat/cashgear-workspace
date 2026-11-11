@@ -36,6 +36,19 @@ export function removeSlashText(view: EditorView) {
   view.dispatch(view.state.tr.delete(from, to).setMeta(slashKey, closed));
 }
 
+/** Opens the menu at the caret as typing `/` would (the touch toolbar's insert button). */
+export function openSlash(view: EditorView): boolean {
+  const { $from, empty } = view.state.selection;
+  if (!empty || !$from.parent.isTextblock || $from.parent.type.spec.code) return false;
+  const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
+  const tr = view.state.tr;
+  if (before && !/s/.test(before)) tr.insertText(' ');
+  const from = tr.selection.from;
+  tr.insertText('/').setMeta(slashKey, { active: true, from, query: '' });
+  view.dispatch(tr);
+  return true;
+}
+
 export const SlashCommands = Extension.create<{ keys: () => SlashKeys | null }>({
   name: 'cgwSlash',
   // Before the block keys: Enter and the arrows belong to the menu while it is open.

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 
 // Phase 1 exit criteria 1 and 2: create a workspace; create and organise pages (nest, move,

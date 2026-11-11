@@ -472,15 +472,23 @@
   cursor: pointer;
 }
 
+/* Shown on hover and on focus (each button is reached by Tab); always shown where there is no
+   hover. Never half-shown: faded text would fail contrast. */
 .cgw-page-header-actions {
   display: flex;
   gap: 4px;
-  opacity: 0.6;
+  opacity: 0;
 }
 
 .cgw-page-header:hover .cgw-page-header-actions,
 .cgw-page-header-actions:focus-within {
   opacity: 1;
+}
+
+@media (hover: none) {
+  .cgw-page-header-actions {
+    opacity: 1;
+  }
 }
 
 .cgw-emoji-picker {
@@ -597,6 +605,11 @@
 .cgw-palette-detail {
   color: var(--cg-text-secondary);
   font-size: 0.8125rem;
+}
+
+/* On the chosen row's tint the secondary colour falls short of 4.5:1. */
+.cgw-palette-item[aria-selected='true'] .cgw-palette-detail {
+  color: var(--cg-text);
 }
 
 .cgw-palette-empty {

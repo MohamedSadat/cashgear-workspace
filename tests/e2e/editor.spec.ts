@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { blocks, createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 
 // Phase 1 exit criteria 3 to 7: edit block documents, slash commands, formatting, drag and
@@ -220,11 +220,7 @@ test.describe('the block editor', () => {
 
   test('copy and paste blocks gives the copies new ids; Markdown pastes as blocks', async ({
     page,
-    context,
-    browserName,
   }) => {
-    void context;
-    void browserName;
     await createWorkspace(page);
     await newPage(page);
     await page.keyboard.type('One');

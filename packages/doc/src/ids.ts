@@ -9,7 +9,38 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { AddMarkStep, RemoveMarkStep, ReplaceStep } from '@tiptap/pm/transform';
 import { digest } from 'lib0/hash/sha256';
+
+/**
+ * Whether a transaction only typed, deleted or formatted text inside text blocks. Such a change
+ * makes no block and copies no id, so the id scan (every block in the page) can be skipped: at
+ * 5,000 blocks it is a few milliseconds a keystroke. Anything else is scanned.
+ */
+export function textOnlyChange(tr: Transaction): boolean {
+  let doc = tr.before;
+  for (const step of tr.steps) {
+    if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
+      doc = step.apply(doc).doc ?? doc;
+      continue;
+    }
+    if (!(step instanceof ReplaceStep)) return false;
+    const { from, to, slice } = step;
+    if (slice.openStart || slice.openEnd) return false;
+    let inline = true;
+    slice.content.forEach((node) => {
+      if (!node.isInline) inline = false;
+    });
+    if (!inline) return false;
+    const $from = doc.resolve(from);
+    const $to = doc.resolve(to);
+    if ($from.parent !== $to.parent || !$from.parent.isTextblock) return false;
+    const next = step.apply(doc).doc;
+    if (!next) return false;
+    doc = next;
+  }
+  return true;
+}
 
 const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 export const BLOCK_ID = /^[0-9A-Za-z]{12}$/;
@@ -125,7 +156,8 @@ export function blockIdPlugin({ isRemote, stats: counters, schedule }: BlockIdOp
       if (
         !changed.length ||
         changed.some(isRemote) ||
-        changed.every((tr) => tr.getMeta(blockIdKey))
+        changed.every((tr) => tr.getMeta(blockIdKey)) ||
+        changed.every(textOnlyChange)
       )
         return null;
       // Local: mint for blocks a command created without an id; a duplicate here is a command

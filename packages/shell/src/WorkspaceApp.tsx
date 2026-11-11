@@ -1,13 +1,22 @@
 import { CgButton } from '@cashgear/ui';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { CommandRegistry } from './commands';
 import { ShellContext, useShell, type CommandContext, type ShellServices } from './context';
 import { FirstRun } from './FirstRun';
 import { Frame } from './frame/Frame';
 import { Settings } from './frame/Settings';
+import { UpdateButton, useUpdates } from './frame/Updates';
 import { applyLanguage, createI18n, type Language } from './i18n';
-import { useSaveState } from './page/usePageDoc';
 import type { WorkspacePlatform } from './platform';
 import { navigate, parseRoute, useHash } from './route';
 import { WorkspaceSession } from './session';
@@ -16,6 +25,8 @@ import { Breadcrumbs } from './page/PageHeader';
 import { PageMenu } from './page/PageMenu';
 import { Notice } from './Notice';
 import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
+// The palette loads with the frame: keys typed straight after Ctrl+K must reach its field.
+import { Palette } from './search/Palette';
 import { ThemeController } from './theme';
 import { normaliseText } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
@@ -23,7 +34,6 @@ import type { PageDocument } from '@cgw/doc';
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
 // (ARCHITECTURE.md, Performance: Startup).
 const PageView = lazy(() => import('./page/PageView').then((m) => ({ default: m.PageView })));
-const Palette = lazy(() => import('./search/Palette').then((m) => ({ default: m.Palette })));
 
 export interface WorkspaceAppProps {
   platform: WorkspacePlatform;
@@ -109,6 +119,15 @@ function Workspace({ session }: { session: WorkspaceSession }) {
   const [openDoc, setOpenDoc] = useState<PageDocument | null>(null);
   useMirror(session);
   useEffect(() => session.onSwitch(() => rerender((n) => n + 1)), [session]);
+
+  // Starting with no page asked for (the desktop window, a bare address), the last page visited
+  // opens, as it was left.
+  useEffect(() => {
+    if (location.hash && location.hash !== '#/') return;
+    const workspaceId = session.workspaceId;
+    const last = workspaceId ? session.mirror.recentOf(workspaceId, 1)[0] : undefined;
+    if (last) navigate({ kind: 'page', pageId: last.id }, true);
+  }, [session]);
 
   const setLanguage = useCallback(
     (language: Language) => {
@@ -204,6 +223,18 @@ function Workspace({ session }: { session: WorkspaceSession }) {
     });
   }, [services, session, session.workspaceId, t]);
 
+  const flushAll = useCallback(() => session.flushAll(), [session]);
+  const updates = useUpdates(services.platform.updates, flushAll);
+
+  // A deep link on the desktop chooses a route; the page router checks it again.
+  useEffect(
+    () =>
+      services.platform.onDeepLink?.((hash) => {
+        navigate(parseRoute(hash));
+      }),
+    [services],
+  );
+
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(
     () =>
@@ -249,17 +280,14 @@ function Workspace({ session }: { session: WorkspaceSession }) {
           {page && !page.trashedAt && <Breadcrumbs session={session} page={page} />}
           <SaveStatus doc={route.kind === 'page' ? openDoc : null} />
           {page && !page.trashedAt && <PageMenu session={session} page={page} onError={onError} />}
+          <UpdateButton updates={updates} />
         </>
       }
     >
       {notice && <Notice text={notice} onClose={() => setNotice(null)} />}
-      {paletteOpen && (
-        <Suspense fallback={null}>
-          <Palette session={session} onClose={() => setPaletteOpen(false)} />
-        </Suspense>
-      )}
+      {paletteOpen && <Palette session={session} onClose={() => setPaletteOpen(false)} />}
       {route.kind === 'settings' ? (
-        <Settings onLanguage={setLanguage} session={session} />
+        <Settings onLanguage={setLanguage} session={session} updates={updates} />
       ) : route.kind === 'trash' ? (
         <TrashView session={session} onError={onError} />
       ) : page && !page.trashedAt ? (
@@ -281,29 +309,42 @@ function Workspace({ session }: { session: WorkspaceSession }) {
   );
 }
 
+/**
+ * Whether the open page is saved. Drawn without React: a React commit while the editor has focus
+ * reads the editor's selection offsets, which walks the page's DOM (about 14 ms at 5,000 blocks),
+ * and the state changes several times a second while typing.
+ */
 function SaveStatus({ doc }: { doc: PageDocument | null }) {
   const { t } = useTranslation();
-  const state = useSaveState(doc);
-  if (!state) return null;
-  const label =
-    state === 'saved'
-      ? t('page.saved')
-      : state === 'saving'
-        ? t('page.saving')
-        : state === 'unsaved'
-          ? t('page.unsaved')
-          : state === 'error'
-            ? t('page.saveError')
-            : t('page.readOnly');
+  const label = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = label.current;
+    if (!el || !doc) return;
+    const show = () => {
+      const state = doc.saveState;
+      el.dataset.state = state;
+      el.textContent =
+        state === 'saved'
+          ? t('page.saved')
+          : state === 'saving'
+            ? t('page.saving')
+            : state === 'unsaved'
+              ? t('page.unsaved')
+              : state === 'error'
+                ? t('page.saveError')
+                : t('page.readOnly');
+    };
+    show();
+    return doc.onSaveState(show);
+  }, [doc, t]);
+  if (!doc) return null;
   return (
     <span
+      ref={label}
       className="cgw-save-status"
-      data-state={state}
       role="status"
       aria-live="polite"
       data-testid="save-status"
-    >
-      {label}
-    </span>
+    />
   );
 }
