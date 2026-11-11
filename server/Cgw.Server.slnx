@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cgw.Core/Cgw.Core.csproj" />
+    <Project Path="src/Cgw.Api/Cgw.Api.csproj" />
+    <Project Path="src/Cgw.Ydoc/Cgw.Ydoc.csproj" />
+    <Project Path="src/Cgw.Worker/Cgw.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cgw.Tests/Cgw.Tests.csproj" />
+  </Folder>
+</Solution>

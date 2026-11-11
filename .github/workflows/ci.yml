@@ -38,8 +38,61 @@ jobs:
         run: cargo deny check advisories
         continue-on-error: true
       - run: pnpm licenses:check
-      - name: GPL dependencies fail both gates
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: NuGet licences (the server's packages)
+        run: dotnet restore server/Cgw.Server.slnx && pnpm licenses:nuget
+      - name: GPL dependencies fail every gate
         run: pnpm licenses:selftest
+
+  server:
+    name: Server (.NET, SQL Server with full-text, Azurite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: pnpm install --frozen-lockfile
+      # A fresh password per run, never in the repo or the logs.
+      - name: SQL Server 2022 with full-text search
+        run: |
+          password="$(openssl rand -base64 24 | tr -d '/+=')Aa1!"
+          echo "::add-mask::$password"
+          echo "MSSQL_SA_PASSWORD=$password" >> "$GITHUB_ENV"
+          docker build -t cgw-mssql-fts -f server/tests/sqlserver-fts.Dockerfile server/tests
+          docker run -d --name mssql -p 1433:1433 -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$password" cgw-mssql-fts
+      # The worker's Yjs library (crates/cgw-ydoc over its C ABI).
+      - run: cargo build -p cgw-ydoc --profile ffi
+      - run: pnpm server:build
+      - name: The OpenAPI document and the API client are committed as the build makes them
+        run: git diff --exit-code server/openapi packages/api/src/schema.ts && pnpm api:check
+      - name: Wait for SQL Server
+        run: |
+          for i in $(seq 1 60); do
+            docker exec mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -Q "SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled')" && break
+            sleep 2
+          done
+      - name: Server tests (SQL Server in a container, Azurite)
+        run: pnpm server:test
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+          CGW_TEST_FULLTEXT: required
 
   windows:
     name: Build and test (Windows)

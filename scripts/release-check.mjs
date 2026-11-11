@@ -1,7 +1,8 @@
 // Checks a release before it is built (pnpm release:check; the release workflow runs it on a
 // version tag), as Sheet does:
 //   - one version everywhere: the package.json files, the Cargo workspace, tauri.conf.json, the
-//     tag (GITHUB_REF_NAME, when set), and a CHANGELOG.md section for it;
+//     server's Directory.Build.props, the tag (GITHUB_REF_NAME, when set), and a CHANGELOG.md
+//     section for it;
 //   - which release settings are present. Without the updater's key the workflow builds and
 //     tests the release but does not draft it. Without Azure Artifact Signing it signs with a
 //     throwaway certificate and says so in the notes.
@@ -34,6 +35,10 @@ versions['apps/desktop/src-tauri/tauri.conf.json'] = json(
 versions['Cargo.toml'] = readFileSync(join(root, 'Cargo.toml'), 'utf8').match(
   /\[workspace\.package\][^[]*?version\s*=\s*"([^"]+)"/,
 )?.[1];
+versions['server/Directory.Build.props'] = readFileSync(
+  join(root, 'server', 'Directory.Build.props'),
+  'utf8',
+).match(/<Version>([^<]+)<\/Version>/)?.[1];
 for (const [path, found] of Object.entries(versions)) {
   if (found !== version) problems.push(`${path} is version ${found}, not ${version}.`);
 }

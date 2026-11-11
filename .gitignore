@@ -30,3 +30,7 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# .NET server
+server/**/bin/
+server/**/obj/

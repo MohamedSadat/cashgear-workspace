@@ -24,5 +24,22 @@
       "reason": "First-party CashGear component library"
     }
   ],
-  "mustInclude": ["react", "react-dom", "@tauri-apps/api", "@cashgear/ui"]
+  "mustInclude": ["react", "react-dom", "@tauri-apps/api", "@cashgear/ui"],
+  "nugetExceptions": [
+    {
+      "package": "Apache.Arrow",
+      "license": "Apache-2.0 (licence file)",
+      "reason": "Apache Software Foundation package whose nuspec names the licence by file; brought by Azure.Storage.Blobs"
+    },
+    {
+      "package": "Microsoft.Data.SqlClient.SNI.runtime",
+      "license": "Microsoft Software License Terms (redistributable)",
+      "reason": "Microsoft's native SQL Server networking for Windows, required by Microsoft.Data.SqlClient; not copyleft"
+    },
+    {
+      "package": "Microsoft.Identity.Client.NativeInterop",
+      "license": "Microsoft Software License Terms (redistributable)",
+      "reason": "Microsoft's MSAL broker interop, brought by Microsoft.Data.SqlClient; not copyleft"
+    }
+  ]
 }

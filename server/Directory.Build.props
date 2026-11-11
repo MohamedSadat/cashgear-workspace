@@ -1,0 +1,18 @@
+<Project>
+  <!-- One version everywhere (scripts/release-check.mjs reads it). -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- SqlClient needs culture data (Phase 0 gotcha). -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+    <Authors>Cash Gear</Authors>
+    <Product>Cash Gear Workspace</Product>
+  </PropertyGroup>
+</Project>

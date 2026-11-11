@@ -1,9 +1,11 @@
 // Runs every standing check in the order CI runs them, and stops at the first failure.
 //   pnpm check            all of them
-//   pnpm check --no-rust  only the TypeScript and npm checks
+//   pnpm check --no-rust  only the TypeScript and npm checks (and no server, which needs cgw-ydoc)
+//   pnpm check --no-server  everything but the .NET server's build and tests
 import { pnpmCommand, run } from './lib.mjs';
 
 const skipRust = process.argv.includes('--no-rust');
+const skipServer = skipRust || process.argv.includes('--no-server');
 const pnpm = (...args) => pnpmCommand(args);
 const checks = [
   ['format', pnpm('format:check')],
@@ -23,7 +25,18 @@ const checks = [
         ['cargo-deny', pnpm('deny')],
       ]),
   ['npm licences', pnpm('licenses:check')],
+  ['nuget licences', pnpm('licenses:nuget')],
   ['licence self-test', pnpm('licenses:selftest')],
+  ...(skipServer
+    ? []
+    : [
+        // The build writes server/openapi/v1.json; @cgw/api's types must match it.
+        ['server build', pnpm('server:build')],
+        ['api types', pnpm('api:check')],
+        // The worker's Yjs library, which the server tests call.
+        ['cgw-ydoc ffi', ['cargo', ['build', '-p', 'cgw-ydoc', '--profile', 'ffi']]],
+        ['server tests', pnpm('server:test')],
+      ]),
 ];
 
 for (const [name, [command, args]] of checks) {

@@ -69,6 +69,8 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; `cgw-store-cli` for tests |
 | `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
+| `server/` | .NET 10 solution `Cgw.Server.slnx`. `Cgw.Core`: EF Core data (`CgwDb`, the tenant filter, migrations), blob storage with signed URLs, mail, audit. `Cgw.Api`: the API process (ProblemDetails with codes, correlation ids, rate limits, health, Identity, OpenIddict, the sign-in pages, the feature modules). `Cgw.Ydoc`: `cgw-ydoc` by P/Invoke, worker only. `Cgw.Worker`: the jobs. `tests/Cgw.Tests`: xUnit v3 on SQL Server and Azurite. `openapi/v1.json` is written by the build |
+| `packages/api` (`@cgw/api`) | The API client: `schema.ts` generated from `server/openapi/v1.json`, openapi-fetch, cookie with antiforgery header (web) or bearer (desktop) |
 | `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison. `app.html`: the whole app over a seeded 10,000-page store, for `bench/phase1.mjs` |
 | `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
 | `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP |
@@ -82,7 +84,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 
 | Command | What |
 | --- | --- |
-| `pnpm check` | Every standing check below, in CI's order; stops at the first failure (`--no-rust` skips Rust) |
+| `pnpm check` | Every standing check below, in CI's order; stops at the first failure (`--no-rust` skips Rust and the server, `--no-server` the server) |
 | `pnpm format:check` / `pnpm format` | Prettier |
 | `pnpm lint` | ESLint, zero warnings |
 | `pnpm typecheck` | `tsc --noEmit` in every package |
@@ -90,6 +92,10 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm rust:fmt` / `pnpm rust:clippy` / `pnpm rust:test` | `cargo fmt --check`, `clippy -D warnings`, `cargo test` over the workspace |
 | `pnpm deny` | `cargo deny check licenses sources` |
 | `pnpm licenses:check` / `pnpm licenses:selftest` | npm licence gate, and proof that both gates reject a GPL dependency |
+| `pnpm licenses:nuget` | NuGet licence gate over the server's packages |
+| `pnpm server:build` / `pnpm server:test` | Build the server (writes `server/openapi/v1.json`); its tests on LocalDB, or the server in `CGW_TEST_SQL`, with an Azurite they start (needs `cargo build -p cgw-ydoc --profile ffi`) |
+| `pnpm api:generate` / `pnpm api:check` | `@cgw/api`'s types from the OpenAPI document; fail if stale |
+| `dotnet ef migrations add <Name> --project server/src/Cgw.Core --startup-project server/src/Cgw.Core --output-dir Data/Migrations` | A migration (`dotnet tool restore` installs `dotnet-ef`) |
 | `pnpm build` | Web build and third-party notices |
 | `pnpm test:e2e` | Playwright against `pnpm preview` (port 4273) |
 | `pnpm desktop:build` / `pnpm desktop:smoke` | Release desktop build (`target/release/cgw-desktop.exe`), then WebView2 smoke over CDP |
@@ -180,3 +186,20 @@ Added as they are found, grouped by phase.
 - Playwright pages from `connectOverCDP` ignore `baseURL`: the desktop fixture rewrites `goto`.
   Elevated WebView2 hosts (GitHub's runners) take the debugging port only from the policy, so the
   desktop e2e run uses one fixed port (9334).
+
+### Phase 2
+
+- Python on Windows writes CRLF in text mode: open files with `newline='
+'` (`.gitattributes`
+  fixes commits, but Prettier fails first).
+- The build's OpenAPI step runs the API's host (`GetDocument.Insider`), hosted services
+  included: anything that reaches SQL or Blob at start skips itself there
+  (`StartupTasks.GeneratingDocument`).
+- Minimal API `[FromForm]` records fail to bind (`FormDataMappingException`); the pages bind
+  `IFormCollection`, which still requires the antiforgery token.
+- xUnit v3 on the .NET 10 SDK needs Microsoft.Testing.Platform (root `global.json`) and
+  `dotnet test --solution ...`.
+- With `InternalsVisibleTo`, two top-level `Program` classes clash in the tests: the worker's
+  entry point is `WorkerProgram`.
+- OpenIddict 7's application manager takes the store, not a resolver;
+  `LoopbackApplicationManager` makes loopback redirect ports not count.

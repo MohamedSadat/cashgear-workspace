@@ -44,3 +44,13 @@ expectRejection(
   ],
   ['gpl-fixture@1.0.0', 'GPL-3.0-only'],
 );
+expectRejection(
+  'NuGet licence check',
+  process.execPath,
+  [
+    join(root, 'scripts/check-nuget-licenses.mjs'),
+    '--listing',
+    join(root, 'tests/license-gate/nuget/gpl.json'),
+  ],
+  ['Gpl.Fixture@1.0.0', 'GPL-3.0-only'],
+);

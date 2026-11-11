@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>cgw-worker-dev-no-secrets</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Cgw.Core/Cgw.Core.csproj" />
+    <ProjectReference Include="../Cgw.Ydoc/Cgw.Ydoc.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cgw.Tests" />
+  </ItemGroup>
+</Project>

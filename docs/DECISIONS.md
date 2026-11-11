@@ -573,3 +573,26 @@ its own), and the decision it confirms or changes. The harnesses are in `bench/`
 | Q13. Link previews | Yes, in Phase 2, fetched by the server behind an SSRF guard (public addresses only, no redirect into a private range, size and time limits). A bookmark still shows its URL when there is no preview |
 | Q20. When the worker validates pushed updates | Before fan-out. Pushed updates are held as unvalidated until the worker passes them with `cgw-ydoc`; pulls by other clients return only validated ones. A failing update is refused and its pusher told |
 | Who may sign up | Anyone, with the email confirmed before the first sign-in. Rate-limited, with lockout after repeated failed sign-ins |
+
+### Defaults picked (say if any should change)
+
+M2.1 and M2.2, the server and accounts:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Server layout | `server/Cgw.Server.slnx`: `Cgw.Core` (data, tenancy, blob, mail, audit), `Cgw.Api`, `Cgw.Ydoc` (P/Invoke), `Cgw.Worker`, `tests/Cgw.Tests`; .NET 10 | Only the worker references `Cgw.Ydoc`; a test walks the API's references and its build output (D14) |
+| Test databases | LocalDB locally, which has no full-text search (the `LIKE` path); in CI SQL Server 2022 in a container with `mssql-server-fts` (the full-text path), on Ubuntu. One scratch database per run, dropped at the end; tests stay apart by working in workspaces of their own | The reference machine has no Docker; CI covers both search paths |
+| Ids | UUIDv7 as `binary(16)` in RFC byte order, by one EF Core value converter for every `Guid` (D13 confirmed) | Time order is index order |
+| Test framework | xUnit v3 (Apache-2.0) with its own asserts, on Microsoft.Testing.Platform (root `global.json`) | FluentAssertions is no longer open source |
+| NuGet licence gate | `scripts/check-nuget-licenses.mjs` against `license-policy.json`, in `pnpm check`, CI and the self-test. Three named exceptions: Apache.Arrow (Apache-2.0, named by its licence file), and Microsoft.Data.SqlClient.SNI.runtime and Microsoft.Identity.Client.NativeInterop (Microsoft redistributables that SqlClient brings) | npm and cargo had gates; NuGet needed its own. None of the three is copyleft |
+| Blob storage in development and tests | Azurite 3.37.0 (MIT), a root dev dependency, always run with `--disableTelemetry` | It collects telemetry unless told not to |
+| Signed URLs | A user-delegation SAS from an Azure AD credential (`DefaultAzureCredential`: managed identity or a service principal from the environment) in production; a service SAS from the account key when a connection string is configured (Azurite) | Azurite has no Azure AD; production never holds an account key |
+| Sign-in pages | Served by the API on its own origin: sign in, sign up, confirm, forgot, reset; English and Arabic (`lang`, else `Accept-Language`), light and dark by the system; antiforgery tokens in every form; a strict CSP | Passwords are typed only on the API's pages, never into the app or its webview (RFC 8252) |
+| The web session | Identity's cookie `cgw_session`, 14 days sliding; each sign-in makes a device row, carried as a claim and checked on every request (cached 15 s, cleared at once on the server that revokes it); writes need `X-CSRF-TOKEN` from `GET /api/v1/account/antiforgery`; return addresses only to the web app's origins or `/connect/authorize` | Signing a device out ends that session; no open redirect |
+| The desktop's sign-in | Authorisation code with PKCE in the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3; the port is not compared, everything else is), not the deep link. The native side exchanges and refreshes the tokens; the refresh token is in the OS keychain and never reaches the webview | Another app can claim a URI scheme, not the app's own loopback port |
+| Tokens | Access tokens 15 minutes, refresh tokens 30 days and rolled on use; one permanent OpenIddict authorisation per desktop device, revoked with it; authorisation and token entry validation on, so a revoked device's tokens stop at once. Production certificates come from `LocalMachine\My` by thumbprint (`OpenIddict__SigningCertificateThumbprint`, `__EncryptionCertificateThumbprint`); ephemeral keys elsewhere | No key in a file or the repo |
+| Passwords and lockout | At least 10 characters, no composition rules (NIST SP 800-63B); 5 failures lock the account for 15 minutes; a reset signs every device out | |
+| Account enumeration | Signing up with a taken address answers as for a new one and mails the owner instead; "forgot" always answers the same | Answers never say whether an address has an account |
+| Data Protection keys | In the database (`DataProtectionKeys`), protected with DPAPI on Windows hosts (`DataProtection__Dpapi=true`) | Every instance and every restart reads the same keys |
+| Links in mails | Built from `Api__PublicUrl`, required in production | A link built from the Host header can be pointed elsewhere by whoever sent the request |
+| Rate limits | Per minute: anonymous routes 120 per IP, sign-in 20 per IP, 1,200 per user, pushes 600, search 240, previews 60; set by `RateLimits__*` (a load test raises them) | |

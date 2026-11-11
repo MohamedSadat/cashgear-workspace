@@ -11,3 +11,8 @@ bench/spikes/**/obj/
 bench/spikes/**/bin/
 docs/
 CLAUDE.md
+server/**/bin/
+server/**/obj/
+# Generated from the server's code, and checked by pnpm api:check
+server/openapi/
+packages/api/src/schema.ts
