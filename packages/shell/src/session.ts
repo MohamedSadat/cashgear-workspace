@@ -240,6 +240,7 @@ export class WorkspaceSession {
     await this.store.appendDocUpdates(record.id, [
       { updateId: uuidv7(), data: newDocumentUpdate(record.id, content) },
     ]);
+    if (content) void this.indexPage(record.id, content).catch(() => undefined);
     return record;
   }
 
@@ -419,13 +420,13 @@ export class WorkspaceSession {
     await this.apply(
       records.map((record) => newOp('page.create', record.workspaceId, record.id, record)),
     );
-    for (const [i, record] of records.entries())
+    for (const [i, record] of records.entries()) {
+      const content = remapRefs(withNewIds(contents[i]), ids);
       await this.store.appendDocUpdates(record.id, [
-        {
-          updateId: uuidv7(),
-          data: newDocumentUpdate(record.id, remapRefs(withNewIds(contents[i]), ids)),
-        },
+        { updateId: uuidv7(), data: newDocumentUpdate(record.id, content) },
       ]);
+      void this.indexPage(record.id, content).catch(() => undefined);
+    }
     return records[0];
   }
 

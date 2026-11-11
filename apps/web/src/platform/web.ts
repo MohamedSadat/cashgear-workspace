@@ -1,5 +1,5 @@
 import type { WorkspacePlatform } from '@cgw/shell';
-import { IndexedDbStore } from '@cgw/store-web';
+import { DATABASE, IndexedDbStore, workerIndex } from '@cgw/store-web';
 
 export const webPlatform: WorkspacePlatform = {
   kind: 'web',
@@ -7,7 +7,8 @@ export const webPlatform: WorkspacePlatform = {
   openExternal: async (url) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   },
-  openStore: () => IndexedDbStore.open(),
+  // Text search runs in a worker, from an index built out of the store (D25).
+  openStore: () => IndexedDbStore.open(indexedDB, DATABASE, { index: workerIndex() }),
   // The browser may evict this origin's data unless it agrees to keep it (SYNC_DESIGN.md).
   requestPersistence: () => IndexedDbStore.persist(),
   saveFile: async (name, bytes, type) => {

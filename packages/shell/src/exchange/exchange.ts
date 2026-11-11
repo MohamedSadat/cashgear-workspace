@@ -316,6 +316,7 @@ export async function importZip(
     await session.store.appendDocUpdates(newId, [
       { updateId: uuidv7(), data: newDocumentUpdate(newId, content) },
     ]);
+    session.scheduleIndex(newId, 0);
   }
   session.switchTo(workspace.id);
   const first = ordered.find((p) => !p.parentPageId) ?? ordered[0];

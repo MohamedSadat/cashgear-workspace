@@ -26,6 +26,7 @@ import {
   type WorkspaceRecord,
 } from '@cgw/workspace';
 import { done, getAll, openDatabase, request } from './idb';
+import type { SearchIndex } from './searchIndex';
 
 export const DATABASE = 'cgw-workspace';
 
@@ -100,11 +101,22 @@ const own = (bytes: Uint8Array) =>
 export class IndexedDbStore implements LocalStore {
   readonly kind = 'indexeddb' as const;
 
-  private constructor(private readonly db: IDBDatabase) {}
+  private constructor(
+    private readonly db: IDBDatabase,
+    private readonly index: SearchIndex | null,
+  ) {}
 
-  static async open(factory: IDBFactory = indexedDB, name = DATABASE): Promise<IndexedDbStore> {
+  /**
+   * Opens the store. With a search index (the browser's worker), text search runs in memory in
+   * the worker; without one (tests in Node), the store scans its entries.
+   */
+  static async open(
+    factory: IDBFactory = indexedDB,
+    name = DATABASE,
+    options: { index?: SearchIndex } = {},
+  ): Promise<IndexedDbStore> {
     const db = await openDatabase(factory, name, STORE_SCHEMA_VERSION, upgrade);
-    const store = new IndexedDbStore(db);
+    const store = new IndexedDbStore(db, options.index ?? null);
     const tx = db.transaction(S.meta, 'readwrite');
     const version = await request(tx.objectStore(S.meta).get('schemaVersion'));
     if (typeof version === 'number' && version > STORE_SCHEMA_VERSION) {
@@ -113,6 +125,8 @@ export class IndexedDbStore implements LocalStore {
     }
     tx.objectStore(S.meta).put(STORE_SCHEMA_VERSION, 'schemaVersion');
     await done(tx);
+    // The index loads in the background; searches wait for it.
+    void options.index?.load(name).catch((error: unknown) => console.warn('Search index:', error));
     return store;
   }
 
@@ -254,6 +268,7 @@ export class IndexedDbStore implements LocalStore {
       'readwrite',
     );
     const committed = done(tx);
+    let deleted: Id[];
     try {
       const plan = await planOps(ops, this.reader(tx));
       for (const w of plan.workspaces) tx.objectStore(S.workspaces).put(w);
@@ -267,12 +282,14 @@ export class IndexedDbStore implements LocalStore {
       for (const v of plan.deleteVisits) tx.objectStore(S.visits).delete([v.workspaceId, v.pageId]);
       for (const op of plan.outbox) tx.objectStore(S.outbox).add(op);
       for (const pageId of plan.deletePages) await this.dropPageData(tx, pageId);
+      deleted = plan.deletePages;
     } catch (error) {
       tx.abort();
       await committed.catch(() => undefined);
       throw error;
     }
     await committed;
+    this.index?.remove(deleted);
   }
 
   /** IndexedDB cannot index null: a top-level page is stored with an empty parent key. */
@@ -391,18 +408,43 @@ export class IndexedDbStore implements LocalStore {
     const tx = this.tx([S.search], 'readwrite');
     tx.objectStore(S.search).put(entry);
     await done(tx);
+    this.index?.put(entry);
   }
 
   async deleteSearchEntries(pageIds: Id[]): Promise<void> {
     const tx = this.tx([S.search], 'readwrite');
     for (const id of pageIds) tx.objectStore(S.search).delete(id);
     await done(tx);
+    this.index?.remove(pageIds);
   }
 
   /** A scan of the workspace's entries; the browser's search worker keeps them in memory (M1.8). */
   async search(workspaceId: Id, normalisedQuery: string, limit: number): Promise<SearchHit[]> {
     const terms = searchTerms(normalisedQuery);
     if (!terms.length) return [];
+    if (this.index) {
+      // The worker ranks; this side drops the trash and writes the snippets.
+      const found = await this.index.search(workspaceId, normalisedQuery, limit * 2);
+      const tx = this.tx([S.pages]);
+      const hits: SearchHit[] = [];
+      for (const hit of found) {
+        const page = this.pageOf(
+          (await request(tx.objectStore(S.pages).get(hit.pageId))) as PageRecord & {
+            parentPageId: string;
+          },
+        );
+        if (!page || page.trashedAt) continue;
+        const inTitle = terms.every((t) => hit.title.split(' ').some((w) => w.startsWith(t)));
+        hits.push({
+          pageId: hit.pageId,
+          title: page.title,
+          snippet: inTitle ? '' : snippet(hit.text, normalisedQuery),
+          score: (inTitle ? 2 : 1) + hit.score / 1000,
+        });
+        if (hits.length >= limit) break;
+      }
+      return hits.sort((a, b) => b.score - a.score);
+    }
     const tx = this.tx([S.search, S.pages]);
     const entries = await getAll<SearchEntry>(
       tx.objectStore(S.search).index('workspace'),
@@ -486,6 +528,7 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async close(): Promise<void> {
+    this.index?.close();
     this.db.close();
   }
 

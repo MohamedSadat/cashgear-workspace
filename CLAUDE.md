@@ -64,7 +64,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
-| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 1); plans operations inside its own transaction |
+| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 1); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
 | `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
 | `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; `cgw-store-cli` for tests |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
