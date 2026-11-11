@@ -18,4 +18,8 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Yjs updates made by packages/doc/src/server-fixtures.test.ts. -->
+    <None Include="fixtures/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,17 @@
+{
+  "1": [
+    "block",
+    "bookmark",
+    "childPage",
+    "codeBlock",
+    "divider",
+    "file",
+    "hardBreak",
+    "image",
+    "pageMention",
+    "table",
+    "tableCell",
+    "tableRow",
+    "textBody"
+  ]
+}

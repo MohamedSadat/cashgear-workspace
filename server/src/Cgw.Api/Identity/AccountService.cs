@@ -209,7 +209,7 @@ public sealed class AccountService(
 }
 
 /// <summary>The account mails, in English and Arabic.</summary>
-internal static class Mails
+public static class Mails
 {
     private static string E(string s) => HtmlEncoder.Default.Encode(s);
 

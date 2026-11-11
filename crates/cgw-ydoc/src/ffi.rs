@@ -200,7 +200,8 @@ pub fn empty_buffer() -> CgwBuffer {
 }
 
 /// Validates `update` on top of `state` against a policy given as JSON:
-/// `{"clients":[u64],"elements":[string],"maxBytes":n}`. Writes `{"problems":[string]}`.
+/// `{"clients":[u64],"elements":[string],"maxBytes":n,"blockIds":bool}`. Writes
+/// `{"problems":[string]}`.
 ///
 /// # Safety
 /// As [`cgw_merge`], for three slices.
@@ -228,6 +229,7 @@ pub unsafe extern "C" fn cgw_validate(
                 })
                 .unwrap_or_default(),
             max_bytes: policy["maxBytes"].as_u64().unwrap_or(0) as usize,
+            block_ids: policy["blockIds"].as_bool().unwrap_or(false),
         };
         let problems = crate::validate(borrow(&state)?, borrow(&update)?, &policy)?;
         Ok(serde_json::json!({ "problems": problems })

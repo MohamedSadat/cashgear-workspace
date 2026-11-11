@@ -127,3 +127,33 @@ export async function ok<T>(result: { data?: T; error?: unknown; response: Respo
   if (result.response.ok) return result.data as T;
   throw await problemOf(result.response);
 }
+
+/**
+ * Bytes from a signed URL (a snapshot, an asset): no credentials are sent, as the signature is
+ * the whole of the permission. Throws NetworkError when the host cannot be reached.
+ */
+export async function getSigned(url: string): Promise<Response> {
+  try {
+    return await fetch(url, { credentials: 'omit' });
+  } catch (error) {
+    throw new NetworkError(error);
+  }
+}
+
+/** Uploads bytes to a signed URL, with the headers the upload ticket names. */
+export async function putSigned(
+  url: string,
+  headers: Record<string, string>,
+  bytes: Uint8Array,
+): Promise<Response> {
+  try {
+    return await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: bytes as unknown as Blob,
+      credentials: 'omit',
+    });
+  } catch (error) {
+    throw new NetworkError(error);
+  }
+}

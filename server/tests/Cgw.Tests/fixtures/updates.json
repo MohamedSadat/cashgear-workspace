@@ -1,0 +1,93 @@
+[
+  {
+    "name": "page",
+    "client": 1001,
+    "data": "AQjpBwAoAQRtZXRhDXNjaGVtYVZlcnNpb24BfQEoAQRtZXRhBWVwb2NoAX0ABwEHY29udGVudAMFYmxvY2sHAOkHAgMIdGV4dEJvZHkHAOkHAwYEAOkHBAVIZWxsbygA6QcDBGtpbmQBdwlwYXJhZ3JhcGgoAOkHAgJpZAF3DEFiM2RFZjZoSWo5TAA=",
+    "expect": "valid",
+    "why": "a new page from a registered client"
+  },
+  {
+    "name": "edit",
+    "client": 1002,
+    "data": "AQHqBwCE6QcJBiB3b3JsZAA=",
+    "expect": "valid",
+    "why": "typing from a second registered client"
+  },
+  {
+    "name": "forged",
+    "client": 999,
+    "data": "AQHnBwCE6QcJBiB3b3JsZAA=",
+    "expect": "rejected",
+    "why": "written as a client id not registered to the pusher"
+  },
+  {
+    "name": "unknownElement",
+    "client": 1001,
+    "data": "AQXpBwyH6QcCAwVibG9jawcA6QcMAwZzY3JpcHQHAOkHDQYEAOkHDhV3aW5kb3cuX194c3MucHVzaCgxMCkoAOkHDAJpZAF3DFp6OXlYOHdWN3VUNgA=",
+    "expect": "rejected",
+    "why": "an element the schema lacks stops every binding syncing the page (S7)"
+  },
+  {
+    "name": "unsafeLink1",
+    "client": 1001,
+    "data": "AQjpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgYA6QcOBGxpbmsqeyJocmVmIjoiamF2YXNjcmlwdDp3aW5kb3cuX194c3MucHVzaCgxKSJ9hOkHDwhjbGljayBtZYbpBxcEbGluawRudWxsKADpBw0Ea2luZAF3CXBhcmFncmFwaCgA6QcMAmlkAXcMTGswYWFhYWFhYWFhAA==",
+    "expect": "rejected",
+    "why": "a link with a scheme off the allow-list"
+  },
+  {
+    "name": "unsafeLink2",
+    "client": 1001,
+    "data": "AQjpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgYA6QcOBGxpbmsseyJocmVmIjoiICBKYVZhU2NSaVB0OndpbmRvdy5fX3hzcy5wdXNoKDIpIn2E6QcPCGNsaWNrIG1lhukHFwRsaW5rBG51bGwoAOkHDQRraW5kAXcJcGFyYWdyYXBoKADpBwwCaWQBdwxMazFhYWFhYWFhYWEA",
+    "expect": "rejected",
+    "why": "a link with a scheme off the allow-list"
+  },
+  {
+    "name": "unsafeLink3",
+    "client": 1001,
+    "data": "AQjpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgYA6QcOBGxpbms/eyJocmVmIjoiZGF0YTp0ZXh0L2h0bWwsPHNjcmlwdD5wYXJlbnQuX194c3MucHVzaCgzKTwvc2NyaXB0PiJ9hOkHDwhjbGljayBtZYbpBxcEbGluawRudWxsKADpBw0Ea2luZAF3CXBhcmFncmFwaCgA6QcMAmlkAXcMTGsyYWFhYWFhYWFhAA==",
+    "expect": "rejected",
+    "why": "a link with a scheme off the allow-list"
+  },
+  {
+    "name": "unsafeLink4",
+    "client": 1001,
+    "data": "AQjpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgYA6QcOBGxpbmsdeyJocmVmIjoidmJzY3JpcHQ6bXNnYm94KDEpIn2E6QcPCGNsaWNrIG1lhukHFwRsaW5rBG51bGwoAOkHDQRraW5kAXcJcGFyYWdyYXBoKADpBwwCaWQBdwxMazNhYWFhYWFhYWEA",
+    "expect": "rejected",
+    "why": "a link with a scheme off the allow-list"
+  },
+  {
+    "name": "hostileAttributes",
+    "client": 1001,
+    "data": "AQbpBwyH6QcCAwVibG9jawcA6QcMAwVpbWFnZSgA6QcNB2Fzc2V0SWQBdx8iIG9uZXJyb3I9IndpbmRvdy5fX3hzcy5wdXNoKDQpKADpBw0Hb25lcnJvcgF3FHdpbmRvdy5fX3hzcy5wdXNoKDUpKADpBw0Dc3JjAXcfamF2YXNjcmlwdDp3aW5kb3cuX194c3MucHVzaCg2KSgA6QcMAmlkAXcMWno5eVg4d1Y3dVQ2AA==",
+    "expect": "valid",
+    "why": "attributes the schema does not know are kept by clients and drawn inert (S7); the server does not judge them"
+  },
+  {
+    "name": "badBlockId",
+    "client": 1001,
+    "data": "AQbpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgQA6QcOAXgoAOkHDQRraW5kAXcJcGFyYWdyYXBoKADpBwwCaWQBdwF4AA==",
+    "expect": "rejected",
+    "why": "a block id the editor could not have minted"
+  },
+  {
+    "name": "otherPage",
+    "client": 1001,
+    "data": "AQHpBwwoAQRtZXRhBnBhZ2VJZAF3JDAxOTNhMWIyLWMzZDQtN2U1Zi04YTliLTBjMWQyZTNmNGE1YgA=",
+    "expect": "rejected",
+    "why": "the document names another page"
+  },
+  {
+    "name": "newerSchema",
+    "client": 1001,
+    "data": "AQHpBwyo6QcAAX2jAQHpBwEAAQ==",
+    "expect": "rejected",
+    "why": "a newer schema version would make every client open the page read-only"
+  },
+  {
+    "name": "garbage",
+    "client": 1001,
+    "data": "AQID+vv8/f7/",
+    "expect": "rejected",
+    "why": "not a Yjs update"
+  }
+]

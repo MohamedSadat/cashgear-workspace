@@ -1,4 +1,6 @@
 using Cgw.Core.Data;
+using Cgw.Core.Sync;
+using Cgw.Worker.Jobs;
 using Cgw.Ydoc;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +20,15 @@ public static class WorkerServices
     public static IServiceCollection AddCgwWorker(this IServiceCollection services, IConfiguration configuration)
     {
         Yjs.Configure(configuration["Ydoc:Library"]);
+        services.AddScoped<ChangeLog>();
+        services.AddSingleton<DocStates>();
+        services.AddSingleton<ICompactionFaults, NoFaults>();
+        services.AddSingleton<IJob, ValidateJob>();
+        services.AddSingleton<IJob, CompactJob>();
+        services.AddSingleton<IJob, DeriveJob>();
+        services.AddSingleton<IAssetScanner, NoScanner>();
+        services.AddSingleton<IJob, AssetCheckJob>();
+        services.AddSingleton<IJob, AssetCleanupJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }
@@ -45,26 +56,41 @@ public sealed class JobLoop(IServiceProvider services, IEnumerable<IJob> jobs, I
     public static async Task<bool> RunOnceAsync(IServiceProvider services, IJob job, ILogger logger, TimeProvider clock, CancellationToken ct)
     {
         await using var scope = services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<CgwDb>();
-        var state = await db.JobStates.FirstOrDefaultAsync(j => j.Name == job.Name, ct);
-        if (state is null) db.JobStates.Add(state = new JobState { Name = job.Name });
-        state.LastRunAt = clock.GetUtcNow();
-        state.Runs++;
+        var started = clock.GetUtcNow();
         var more = false;
+        string? error = null;
         try
         {
             more = await job.RunAsync(scope.ServiceProvider, ct);
-            state.LastOkAt = clock.GetUtcNow();
-            state.LastError = null;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             logger.LogError(e, "Job {Job} failed", job.Name);
-            state.LastError = e.Message.Length > 2000 ? e.Message[..2000] : e.Message;
+            error = e.Message.Length > 2000 ? e.Message[..2000] : e.Message;
         }
-        db.ChangeTracker.Clear();
-        db.JobStates.Update(state);
-        await db.SaveChangesAsync(CancellationToken.None);
+        await RecordAsync(scope.ServiceProvider.GetRequiredService<CgwDb>(), job.Name, started, error, clock);
         return more;
+    }
+
+    /// <summary>The job's last run and last success, for its lag and the API's health check.</summary>
+    private static async Task RecordAsync(CgwDb db, string name, DateTimeOffset ran, string? error, TimeProvider clock)
+    {
+        db.ChangeTracker.Clear();
+        var ok = error is null ? clock.GetUtcNow() : (DateTimeOffset?)null;
+        var changed = await db.JobStates.Where(j => j.Name == name).ExecuteUpdateAsync(s => s
+            .SetProperty(j => j.LastRunAt, ran)
+            .SetProperty(j => j.Runs, j => j.Runs + 1)
+            .SetProperty(j => j.LastError, error)
+            .SetProperty(j => j.LastOkAt, j => ok ?? j.LastOkAt));
+        if (changed > 0) return;
+        try
+        {
+            db.JobStates.Add(new JobState { Name = name, LastRunAt = ran, LastOkAt = ok, LastError = error, Runs = 1 });
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Another run recorded it first.
+        }
     }
 }

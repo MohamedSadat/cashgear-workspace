@@ -25,13 +25,17 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
 });
-builder.Services.AddOpenApi("v1", options => options.AddDocumentTransformer((document, _, _) =>
+builder.Services.AddOpenApi("v1", options =>
 {
-    document.Info.Title = "Cash Gear Workspace API";
-    document.Info.Version = "v1";
-    document.Info.Description = "Generated from the code and checked in (server/openapi/v1.json); @cgw/api is generated from it.";
-    return Task.CompletedTask;
-}));
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info.Title = "Cash Gear Workspace API";
+        document.Info.Version = "v1";
+        document.Info.Description = "Generated from the code and checked in (server/openapi/v1.json); @cgw/api is generated from it.";
+        return Task.CompletedTask;
+    });
+    options.AddOperationTransformer<RouteParameters>();
+});
 builder.Services.AddHealthChecks()
     .AddCheck<SqlHealth>("sql", tags: ["ready"])
     .AddCheck<BlobHealth>("blob", tags: ["ready"])

@@ -69,7 +69,7 @@ public sealed class YdocException(int status, string message) : Exception($"cgw-
 public sealed record ClientRange(ulong Client, uint Start, uint End);
 
 /// <summary>What a pushed update may contain (cgw_validate's policy).</summary>
-public sealed record ValidationPolicy(IReadOnlyCollection<ulong> Clients, IReadOnlyCollection<string> Elements, int MaxBytes);
+public sealed record ValidationPolicy(IReadOnlyCollection<ulong> Clients, IReadOnlyCollection<string> Elements, int MaxBytes, bool BlockIds = true);
 
 public static class Yjs
 {
@@ -198,7 +198,7 @@ public static class Yjs
     /// <summary>The problems with <paramref name="update"/> on top of <paramref name="state"/>; empty when it may be kept.</summary>
     public static unsafe IReadOnlyList<string> Validate(ReadOnlySpan<byte> state, ReadOnlySpan<byte> update, ValidationPolicy policy)
     {
-        var policyBytes = JsonSerializer.SerializeToUtf8Bytes(new { clients = policy.Clients, elements = policy.Elements, maxBytes = policy.MaxBytes });
+        var policyBytes = JsonSerializer.SerializeToUtf8Bytes(new { clients = policy.Clients, elements = policy.Elements, maxBytes = policy.MaxBytes, blockIds = policy.BlockIds });
         fixed (byte* s = state)
         fixed (byte* u = update)
         fixed (byte* p = policyBytes)

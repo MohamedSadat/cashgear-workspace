@@ -373,6 +373,13 @@ pub struct Policy {
     /// Element names the document's schema version knows.
     pub elements: Vec<String>,
     pub max_bytes: usize,
+    /// Every `block` element's `id`, when it has one, is 12 base-62 characters (D4).
+    pub block_ids: bool,
+}
+
+/// A block id as the editor mints them: 12 characters of base 62 (DATA_MODEL.md, Identifiers).
+fn valid_block_id(id: &str) -> bool {
+    id.len() == 12 && id.bytes().all(|b| b.is_ascii_alphanumeric())
 }
 
 /// Link schemes allowed when a link is parsed, drawn or clicked (ARCHITECTURE.md, Links).
@@ -399,6 +406,16 @@ fn check_tree<T: ReadTxn>(
             let name = element.tag().to_string();
             if !policy.elements.is_empty() && !policy.elements.contains(&name) {
                 problems.push(format!("unknown element <{name}>"));
+            }
+            for (key, value) in element.attributes(txn) {
+                if !matches!(value, Out::Any(_)) {
+                    problems.push(format!("<{name}> attribute {key:.40} holds a shared type"));
+                } else if policy.block_ids && name == "block" && key == "id" {
+                    let ok = matches!(&value, Out::Any(Any::String(id)) if valid_block_id(id));
+                    if !ok {
+                        problems.push("a block id that is not 12 base-62 characters".into());
+                    }
+                }
             }
             for child in element.children(txn) {
                 check_tree(txn, &child, depth + 1, policy, problems);

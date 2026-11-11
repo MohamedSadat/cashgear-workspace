@@ -9,6 +9,7 @@ fn policy() -> Policy {
             .map(String::from)
             .to_vec(),
         max_bytes: 1024 * 1024,
+        block_ids: true,
     }
 }
 
@@ -158,4 +159,37 @@ fn a_struct_claiming_a_huge_clock_range_does_not_crash() {
     let _ = compact(&bytes);
     let _ = state_vector(&bytes);
     let _ = client_ranges(&bytes);
+}
+
+/// A block whose id is not one the editor could have minted (Q20: block ids are checked).
+fn block_with_id(id: Any) -> Vec<u8> {
+    let doc = Doc::with_client_id(1);
+    let content = doc.get_or_insert_xml_fragment(CONTENT);
+    let mut txn = doc.transact_mut();
+    let block = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+    block.insert_attribute(&mut txn, "id", id);
+    txn.encode_update_v1()
+}
+
+#[test]
+fn a_malformed_block_id_is_flagged() {
+    for bad in [
+        Any::String("short".into()),
+        Any::String("aaaaaaaaaaa!".into()),
+        Any::String("x".repeat(5000).into()),
+        Any::Number(yrs::any::Number::Int(7)),
+    ] {
+        let problems = validate(&[], &block_with_id(bad.clone()), &policy()).unwrap();
+        assert!(
+            problems.iter().any(|p| p.contains("block id")),
+            "{bad:?}: {problems:?}"
+        );
+    }
+    let good = validate(
+        &[],
+        &block_with_id(Any::String("Ab3dEf6hIj9L".into())),
+        &policy(),
+    )
+    .unwrap();
+    assert!(good.is_empty(), "{good:?}");
 }

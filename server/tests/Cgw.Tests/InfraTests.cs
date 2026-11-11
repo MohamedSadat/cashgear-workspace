@@ -89,9 +89,9 @@ public sealed class InfraTests(ServerFixture server)
     [Fact]
     public async Task Ids_are_stored_in_time_order()
     {
-        var a = Guid.CreateVersion7();
-        await Task.Delay(5);
-        var b = Guid.CreateVersion7();
+        var now = DateTimeOffset.UtcNow;
+        var a = Guid.CreateVersion7(now);
+        var b = Guid.CreateVersion7(now.AddMilliseconds(1));
         Assert.True(GuidBytes.ToBytes(a).AsSpan().SequenceCompareTo(GuidBytes.ToBytes(b)) < 0);
         Assert.Equal(a, GuidBytes.FromBytes(GuidBytes.ToBytes(a)));
         await Task.CompletedTask;

@@ -26,6 +26,36 @@
         }
       }
     },
+    "/api/v1/invites/{token}/accept": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "acceptInvite",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/account/register": {
       "post": {
         "tags": [
@@ -238,10 +268,1069 @@
           }
         }
       }
+    },
+    "/api/v1/workspaces": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "listWorkspaces",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "createWorkspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewWorkspace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "getWorkspace",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "updateWorkspace",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpResultDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "deleteWorkspace",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/members": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "listMembers",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemberDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "addMember",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMember"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/members/{userId}": {
+      "patch": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "updateMember",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "removeMember",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/invites": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "createInvite",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewInvite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "listInvites",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InviteDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/invites/{inviteId}": {
+      "delete": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "revokeInvite",
+        "parameters": [
+          {
+            "name": "inviteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/ops": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "pushOps",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/changes": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "listChanges",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/tree": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "getTree",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreeDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pages/{pageId}/doc/updates": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "operationId": "pushDocUpdates",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pages/{pageId}/doc": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "operationId": "pullDoc",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PullResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pages/{pageId}/doc/json": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "operationId": "getDocJson",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocJsonResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/yjs-clients": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "operationId": "yjsClients",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YjsClientsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YjsClientsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/assets": {
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "operationId": "createAssetTicket",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAsset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetTicketDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/link-preview": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "operationId": "getLinkPreview",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPreviewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "operationId": "getAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}/complete": {
+      "post": {
+        "tags": [
+          "Assets"
+        ],
+        "operationId": "completeAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assets/{assetId}/url": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "operationId": "getAssetUrl",
+        "parameters": [
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetUrlDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AddMember": {
+        "required": [
+          "email",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "AssetDto": {
+        "required": [
+          "id",
+          "fileName",
+          "contentType",
+          "sizeBytes",
+          "status",
+          "width",
+          "height",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "width": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "height": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AssetTicketDto": {
+        "required": [
+          "assetId",
+          "uploadUrl",
+          "headers",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uploadUrl": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AssetUrlDto": {
+        "required": [
+          "url",
+          "expiresAt",
+          "contentType",
+          "inline"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "inline": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChangeDto": {
+        "required": [
+          "seq",
+          "entityType",
+          "entityId",
+          "kind",
+          "entity"
+        ],
+        "type": "object",
+        "properties": {
+          "seq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "entity": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntityDto"
+              }
+            ]
+          }
+        }
+      },
+      "ChangesDto": {
+        "required": [
+          "changes",
+          "cursor",
+          "more"
+        ],
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeDto"
+            }
+          },
+          "cursor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        }
+      },
       "ConfirmRequest": {
         "required": [
           "userId",
@@ -307,6 +1396,185 @@
           }
         }
       },
+      "DocAck": {
+        "required": [
+          "updateId",
+          "seq"
+        ],
+        "type": "object",
+        "properties": {
+          "updateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "seq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "DocJsonResponse": {
+        "required": [
+          "upToSeq",
+          "schemaVersion",
+          "json"
+        ],
+        "type": "object",
+        "properties": {
+          "upToSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "schemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "json": {
+            "type": "string"
+          }
+        }
+      },
+      "DocUpdateIn": {
+        "required": [
+          "updateId",
+          "data"
+        ],
+        "type": "object",
+        "properties": {
+          "updateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "data": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      },
+      "DocUpdateOut": {
+        "required": [
+          "seq",
+          "updateId",
+          "data"
+        ],
+        "type": "object",
+        "properties": {
+          "seq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "updateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "data": {
+            "type": "string",
+            "format": "byte"
+          }
+        }
+      },
+      "EntityDto": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceDto"
+              }
+            ]
+          },
+          "section": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SectionDto"
+              }
+            ]
+          },
+          "page": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PageDto"
+              }
+            ]
+          },
+          "favourite": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FavouriteDto"
+              }
+            ]
+          },
+          "visit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/VisitDto"
+              }
+            ]
+          },
+          "member": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MemberDto"
+              }
+            ]
+          }
+        }
+      },
+      "FavouriteDto": {
+        "required": [
+          "workspaceId",
+          "pageId",
+          "orderKey"
+        ],
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orderKey": {
+            "type": "string"
+          }
+        }
+      },
       "ForgotRequest": {
         "required": [
           "email",
@@ -329,6 +1597,86 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "InviteDto": {
+        "required": [
+          "id",
+          "email",
+          "role",
+          "expiresAt",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "JsonElement": { },
+      "LinkPreviewDto": {
+        "required": [
+          "url",
+          "status",
+          "title",
+          "description",
+          "siteName",
+          "imageAssetId",
+          "fetchedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "siteName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "imageAssetId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -368,6 +1716,30 @@
           }
         }
       },
+      "MemberDto": {
+        "required": [
+          "userId",
+          "displayName",
+          "email",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "MeUpdate": {
         "required": [
           "displayName",
@@ -386,6 +1758,490 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "NewAsset": {
+        "required": [
+          "id",
+          "fileName",
+          "contentType",
+          "sizeBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "NewInvite": {
+        "required": [
+          "email",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "NewWorkspace": {
+        "required": [
+          "id",
+          "name",
+          "icon"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OperationDto": {
+        "required": [
+          "opId",
+          "type",
+          "workspaceId",
+          "entityId",
+          "baseVersion",
+          "payload",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "opId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "createdAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OpErrorDto": {
+        "required": [
+          "code",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "OpResultDto": {
+        "required": [
+          "opId",
+          "status",
+          "error",
+          "entityType",
+          "entity",
+          "notice"
+        ],
+        "type": "object",
+        "properties": {
+          "opId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OpErrorDto"
+              }
+            ]
+          },
+          "entityType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entity": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntityDto"
+              }
+            ]
+          },
+          "notice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "OpsRequest": {
+        "required": [
+          "deviceId",
+          "ops"
+        ],
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationDto"
+            }
+          }
+        }
+      },
+      "OpsResponse": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpResultDto"
+            }
+          }
+        }
+      },
+      "PageDto": {
+        "required": [
+          "id",
+          "workspaceId",
+          "sectionId",
+          "parentPageId",
+          "orderKey",
+          "kind",
+          "title",
+          "icon",
+          "coverAssetId",
+          "isTemplate",
+          "templateOfPageId",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "trashedAt",
+          "trashRootId",
+          "restricted",
+          "docHeadSeq",
+          "docEpoch",
+          "docSchemaVersion",
+          "access"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentPageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "coverAssetId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isTemplate": {
+            "type": "boolean"
+          },
+          "templateOfPageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trashedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "trashRootId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "restricted": {
+            "type": "boolean"
+          },
+          "docHeadSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "docEpoch": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "docSchemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "access": {
+            "type": "string"
+          }
+        }
+      },
+      "PullResponse": {
+        "required": [
+          "epoch",
+          "schemaVersion",
+          "headSeq",
+          "cursor",
+          "more",
+          "snapshot",
+          "updates",
+          "rejected"
+        ],
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "schemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "headSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "cursor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "snapshot": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SnapshotRef"
+              }
+            ]
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocUpdateOut"
+            }
+          },
+          "rejected": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "PushRequest": {
+        "required": [
+          "epoch",
+          "clientSchemaVersion",
+          "updates"
+        ],
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clientSchemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocUpdateIn"
+            }
+          }
+        }
+      },
+      "PushResponse": {
+        "required": [
+          "acks",
+          "headSeq"
+        ],
+        "type": "object",
+        "properties": {
+          "acks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocAck"
+            }
+          },
+          "headSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -442,6 +2298,128 @@
           }
         }
       },
+      "RoleUpdate": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "SectionDto": {
+        "required": [
+          "id",
+          "workspaceId",
+          "name",
+          "orderKey",
+          "visibility",
+          "version",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SnapshotRef": {
+        "required": [
+          "upToSeq",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "upToSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "TreeDto": {
+        "required": [
+          "workspace",
+          "sections",
+          "pages",
+          "favourites",
+          "visits",
+          "cursor"
+        ],
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "$ref": "#/components/schemas/WorkspaceDto"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectionDto"
+            }
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PageDto"
+            }
+          },
+          "favourites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FavouriteDto"
+            }
+          },
+          "visits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VisitDto"
+            }
+          },
+          "cursor": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "VersionInfo": {
         "required": [
           "version",
@@ -456,6 +2434,205 @@
             "type": "string"
           }
         }
+      },
+      "VisitDto": {
+        "required": [
+          "workspaceId",
+          "pageId",
+          "lastVisitedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lastVisitedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkspaceDto": {
+        "required": [
+          "id",
+          "name",
+          "icon",
+          "createdAt",
+          "version",
+          "localOnly",
+          "deletedAt",
+          "role",
+          "changeSeq",
+          "storageQuotaBytes",
+          "storageUsedBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "localOnly": {
+            "type": "boolean"
+          },
+          "deletedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "role": {
+            "type": "string"
+          },
+          "changeSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "storageQuotaBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "storageUsedBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "WorkspaceUpdate": {
+        "required": [
+          "name",
+          "icon"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "YjsClientsRequest": {
+        "required": [
+          "issue",
+          "register"
+        ],
+        "type": "object",
+        "properties": {
+          "issue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "register": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "YjsClientsResponse": {
+        "required": [
+          "issued",
+          "registered",
+          "refused"
+        ],
+        "type": "object",
+        "properties": {
+          "issued": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          "registered": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          "refused": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        }
       }
     }
   },
@@ -464,7 +2641,16 @@
       "name": "Cgw.Api"
     },
     {
+      "name": "Workspaces"
+    },
+    {
       "name": "Account"
+    },
+    {
+      "name": "Documents"
+    },
+    {
+      "name": "Assets"
     }
   ]
 }
