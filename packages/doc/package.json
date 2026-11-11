@@ -1,6 +1,6 @@
 {
   "name": "@cgw/doc",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "The document layer: block schema, block ids, the Yjs seam, the page document and its autosave, plain text and Markdown. No React, no DOM.",
