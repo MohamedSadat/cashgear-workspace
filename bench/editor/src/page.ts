@@ -313,9 +313,15 @@ const spike = {
       eventAttributes: all
         .flatMap((e) => [...e.attributes].map((a) => a.name))
         .filter((n) => /^on/i.test(n)),
+      // The image block's own <img> takes its source only from the local asset store (blob:
+      // URLs); an image with any other source is the hostile content's.
       dangerousElements: all
-        .map((e) => e.tagName.toLowerCase())
-        .filter((t) => ['script', 'iframe', 'object', 'embed', 'img'].includes(t)),
+        .filter(
+          (e) =>
+            ['script', 'iframe', 'object', 'embed'].includes(e.tagName.toLowerCase()) ||
+            (e.tagName === 'IMG' && !/^blob:/.test(e.getAttribute('src') ?? 'blob:')),
+        )
+        .map((e) => e.tagName.toLowerCase()),
       styleWithScript: all.filter((e) => /javascript:/i.test(e.getAttribute('style') ?? '')).length,
       contentErrors: current!.spike.contentErrors.map((e) => e.message),
       textShown: host.textContent?.includes('<img src=x') ?? false,
