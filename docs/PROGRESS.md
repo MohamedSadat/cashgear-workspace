@@ -10,7 +10,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | --- | --- | --- |
 | Planning documents | Done, 2026-11-11 | |
 | Phase 0: Scaffold and spikes | Done, 2026-11-11 (S6 misses one budget by 1 to 3 ms; Q18 to Q20 raised) | `phase-0` |
-| Phase 1: Core block editor (MVP) | Not started | |
+| Phase 1: Core block editor (MVP) | Done, 2026-11-11 (0.1.0; the screen-reader pass is by the accessibility tree) | `phase-1`, `v0.1.0` |
 | Phase 2: Cloud document platform | Not started | |
 | Phase 3: Offline | Not started | |
 | Phase 4: Workspace databases | Not started | |
@@ -78,46 +78,119 @@ Exit criteria
 
 ## Phase 1: Core block editor (MVP)
 
+Done 2026-11-11. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43090750008
+(commit `572eaf9`, all jobs green). Local results are from `bench/results/` on the reference machine
+(Windows 10 19045, Chrome 157.0.8103.50, Edge, WebView2 157.0.4341.46). Answers and defaults are in
+`DECISIONS.md` (2026-11-11: Phase 1); what changed for users is in `CHANGELOG.md` (0.1.0).
+
 Milestones
 
-- [ ] M1.1 Shell, themes, languages
-- [ ] M1.2 Document model and basic blocks
-- [ ] M1.3 Slash menu, Markdown shortcuts, bubble toolbar
-- [ ] M1.4 Nesting, selection, drag
-- [ ] M1.5 The remaining MVP blocks
-- [ ] M1.6 Pages and the sidebar
-- [ ] M1.7 Local persistence
-- [ ] M1.8 Search
-- [ ] M1.9 Desktop packaging and polish
+- [x] M1.1 Shell, themes, languages. Commit `91a8c83`
+- [x] M1.2 Document model and basic blocks. Commit `21042e4`
+- [x] M1.3 Slash menu, Markdown shortcuts, bubble toolbar. Commit `21042e4`
+- [x] M1.4 Nesting, selection, drag. Commit `21042e4`
+- [x] M1.5 The remaining MVP blocks. Commit `21042e4`
+- [x] M1.6 Pages and the sidebar. Commits `0016712`, `80406e4`
+- [x] M1.7 Local persistence. Commits `847f33f`, `581cf81`
+- [x] M1.8 Search. Commit `7ce146d`
+- [x] M1.9 Desktop packaging and polish. Commits `987e0ff`, `daf233e`, `19acc65`, `3368731`, `62bd3f2`, `572eaf9`; 0.1.0 in `b179ab3`
+
+Notes
+
+- `f4d29c8` is an incomplete commit of M1.2 to M1.5 (a refused write to `.git/objects` left only
+  the removal of `bench/editor/vendor` staged); `21042e4` is the complete one.
+- `.gitignore`'s `bin/` kept `crates/cgw-store/src/bin/cgw-store-cli.rs` out of the commits from
+  `847f33f` to `7ce146d`; they pass locally but not in CI (run 43051050646 failed at
+  `cargo fmt`). `581cf81` adds the file and scopes the rule.
+- Other runs that failed, and what fixed them: 43045311528 (`0016712`, e2e races; `80406e4`),
+  43070320300 (`b179ab3`, two e2e races on the slower runner; `daf233e`), 43073289097
+  (`daf233e`, the kill test hung probing Chrome; `19acc65`), 43078539645 (`19acc65`, the theme
+  test sampled outside CI's smaller desktop window; `3368731`), 43083799788 (`3368731`, the kill
+  test named the page before its new one opened; `62bd3f2`), 43085875615 (`62bd3f2`, S7 counted the
+  image block's own `<img>` as hostile; `572eaf9`). Runs 43043296339, 43043375644,
+  43050440631, 43052902043 and 43053120075 were cancelled by later pushes.
+- Screen reader: no screen reader was run. The pass is the accessibility tree, checked by e2e
+  (named landmarks, a tree with levels and set sizes, a named editor and title, every control
+  named, an ARIA snapshot of the tree), with Axe on every main screen. A pass with NVDA or
+  Narrator by hand is worth doing before a wider release.
+- The installer test ran locally (`bench/results/installer-test.json`): two signed builds,
+  install, `cgw-installer-test://` opened the app on its route cold and in the running app (one
+  process), update from a local feed to the next version, uninstall with nothing left. It runs
+  again in the release workflow on the `v0.1.0` tag.
+- In the web kill test one save came 1,119 ms after the last key, in 1,770 pauses (p95 199 ms);
+  every other was within a second.
+- The updater's private key and its password are only in the repository's secrets (made by
+  `scripts/updater-key.mjs`, never written or shown); the public key is in `tauri.conf.json`.
+  Without Azure Artifact Signing (`CGW_SIGN_*` unset) the release is signed with a throwaway
+  certificate, and its notes say so.
 
 Exit criteria
 
+Each e2e spec runs in Chrome and Edge (`pnpm test:e2e`) and on the built desktop app over CDP
+(`pnpm test:e2e:desktop`; narrow screens and Axe are browser-only).
+
 | # | Criterion | Result | Evidence |
 | --- | --- | --- | --- |
-| 1 | Create a workspace | | |
-| 2 | Create and organise pages | | |
-| 3 | Edit block-based documents | | |
-| 4 | Slash commands | | |
-| 5 | Format text | | |
-| 6 | Drag and reorder blocks, ids unchanged | | |
-| 7 | Insert images and tables | | |
-| 8 | Autosave (kill test) | | |
-| 9 | Open saved documents | | |
-| 10 | Search pages, Arabic and English | | |
-| 11 | Dark and light themes | | |
-| 12 | Arabic and English, RTL | | |
-| 13 | Runs in a browser | | |
-| 14 | Runs in a Tauri desktop app | | |
-| | `LocalStore` conformance on both stores | | |
-| | Benchmarks within budget | | |
-| | Axe, keyboard-only and screen-reader passes | | |
-| | No stand-in component left unlisted | | |
+| 1 | Create a workspace | Pass | `pages.spec.ts` "creates a workspace, then a second one from the switcher" |
+| 2 | Create and organise pages | Pass | `pages.spec.ts` "nests, renames, moves by drag, trashes and restores pages", "favourites, templates and page mentions" |
+| 3 | Edit block-based documents | Pass | `editor.spec.ts` "types, splits into blocks and saves", "turns Markdown shortcuts into blocks and marks"; every MVP block is in the Getting started pages, which Axe checks |
+| 4 | Slash commands | Pass | `editor.spec.ts` "slash menu inserts blocks, filtered in English and in Arabic", "slash menu in the Arabic interface" |
+| 5 | Format text | Pass | `editor.spec.ts` "bubble toolbar formats a selection and edits a link"; the touch toolbar in `narrow.spec.ts` |
+| 6 | Drag and reorder blocks, ids unchanged | Pass | `editor.spec.ts` "moves blocks by keyboard and by drag, keeping their ids"; `narrow.spec.ts` "the touch toolbar moves, indents and inserts blocks"; the S1 fuzz on the product's id plugin (`pnpm test`) |
+| 7 | Insert images and tables | Pass | `editor.spec.ts` "tables: insert, type across cells with Tab, add a row and a header column", "images: pick a file, then it shows from local bytes with a caption" |
+| 8 | Autosave (kill test) | Pass | 1,000 kills while typing on each target, 0 failures. Web (Chrome, IndexedDB): 1,810 saved checks, 445 kills while saving, durable p50 169 ms, p95 199 ms. Desktop (SQLite): 1,784 saved checks, 433 kills while saving, durable p50 171 ms, p95 201 ms, max 269 ms (`kill-web-1000.json`, `kill-desktop-1000.json`). CI runs 25 of each |
+| 9 | Open saved documents | Pass | `persistence.spec.ts` "a page and its tree are there after the app starts again" (a new tab; the desktop app started again), "keeps a version and restores it, and the restore can be undone", "exports a workspace and imports it as a new one" |
+| 10 | Search pages, Arabic and English | Pass | `search.spec.ts` "finds text in English and Arabic, normalised alike", "keeps the index after a reload and drops pages in the trash", "runs a command from the palette"; FTS5 in the SQLite conformance suite |
+| 11 | Dark and light themes | Pass | `themes.spec.ts`: each theme's screenshot read back pixel by pixel (page, sidebar and top bar in that theme's colours, title contrast above 7:1, the themes differing almost everywhere), attached to the report; `smoke.spec.ts`; the desktop smoke sets the window's theme |
+| 12 | Arabic and English, RTL | Pass | `arabic.spec.ts` "the Arabic interface is right to left, with no English of its own" (every visible text, label, placeholder and tooltip on ten screens); `smoke.spec.ts`; the S5 checklist in CI |
+| 13 | Runs in a browser | Pass | CI: web build, Chrome and Edge e2e, the web kill test |
+| 14 | Runs in a Tauri desktop app | Pass | CI: release build, WebView2 smoke, desktop e2e, the desktop kill test; the installer test (notes) |
+| | `LocalStore` conformance on both stores | Pass | `describeLocalStore` on memory, IndexedDB (`packages/store-web/src/store.test.ts`) and SQLite through `cgw-store-cli` (`packages/store-desktop/src/store.test.ts`) |
+| | Benchmarks within budget | Pass | Below |
+| | Axe, keyboard-only and screen-reader passes | Pass; the screen reader by its tree (notes) | `a11y.spec.ts`: Axe (WCAG 2.2 AA rules) on first run, a page with every block, search, the block menu, settings and trash, in light and dark, English and Arabic, and on a phone with the drawer open; "the main tasks can be done with the keyboard alone"; "a screen reader finds named landmarks, a named tree and a named editor" |
+| | No stand-in component left unlisted | Pass | Below |
+
+Benchmarks (`bench/phase1.mjs`, gated in CI against the budgets and the last run on `main`)
+
+| Budget | Limit | CI (run 43090750008) | Local |
+| --- | --- | --- | --- |
+| Open a 200-block page from the store, p95 | 300 ms | 59.2 ms | 77.6 ms |
+| Open a 2,000-block page, p95 | 1000 ms | 298.3 ms | 448.6 ms |
+| Editor work per keystroke, 200 blocks, p95 (Q19) | 8 ms | 4.6 ms | 5.1 ms |
+| Keystroke to the next frame, 200 blocks, p95 (Q19) | 33 ms | 16.7 ms | 20.6 ms |
+| Keystroke to the next frame, 5,000 blocks, p95 | 50 ms | 24.5 ms | 48.5 ms |
+| Heap with a 5,000-block page open | 150 MB | 36.5 MB | 36.5 MB |
+| Sidebar: expand a node of 999 in 10,000 pages, p95 | 100 ms | 17.6 ms | 20.7 ms |
+| Search over 10,000 pages, Arabic and English, p95 | 100 ms | 44.5 ms | 61 ms |
+| Initial JavaScript, gzip | 350 kB | 150 kB | 150 kB |
+| Desktop cold start to an editable page, median | 1500 ms | 842 ms | 1240 ms |
+| Edit durable after the last key, web, p95 | 1000 ms | 190 ms | 199 ms |
+| Edit durable after the last key, desktop, p95 | 1000 ms | 190 ms | 201 ms |
+
+Local editor work is S6's (`s6-perf.json`); desktop cold start is the median of five starts, from
+process start to the first editable page. The first gated run has no run on `main` to compare
+with: the regression half of the gate starts with the next one.
 
 Stand-ins waiting on Track U
 
 | Component | Stand-in in | Replaced |
 | --- | --- | --- |
-| | | |
+| U1 Command menu | `packages/editor/src/ui/SlashMenu.tsx` (slash and mention menus), `packages/shell/src/search/Palette.tsx` | |
+| U2 Selection toolbar | `packages/editor/src/ui/BubbleToolbar.tsx`, `TouchToolbar.tsx` | |
+| U3 Drag handle, drop indicator | `packages/editor/src/handle.ts`, `ui/BlockMenu.tsx` | |
+| U4 `CgTreeView` with drag, rename, virtualisation | `packages/shell/src/sidebar/PageTree.tsx` | |
+| U5 Breadcrumb | `packages/shell/src/page/PageHeader.tsx` (`Breadcrumbs`) | |
+| U6 Emoji picker and page icons | `packages/shell/src/page/PageHeader.tsx` (`EmojiPicker`) | |
+| U8 Block-type icons | glyphs in `packages/editor/src/actions.ts` | |
+
+Defects in `@cashgear/ui` worked around here, for Track U
+
+| Defect | Worked around in |
+| --- | --- |
+| `CgSplitter`'s pane scrolls as a whole, and its content box has no height to fill | `.cgw-pane` in `packages/shell/src/shell.css` |
+| `CgSplitter` names its separator with an English template ("Resize A and B") | `Frame.tsx` sets the name from the catalogue |
+| The primary button's white text on the dark theme's accent is 2.5:1 | `shell.css`: dark text there, as the library's own dialog actions use |
+| `CgDrawer` refuses a CSS `min()` size | `openSize="20rem"` |
 
 ## Phase 2: Cloud document platform
 
