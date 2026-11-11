@@ -213,9 +213,11 @@ interface WorkspacePlatform {
 
 - **Engine.** Tiptap 3 on ProseMirror, with `prosemirror-tables` for tables.
 - **Schema.** A uniform block container (`DATA_MODEL.md`). Lists are blocks.
-- **Node views.** Plain DOM for paragraphs, headings, list items, quotes, dividers. React for
-  images, files, tables' controls, bookmarks, child pages, and every embed. Heavy node views mount
-  when scrolled near and unmount when far.
+- **Node views.** Plain DOM for every MVP block: text bodies, code blocks, images, files,
+  bookmarks, child pages and tables (Phase 1: each is small, and the editor needs no React
+  renderer). The menus, toolbars and table controls drawn over the editor are React. Embeds
+  (Phases 4 and 5) may use React node views; heavy ones mount when scrolled near and unmount when
+  far.
 - **Slash menu.** Typing `/` opens a command menu at the caret, filtered as the user types, in
   the interface language, with keywords in both languages.
 - **Markdown shortcuts.** Input rules: `#`, `##`, `###`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`,

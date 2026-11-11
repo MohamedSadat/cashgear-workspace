@@ -21,7 +21,6 @@ const recommended = [
   { binding: 'tiptap-ids', content: 'ordered', bodies: 'kind' },
 ] as const;
 const comparisons = [
-  { binding: 'tiptap', content: 'ordered', bodies: 'types' },
   { binding: 'tiptap-ids', content: 'ordered', bodies: 'types' },
   { binding: 'tiptap-ids', content: 'mixed', bodies: 'types' },
   { binding: 'upstream', content: 'ordered', bodies: 'types' },

@@ -7,3 +7,5 @@ onlyBuiltDependencies:
 # The CashGear component library is a git dependency: pnpm builds its dist/ on install.
 allowBuilds:
   '@cashgear/ui@https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/ef1277e78c6151643043fe3327a7f0733307b873': true
+patchedDependencies:
+  '@tiptap/y-tiptap@3.3.0': patches/@tiptap__y-tiptap@3.3.0.patch

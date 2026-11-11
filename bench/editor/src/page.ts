@@ -4,7 +4,7 @@ import './page.css';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import * as Y from 'yjs';
-import * as ids from '../vendor/y-tiptap-ids.js';
+import { writeJSON, type DocJSON } from '@cgw/doc';
 import { createSpikeEditor, CONTENT, type SpikeEditor } from './editor';
 import { generateBlocks, rtlChecklistDoc, type Language } from './generate';
 import { BlockHandle } from './handle';
@@ -22,7 +22,7 @@ const schema = probe.schema;
 /** The stored form of a document: one Yjs update, as the local store would hold it. */
 function toUpdate(json: JSONContent): Uint8Array {
   const doc = new Y.Doc();
-  ids.prosemirrorJSONToYXmlFragment(schema, json, doc.getXmlFragment(CONTENT));
+  writeJSON(doc.getXmlFragment(CONTENT), schema, json as DocJSON);
   return Y.encodeStateAsUpdate(doc);
 }
 
@@ -69,7 +69,7 @@ function close() {
 export interface Layers {
   handle?: boolean;
   ids?: boolean;
-  binding?: 'tiptap-ids' | 'tiptap';
+  binding?: 'tiptap-ids';
 }
 
 let plain: Editor | null = null;

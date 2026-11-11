@@ -1,0 +1,28 @@
+{
+  "name": "@cgw/editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The block editor: Tiptap extensions, plain DOM node views, slash menu, bubble toolbar, block handle, drag and drop, clipboard. Given a Y.Doc and callbacks; never saves, loads or calls the network.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cashgear/ui": "github:MohamedSadat/CashGear.React.UI#ef1277e78c6151643043fe3327a7f0733307b873",
+    "@cgw/doc": "workspace:*",
+    "@tiptap/core": "3.33.1",
+    "@tiptap/pm": "3.33.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "yjs": "13.6.33"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "jsdom": "31.0.0",
+    "@types/jsdom": "30.0.0"
+  }
+}

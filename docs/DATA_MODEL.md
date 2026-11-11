@@ -70,7 +70,7 @@ Fixed by spike S1 (DECISIONS.md, 2026-11-11: Phase 0 results).
 | `tableRow` | | `tableCell*` | |
 | `tableCell` | | `inline*` | all |
 | `divider`, `image`, `file`, `bookmark`, `childPage`, `sheetEmbed`, `erpView`, `databaseView` | `body` | none (atom) | |
-| `text`, `pageMention`, `userMention`, `dateMention` | `inline` | | |
+| `text`, `hardBreak`, `pageMention`, `userMention`, `dateMention` | `inline` | | |
 
 Schema rules that hold forever (D3):
 
@@ -91,7 +91,7 @@ Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
 
 | Block | Body node | Attributes (all optional, with defaults) | Inline content | MVP |
 | --- | --- | --- | --- | --- |
-| Paragraph | `textBody`, `kind: paragraph` | `dir` | Yes | Yes |
+| Paragraph | `textBody`, `kind: paragraph` | `dir`, `colour` | Yes | Yes |
 | Heading 1 to 3 | `textBody`, `kind: heading` | `level` (1 to 3), `dir` | Yes | Yes |
 | Bulleted list item | `textBody`, `kind: bulletItem` | `dir` | Yes | Yes |
 | Numbered list item | `textBody`, `kind: numberedItem` | `dir`, `start` | Yes | Yes |
@@ -116,6 +116,10 @@ Notes:
 - A toggle's children are its hidden content. Whether it is open is kept per device.
 - `dir` is `null` (from the first strong character), `ltr` or `rtl`. It exists on text blocks
   only. Containers and lists take their direction from their first text.
+- `colour` is a theme token (as the colour marks use) for the whole block's text, set from the
+  block menu. Every text kind has it, as it has `dir`.
+- `hardBreak` is a line break inside a text body (Shift+Enter). A code block keeps its new lines
+  as text instead.
 - A file's name, size and type are read from the asset record, not copied into the document.
 - A child page block is a link. The tree's parent field is the truth; deleting the block does not
   delete the page, and a page whose block is gone still shows in the sidebar.
@@ -129,6 +133,7 @@ Notes:
 | Mark | `bold`, `italic`, `underline`, `strike`, `code` | none |
 | Mark | `link` | `href` (scheme allow-list: `https`, `http`, `mailto`, `tel`, and internal page links) |
 | Mark | `textColour`, `highlight` | `token` (a named colour from the theme, not a hex value, so dark mode works) |
+| Inline atom | `hardBreak` | none |
 | Inline atom | `pageMention` | `pageId`, optional `blockId` |
 | Inline atom | `userMention` | `userId` (Phase 6) |
 | Inline atom | `dateMention` | `date` (Phase 4) |

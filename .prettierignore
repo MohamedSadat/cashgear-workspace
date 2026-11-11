@@ -11,4 +11,3 @@ bench/spikes/**/obj/
 bench/spikes/**/bin/
 docs/
 CLAUDE.md
-bench/editor/vendor/

@@ -1,8 +1,14 @@
 import { Editor, type AnyExtension } from '@tiptap/core';
+import { createBlockEditor } from '@cgw/editor';
 import type * as Y from 'yjs';
 import { isRemoteChange, yjsExtension, type BindingKind } from './binding';
 import { BlockIds, newStats, type BlockIdStats } from './ids';
-import { schemaExtensions, type SchemaAdditions, type SchemaVariant } from './schema';
+import {
+  isProductSchema,
+  schemaExtensions,
+  type SchemaAdditions,
+  type SchemaVariant,
+} from './schema';
 
 export interface SpikeEditorOptions {
   doc: Y.Doc;
@@ -31,11 +37,36 @@ export interface SpikeEditor {
 export const CONTENT = 'content';
 export const META = 'meta';
 
+/**
+ * The product's configuration (its schema, id plugin and binding) is the product's editor,
+ * @cgw/editor, so the harnesses test what ships. The configurations S1 rejected, and S2's newer
+ * builds, are assembled here from their parts.
+ */
 export function createSpikeEditor(options: SpikeEditorOptions): SpikeEditor {
-  const stats = newStats();
-  const contentErrors: Error[] = [];
   const fragment = options.doc.getXmlFragment(CONTENT);
   const element = options.element ?? document.createElement('div');
+  if (
+    options.binding === 'tiptap-ids' &&
+    isProductSchema(options.schema) &&
+    !options.additions &&
+    !options.withoutIds
+  ) {
+    const product = createBlockEditor({
+      element,
+      fragment,
+      editable: options.editable ?? true,
+      schedule: options.schedule,
+      extensions: options.extraExtensions ? () => options.extraExtensions! : undefined,
+    });
+    return {
+      editor: product.editor,
+      stats: product.stats,
+      contentErrors: product.contentErrors,
+      fragment,
+    };
+  }
+  const stats = newStats();
+  const contentErrors: Error[] = [];
   const editor = new Editor({
     element,
     extensions: [

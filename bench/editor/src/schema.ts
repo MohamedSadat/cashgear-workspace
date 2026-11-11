@@ -1,12 +1,15 @@
-// Spike S1: the uniform block container (D3) as Tiptap extensions.
+// Spike S1's schema variants. The one S1 chose, (body | block)* with one textBody and a `kind`, is
+// the product's own (@cgw/doc), which every harness now uses. The others are kept for S1's
+// comparison runs and S2's newer builds.
 //
-// Two variants of the container's content expression are under test, both `*` only:
+// Two variants of the container's content expression, both `*` only:
 //   ordered: block = body* block*      (bodies first, then child blocks)
 //   mixed:   block = (body | block)*   (any order)
 // and two ways of naming text bodies:
 //   types: one node type per kind (paragraph, heading, bulletItem, ...), as DATA_MODEL.md lists
 //   kind:  one `textBody` node with a `kind` attribute, so "turn into" is an attribute change
 import { Mark, Node, mergeAttributes, type AnyExtension } from '@tiptap/core';
+import { schemaExtensions as productSchema } from '@cgw/doc';
 
 export type ContentVariant = 'ordered' | 'mixed';
 export type BodyVariant = 'types' | 'kind';
@@ -226,10 +229,16 @@ export interface SchemaAdditions {
   attributes?: string[];
 }
 
+/** The variant the product ships (DATA_MODEL.md, Content expressions). */
+export const isProductSchema = (variant: SchemaVariant) =>
+  variant.content === 'mixed' && variant.bodies === 'kind';
+
 export function schemaExtensions(
   variant: SchemaVariant,
   additions: SchemaAdditions = {},
 ): AnyExtension[] {
+  if (isProductSchema(variant) && !additions.kinds?.length && !additions.attributes?.length)
+    return productSchema();
   const extraKinds = additions.kinds ?? [];
   const bodies =
     variant.bodies === 'types'

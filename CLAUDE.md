@@ -55,13 +55,17 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | --- | --- |
 | `apps/web` (`@cgw/web`) | Vite + React entry: picks the platform (web or Tauri) and mounts the shell |
 | `packages/shell` (`@cgw/shell`) | App frame (sidebar, top bar, hash routing by page id), i18next catalogues (`en`, `ar`), theme controller, command registry, `event.code` shortcuts, the `WorkspacePlatform` interface |
+| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` and its conformance suite (`@cgw/workspace/testing`), the operation planner with the tree rules, order keys, UUIDv7, the metadata mirror, search normalisation; shared test vectors in `vectors/`. No React, DOM or ProseMirror |
+| `packages/doc` (`@cgw/doc`) | The block schema (version 1), block-id plugin, the Yjs seam over the patched `@tiptap/y-tiptap`, `PageDocument` (open, autosave, compaction, history), plain text and Markdown out, Markdown in, content builders |
+| `packages/editor` (`@cgw/editor`) | The Tiptap editor over a `Y.Doc`: block commands, keymap, input rules, slash menu, bubble toolbar, block handle and drag, block selection, clipboard, tables, plain DOM node views; given an `EditorHost`, never touches storage |
+| `patches/` | The Q18 patch on `@tiptap/y-tiptap` 3.3.0 (`pnpm patch`), made by `scripts/y-tiptap-patch.mjs` |
 | `scripts/eslint` | Workspace's own lint rules: `cgw/no-untranslated-text` |
 | `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json` |
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
-| `bench/editor` (`@cgw/bench-editor`) | Phase 0's editor model (schema, block-id plugin, Yjs seam, vendored id-aware binding) and its harnesses: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content |
+| `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison |
 | `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
 | `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP |
 | `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
@@ -133,3 +137,21 @@ Added as they are found, grouped by phase.
   `System.Security.Cryptography.Pkcs` 9.0.18, which has advisories: pin 10.0.15.
 - The WebView2 spike host must start on `about:blank`; navigating it while it loads a start URL
   interrupts Playwright's `goto`.
+
+### Phase 1
+
+- Run `cd` only inside `( ... )` in Bash: a plain `cd` moves the session's working directory.
+- Tiptap 3.33 runs an input rule after inserting the typed character: the handler sees it in the
+  document, and `range.to` includes it.
+- `editor.commands.keyboardShortcut` replays a captured transaction through its own mapping and
+  drops an insert that follows a delete of the same range. Tests press keys through
+  `view.someProp('handleKeyDown')` (`packages/editor/src/testing.ts`).
+- A node view must ignore mutations of its own attributes, or setting one (a toggle's open state)
+  makes ProseMirror re-read the node and render it again, for ever.
+- With `content-visibility: auto` on top-level blocks, Chrome may not have laid out a block made
+  a moment ago; a key typed then lands at its start. The editor inserts typed text itself for two
+  frames after a structural change (`StableTyping`).
+- `useSyncExternalStore` with an inline `subscribe` resubscribes every render; keep it stable when
+  the subscription holds state (the bubble toolbar's focus).
+- Playwright's `dragTo` does not drive the block handle's HTML5 drag; use `page.mouse` down, move
+  in steps, up.

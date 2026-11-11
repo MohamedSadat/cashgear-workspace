@@ -75,7 +75,7 @@ describe('S2: an older build meets a newer document', () => {
     newer.editor.destroy();
   });
 
-  for (const binding of ['tiptap', 'tiptap-ids', 'upstream'] as const) {
+  for (const binding of ['tiptap-ids', 'upstream'] as const) {
     it(`without the gate (${binding}): what binding the old build does to the newer document`, () => {
       const { doc } = newerDocument();
       const bytes = Y.encodeStateAsUpdate(doc);
@@ -102,7 +102,7 @@ describe('S2: an older build meets a newer document', () => {
     });
   }
 
-  for (const binding of ['tiptap', 'tiptap-ids'] as const) {
+  for (const binding of ['tiptap-ids'] as const) {
     it(`an attribute a newer build added, after an older build edits the block (${binding})`, () => {
       const newDoc = new Y.Doc();
       const oldDoc = new Y.Doc();

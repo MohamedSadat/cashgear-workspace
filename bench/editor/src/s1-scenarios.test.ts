@@ -9,8 +9,8 @@ const { Network } = await import('./network');
 const { createOps, listBlocks, firstBody, blockText, seeded } = await import('./commands');
 const { blockIds, repairId, BLOCK_ID } = await import('./ids');
 
-type Binding = 'tiptap' | 'tiptap-ids' | 'upstream';
-const BINDINGS: Binding[] = ['tiptap', 'tiptap-ids', 'upstream'];
+type Binding = 'tiptap-ids' | 'upstream';
+const BINDINGS: Binding[] = ['tiptap-ids', 'upstream'];
 const findings: Record<string, unknown> = {};
 afterAll(() => {
   mkdirSync('bench/results', { recursive: true });

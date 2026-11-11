@@ -162,6 +162,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@tiptap/y-tiptap@3.3.0': 05746e11564e6d3868c3a140d1bb7de4793cd1f70b7d159c3977e1216509f7e3
+
 importers:
 
   .:
@@ -205,6 +208,9 @@ importers:
       '@cgw/shell':
         specifier: workspace:*
         version: link:../../packages/shell
+      '@cgw/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
@@ -233,18 +239,21 @@ importers:
 
   bench/editor:
     devDependencies:
+      '@cgw/doc':
+        specifier: workspace:*
+        version: link:../../packages/doc
+      '@cgw/editor':
+        specifier: workspace:*
+        version: link:../../packages/editor
       '@tiptap/core':
-        specifier: 3.33.0
-        version: 3.33.0(@tiptap/pm@3.33.0)
-      '@tiptap/extension-collaboration':
-        specifier: 3.33.0
-        version: 3.33.0(@tiptap/core@3.33.0(@tiptap/pm@3.33.0))(@tiptap/pm@3.33.0)(@tiptap/y-tiptap@3.2.0(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33))(yjs@13.6.33)
+        specifier: 3.33.1
+        version: 3.33.1(@tiptap/pm@3.33.1)
       '@tiptap/pm':
-        specifier: 3.33.0
-        version: 3.33.0
+        specifier: 3.33.1
+        version: 3.33.1
       '@tiptap/y-tiptap':
-        specifier: 3.2.0
-        version: 3.2.0(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
+        specifier: 3.3.0
+        version: 3.3.0(patch_hash=05746e11564e6d3868c3a140d1bb7de4793cd1f70b7d159c3977e1216509f7e3)(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
       '@types/jsdom':
         specifier: 30.0.0
         version: 30.0.0
@@ -270,11 +279,85 @@ importers:
         specifier: 13.6.33
         version: 13.6.33
 
+  packages/doc:
+    dependencies:
+      '@cgw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      '@tiptap/core':
+        specifier: 3.33.1
+        version: 3.33.1(@tiptap/pm@3.33.1)
+      '@tiptap/pm':
+        specifier: 3.33.1
+        version: 3.33.1
+      '@tiptap/y-tiptap':
+        specifier: 3.3.0
+        version: 3.3.0(patch_hash=05746e11564e6d3868c3a140d1bb7de4793cd1f70b7d159c3977e1216509f7e3)(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
+      lib0:
+        specifier: 0.2.120
+        version: 0.2.120
+      yjs:
+        specifier: 13.6.33
+        version: 13.6.33
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+
+  packages/editor:
+    dependencies:
+      '@cashgear/ui':
+        specifier: github:MohamedSadat/CashGear.React.UI#ef1277e78c6151643043fe3327a7f0733307b873
+        version: https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/ef1277e78c6151643043fe3327a7f0733307b873(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@cgw/doc':
+        specifier: workspace:*
+        version: link:../doc
+      '@tiptap/core':
+        specifier: 3.33.1
+        version: 3.33.1(@tiptap/pm@3.33.1)
+      '@tiptap/pm':
+        specifier: 3.33.1
+        version: 3.33.1
+      react:
+        specifier: 19.3.1
+        version: 19.3.1
+      react-dom:
+        specifier: 19.3.1
+        version: 19.3.1(react@19.3.1)
+      yjs:
+        specifier: 13.6.33
+        version: 13.6.33
+    devDependencies:
+      '@types/jsdom':
+        specifier: 30.0.0
+        version: 30.0.0
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      jsdom:
+        specifier: 31.0.0
+        version: 31.0.0
+
   packages/shell:
     dependencies:
       '@cashgear/ui':
         specifier: github:MohamedSadat/CashGear.React.UI#ef1277e78c6151643043fe3327a7f0733307b873
         version: https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/ef1277e78c6151643043fe3327a7f0733307b873(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@cgw/doc':
+        specifier: workspace:*
+        version: link:../doc
+      '@cgw/editor':
+        specifier: workspace:*
+        version: link:../editor
+      '@cgw/workspace':
+        specifier: workspace:*
+        version: link:../workspace
       i18next:
         specifier: 27.1.1
         version: 27.1.1(typescript@6.0.3)
@@ -287,6 +370,9 @@ importers:
       react-i18next:
         specifier: 18.0.1
         version: 18.0.1(@types/react@19.3.0)(i18next@27.1.1(typescript@6.0.3))(react@19.3.1)(typescript@6.0.3)
+      yjs:
+        specifier: 13.6.33
+        version: 13.6.33
     devDependencies:
       '@types/react':
         specifier: 19.3.0
@@ -294,6 +380,12 @@ importers:
       '@types/react-dom':
         specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
+
+  packages/workspace:
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
 
 packages:
 
@@ -584,24 +676,16 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
-  '@tiptap/core@3.33.0':
-    resolution: {integrity: sha512-sZjBCwK9+h0kbc/CZvkepX6RTJ2jOfeWY1aId9O3YnG0CAiOs/4DbqFmpcmv5BQAGPA6gC96gqdafa/9Dpg0tw==}
+  '@tiptap/core@3.33.1':
+    resolution: {integrity: sha512-cWSLHe0Bp44SqEsNMpfSpJeeWenG9/g4pAMRjcEpm0IZN9cmY5fq7LEYZCpjBbVqpzjaT1q7HnkvbBOPTdhbrQ==}
     peerDependencies:
-      '@tiptap/pm': 3.33.0
+      '@tiptap/pm': 3.33.1
 
-  '@tiptap/extension-collaboration@3.33.0':
-    resolution: {integrity: sha512-pMa/RLo3HCJpN0DzmoF6dH3MSLc6RR9hZvXZiP3XcrNLMpiusvZxsQX0yMybDcl/8x4sWOJ3IG86D1tfFTX+Ew==}
-    peerDependencies:
-      '@tiptap/core': 3.33.0
-      '@tiptap/pm': 3.33.0
-      '@tiptap/y-tiptap': ^3.0.7
-      yjs: ^13
+  '@tiptap/pm@3.33.1':
+    resolution: {integrity: sha512-b1sqPaqkQe6/Ln0bx18KT9fF5NV01DeN/kQuy26JbPiQ0pRXLELfrPOG3FdSx0iyV2Xyhz9IQA4VuP4yNOaRqQ==}
 
-  '@tiptap/pm@3.33.0':
-    resolution: {integrity: sha512-NKTaRMMoh6wXXL527o/dVC05olV8WCI19fRGVmV2okYjIBriGe0+sW/+neNSUVeQj3YtwKLnkPm7i++XygOwCw==}
-
-  '@tiptap/y-tiptap@3.2.0':
-    resolution: {integrity: sha512-vKd9exe/lkUPLiTYwM7WUjwy9kxQfgW2kVZp8s3FnHSN+9oUXjybm+F02/MmEeQYU7ctRcsA2qDVnCISiXS6aQ==}
+  '@tiptap/y-tiptap@3.3.0':
+    resolution: {integrity: sha512-TLblfhvXCJK2bnow8nBdILh350UcxoGR8Wy3JoC/CPAhjLxdqSmv2dqs/lPA8JhiE+FxZDG9cDmcXbZV1yidbQ==}
     peerDependencies:
       prosemirror-model: ^1.7.1
       prosemirror-state: ^1.2.3
@@ -1661,18 +1745,11 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.12.4
       '@tauri-apps/cli-win32-x64-msvc': 2.12.4
 
-  '@tiptap/core@3.33.0(@tiptap/pm@3.33.0)':
+  '@tiptap/core@3.33.1(@tiptap/pm@3.33.1)':
     dependencies:
-      '@tiptap/pm': 3.33.0
+      '@tiptap/pm': 3.33.1
 
-  '@tiptap/extension-collaboration@3.33.0(@tiptap/core@3.33.0(@tiptap/pm@3.33.0))(@tiptap/pm@3.33.0)(@tiptap/y-tiptap@3.2.0(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33))(yjs@13.6.33)':
-    dependencies:
-      '@tiptap/core': 3.33.0(@tiptap/pm@3.33.0)
-      '@tiptap/pm': 3.33.0
-      '@tiptap/y-tiptap': 3.2.0(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)
-      yjs: 13.6.33
-
-  '@tiptap/pm@3.33.0':
+  '@tiptap/pm@3.33.1':
     dependencies:
       prosemirror-changeset: 2.4.6
       prosemirror-commands: 1.7.2
@@ -1688,7 +1765,7 @@ snapshots:
       prosemirror-transform: 1.12.5
       prosemirror-view: 1.42.9
 
-  '@tiptap/y-tiptap@3.2.0(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)':
+  '@tiptap/y-tiptap@3.3.0(patch_hash=05746e11564e6d3868c3a140d1bb7de4793cd1f70b7d159c3977e1216509f7e3)(prosemirror-model@1.25.13)(prosemirror-state@1.4.4)(prosemirror-view@1.42.9)(y-protocols@1.0.7(yjs@13.6.33))(yjs@13.6.33)':
     dependencies:
       lib0: 0.2.120
       prosemirror-model: 1.25.13

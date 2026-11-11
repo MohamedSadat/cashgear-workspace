@@ -1,0 +1,23 @@
+{
+  "name": "@cgw/doc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The document layer: block schema, block ids, the Yjs seam, the page document and its autosave, plain text and Markdown. No React, no DOM.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cgw/workspace": "workspace:*",
+    "@tiptap/core": "3.33.1",
+    "@tiptap/pm": "3.33.1",
+    "@tiptap/y-tiptap": "3.3.0",
+    "lib0": "0.2.120",
+    "yjs": "13.6.33"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
+  }
+}

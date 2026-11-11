@@ -1,3 +1,4 @@
+import type { BlockEditor } from '@cgw/editor';
 import { createContext, useContext, useSyncExternalStore } from 'react';
 import type { CommandRegistry } from './commands';
 import type { WorkspacePlatform } from './platform';
@@ -8,6 +9,8 @@ export interface ShellServices {
   platform: WorkspacePlatform;
   theme: ThemeController;
   commands: CommandRegistry<CommandContext>;
+  /** The editor of the page on screen, if any: block commands act on it. */
+  editor: { current: BlockEditor | null };
 }
 
 /** What a command can act on. Grows as the shell does. */

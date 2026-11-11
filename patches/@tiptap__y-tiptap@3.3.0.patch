@@ -1,0 +1,142 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 309e68f4a77be4ab8e7b2ca271a6098a9182a245..2257a2b8123f5b71d4ab2292ac3cb5290fcb320b 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -887,7 +887,13 @@ const equalYTextPText = (ytext, ptexts) => {
+ };
+ //#endregion
+ //#region src/lib/utils/reconciliation/matchNodeName.ts
+-const matchNodeName = (yElement, pNode) => !(pNode instanceof Array) && yElement.nodeName === pNode.type.name;
++// cgw (Q18): a node with an id never stands in for a node with another id.
++const sameBlockId = (yElement, pNode) => {
++	const yId = yElement.getAttribute("id");
++	const pId = pNode.attrs.id;
++	return yId == null || pId == null || yId === pId;
++};
++const matchNodeName = (yElement, pNode) => !(pNode instanceof Array) && yElement.nodeName === pNode.type.name && sameBlockId(yElement, pNode);
+ //#endregion
+ //#region src/lib/utils/reconciliation/equalYTypePNode.ts
+ const equalYTypePNode = (ytype, pnode) => {
+@@ -907,11 +913,22 @@ const findMappedChildAnchors = (yChildren, pChildren, meta) => {
+ 	pChildren.forEach((pChild, index) => {
+ 		if (!pChildIndices.has(pChild)) pChildIndices.set(pChild, index);
+ 	});
++	// cgw (Q18): children with equal ids anchor the diff too.
++	const pIdIndices = /* @__PURE__ */ new Map();
++	pChildren.forEach((pChild, index) => {
++		const id = pChild instanceof Array ? null : pChild.attrs.id;
++		if (id != null && !pIdIndices.has(id)) pIdIndices.set(id, index);
++	});
+ 	const candidates = [];
+ 	yChildren.forEach((yChild, yIndex) => {
+ 		const mapped = meta.mapping.get(yChild);
+-		const pIndex = mapped === void 0 ? void 0 : pChildIndices.get(mapped);
+-		if (pIndex !== void 0 && mappedIdentity(mapped, pChildren[pIndex])) candidates.push({
++		let pIndex = mapped === void 0 ? void 0 : pChildIndices.get(mapped);
++		if (pIndex !== void 0 && !mappedIdentity(mapped, pChildren[pIndex])) pIndex = void 0;
++		if (pIndex === void 0 && yChild instanceof yjs.XmlElement) {
++			const id = yChild.getAttribute("id");
++			if (id != null) pIndex = pIdIndices.get(id);
++		}
++		if (pIndex !== void 0) candidates.push({
+ 			yIndex,
+ 			pIndex,
+ 			yChild
+@@ -1024,7 +1041,7 @@ const reconcileUnanchoredChildren = (y, yDomFragment, pChildren, yChildren, ySta
+ //#region src/lib/utils/reconciliation/reconcileMappedChildren.ts
+ const reconcileMappedChildren = (y, yDomFragment, pChildren, yChildren, meta, updateFragment) => {
+ 	const anchors = findMappedChildAnchors(yChildren, pChildren, meta);
+-	if (anchors.length < 2 || !anchors.some((anchor) => anchor.yIndex !== anchor.pIndex) || anchors.some((anchor) => {
++	if (anchors.length < 1 || !anchors.some((anchor) => anchor.yIndex !== anchor.pIndex) || anchors.some((anchor) => {
+ 		const pChild = pChildren[anchor.pIndex];
+ 		return !(anchor.yChild instanceof yjs.XmlText && pChild instanceof Array || anchor.yChild instanceof yjs.XmlElement && !(pChild instanceof Array));
+ 	})) return false;
+@@ -1033,7 +1050,7 @@ const reconcileMappedChildren = (y, yDomFragment, pChildren, yChildren, meta, up
+ 	for (const anchor of anchors) {
+ 		reconcileUnanchoredChildren(y, yDomFragment, pChildren, yChildren, yIndex, anchor.yIndex, pIndex, anchor.pIndex, meta, updateFragment);
+ 		const pChild = pChildren[anchor.pIndex];
+-		updateMatchingYChild(y, anchor.yChild, pChild, meta, updateFragment);
++		if (!mappedIdentity(meta.mapping.get(anchor.yChild), pChild)) updateMatchingYChild(y, anchor.yChild, pChild, meta, updateFragment);
+ 		yIndex = anchor.yIndex + 1;
+ 		pIndex = anchor.pIndex + 1;
+ 	}
+@@ -1084,7 +1101,7 @@ const updateYFragment = (y, yDomFragment, pNode, meta) => {
+ 			}
+ 			if (yDomAttrs[key] !== pAttrs[key] && key !== "ychange") yDomFragment.setAttribute(key, pAttrs[key]);
+ 		}
+-		for (const key in yDomAttrs) if (pAttrs[key] === void 0) yDomFragment.removeAttribute(key);
++		for (const key in yDomAttrs) if (pAttrs[key] === void 0 && key in pNode.type.attrs) yDomFragment.removeAttribute(key); // cgw (Q18): unknown attributes are kept
+ 	}
+ 	const pChildren = normalizePNodeContent(pNode);
+ 	const pChildCnt = pChildren.length;
+diff --git a/dist/index.js b/dist/index.js
+index 64482faff4203574f1326cfab8f847cd00c2d850..8e27fcddbea48d6901526bb1c4965d2739777985 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -854,7 +854,13 @@ const equalYTextPText = (ytext, ptexts) => {
+ };
+ //#endregion
+ //#region src/lib/utils/reconciliation/matchNodeName.ts
+-const matchNodeName = (yElement, pNode) => !(pNode instanceof Array) && yElement.nodeName === pNode.type.name;
++// cgw (Q18): a node with an id never stands in for a node with another id.
++const sameBlockId = (yElement, pNode) => {
++	const yId = yElement.getAttribute("id");
++	const pId = pNode.attrs.id;
++	return yId == null || pId == null || yId === pId;
++};
++const matchNodeName = (yElement, pNode) => !(pNode instanceof Array) && yElement.nodeName === pNode.type.name && sameBlockId(yElement, pNode);
+ //#endregion
+ //#region src/lib/utils/reconciliation/equalYTypePNode.ts
+ const equalYTypePNode = (ytype, pnode) => {
+@@ -874,11 +880,22 @@ const findMappedChildAnchors = (yChildren, pChildren, meta) => {
+ 	pChildren.forEach((pChild, index) => {
+ 		if (!pChildIndices.has(pChild)) pChildIndices.set(pChild, index);
+ 	});
++	// cgw (Q18): children with equal ids anchor the diff too.
++	const pIdIndices = /* @__PURE__ */ new Map();
++	pChildren.forEach((pChild, index) => {
++		const id = pChild instanceof Array ? null : pChild.attrs.id;
++		if (id != null && !pIdIndices.has(id)) pIdIndices.set(id, index);
++	});
+ 	const candidates = [];
+ 	yChildren.forEach((yChild, yIndex) => {
+ 		const mapped = meta.mapping.get(yChild);
+-		const pIndex = mapped === void 0 ? void 0 : pChildIndices.get(mapped);
+-		if (pIndex !== void 0 && mappedIdentity(mapped, pChildren[pIndex])) candidates.push({
++		let pIndex = mapped === void 0 ? void 0 : pChildIndices.get(mapped);
++		if (pIndex !== void 0 && !mappedIdentity(mapped, pChildren[pIndex])) pIndex = void 0;
++		if (pIndex === void 0 && yChild instanceof Y.XmlElement) {
++			const id = yChild.getAttribute("id");
++			if (id != null) pIndex = pIdIndices.get(id);
++		}
++		if (pIndex !== void 0) candidates.push({
+ 			yIndex,
+ 			pIndex,
+ 			yChild
+@@ -991,7 +1008,7 @@ const reconcileUnanchoredChildren = (y, yDomFragment, pChildren, yChildren, ySta
+ //#region src/lib/utils/reconciliation/reconcileMappedChildren.ts
+ const reconcileMappedChildren = (y, yDomFragment, pChildren, yChildren, meta, updateFragment) => {
+ 	const anchors = findMappedChildAnchors(yChildren, pChildren, meta);
+-	if (anchors.length < 2 || !anchors.some((anchor) => anchor.yIndex !== anchor.pIndex) || anchors.some((anchor) => {
++	if (anchors.length < 1 || !anchors.some((anchor) => anchor.yIndex !== anchor.pIndex) || anchors.some((anchor) => {
+ 		const pChild = pChildren[anchor.pIndex];
+ 		return !(anchor.yChild instanceof Y.XmlText && pChild instanceof Array || anchor.yChild instanceof Y.XmlElement && !(pChild instanceof Array));
+ 	})) return false;
+@@ -1000,7 +1017,7 @@ const reconcileMappedChildren = (y, yDomFragment, pChildren, yChildren, meta, up
+ 	for (const anchor of anchors) {
+ 		reconcileUnanchoredChildren(y, yDomFragment, pChildren, yChildren, yIndex, anchor.yIndex, pIndex, anchor.pIndex, meta, updateFragment);
+ 		const pChild = pChildren[anchor.pIndex];
+-		updateMatchingYChild(y, anchor.yChild, pChild, meta, updateFragment);
++		if (!mappedIdentity(meta.mapping.get(anchor.yChild), pChild)) updateMatchingYChild(y, anchor.yChild, pChild, meta, updateFragment);
+ 		yIndex = anchor.yIndex + 1;
+ 		pIndex = anchor.pIndex + 1;
+ 	}
+@@ -1051,7 +1068,7 @@ const updateYFragment = (y, yDomFragment, pNode, meta) => {
+ 			}
+ 			if (yDomAttrs[key] !== pAttrs[key] && key !== "ychange") yDomFragment.setAttribute(key, pAttrs[key]);
+ 		}
+-		for (const key in yDomAttrs) if (pAttrs[key] === void 0) yDomFragment.removeAttribute(key);
++		for (const key in yDomAttrs) if (pAttrs[key] === void 0 && key in pNode.type.attrs) yDomFragment.removeAttribute(key); // cgw (Q18): unknown attributes are kept
+ 	}
+ 	const pChildren = normalizePNodeContent(pNode);
+ 	const pChildCnt = pChildren.length;

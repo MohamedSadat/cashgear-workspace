@@ -1,14 +1,24 @@
 import { CgButton } from '@cashgear/ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { I18nextProvider, useTranslation } from 'react-i18next';
 import { CommandRegistry } from './commands';
 import { ShellContext, useShell, type CommandContext, type ShellServices } from './context';
+import { FirstRun } from './FirstRun';
 import { Frame } from './frame/Frame';
 import { Settings } from './frame/Settings';
 import { applyLanguage, createI18n, type Language } from './i18n';
+import { useSaveState } from './page/usePageDoc';
 import type { WorkspacePlatform } from './platform';
 import { navigate, parseRoute, useHash } from './route';
+import { WorkspaceSession } from './session';
+import { Sidebar, useMirror } from './sidebar/Sidebar';
 import { ThemeController } from './theme';
+import { normaliseText } from '@cgw/workspace';
+import type { PageDocument } from '@cgw/doc';
+
+// The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
+// (ARCHITECTURE.md, Performance: Startup).
+const PageView = lazy(() => import('./page/PageView').then((m) => ({ default: m.PageView })));
 
 export interface WorkspaceAppProps {
   platform: WorkspacePlatform;
@@ -20,25 +30,80 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
     () => ({
       platform,
       theme: new ThemeController(platform),
-      commands: new CommandRegistry<CommandContext>(),
+      commands: new CommandRegistry<CommandContext>(normaliseText),
+      editor: { current: null },
     }),
     [platform],
   );
+  const [session, setSession] = useState<WorkspaceSession | null>(null);
+  const [failed, setFailed] = useState<unknown>(null);
   useEffect(() => () => services.theme.dispose(), [services]);
+  useEffect(() => {
+    let live = true;
+    let opened: WorkspaceSession | null = null;
+    platform
+      .openStore()
+      .then((store) => WorkspaceSession.start(store))
+      .then(
+        (started) => {
+          opened = started;
+          if (live) setSession(started);
+          else void started.close();
+        },
+        (error: unknown) => live && setFailed(error),
+      );
+    return () => {
+      live = false;
+      void opened?.close();
+    };
+  }, [platform]);
+
+  // Pending saves are written before the page is hidden or closed (SYNC_DESIGN.md, Autosave).
+  useEffect(() => {
+    if (!session) return;
+    const flush = () => void session.flushAll();
+    const onVisibility = () => document.visibilityState === 'hidden' && flush();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flush);
+    const offClose = platform.onCloseRequested?.(() => session.flushAll());
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flush);
+      offClose?.();
+    };
+  }, [session, platform]);
 
   return (
     <I18nextProvider i18n={i18n}>
       <ShellContext.Provider value={services}>
-        <Workspace />
+        {session ? <Workspace session={session} /> : <Starting failed={failed} />}
       </ShellContext.Provider>
     </I18nextProvider>
   );
 }
 
-function Workspace() {
+function Starting({ failed }: { failed: unknown }) {
+  const { t } = useTranslation();
+  return failed ? (
+    <main className="cgw-empty" role="alert">
+      <h1>{t('app.storeFailed')}</h1>
+      <p>{String(failed)}</p>
+    </main>
+  ) : (
+    <main className="cgw-empty" aria-busy="true">
+      {t('app.loading')}
+    </main>
+  );
+}
+
+function Workspace({ session }: { session: WorkspaceSession }) {
   const { t, i18n } = useTranslation();
   const services = useShell();
   const route = parseRoute(useHash());
+  const [, rerender] = useState(0);
+  const [openDoc, setOpenDoc] = useState<PageDocument | null>(null);
+  useMirror(session);
+  useEffect(() => session.onSwitch(() => rerender((n) => n + 1)), [session]);
 
   const setLanguage = useCallback(
     (language: Language) => {
@@ -81,11 +146,23 @@ function Workspace() {
     [services, t, setLanguage],
   );
 
+  const page = route.kind === 'page' ? session.mirror.pages.get(route.pageId) : undefined;
+
+  const visiting = page && !page.trashedAt ? page.id : null;
+  useEffect(() => {
+    if (visiting) void session.recordVisit(visiting).catch(() => undefined);
+  }, [session, visiting]);
+
+  // Settings stay reachable before a workspace exists (language and theme come first).
+  if (!session.workspaceId && route.kind !== 'settings')
+    return <FirstRun session={session} onCreated={() => rerender((n) => n + 1)} />;
+
   return (
     <Frame
       sidebar={
         <div className="cgw-sidebar-inner">
-          <div className="cgw-sidebar-header">{t('app.title')}</div>
+          <div className="cgw-sidebar-header">{session.current?.name}</div>
+          <Sidebar session={session} activePageId={page?.id ?? null} />
           <div className="cgw-sidebar-footer">
             <CgButton
               appearance="ghost"
@@ -98,9 +175,18 @@ function Workspace() {
           </div>
         </div>
       }
+      topBar={<SaveStatus doc={route.kind === 'page' ? openDoc : null} />}
     >
       {route.kind === 'settings' ? (
         <Settings onLanguage={setLanguage} />
+      ) : page && !page.trashedAt ? (
+        <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+          <PageView session={session} page={page} onEditor={(_, doc) => setOpenDoc(doc)} />
+        </Suspense>
+      ) : route.kind === 'page' ? (
+        <div className="cgw-empty">
+          <h1>{t('frame.notFound')}</h1>
+        </div>
       ) : (
         <div className="cgw-empty">
           <h1>{t('frame.emptyTitle')}</h1>
@@ -108,5 +194,32 @@ function Workspace() {
         </div>
       )}
     </Frame>
+  );
+}
+
+function SaveStatus({ doc }: { doc: PageDocument | null }) {
+  const { t } = useTranslation();
+  const state = useSaveState(doc);
+  if (!state) return null;
+  const label =
+    state === 'saved'
+      ? t('page.saved')
+      : state === 'saving'
+        ? t('page.saving')
+        : state === 'unsaved'
+          ? t('page.unsaved')
+          : state === 'error'
+            ? t('page.saveError')
+            : t('page.readOnly');
+  return (
+    <span
+      className="cgw-save-status"
+      data-state={state}
+      role="status"
+      aria-live="polite"
+      data-testid="save-status"
+    >
+      {label}
+    </span>
   );
 }

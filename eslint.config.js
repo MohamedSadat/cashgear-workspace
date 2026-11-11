@@ -42,8 +42,6 @@ export default tseslint.config(
       '**/obj/**',
       'apps/desktop/src-tauri/gen/**',
       'bench/results/**',
-      // A vendored copy of @tiptap/y-tiptap for the Phase 0 harness (bench/editor/vendor).
-      'bench/editor/vendor/**',
     ],
   },
   js.configs.recommended,

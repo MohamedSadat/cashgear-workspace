@@ -115,3 +115,121 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Sidebar (M1.2 list; M1.6 draws the tree) */
+.cgw-sidebar-section {
+  padding-block: 4px;
+}
+
+.cgw-sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 14px 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cg-text-secondary);
+}
+
+.cgw-sidebar ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-sidebar ul ul {
+  padding-inline-start: 14px;
+}
+
+.cgw-tree-link {
+  display: block;
+  padding: 3px 14px;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+}
+
+.cgw-tree-link:hover,
+[aria-selected='true'] > .cgw-tree-link {
+  background: color-mix(in srgb, var(--cg-text) 8%, transparent);
+}
+
+/* A page */
+.cgw-page {
+  max-inline-size: 760px;
+  margin-inline: auto;
+  padding: 48px 56px 0;
+  box-sizing: border-box;
+}
+
+.cgw-title {
+  display: block;
+  inline-size: 100%;
+  field-sizing: content;
+  resize: none;
+  border: 0;
+  outline: none;
+  padding: 0;
+  margin-block-end: 12px;
+  background: none;
+  color: var(--cg-text);
+  font: inherit;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.cgw-title::placeholder {
+  color: var(--cg-text-secondary);
+  opacity: 0.5;
+}
+
+.cgw-page-notice {
+  margin-block-end: 16px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cg-accent) 12%, transparent);
+}
+
+.cgw-page-loading,
+.cgw-page-error {
+  padding: 48px;
+}
+
+.cgw-save-status {
+  margin-inline-start: auto;
+  font-size: 0.8125rem;
+  color: var(--cg-text-secondary);
+  white-space: nowrap;
+}
+
+.cgw-save-status[data-state='error'] {
+  color: var(--cg-danger, #c4383a);
+}
+
+.cgw-first-run {
+  max-inline-size: 480px;
+  margin: 12vh auto 0;
+  padding: 24px;
+}
+
+.cgw-first-run form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-block: 24px;
+}
+
+.cgw-first-run-note {
+  color: var(--cg-text-secondary);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 640px) {
+  .cgw-page {
+    padding: 24px 18px 0;
+  }
+}

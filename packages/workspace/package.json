@@ -1,0 +1,19 @@
+{
+  "name": "@cgw/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The page tree and its rules, order keys, operations and the outbox, the metadata mirror, search normalisation and the LocalStore interface with its conformance suite. No React, no DOM, no ProseMirror.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/conformance.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
+  }
+}
