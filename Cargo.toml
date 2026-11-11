@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["apps/desktop/src-tauri"]
+members = ["crates/*", "apps/desktop/src-tauri", "bench/webview2-host"]
 
 [workspace.package]
 version = "0.0.0"
@@ -15,3 +15,9 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# cgw-ydoc's C library catches panics at its boundary, which needs unwinding; the desktop app
+# keeps `abort`. Build it with `cargo build -p cgw-ydoc --profile ffi`.
+[profile.ffi]
+inherits = "release"
+panic = "unwind"

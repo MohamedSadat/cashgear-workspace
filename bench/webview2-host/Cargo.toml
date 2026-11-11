@@ -1,0 +1,13 @@
+[package]
+name = "cgw-webview2-host"
+description = "Spikes S5, S6, S9: a WebView2 window on any URL, for Playwright to drive over CDP"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The versions Tauri 2.12 already builds.
+tao = "=0.37.2"
+wry = "=0.57.2"
