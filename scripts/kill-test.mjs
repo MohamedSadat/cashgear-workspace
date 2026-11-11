@@ -6,7 +6,7 @@
 // web: Chrome on the built app (`pnpm preview` on 4273, started if not running), killed with its
 // whole process tree. desktop: target/release/cgw-desktop.exe with its own data folder.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,9 +57,9 @@ function chromePath() {
     'C:/Program Files/Google/Chrome/Application/chrome.exe',
     'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   ].filter(Boolean);
-  for (const candidate of candidates)
-    if (spawnSync(candidate, ['--version'], { windowsHide: true }).status !== null)
-      return candidate;
+  // Found by its file: on Windows `chrome.exe --version` starts the browser, which never exits
+  // where no Chrome is running yet (CI run 43073289097 hung on it).
+  for (const candidate of candidates) if (existsSync(candidate)) return candidate;
   return chromium.executablePath();
 }
 
