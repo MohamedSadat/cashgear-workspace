@@ -123,8 +123,9 @@ The server, in one transaction per request:
 6. Locks the page row, assigns the next sequence numbers, inserts the rows, and moves the page's
    head sequence.
 
-The server does not decode updates on this path. The worker validates them afterwards (see
-"What the server checks").
+The server does not decode updates on this path. The worker validates them (see "What the server
+checks") before they are served to other clients (Q20): spike S7 showed that one update with a
+node type the schema lacks stops every client's binding from syncing that page.
 
 **Pull**
 
@@ -260,15 +261,27 @@ user signs in again; nothing is discarded.
 | --- | --- | --- |
 | Two people type in the same block | Both insertions stand, interleaved by Yjs's rules | No |
 | One edits a block, another deletes it | The block is deleted; the edit goes with it. Version history has it | Yes, by design |
-| One edits a block while another moves it | A move is delete and insert in Yjs, so the edit can be lost | Yes. Named limit. Tested |
+| One edits a block while another moves it (or indents it) | A move is delete and insert in Yjs, so the edit is lost | Yes. Named limit. Measured in spike S1 |
+| One edits a block while another merges it into the block above | The merged block is deleted and its text copied, so the edit is lost | Yes. Named limit. Measured in S1 |
+| One edits a block while another moves a different block | Both stand, with the id-aware binding (Q18); the stock binding can rebuild the untouched neighbour and lose the edit | No, with the patch |
+| One types while another turns the block into another text kind | Both stand: the kind is an attribute | No |
 | Two people move the same block | Two copies. The id plugin repairs the duplicate id; the content appears twice | Duplicates, visible to users |
-| Two people split or merge the same block | Yjs merges; the result is valid because the schema uses `*` only | No |
+| Two people split the same paragraph | Each split copies the tail into a new block, so the shared tail appears twice | Duplicates, visible to users (S1) |
+| Two people merge the same block | Valid, because the schema uses `*` only | Can lose an edit made in the merged block |
 | One formats, another types in the same range | Both stand | No |
 | Undo | Each user's undo reverts only their own changes (Yjs `UndoManager`, scoped to local origin) | No |
 
-The two "yes" rows are properties of Yjs, not bugs to fix later. They matter mostly for long
-offline sessions. The mitigations are version history, and a move intent recorded by the id
-plugin so a moved block is at least recognisable.
+The "yes" and "duplicates" rows are properties of Yjs, not bugs to fix later. They matter mostly
+for long offline sessions. The mitigations are version history, and a move intent recorded by the
+id plugin so a moved block is at least recognisable. Under spike S1's harshest test (three clients,
+long offline spells, a quarter of all edits structural) about a third of typed text that raced a
+structural edit of the same block was lost this way; every loss was one of these rows.
+
+**Pending updates.** Yjs 13.6.33 can keep updates pending after every update they need has
+arrived, depending on the order they came in (S1; `bench/editor/fixtures/yjs-pending-order.json`).
+After applying a batch, the document layer applies Yjs's pending update once more, which
+integrates it. Only what is still pending after that is treated as missing, and goes to the
+repair path above.
 
 ### Metadata
 

@@ -3,7 +3,8 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phase 0 (scaffold and spikes) is in progress.
+Status: Phase 0 (scaffold and spikes) is done; the next step is Phase 1. Spike results and the
+decisions they changed are in `docs/DECISIONS.md` (2026-11-11: Phase 0 results).
 
 ## Workflow
 
@@ -57,8 +58,13 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
-| `bench/` | Spikes (`bench/spikes/`, Phase 0 only) and benchmark harnesses; results in `bench/results/` (not committed) |
-| `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test and desktop smoke on Windows |
+| `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
+| `bench/editor` (`@cgw/bench-editor`) | Phase 0's editor model (schema, block-id plugin, Yjs seam, vendored id-aware binding) and its harnesses: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content |
+| `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
+| `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP |
+| `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
+| `bench/results/` | What runs write; not committed; CI uploads it |
+| `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test, desktop smoke and the Phase 0 harnesses on Windows |
 | `docs/` | Plan, design, decisions, progress |
 
 ## Commands
@@ -77,6 +83,11 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm test:e2e` | Playwright against `pnpm preview` (port 4273) |
 | `pnpm desktop:build` / `pnpm desktop:smoke` | Release desktop build (`target/release/cgw-desktop.exe`), then WebView2 smoke over CDP |
 | `pnpm dev:web` / `pnpm dev:desktop` | Vite dev server on port 5273; Tauri dev window on it |
+| `pnpm bench:s3` | S3: Yjs writes a corpus, `cgw-ydoc` processes it from .NET, Yjs checks it (`S3_DOCS`, `S3_BIG_BYTES`) |
+| `pnpm bench:webview2-host` then `pnpm bench:browser [-- --s5 --s6 --s7 --chrome --webview2]` | Browser harnesses on port 4290 |
+| `pnpm bench:sequence` | S8 on LocalDB (creates and drops `cgw_spike_s8`) |
+| `pnpm bench:sheet-embed` | S9 against Sheet's deployed app |
+| `S1_OPS=10000 S1_SEEDS=3 S1_COMPARE=1 pnpm exec vitest run bench/editor/src/s1-fuzz.test.ts` | The full S1 fuzz, with the rejected configurations for comparison |
 
 ## Related repos on this machine
 
@@ -104,3 +115,19 @@ Added as they are found, grouped by phase.
   Run `cargo fetch` in the foreground first, then build in the background with
   `CARGO_NET_OFFLINE=true`.
 - A release desktop build takes about five minutes (LTO, one codegen unit).
+- In this environment the Bash tool may be refused writes under `.git/objects`; run git from
+  PowerShell. Heredocs holding Arabic text or `|` can fail in Bash: write such files with the
+  file tool.
+- Tiptap's `configure()` copies option objects deeply: an object passed in (a counter, a cache)
+  is not the one the extension uses. Pass a function that returns it.
+- A transaction appended to a remote Yjs change (`appendTransaction`) never reaches Yjs in either
+  binding: they hold a mutex. Dispatch follow-up changes on their own (the id repair does).
+- Every Tiptap editor builds its own `Schema`, so `Node.eq` across editors is always false;
+  compare JSON.
+- `yrs`: asking for a root type (`get_or_insert_*`) while a transaction is open blocks forever;
+  `get_string` on XML text renders formatting as tags (read the delta for plain text). Yjs keeps
+  its pending update in the v2 encoding (`applyUpdateV2`).
+- `Microsoft.Data.SqlClient` refuses invariant globalization, and 7.1.1 brings
+  `System.Security.Cryptography.Pkcs` 9.0.18, which has advisories: pin 10.0.15.
+- The WebView2 spike host must start on `about:blank`; navigating it while it loads a start URL
+  interrupts Playwright's `goto`.

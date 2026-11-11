@@ -32,42 +32,73 @@ Rules for stable ids:
 - A duplicated block or page gets new ids for itself and everything inside it.
 - Duplicate block ids inside one page (from two concurrent moves) are repaired the same way on
   every client: in document order, the first keeps the id and the k-th gets the first 12 base-62
-  characters of SHA-256 of `id` + `:` + k.
+  characters of SHA-256 of `id` + `:` + k, or of the next k whose result is not already an id in
+  the page (so a repair never makes a new duplicate). The repair is its own local transaction,
+  dispatched after the remote change has been applied; a transaction appended to the remote one
+  never reaches Yjs (spike S1).
 
 ## Page content: the block schema
 
 ### Shape
 
-Every block is a container with the same shape. This is the logical shape; the exact ProseMirror
-content expressions are fixed by spike S1.
+Every block is a container with the same shape.
 
 ```
-doc
-└─ block*                     attrs: id
-   ├─ body (0 or 1)           one of the body kinds below
-   └─ children: block*        any block can hold blocks
+doc                           block*
+└─ block                      attrs: id; content: (body | block)*
+   ├─ body                    one of the body kinds below; the first is the block's body
+   └─ block                   any block can hold blocks
 ```
+
+A block is created with exactly one body, first. The content expression still allows any order
+and any number, because concurrent edits can produce them and the binding stops syncing a
+document the schema cannot hold (spike S1: `body* block*` broke in 9 of 12 long runs). A second
+body, left by two concurrent conversions, is drawn after the first; a client never removes it on
+its own.
+
+### Content expressions
+
+Fixed by spike S1 (DECISIONS.md, 2026-11-11: Phase 0 results).
+
+| Node | Group | Content | Marks |
+| --- | --- | --- | --- |
+| `doc` | | `block*` | |
+| `block` | | `(body \| block)*` | |
+| `textBody` | `body` | `inline*` | all |
+| `codeBlock` | `body` | `text*` | none |
+| `table` | `body` | `tableRow*` | |
+| `tableRow` | | `tableCell*` | |
+| `tableCell` | | `inline*` | all |
+| `divider`, `image`, `file`, `bookmark`, `childPage`, `sheetEmbed`, `erpView`, `databaseView` | `body` | none (atom) | |
+| `text`, `pageMention`, `userMention`, `dateMention` | `inline` | | |
 
 Schema rules that hold forever (D3):
 
-- `*` only. No `+`, no fixed counts.
-- A new attribute is optional and has a default.
+- `*` only. No `+`, no fixed counts, and no order between groups inside a container.
+- A new attribute is optional and has a default. An older client that edits a node keeps the
+  attributes it does not know only with the binding patch (Q18); without it, adding an attribute
+  raises `schemaVersion` like a new node type.
 - A node type or attribute is never removed or renamed. It can stop being created.
 - An unknown node type is never dropped by a client: the schema-version gate (D7) stops an old
-  client from binding the editor at all.
+  client from binding the editor at all (spike S2).
+- "Turn into" between text kinds changes `textBody.kind`; it never replaces the node, so a peer's
+  concurrent typing in the block is kept. Turning text into a code block, or a code block into
+  text, replaces the node, and concurrent typing in it is lost.
 
 ### Body kinds
 
+Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
+
 | Block | Body node | Attributes (all optional, with defaults) | Inline content | MVP |
 | --- | --- | --- | --- | --- |
-| Paragraph | `paragraph` | `dir` | Yes | Yes |
-| Heading 1 to 3 | `heading` | `level` (1 to 3), `dir` | Yes | Yes |
-| Bulleted list item | `bulletItem` | `dir` | Yes | Yes |
-| Numbered list item | `numberedItem` | `dir`, `start` | Yes | Yes |
-| Checklist item | `checkItem` | `checked`, `dir` | Yes | Yes |
-| Toggle | `toggle` | `dir` | Yes (the summary line) | Yes |
-| Quote | `quote` | `dir` | Yes | Yes |
-| Callout | `callout` | `icon`, `tone`, `dir` | Yes | Yes |
+| Paragraph | `textBody`, `kind: paragraph` | `dir` | Yes | Yes |
+| Heading 1 to 3 | `textBody`, `kind: heading` | `level` (1 to 3), `dir` | Yes | Yes |
+| Bulleted list item | `textBody`, `kind: bulletItem` | `dir` | Yes | Yes |
+| Numbered list item | `textBody`, `kind: numberedItem` | `dir`, `start` | Yes | Yes |
+| Checklist item | `textBody`, `kind: checkItem` | `checked`, `dir` | Yes | Yes |
+| Toggle | `textBody`, `kind: toggle` | `dir` | Yes (the summary line) | Yes |
+| Quote | `textBody`, `kind: quote` | `dir` | Yes | Yes |
+| Callout | `textBody`, `kind: callout` | `icon`, `tone`, `dir` | Yes | Yes |
 | Divider | `divider` | none | No | Yes |
 | Code block | `codeBlock` | `language`, `wrap` | Plain text only, no marks | Yes |
 | Image | `image` | `assetId`, `width`, `align`, `alt`, `caption` | No | Yes |

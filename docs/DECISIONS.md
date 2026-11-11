@@ -418,3 +418,89 @@ Further defaults picked while scaffolding (M0.1):
 | Local ports | Web dev 5273, preview 4273 | Sheet uses 5173 and 4173; both can run at once |
 | Desktop CSP `frame-src` | `https://sheet.cashgearerp.com` and Sheet's current Static Web Apps host | ARCHITECTURE.md names the Sheet origin; the custom domain has no DNS record yet |
 | Spike dependencies | `devDependencies` of packages under `bench/spikes/` | Spike code never ships; the licence gate still refuses denied licences in them |
+
+## 2026-11-11: Phase 0 results
+
+Each spike's result, its evidence (files under `bench/results/` come from a local run; CI uploads
+its own), and the decision it confirms or changes. The harnesses are in `bench/` (see its README).
+
+### Spike results
+
+| Spike | Result | Evidence |
+| --- | --- | --- |
+| S1 Block schema and ids under collaboration | **Pass**, with the schema and binding changed as below. 12 runs of 10,000 operations (2 and 3 clients, 3 seeds, two schemas): all converged, schema valid, no duplicate id after quiescence, no id changed by a move, 291 to 843 deterministic repairs a run. No caret jump when a peer types earlier in the paragraph, in jsdom and in real Chrome and WebView2 (S5) | `bench/results/s1-fuzz-recommended.json`, `s1-scenarios.json`; CI runs 1,500 operations a configuration on every push |
+| S1 rejected configurations | Separate node types per text kind under `body* block*`: 9 of 12 runs ended with "Invalid content for node block" (a body after a child block), after which the binding stops syncing that client. Upstream `y-prosemirror` 1.3.7: crashed in 3 of 6 runs (it restores a node selection on a node a peer removed), and rewrites the blocks between a move's ends, losing a peer's typing in blocks nobody moved (185 such losses in three runs) | `bench/results/s1-fuzz-final.json` (`S1_COMPARE=1`) |
+| S2 Old client meets a newer document | **Pass.** With the gate the older build opens read-only, pushes nothing, and the update is byte-identical (281 bytes before and after). Without it: Tiptap's binding refuses the unknown node and then silently saves none of the user's edits; upstream deletes the unknown block for everyone | `bench/results/s2-version-gate.json` |
+| S3 Yjs on the server, Rust over `yrs` | **Pass.** 1,000 fuzzed documents merged, compacted and diffed by `cgw-ydoc` from .NET 10.0.15 by P/Invoke all load in Yjs 13 with identical XML and ProseMirror JSON; its JSON, text, meta and client ranges match Yjs's. 2,520 calls on 504 malformed inputs: 2,195 refused with an error, 325 decoded as valid updates (bit flips inside text), no panic, no crash. A 1 MB page compacts in 24.8 ms (median); a deliberately fragmented 1 MB history of 34,001 one-character transactions takes 307 ms, where Yjs 13 itself takes 642 ms on the same bytes | `bench/results/s3/dotnet-summary.json`, `verify-summary.json`; `pnpm bench:s3` in CI |
+| S4 YDotNet | **Not run**: S3 passed. YDotNet wraps the same `yrs`, so it could not be faster | — |
+| S5 RTL and Arabic input | **Pass**: 17 of 17 checks in Chrome 157.0.8103.50 and in WebView2 157.0.4341.42 (paragraph direction, list markers and nesting, table columns, block handle side, arrow keys in RTL, LTR and mixed text, End, a selection across directions, typed Arabic, IME composition, no caret jump, typing after a peer edit) | `bench/results/s5-rtl.json`, `s5-chrome.png`, `s5-webview2.png` |
+| S6 Performance | **Fail on one budget, by 1 to 3 ms.** Keystroke to paint at 200 blocks: p95 19.1 ms (Chrome), 17.0 ms (WebView2) against 16 ms. Everything else is met: open 200 blocks p95 46.5 / 34.7 ms (≤ 300), open 2,000 p95 167 / 202 ms (≤ 1 s), keystroke at 5,000 p95 47.5 / 45.5 ms (≤ 50), heap at 5,000 blocks 19.6 MB (≤ 150). The editor's own work per keystroke is 0.5 ms at 200 blocks and 4.5 ms at 5,000; the rest is waiting for the next 60 Hz frame, which alone reaches 16.7 ms. See Q19 | `bench/results/s6-perf.json` |
+| S7 Hostile updates | **Pass.** No script ran and nothing unsafe was drawn in Chrome or WebView2 (`javascript:`, `data:`, `vbscript:` links; `on*` and `style` attributes; markup in text; pasted `<script>`, `<iframe>`, `<img onerror>`). `cgw-ydoc` refuses oversized and lying-length input without allocating it, survives 100,000-deep nesting on a 1 MB stack, and flags forged client ids, unknown elements and unsafe link schemes. One gap for Phase 2: an update with an unknown node type makes the client binding stop syncing, so updates must be validated before other clients receive them (Q20) | `bench/results/s7-browser.json`; `crates/cgw-ydoc/src/hostile_tests.rs` |
+| S8 Sequence under load | **Pass.** 50 writers, 3,998 updates, 8 readers pulling "after N" with no repair: no reader missed an update, under READ COMMITTED and under READ_COMMITTED_SNAPSHOT. The `IDENTITY` control without the lock lost about 70 % of updates for every reader. On one hot page the lock serialises pushes: p50 0.65 s, p95 0.84 s (READ COMMITTED) and 5.1 s (snapshot) on LocalDB | `bench/results/s8-sequence.json` |
+| S9 Sheet in an iframe | **Pass.** From a parent without COEP, Sheet's deployed app draws a real workbook (`formattingBook()`: values, formats, a chart) inside a sandboxed iframe, in Chrome and in WebView2. The frame is not cross-origin isolated and Sheet runs without shared memory ("No shared memory"). From a cross-origin isolated parent the frame is blocked, because Sheet sends `Cross-Origin-Resource-Policy: same-origin` | `bench/results/s9-embed.json`, `s9-*.png` |
+
+### Answers to Q1 to Q4
+
+| Question | Answer |
+| --- | --- |
+| Q1. Exact content expression of the block container | `block: (body \| block)*` and `doc: block*`. Text kinds are one node, `textBody`, with a `kind` attribute (paragraph, heading, bulleted, numbered and check item, toggle, quote, callout), so "turn into" is an attribute change. The final expressions are in `DATA_MODEL.md` |
+| Q2. Tiptap's Yjs fork or upstream `y-prosemirror` 1.x | Tiptap's fork, `@tiptap/y-tiptap`, behind our seam; upstream is rejected. The fork needs two small changes; whether to carry them as a patch is Q18 |
+| Q3. Rust `yrs` library or YDotNet in the worker | The Rust library, `crates/cgw-ydoc`. YDotNet is not needed |
+| Q4. Does the Sheet embed need cross-origin isolation inside an iframe? | No. Workspace keeps sending no COEP. An isolated parent could not embed Sheet anyway while Sheet sends `CORP: same-origin` |
+
+### Decisions confirmed or changed
+
+- **D3 (block schema), changed.** The container is `(body | block)*`, not "bodies, then children":
+  with one node type per kind, a concurrent "turn into" deletes and re-inserts the body, and 9 of
+  12 long runs broke `body* block*`. Text kinds become one `textBody` node with a `kind`
+  attribute: "turn into" then keeps a peer's concurrent typing, which separate node types lose.
+  `body* block*` with the `kind` attribute also passed (12 of 12), but only while no operation
+  ever re-creates a body; `(body | block)*` cannot be broken by any interleaving. The first body
+  is the block's body; a second one, left by two concurrent conversions, is shown after it. Code
+  block, divider, image, file, table, bookmark, child page and the embeds stay node types.
+- **D4 (block ids), refined.** The repair rule now reads: the k-th copy takes the hash of `id:k`,
+  or of the next `k` whose id is not already in the page. Without that, a later round could repair
+  a copy onto an id an earlier round had given. The repair cannot be an `appendTransaction` on the
+  remote change: both bindings hold a mutex then and never write it to Yjs (the cause of Tiptap
+  UniqueID issue 8603). It is dispatched on its own once the remote change is done. A split keeps
+  the children with the original block.
+- **D5 (Yjs seam), confirmed, with findings.** The seam held: three bindings ran behind one
+  function. Named limits measured: a block moved, merged or deleted while a peer types in it loses
+  that typing (Yjs moves are delete and insert), and two concurrent splits of one paragraph
+  duplicate the shared tail. Yjs 13.6.33 can leave updates pending after everything they need has
+  arrived, depending on order (1 run in 276 at small sizes; `bench/editor/fixtures/yjs-pending-order.json`);
+  applying the pending update once more integrates it, so the document layer retries after every
+  batch, and only what is still pending after that goes to the repair path.
+- **D7 (schema version), confirmed, with a gap.** The read-only gate works. But "a new optional
+  attribute does not raise the version" is unsafe with the stock binding: an older client that
+  edits a node removes the attribute it does not know. Either the binding keeps unknown attributes
+  (Q18) or every attribute addition raises `schemaVersion`.
+- **D14 (Yjs on the server), confirmed.** `cgw-ydoc`'s functions are the worker's interface:
+  `merge`, `state_vector`, `diff`, `compact`, `to_json`, `to_text`, `meta`, `client_ranges` and
+  `validate`, over a C ABI (`cgw_*`) that returns a status and a buffer and never unwinds.
+- **D15 (sequence), confirmed.** The gap-free sequence under the page-row lock never let a reader
+  skip; an `IDENTITY` column does. A page with many simultaneous writers serialises on its row,
+  which Phase 2's push budget and Phase 6's hub must allow for.
+- **D21 (Sheet embed), confirmed.** A sandboxed iframe with `allow-scripts allow-same-origin`
+  works from a page without COEP. Inside a frame, Sheet's "Open" button (the File System Access
+  picker) is unavailable; the embed route gets its bytes from the parent (`source`), as planned.
+- **D26 (large pages), confirmed, with a rule.** Plain node views and `content-visibility: auto`
+  meet the budgets at 5,000 blocks, but a decoration per block re-made on every change costs about
+  95 ms a keystroke at 5,000 blocks: the block handle is one floating element (Track U3), never a
+  widget per block.
+
+### Defaults picked
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Pending updates | After applying a batch, re-apply `store.pendingStructs` once; repair-pull only if still pending | The Yjs order bug above; costs nothing when nothing is pending |
+| `cgw-ydoc` limits | 64 MB input, nesting depth 200 | Refuse before decoding; real pages nest a few levels |
+| Benchmarks in CI | S6 in Chrome on every push, recorded, gated from Phase 1 | The first rows of the benchmark history |
+
+### New open questions, each with a recommended default
+
+| # | Question | Recommended default | Phase |
+| --- | --- | --- | --- |
+| Q18 | Carry a patch on `@tiptap/y-tiptap` 3.2.0? Two changes, about 40 lines (`bench/editor/vendor/y-tiptap-ids.js` shows them): a node with an id never stands in for a node with another id, and equal ids anchor the diff, which stops a move or merge from losing a peer's typing in blocks it did not touch; and attributes the schema does not know are kept, not removed (S2). Measured cost: 4.5 ms a keystroke at 5,000 blocks against 2.4 ms stock | Yes: a `pnpm patch` on the pinned version, offered upstream, with S1's fuzz as its test. The alternative is to accept those losses and raise `schemaVersion` for every attribute | 1 |
+| Q19 | The keystroke budget at 200 blocks (p95 ≤ 16 ms keystroke to paint) is missed by 1 to 3 ms, almost all of it waiting for the next frame | Redefine it as two budgets: the editor's work per keystroke p95 ≤ 8 ms, and keystroke to the frame after paint p95 ≤ 33 ms (two frames). Keep 50 ms at 5,000 blocks | 1 |
+| Q20 | When the worker validates pushed updates (S7) | Before other clients receive them: the push path holds a page's new updates as unvalidated until the worker passes them, and refuses the push if they fail | 2 |

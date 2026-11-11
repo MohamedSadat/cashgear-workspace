@@ -8,7 +8,9 @@ This document says what the parts are and how data moves between them. Why each 
 is in `DECISIONS.md`. The stored shapes are in `DATA_MODEL.md`, sync in `SYNC_DESIGN.md`, and the
 Sheet and ERP contracts in `INTEGRATIONS.md`.
 
-Status: planning. Nothing here is built. Package and module names are proposals; none exists yet.
+Status: Phase 0 is done. What exists is listed in `CLAUDE.md` (the web app and desktop shell
+scaffold, `crates/cgw-ydoc`, the harnesses in `bench/`); the rest are proposals. Spike results
+are in `DECISIONS.md` (2026-11-11: Phase 0 results).
 
 ## What already exists in the Cash Gear ecosystem
 
@@ -407,7 +409,7 @@ Targets, validated in Phase 0 and then gated in CI.
 | Cold start to an editable page, web, cached | ≤ 2 s | Lighthouse and a Playwright trace on a mid-range laptop profile |
 | Open a 200-block page from the local store | ≤ 300 ms | `performance.mark` around open; p95 of 30 runs |
 | Open a 2,000-block page | ≤ 1 s | Same |
-| Keystroke to paint, typical page (200 blocks), p95 | ≤ 16 ms | Scripted typing with event timing, Chrome and WebView2 |
+| Keystroke to paint, typical page (200 blocks), p95 | ≤ 16 ms (missed by 1 to 3 ms in Phase 0; redefinition proposed as Q19) | Scripted typing with event timing, Chrome and WebView2 |
 | Keystroke to paint, 5,000 blocks, p95 | ≤ 50 ms | Same |
 | Heap with a 5,000-block page open | ≤ 150 MB | `performance.measureUserAgentSpecificMemory` or a heap snapshot |
 | Sidebar: expand a node in a 10,000-page workspace | ≤ 100 ms | Scripted, virtualised tree |
@@ -419,7 +421,9 @@ Targets, validated in Phase 0 and then gated in CI.
 How the budgets are met:
 
 - **Rendering.** Plain DOM node views for common blocks; `content-visibility: auto` with a size
-  hint on top-level blocks; heavy node views mounted lazily. React state is kept out of the
+  hint on top-level blocks; heavy node views mounted lazily. Nothing is drawn per block on every
+  change: the block handle is one floating element (spike S6 measured a widget per block at about
+  95 ms a keystroke on a 5,000-block page). React state is kept out of the
   typing path: the editor is not re-rendered by React on each transaction.
 - **Incremental updates.** Yjs updates are small differences; only those are stored and sent.
 - **Large workspaces.** The sidebar draws from the metadata mirror with a virtualised tree; no
