@@ -388,3 +388,22 @@ first dependency is added in Phase 0.
 Not verified, and treated as unknown: Lexical's RTL and table maturity; the quality of SQL
 Server's Arabic stemmer; YDotNet's native library loading under IIS; FTS5 in the official SQLite
 WASM build.
+
+## 2026-11-11: Phase 0
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Q12. Code signing for the desktop app | Reuse Sheet's setup. The release workflow signs with Azure Artifact Signing, on the same account and certificate profile as Sheet, once the repository variables `CGW_SIGN_ENDPOINT`, `CGW_SIGN_ACCOUNT`, `CGW_SIGN_PROFILE` and the Azure secrets exist; until then it signs with a throwaway certificate and the release notes say so. Phase 0 builds the desktop app unsigned in CI. The release workflow and Workspace's own Tauri updater key come in Phase 1 (M1.9) |
+| Q1 to Q4 | Settled by spike results, with the recommended defaults as the hypotheses under test: Q1 and Q2 by S1, Q3 by S3, Q4 by S9. A failed spike is recorded and raised with you, not worked around |
+| Pin of `@cashgear/ui` | The full commit hash of the head of `CashGear.React.UI`'s only branch, `claude/cashgear-react-ui-library-xq8tsz`, checked when pinning: `ef1277e78c6151643043fe3327a7f0733307b873`, the same commit Sheet pins. The library has no `main` branch |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| S8 database | A scratch database on `(localdb)\MSSQLLocalDB`, dropped when the spike ends | Never the ERP's database, which is live and shared |
+| S9 target | Sheet's deployed web app at `proud-desert-008137810.4.azurestaticapps.net` | `sheet.cashgearerp.com` has no DNS record yet (Sheet's `PROGRESS.md`) |
+| .NET for spike harnesses | `net10.0`, built with the installed SDK 11 | D12 names .NET 10, the long-term release |
+| CI shape | As Sheet's: licence gates on `ubuntu-latest`, build and test on `windows-latest` | Same runners, same gates, same desktop smoke test |
