@@ -110,6 +110,17 @@ test.describe('search', () => {
     await expect(palette(page).getByText('Nothing found')).toBeVisible();
   });
 
+  test('Enter straight after typing opens what was typed for', async ({ page }) => {
+    await createWorkspace(page);
+    // No pause: the Enter comes before the search has answered, and waits for it.
+    await page.keyboard.press('Control+KeyK');
+    await expect(palette(page)).toBeVisible();
+    await page.keyboard.type('البدا');
+    await page.keyboard.press('Enter');
+    await expect(palette(page)).toBeHidden();
+    await expect(page.getByLabel('Page title')).toHaveValue('البداية');
+  });
+
   test('runs a command from the palette', async ({ page }) => {
     await createWorkspace(page);
     await search(page, 'dark theme');

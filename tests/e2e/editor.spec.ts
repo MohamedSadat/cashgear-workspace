@@ -241,6 +241,9 @@ test.describe('the block editor', () => {
     );
     expect(copied['text/plain']).toContain('One');
     await page.keyboard.press('Control+End');
+    // The browser moves the caret; the editor reads it on the next task. Enter before that would
+    // still act on the whole selection.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))));
     await page.keyboard.press('Enter');
     const paste = (types: Record<string, string>) =>
       editor(page).evaluate((root, items) => {

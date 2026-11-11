@@ -23,22 +23,30 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
   const { t } = useTranslation();
   const services = useShell();
   const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  // The hits and the query they answer: while a search runs, the last hits stay in view.
+  const [result, setResult] = useState<{ query: string; hits: SearchHit[] }>({
+    query: '',
+    hits: [],
+  });
+  const hits = result.hits;
   const [active, setActive] = useState(0);
   const list = useRef<HTMLDivElement>(null);
   const workspaceId = session.workspaceId;
+  const ready = !workspaceId || result.query === normaliseText(query);
+  // Enter pressed before the results for what was typed are in: it acts when they arrive.
+  const enterWhenReady = useRef(false);
 
   useEffect(() => {
     let live = true;
     const q = normaliseText(query);
     if (!workspaceId || !q) {
-      setHits([]);
+      setResult({ query: q, hits: [] });
       return;
     }
     const started = performance.now();
     void session.search(q, 20).then((found) => {
       if (!live) return;
-      setHits(found);
+      setResult({ query: q, hits: found });
       performance.measure('cgw-search', { start: started, end: performance.now() });
     });
     return () => {
@@ -89,19 +97,27 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
 
   useEffect(() => setActive(0), [query]);
   useEffect(() => {
+    if (!enterWhenReady.current || !ready) return;
+    enterWhenReady.current = false;
+    items[active]?.run();
+  }, [ready, items, active]);
+  useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [active]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
+      enterWhenReady.current = false;
       setActive((i) => Math.min(items.length - 1, i + 1));
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
+      enterWhenReady.current = false;
       setActive((i) => Math.max(0, i - 1));
     } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      items[active]?.run();
+      if (ready) items[active]?.run();
+      else enterWhenReady.current = true;
     }
   };
 

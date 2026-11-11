@@ -4,6 +4,11 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [Unreleased]
+
+- Pressing Enter in search straight after typing opens the first result for what was typed. Before,
+  an Enter that came before the search had answered acted on the earlier list.
+
 ## [0.1.0] - 2026-11-11
 
 The first release: a local-first workspace of block pages, in a browser and as a Windows desktop
