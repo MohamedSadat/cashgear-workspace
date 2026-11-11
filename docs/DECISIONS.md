@@ -504,3 +504,24 @@ its own), and the decision it confirms or changes. The harnesses are in `bench/`
 | Q18 | Carry a patch on `@tiptap/y-tiptap` 3.2.0? Two changes, about 40 lines (`bench/editor/vendor/y-tiptap-ids.js` shows them): a node with an id never stands in for a node with another id, and equal ids anchor the diff, which stops a move or merge from losing a peer's typing in blocks it did not touch; and attributes the schema does not know are kept, not removed (S2). Measured cost: 4.5 ms a keystroke at 5,000 blocks against 2.4 ms stock | Yes: a `pnpm patch` on the pinned version, offered upstream, with S1's fuzz as its test. The alternative is to accept those losses and raise `schemaVersion` for every attribute | 1 |
 | Q19 | The keystroke budget at 200 blocks (p95 ≤ 16 ms keystroke to paint) is missed by 1 to 3 ms, almost all of it waiting for the next frame | Redefine it as two budgets: the editor's work per keystroke p95 ≤ 8 ms, and keystroke to the frame after paint p95 ≤ 33 ms (two frames). Keep 50 ms at 5,000 blocks | 1 |
 | Q20 | When the worker validates pushed updates (S7) | Before other clients receive them: the push path holds a page's new updates as unvalidated until the worker passes them, and refuses the push if they fail | 2 |
+
+## 2026-11-11: Phase 1
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| The MVP's block list | As planned: paragraph, headings 1 to 3, bulleted, numbered and check items, toggle, quote, callout, divider, code block, table, image, file, bookmark and child page. A bookmark shows its URL only (previews are Q13, Phase 2). Sheet, ERP and database blocks are absent until Phases 4 and 5 |
+| Export format in the MVP | A zip: one Markdown and one JSON file per page, in folders that follow the tree, an `assets` folder and a manifest of ids. Import reads the same zip |
+| Desktop file association and deep-link scheme | `cashgear-workspace://`, no file type |
+| First-run content | One "Getting started" page in each language |
+| Track U | Local stand-ins behind the props the Track U component will have, each listed in `PROGRESS.md`. `CashGear.React.UI` is not changed in this phase |
+| Q18. Patch `@tiptap/y-tiptap`? | Yes. A `pnpm patch` on the pinned version: a node with an id never stands in for a node with another id, equal ids anchor the diff, and attributes the schema does not know are kept. S1's fuzz is its test. The upstream issue and pull request are drafted for you to send; nothing is posted from here |
+| Q19. The keystroke budget at 200 blocks | Two budgets: the editor's work per keystroke p95 ≤ 8 ms, and keystroke to the next frame p95 ≤ 33 ms. The 5,000-block budget stays p95 ≤ 50 ms |
+| Workspace's Tauri updater key | Made here with `tauri signer generate` and a random password, piped straight into the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; never written to disk or shown. Only the public key is committed. A `v*` tag drafts a GitHub release, which you publish |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Versions taken | Tiptap 3.33.1 and `@tiptap/y-tiptap` 3.3.0, once a day old (14:01 UTC today); Vite stays on 8.3.7 (8.3.8 is under a day old) | pnpm's release-age guard stays on. y-tiptap 3.3.0 changes only the cursor plugin, so the Q18 patch applies unchanged |

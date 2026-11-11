@@ -1,5 +1,5 @@
 // Launches the release desktop build, attaches Playwright to its WebView2 over CDP and checks
-// what the browser smoke checks: the page renders a CashGear control in light, dark, English and
+// what the browser smoke checks: the shell renders its settings in light, dark, English and
 // Arabic; the window's own theme follows the page; the page is not cross-origin isolated (no
 // COEP); and the CSP refused nothing. Adapted from cashgear-sheet.
 import { spawn, spawnSync } from 'node:child_process';
@@ -131,7 +131,12 @@ let app;
 try {
   app = await launch();
   const { page } = app;
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Cash Gear Workspace', {
+  // The window starts loading the app before the debugger attaches: wait for the frame first.
+  await expect(page.locator('.cgw-frame')).toBeVisible({ timeout: 30000 });
+  await page.evaluate(() => {
+    location.hash = '#/settings';
+  });
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible({
     timeout: 30000,
   });
   const results = {
@@ -140,7 +145,7 @@ try {
     url: page.url(),
     startToHeadingMs: Date.now() - app.started,
   };
-  await expect(page.getByTestId('host-info')).toHaveText(`Desktop ${appVersion}`);
+  await expect(page.getByTestId('host-info')).toHaveText(`Desktop Version ${appVersion}`);
   if (await page.evaluate(() => crossOriginIsolated))
     throw new Error('The desktop page is cross-origin isolated; Workspace sends no COEP.');
   results.crossOriginIsolated = false;
@@ -162,8 +167,8 @@ try {
     .getByRole('radio', { name: 'العربية' })
     .check();
   await expect(html).toHaveAttribute('dir', 'rtl');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('مساحة عمل كاش جير');
-  await expect(page.getByTestId('host-info')).toHaveText(`سطح المكتب ${appVersion}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'الإعدادات' })).toBeVisible();
+  await expect(page.getByTestId('host-info')).toHaveText(`سطح المكتب الإصدار ${appVersion}`);
   results.arabic = 'rtl';
 
   await mkdir(join(root, 'bench/results'), { recursive: true });

@@ -53,7 +53,9 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 
 | Path | What |
 | --- | --- |
-| `apps/web` (`@cgw/web`) | Vite + React app: one `@cashgear/ui` control in light, dark, English and Arabic |
+| `apps/web` (`@cgw/web`) | Vite + React entry: picks the platform (web or Tauri) and mounts the shell |
+| `packages/shell` (`@cgw/shell`) | App frame (sidebar, top bar, hash routing by page id), i18next catalogues (`en`, `ar`), theme controller, command registry, `event.code` shortcuts, the `WorkspacePlatform` interface |
+| `scripts/eslint` | Workspace's own lint rules: `cgw/no-untranslated-text` |
 | `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json` |
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
