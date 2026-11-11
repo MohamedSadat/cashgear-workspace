@@ -463,6 +463,10 @@ importers:
         version: 6.2.8
 
   packages/workspace:
+    dependencies:
+      '@cgw/api':
+        specifier: workspace:*
+        version: link:../api
     devDependencies:
       '@types/node':
         specifier: 24.19.2
