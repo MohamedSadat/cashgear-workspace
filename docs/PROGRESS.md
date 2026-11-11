@@ -9,7 +9,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Work | Status | Tag |
 | --- | --- | --- |
 | Planning documents | Done, 2026-11-11 | |
-| Phase 0: Scaffold and spikes | Not started | |
+| Phase 0: Scaffold and spikes | Done, 2026-11-11 (S6 misses one budget by 1 to 3 ms; Q18 to Q20 raised) | `phase-0` |
 | Phase 1: Core block editor (MVP) | Not started | |
 | Phase 2: Cloud document platform | Not started | |
 | Phase 3: Offline | Not started | |
@@ -34,33 +34,47 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 
 ## Phase 0: Scaffold and spikes
 
+Done 2026-11-11. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43019133145
+(commit `6346d23`, all jobs green). Local results are from `bench/results/` on the reference machine (Windows 10
+19045, Chrome 157.0.8103.50, WebView2 157.0.4341.42, .NET 10.0.15, LocalDB 17.0.4025.3).
+
 Milestones
 
-- [ ] M0.1 Scaffold: workspaces, configs, web app, desktop shell, CI, licence gate
-- [ ] M0.2 Spike S1: block schema and block ids under collaboration
-- [ ] M0.3 Spike S2: old client meets a newer document
-- [ ] M0.4 Spikes S3 and S4: Yjs on the server
-- [ ] M0.5 Spike S5: RTL and Arabic input
-- [ ] M0.6 Spike S6: performance
-- [ ] M0.7 Spikes S7, S8, S9: hostile updates, sequence under load, Sheet in an iframe
-- [ ] M0.8 Close: results recorded, spike code removed
+- [x] M0.1 Scaffold: workspaces, configs, web app, desktop shell, CI, licence gate. Commits `1a31905`, `b5ca59b`, `47f6338`; CI run 43001602936 green (standing checks, web build, Chrome and Edge smoke, desktop build and WebView2 smoke)
+- [x] M0.2 Spike S1: block schema and block ids under collaboration. `bench/editor/src/s1-fuzz.test.ts`, `s1-scenarios.test.ts`; commit `cfa61c9`
+- [x] M0.3 Spike S2: old client meets a newer document. `bench/editor/src/s2-version-gate.test.ts`
+- [x] M0.4 Spikes S3 and S4: Yjs on the server. `crates/cgw-ydoc` (commit `ec1b001`), `bench/ydoc-dotnet`, `pnpm bench:s3`; S4 not needed
+- [x] M0.5 Spike S5: RTL and Arabic input. `bench/editor/run-browser.mjs --s5`, `bench/webview2-host`
+- [x] M0.6 Spike S6: performance. `bench/editor/run-browser.mjs --s6`, `bench/editor/src/generate.ts`
+- [x] M0.7 Spikes S7, S8, S9: hostile updates, sequence under load, Sheet in an iframe. `crates/cgw-ydoc/src/hostile_tests.rs`, `run-browser.mjs --s7`, `bench/sequence-dotnet`, `bench/sheet-embed` (commit `1ce99d3`)
+- [x] M0.8 Close: results in `DECISIONS.md` (2026-11-11: Phase 0 results), content expressions in `DATA_MODEL.md`, `bench/spikes/` removed and its harnesses moved under `bench/` (commit `ce830e5`); CI runs S1, S2, S3, S5, S6 and S7 (commit `21d836d`)
+
+Notes
+
+- Commits `1ce99d3`, `21d836d` and `ce830e5` fail `format:check` (an unformatted
+  `bench/README.md`; CI run 43017712882). `6346d23` fixes it; every other check passed on them.
+- `cargo deny check advisories` (informational, as in Sheet) reports `smallstr` 0.3.1 as
+  unmaintained; `yrs` 0.28.1 depends on it.
+- S6 on the hosted runner (Chrome 156.0.8078.80, run 43019133145), the first rows of the
+  benchmark history: open p95 34.8 / 114.4 / 297.4 ms and keystroke p95 16.7 / 20.0 / 25.1 ms at
+  200 / 2,000 / 5,000 blocks; heap 19.5 MB at 5,000.
 
 Exit criteria
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| CI green on `main` with all standing checks | | |
-| S1: no duplicate ids, ids stable on move, no caret jump | | |
-| S2: old build read-only, server bytes unchanged | | |
-| S3: `cgw-ydoc` matches Yjs on 1,000 fuzzed documents; no crash; 1 MB compacts in under 200 ms | | |
-| S4: YDotNet suite and soak (only if S3 fails) | | |
-| S5: RTL and IME checklist | | |
-| S6: budgets met at 2,000 blocks; 5,000 usable | | |
-| S7: hostile corpus inert | | |
-| S8: no missed update with 50 writers | | |
-| S9: Sheet draws a range inside an iframe | | |
-| Q1 to Q4 answered in `DECISIONS.md` | | |
-| Final content expressions in `DATA_MODEL.md` | | |
+| CI green on `main` with all standing checks | Pass | Run 43019133145 on `6346d23`: licence gates; format, lint, typecheck, unit tests (with the S1 fuzz at 1,500 operations, S1 scenarios, S2, the Yjs pending case); Rust fmt, clippy, tests (with S7's server side); web build; e2e in Chrome and Edge; desktop build and WebView2 smoke; S3, S5, S7 and S6 in Chrome |
+| S1: no duplicate ids, ids stable on move, no caret jump | Pass, after changing the schema (D3) and with the id-aware binding (Q18) | 12 runs of 10,000 operations, 2 and 3 clients: 0 duplicate ids, 0 ids changed by a move, 0 content errors, 291 to 843 repairs a run (`s1-fuzz-recommended.json`); no caret jump in jsdom (`s1-scenarios.json`) and in Chrome and WebView2 (`s5-rtl.json`). The original schema failed 9 of 12 runs (`s1-fuzz-final.json`) |
+| S2: old build read-only, server bytes unchanged | Pass | Read-only, 0 updates pushed, 281 bytes identical (`s2-version-gate.json`) |
+| S3: `cgw-ydoc` matches Yjs on 1,000 fuzzed documents; no crash; 1 MB compacts in under 200 ms | Pass | 1,000 documents, 0 differences locally and 300 on every CI run (`s3/verify-summary.json`); 2,520 malformed calls, no panic or crash; 1 MB page 24.8 ms median; fragmented 1 MB history 307 ms, against 642 ms for Yjs 13 (`s3/dotnet-summary.json`) |
+| S4: YDotNet suite and soak (only if S3 fails) | Not run | S3 passed; YDotNet wraps the same `yrs` |
+| S5: RTL and IME checklist | Pass | 17 of 17 in Chrome and in WebView2 (`s5-rtl.json`) |
+| S6: budgets met at 2,000 blocks; 5,000 usable | **Fail on one budget** | Keystroke to paint at 200 blocks p95 19.1 ms (Chrome) and 17.0 ms (WebView2) against 16 ms. Met: open 200 p95 46.5 / 34.7 ms, open 2,000 p95 167 / 202 ms, keystroke at 5,000 p95 47.5 / 45.5 ms, heap at 5,000 19.6 MB (`s6-perf.json`). Raised as Q19 |
+| S7: hostile corpus inert | Pass | No script, unsafe link, event attribute or dialog in Chrome and WebView2 (`s7-browser.json`); 8 hostile-input tests in `cgw-ydoc`. Gap raised as Q20 |
+| S8: no missed update with 50 writers | Pass | 3,998 updates, 8 readers, 0 missed under READ COMMITTED and READ_COMMITTED_SNAPSHOT; the `IDENTITY` control missed about 70 % (`s8-sequence.json`) |
+| S9: Sheet draws a range inside an iframe | Pass | A workbook drawn in a sandboxed iframe from a parent without COEP, Chrome and WebView2 (`s9-embed.json`, `s9-*-plain.png`) |
+| Q1 to Q4 answered in `DECISIONS.md` | Done | 2026-11-11: Phase 0 results, "Answers to Q1 to Q4" |
+| Final content expressions in `DATA_MODEL.md` | Done | "Content expressions" |
 
 ## Phase 1: Core block editor (MVP)
 
