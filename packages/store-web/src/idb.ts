@@ -16,10 +16,11 @@ export function done(tx: IDBTransaction): Promise<void> {
   });
 }
 
+/** Opens a database; without a version, at the version it has (no upgrade runs). */
 export function openDatabase(
   factory: IDBFactory,
   name: string,
-  version: number,
+  version: number | undefined,
   upgrade: (db: IDBDatabase, oldVersion: number, tx: IDBTransaction) => void,
 ): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -32,10 +33,19 @@ export function openDatabase(
   });
 }
 
-/** Every value of an index for a key, or of a store. */
+/** Every value of an index for a key, or of a store; at most `count` when it is given. */
 export function getAll<T>(
   source: IDBObjectStore | IDBIndex,
   query?: IDBValidKey | IDBKeyRange,
+  count?: number,
 ): Promise<T[]> {
-  return request(source.getAll(query) as IDBRequest<T[]>);
+  return request(source.getAll(query, count) as IDBRequest<T[]>);
+}
+
+/** The primary keys of a store's records, or of an index's records for a key. */
+export function getAllKeys(
+  source: IDBObjectStore | IDBIndex,
+  query?: IDBValidKey | IDBKeyRange,
+): Promise<IDBValidKey[]> {
+  return request(source.getAllKeys(query));
 }

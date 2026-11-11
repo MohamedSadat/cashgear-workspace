@@ -1,15 +1,21 @@
 // The desktop's LocalStore: requests to crates/cgw-store over a transport (Tauri's invoke in the
 // app; the cgw-store-cli process in tests). Bytes travel as bytes in a binary frame. The tree rules
 // are planned here against the in-memory mirror (the desktop app is one instance), and the plan is
-// written by the Rust store in one transaction.
+// written by the Rust store in one transaction. The server's answers and change feed are planned
+// the same way (planSettle, planRemote), against the mirror and an in-memory index of the outbox.
 import {
   Mirror,
   STORE_SCHEMA_VERSION,
+  emptyPlan,
   planOps,
+  planRemote,
+  planSettle,
   snippet,
   searchTerms,
   uuidv7,
   type AssetRecord,
+  type DocAck,
+  type DocCursor,
   type HistoryEntry,
   type Id,
   type LocalStore,
@@ -18,11 +24,18 @@ import {
   type Operation,
   type OpResult,
   type PageRecord,
+  type Plan,
+  type RemoteBatch,
+  type RemoteDocPull,
+  type RemoteReader,
   type SearchEntry,
   type SearchHit,
   type StoredDoc,
+  type StoredUpdate,
+  type UnsentDoc,
 } from '@cgw/workspace';
 import { decodeFrame, encodeFrame } from './frame';
+import { OutboxIndex, type OutboxEntry } from './outbox';
 
 /** Sends one request frame and resolves with the answer frame. */
 export type Transport = (frame: Uint8Array) => Promise<Uint8Array>;
@@ -36,10 +49,11 @@ export class DesktopStore implements LocalStore {
   private constructor(
     private readonly transport: Transport,
     private readonly mirror: Mirror,
+    private readonly outbox: OutboxIndex,
   ) {}
 
   static async open(transport: Transport): Promise<DesktopStore> {
-    const probe = new DesktopStore(transport, new Mirror());
+    const probe = new DesktopStore(transport, new Mirror(), new OutboxIndex());
     const version = (await probe.call<number>({ op: 'schemaVersion' })).value;
     if (version > STORE_SCHEMA_VERSION)
       throw new StoreRequestError(
@@ -47,7 +61,8 @@ export class DesktopStore implements LocalStore {
       );
     const snapshot = (await probe.call<MirrorSnapshot>({ op: 'readMirror', workspaceId: null }))
       .value;
-    return new DesktopStore(transport, new Mirror(snapshot));
+    const outbox = (await probe.call<OutboxEntry[]>({ op: 'outboxIndex' })).value;
+    return new DesktopStore(transport, new Mirror(snapshot), new OutboxIndex(outbox));
   }
 
   private async call<T>(
@@ -65,6 +80,53 @@ export class DesktopStore implements LocalStore {
     const next = this.queue.then(task, task);
     this.queue = next.catch(() => undefined);
     return next;
+  }
+
+  /**
+   * Writes a plan in one request, then moves the mirror and the outbox index the same way the Rust
+   * store moved the database: answered operations go, lost workspaces' operations go, an upload's
+   * creates replace its workspace's operations, and the plan's own operations are added.
+   */
+  private async write(plan: Plan): Promise<void> {
+    await this.call({ op: 'applyPlan', plan });
+    this.mirror.apply(plan);
+    this.outbox.remove(plan.settled ?? []);
+    for (const id of plan.deleteWorkspaces ?? []) this.outbox.removeWorkspace(id);
+    if (plan.replaceOutbox) {
+      this.outbox.removeWorkspace(plan.replaceOutbox.workspaceId);
+      this.outbox.add(plan.replaceOutbox.ops);
+    }
+    this.outbox.add(plan.outbox);
+  }
+
+  /**
+   * A remote plan, written. Its records come from the caller (the server's answers), so the mirror
+   * takes copies; and since the Rust store drops a deleted page's favourites and visits with it,
+   * the plan drops them from the mirror too.
+   */
+  private writeRemote(remote: Plan): Promise<void> {
+    const plan = structuredClone(remote);
+    const gone = new Set(plan.deletePages);
+    if (gone.size) {
+      for (const f of this.mirror.favourites.values())
+        if (gone.has(f.pageId))
+          plan.deleteFavourites.push({ workspaceId: f.workspaceId, pageId: f.pageId });
+      for (const v of this.mirror.visits.values())
+        if (gone.has(v.pageId))
+          plan.deleteVisits.push({ workspaceId: v.workspaceId, pageId: v.pageId });
+    }
+    return this.write(plan);
+  }
+
+  /** What the remote planners read: the mirror, and the outbox index. */
+  private reader(): RemoteReader {
+    return {
+      workspace: async (id) => this.mirror.workspaces.get(id),
+      workspacePages: async (id) =>
+        [...this.mirror.pages.values()].filter((p) => p.workspaceId === id),
+      workspaceSections: async (id) => this.mirror.sectionsOf(id),
+      pending: async (entityId, except) => this.outbox.pending(entityId, except),
+    };
   }
 
   // Documents ----------------------------------------------------------------------------------
@@ -142,23 +204,20 @@ export class DesktopStore implements LocalStore {
   }
 
   applyLocalOps(ops: Operation[]): Promise<void> {
-    return this.serial(async () => {
-      const plan = await planOps(ops, this.mirror);
-      await this.call({ op: 'applyPlan', plan });
-      this.mirror.apply(plan);
-    });
+    return this.serial(async () => this.write(await planOps(ops, this.mirror)));
   }
 
-  nextOutboxBatch(limit: number): Promise<Operation[]> {
+  nextOutboxBatch(limit: number, workspaceId?: Id): Promise<Operation[]> {
     return this.serial(
-      async () => (await this.call<Operation[]>({ op: 'nextOutboxBatch', limit })).value,
+      async () =>
+        (
+          await this.call<Operation[]>({
+            op: 'nextOutboxBatch',
+            limit,
+            workspaceId: workspaceId ?? null,
+          })
+        ).value,
     );
-  }
-
-  settleOps(results: OpResult[]): Promise<void> {
-    return this.serial(async () => {
-      await this.call({ op: 'settleOps', opIds: results.map((r) => r.opId) });
-    });
   }
 
   readMirror(workspaceId: Id | null): Promise<MirrorSnapshot> {
@@ -167,6 +226,138 @@ export class DesktopStore implements LocalStore {
 
   getPage(pageId: Id): Promise<PageRecord | null> {
     return this.serial(async () => structuredClone(this.mirror.pages.get(pageId) ?? null));
+  }
+
+  // Sync (store schema 2) ----------------------------------------------------------------------
+
+  settleOps(results: OpResult[]): Promise<void> {
+    return this.serial(async () => {
+      if (!results.length) return;
+      // Only an answer that names an entity needs its operation to be planned.
+      const named = results.filter((r) => r.entityType).map((r) => r.opId);
+      const answered = named.length
+        ? (await this.call<Operation[]>({ op: 'outboxOps', opIds: named })).value
+        : [];
+      const ops = new Map(answered.map((op) => [op.opId, op]));
+      await this.writeRemote(await planSettle(results, ops, this.reader()));
+    });
+  }
+
+  applyRemote(batch: RemoteBatch): Promise<void> {
+    return this.serial(async () => this.writeRemote(await planRemote(batch, this.reader())));
+  }
+
+  syncCursor(workspaceId: Id): Promise<number | null> {
+    return this.serial(
+      async () => (await this.call<number | null>({ op: 'syncCursor', workspaceId })).value,
+    );
+  }
+
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void> {
+    return this.serial(async () => {
+      const workspace = this.mirror.workspaces.get(workspaceId);
+      if (!workspace) throw new StoreRequestError('No such workspace');
+      const plan = emptyPlan();
+      plan.workspaces.push({ ...workspace, localOnly: false, accountId });
+      plan.replaceOutbox = { workspaceId, ops };
+      await this.writeRemote(plan);
+    });
+  }
+
+  unsentDocUpdates(limit: number): Promise<UnsentDoc[]> {
+    return this.serial(async () => {
+      const { value, blobs } = await this.call<{ pageId: Id; updateId: Id; localSeq: number }[]>({
+        op: 'unsentDocUpdates',
+        limit,
+      });
+      // Rows come grouped by page, pages in the order of their oldest unsent update.
+      const out: UnsentDoc[] = [];
+      value.forEach((row, i) => {
+        const update: StoredUpdate = {
+          updateId: row.updateId,
+          data: blobs[i],
+          localSeq: row.localSeq,
+          seq: null,
+        };
+        const last = out[out.length - 1];
+        if (last?.pageId === row.pageId) last.updates.push(update);
+        else out.push({ pageId: row.pageId, updates: [update] });
+      });
+      return out;
+    });
+  }
+
+  ackDocUpdates(pageId: Id, acks: DocAck[]): Promise<void> {
+    return this.serial(async () => {
+      if (!acks.length) return;
+      await this.call({
+        op: 'ackDocUpdates',
+        pageId,
+        acks: acks.map(({ updateId, seq }) => ({ updateId, seq })),
+      });
+    });
+  }
+
+  applyRemoteDocUpdates(pageId: Id, pull: RemoteDocPull): Promise<StoredUpdate[]> {
+    return this.serial(async () => {
+      // An update the server has no key for is kept under a new one, should it be added.
+      const updates = pull.updates.map((u) => ({
+        seq: u.seq,
+        updateId: u.updateId ?? null,
+        id: u.updateId ?? uuidv7(),
+      }));
+      const added = (
+        await this.call<{ index: number; updateId: Id; localSeq: number }[]>(
+          {
+            op: 'applyRemoteDocUpdates',
+            pageId,
+            epoch: pull.epoch,
+            headSeq: pull.headSeq,
+            updates,
+          },
+          pull.updates.map((u) => u.data),
+        )
+      ).value;
+      return added.map(({ index, updateId, localSeq }) => ({
+        updateId,
+        data: pull.updates[index].data.slice(),
+        localSeq,
+        seq: pull.updates[index].seq,
+      }));
+    });
+  }
+
+  docCursor(pageId: Id): Promise<DocCursor | null> {
+    return this.serial(
+      async () => (await this.call<DocCursor | null>({ op: 'docCursor', pageId })).value,
+    );
+  }
+
+  docCursors(workspaceId: Id): Promise<Record<Id, DocCursor>> {
+    return this.serial(
+      async () => (await this.call<Record<Id, DocCursor>>({ op: 'docCursors', workspaceId })).value,
+    );
+  }
+
+  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void> {
+    return this.serial(async () => {
+      await this.call({ op: 'replaceDoc', pageId, updateId: update.updateId }, [update.data]);
+    });
+  }
+
+  pendingAssets(limit: number): Promise<AssetRecord[]> {
+    return this.serial(
+      async () => (await this.call<AssetRecord[]>({ op: 'pendingAssets', limit })).value,
+    );
+  }
+
+  markAssetUploaded(assetId: Id): Promise<void> {
+    return this.serial(async () => {
+      const asset = this.mirror.assets.get(assetId);
+      if (!asset) return;
+      await this.call({ op: 'markAssetUploaded', id: assetId });
+      this.mirror.putAsset({ ...asset, uploaded: true });
+    });
   }
 
   // Search (FTS5 over normalised text) ----------------------------------------------------------

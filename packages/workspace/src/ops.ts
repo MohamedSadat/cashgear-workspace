@@ -38,6 +38,14 @@ export interface Plan {
   deleteFavourites: { workspaceId: Id; pageId: Id }[];
   deleteVisits: { workspaceId: Id; pageId: Id }[];
   outbox: Operation[];
+  /** Remote plans only (remote.ts): workspaces removed with all they hold. */
+  deleteWorkspaces?: Id[];
+  /** Remote plans only: operations answered by the server, removed from the outbox. */
+  settled?: Id[];
+  /** Remote plans only: the change feed's cursor to keep. */
+  cursor?: { workspaceId: Id; value: number };
+  /** Remote plans only: a local workspace's outbox replaced by an upload's creates. */
+  replaceOutbox?: { workspaceId: Id; ops: Operation[] };
 }
 
 const favKey = (workspaceId: Id, pageId: Id) => `${workspaceId}/${pageId}`;
@@ -265,6 +273,8 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
         break;
       }
       case 'page.delete': {
+        // A trash root inside another one, both purged together: gone with the outer one.
+        if (deletePages.has(op.entityId)) break;
         const page = need(await reader.page(op.entityId), 'Page');
         if (!page.trashedAt)
           throw new OpError('page.notTrashed', 'Pages are deleted for good only from the trash');

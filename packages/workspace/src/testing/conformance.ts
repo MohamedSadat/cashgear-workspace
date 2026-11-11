@@ -462,4 +462,331 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.close();
     });
   });
+
+  describe(`LocalStore conformance, sync (schema 2): ${name}`, () => {
+    /** A seeded workspace made a synced one, with an empty outbox. */
+    async function synced(store: LocalStore) {
+      const tree = await seedTree(store);
+      await store.beginUpload(tree.ws.id, ACCOUNT, []);
+      return tree;
+    }
+
+    it('purges a trash root that lies inside another one', async () => {
+      const store = await factory();
+      const { ws, a, d } = await seedTree(store);
+      await store.applyLocalOps([op('page.trash', ws.id, d.id, {}, 1)]);
+      const trashedD = (await store.getPage(d.id))!;
+      await store.applyLocalOps([op('page.trash', ws.id, a.id, {}, 1)]);
+      expect((await store.getPage(d.id))?.trashRootId).toBe(trashedD.trashRootId);
+      const gone = await store.purgeTrash(ws.id, '9999-01-01T00:00:00.000Z');
+      expect(gone).toContain(d.id);
+      expect(gone).toContain(a.id);
+      expect(await store.getPage(d.id)).toBeNull();
+      await store.close();
+    });
+
+    it('drops the favourite of a page the server deleted', async () => {
+      const store = await factory();
+      const { ws, a } = await synced(store);
+      await store.applyRemote({
+        workspaceId: ws.id,
+        favourites: [{ workspaceId: ws.id, pageId: a.id, orderKey: 'a0' }],
+      });
+      await store.applyRemote({ workspaceId: ws.id, deletePages: [a.id] });
+      expect((await store.readMirror(ws.id)).favourites).toEqual([]);
+      await store.close();
+    });
+
+    it('reports schema version 2', async () => {
+      const store = await factory();
+      expect(await store.schemaVersion()).toBe(2);
+      await store.close();
+    });
+
+    it("gives one workspace's outbox, oldest first", async () => {
+      const store = await factory();
+      const one = await seedTree(store);
+      const two = await seedTree(store);
+      const all = await store.nextOutboxBatch(100);
+      const mine = await store.nextOutboxBatch(100, two.ws.id);
+      expect(all.length).toBeGreaterThan(mine.length);
+      expect(mine.every((o) => o.workspaceId === two.ws.id)).toBe(true);
+      expect(mine.map((o) => o.opId)).toEqual(
+        all.filter((o) => o.workspaceId === two.ws.id).map((o) => o.opId),
+      );
+      expect((await store.nextOutboxBatch(2, one.ws.id)).length).toBe(2);
+      await store.close();
+    });
+
+    it('begins an upload: the outbox is replaced and the workspace syncs for an account', async () => {
+      const store = await factory();
+      const { ws, a } = await seedTree(store);
+      const create = op('page.update', ws.id, a.id, { title: 'Upload' });
+      await store.beginUpload(ws.id, ACCOUNT, [create]);
+      expect((await store.nextOutboxBatch(100, ws.id)).map((o) => o.opId)).toEqual([create.opId]);
+      const record = (await store.readMirror(ws.id)).workspaces[0];
+      expect(record.localOnly).toBe(false);
+      expect(record.accountId).toBe(ACCOUNT);
+      await store.close();
+    });
+
+    it("settles operations and takes the server's entity, unless more wait for it", async () => {
+      const store = await factory();
+      const { ws, a, c } = await synced(store);
+      const rename = op('page.update', ws.id, a.id, { title: 'Local' });
+      const renameC = op('page.update', ws.id, c.id, { title: 'C local' });
+      const renameCAgain = op('page.update', ws.id, c.id, { title: 'C again' });
+      await store.applyLocalOps([rename, renameC, renameCAgain]);
+      await store.settleOps([
+        {
+          opId: rename.opId,
+          status: 'applied',
+          entityType: 'page',
+          entity: { ...a, title: 'Server', version: 7, access: 'edit' },
+        },
+        {
+          opId: renameC.opId,
+          status: 'applied',
+          entityType: 'page',
+          entity: { ...c, title: 'C server', version: 5 },
+        },
+      ]);
+      const pages = new Map((await store.readMirror(ws.id)).pages.map((p) => [p.id, p]));
+      expect(pages.get(a.id)?.title).toBe('Server');
+      expect(pages.get(a.id)?.version).toBe(7);
+      expect(pages.get(a.id)?.access).toBe('edit');
+      // c still has an operation waiting: it keeps its local state.
+      expect(pages.get(c.id)?.title).toBe('C again');
+      expect((await store.nextOutboxBatch(100, ws.id)).map((o) => o.opId)).toEqual([
+        renameCAgain.opId,
+      ]);
+      await store.close();
+    });
+
+    it('drops a record the server refused with no entity', async () => {
+      const store = await factory();
+      const { ws, section } = await synced(store);
+      const page = pageRecord(ws.id, section.id, null, 'Refused', 'a5');
+      const create = op('page.create', ws.id, page.id, page);
+      await store.applyLocalOps([create]);
+      await store.appendDocUpdates(page.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      await store.settleOps([
+        {
+          opId: create.opId,
+          status: 'rejected',
+          error: { code: 'invalid' },
+          entityType: 'page',
+          entity: null,
+        },
+      ]);
+      expect(await store.getPage(page.id)).toBeNull();
+      expect((await store.loadDoc(page.id)).updates).toEqual([]);
+      await store.close();
+    });
+
+    it('applies a remote batch: upserts, deletes, the cursor, and skips what waits locally', async () => {
+      const store = await factory();
+      const { ws, section, a, b, c } = await synced(store);
+      const pending = op('page.update', ws.id, c.id, { title: 'Mine' });
+      await store.applyLocalOps([pending]);
+      await store.appendDocUpdates(b.id, [{ updateId: uuidv7(), data: bytes(5) }]);
+      const fresh = pageRecord(ws.id, section.id, null, 'From another device', 'a9');
+      await store.applyRemote({
+        workspaceId: ws.id,
+        cursor: 42,
+        pages: [
+          { ...a, title: 'Remote A', version: 3 },
+          { ...c, title: 'Remote C', version: 4 },
+          fresh,
+        ],
+        deletePages: [b.id],
+        favourites: [{ workspaceId: ws.id, pageId: a.id, orderKey: 'a0' }],
+      });
+      const mirror = await store.readMirror(ws.id);
+      const pages = new Map(mirror.pages.map((p) => [p.id, p]));
+      expect(pages.get(a.id)?.title).toBe('Remote A');
+      expect(pages.get(c.id)?.title).toBe('Mine');
+      expect(pages.get(fresh.id)?.title).toBe('From another device');
+      expect(pages.has(b.id)).toBe(false);
+      expect((await store.loadDoc(b.id)).updates).toEqual([]);
+      expect(mirror.favourites.map((f) => f.pageId)).toEqual([a.id]);
+      expect(await store.syncCursor(ws.id)).toBe(42);
+      expect(await store.syncCursor(uuidv7())).toBeNull();
+      await store.applyRemote({ workspaceId: ws.id, deleteFavourites: [a.id] });
+      expect((await store.readMirror(ws.id)).favourites).toEqual([]);
+      expect(await store.syncCursor(ws.id)).toBe(42);
+      await store.close();
+    });
+
+    it('replaces the whole tree, or one subtree, with what the server sent', async () => {
+      const store = await factory();
+      const { ws, section, a, c, d } = await synced(store);
+      // A subtree under a: b and d are not sent, so they go; c is outside it and stays.
+      await store.applyRemote({ workspaceId: ws.id, pages: [a], replace: { root: a.id } });
+      let ids = (await store.readMirror(ws.id)).pages.map((p) => p.id).sort();
+      expect(ids).toEqual([a.id, c.id].sort());
+      // The whole tree: only c, and the section, are left; a page waiting in the outbox stays.
+      const local = pageRecord(ws.id, section.id, null, 'Not pushed', 'b0');
+      await store.applyLocalOps([op('page.create', ws.id, local.id, local)]);
+      await store.applyRemote({
+        workspaceId: ws.id,
+        sections: [section],
+        pages: [c],
+        replace: { root: null },
+        cursor: 7,
+      });
+      ids = (await store.readMirror(ws.id)).pages.map((p) => p.id).sort();
+      expect(ids).toEqual([c.id, local.id].sort());
+      expect((await store.readMirror(ws.id)).sections.map((s) => s.id)).toEqual([section.id]);
+      expect(d).toBeTruthy();
+      await store.close();
+    });
+
+    it('removes a workspace the account lost, with all it holds', async () => {
+      const store = await factory();
+      const { ws, a } = await synced(store);
+      await store.appendDocUpdates(a.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      await store.applyLocalOps([op('page.update', ws.id, a.id, { title: 'x' })]);
+      await store.applyRemote({ workspaceId: ws.id, deleteWorkspace: true });
+      const mirror = await store.readMirror(ws.id);
+      expect(mirror.workspaces).toEqual([]);
+      expect(mirror.pages).toEqual([]);
+      expect(await store.nextOutboxBatch(100, ws.id)).toEqual([]);
+      expect((await store.loadDoc(a.id)).updates).toEqual([]);
+      await store.close();
+    });
+
+    it('lists unsent updates of synced workspaces only, and acknowledges them', async () => {
+      const store = await factory();
+      const local = await seedTree(store);
+      const { a, b } = await synced(store);
+      await store.appendDocUpdates(local.a.id, [{ updateId: uuidv7(), data: bytes(9) }]);
+      const [u1, u2] = [uuidv7(), uuidv7()];
+      await store.appendDocUpdates(a.id, [
+        { updateId: u1, data: bytes(1) },
+        { updateId: u2, data: bytes(2) },
+      ]);
+      await store.appendDocUpdates(b.id, [{ updateId: uuidv7(), data: bytes(3) }]);
+      const unsent = await store.unsentDocUpdates(100);
+      expect(unsent.map((d) => d.pageId).sort()).toEqual([a.id, b.id].sort());
+      expect(unsent.find((d) => d.pageId === a.id)!.updates.map((u) => [...u.data])).toEqual([
+        [1],
+        [2],
+      ]);
+      expect((await store.unsentDocUpdates(1)).flatMap((d) => d.updates).length).toBe(1);
+      await store.ackDocUpdates(a.id, [{ updateId: u1, seq: 11 }]);
+      const after = await store.unsentDocUpdates(100);
+      expect(after.find((d) => d.pageId === a.id)!.updates.map((u) => u.updateId)).toEqual([u2]);
+      expect((await store.loadDoc(a.id)).updates.find((u) => u.updateId === u1)?.seq).toBe(11);
+      await store.close();
+    });
+
+    it('stores pulled updates once, acknowledges its own, and moves the page cursor', async () => {
+      const store = await factory();
+      const { ws, a, c } = await synced(store);
+      const mine = uuidv7();
+      await store.appendDocUpdates(a.id, [{ updateId: mine, data: bytes(1) }]);
+      const added = await store.applyRemoteDocUpdates(a.id, {
+        epoch: 0,
+        headSeq: 3,
+        updates: [
+          { seq: 1, updateId: mine, data: bytes(1) },
+          { seq: 2, updateId: uuidv7(), data: bytes(2) },
+          { seq: 3, data: bytes(3) },
+        ],
+      });
+      expect(added.map((u) => [u.seq, [...u.data]])).toEqual([
+        [2, [2]],
+        [3, [3]],
+      ]);
+      expect(await store.unsentDocUpdates(100)).toEqual([]);
+      // The same pull again adds nothing.
+      expect(
+        await store.applyRemoteDocUpdates(a.id, {
+          epoch: 0,
+          headSeq: 3,
+          updates: [{ seq: 3, data: bytes(3) }],
+        }),
+      ).toEqual([]);
+      expect(await store.docCursor(a.id)).toEqual({ headSeq: 3, epoch: 0 });
+      expect(await store.docCursor(c.id)).toBeNull();
+      expect(await store.docCursors(ws.id)).toEqual({ [a.id]: { headSeq: 3, epoch: 0 } });
+      expect((await store.loadDoc(a.id)).updates.map((u) => u.seq)).toEqual([1, 2, 3]);
+      await store.close();
+    });
+
+    it('keeps unsent updates of a synced page when it compacts', async () => {
+      const store = await factory();
+      const local = await seedTree(store);
+      const { a } = await synced(store);
+      const seqs = await store.appendDocUpdates(
+        a.id,
+        [1, 2, 3].map((v) => ({ updateId: uuidv7(), data: bytes(v) })),
+      );
+      await store.ackDocUpdates(a.id, [
+        { updateId: (await store.loadDoc(a.id)).updates[0].updateId, seq: 1 },
+      ]);
+      await store.compactDoc(a.id, bytes(9), seqs[2]);
+      expect((await store.loadDoc(a.id)).updates.map((u) => u.data[0])).toEqual([2, 3]);
+      // A local-only page drops what the snapshot covers, as in schema 1.
+      const localSeqs = await store.appendDocUpdates(
+        local.a.id,
+        [1, 2].map((v) => ({ updateId: uuidv7(), data: bytes(v) })),
+      );
+      await store.compactDoc(local.a.id, bytes(9), localSeqs[1]);
+      expect((await store.loadDoc(local.a.id)).updates).toEqual([]);
+      await store.close();
+    });
+
+    it("replaces a page's log with one unsent update and forgets its cursor", async () => {
+      const store = await factory();
+      const { a } = await synced(store);
+      await store.applyRemoteDocUpdates(a.id, {
+        epoch: 0,
+        headSeq: 2,
+        updates: [{ seq: 2, data: bytes(2) }],
+      });
+      await store.compactDoc(a.id, bytes(8), 1);
+      const id = uuidv7();
+      await store.replaceDoc(a.id, { updateId: id, data: bytes(7, 7) });
+      const loaded = await store.loadDoc(a.id);
+      expect(loaded.snapshot).toBeNull();
+      expect(loaded.updates.map((u) => [u.updateId, u.seq, [...u.data]])).toEqual([
+        [id, null, [7, 7]],
+      ]);
+      expect(await store.docCursor(a.id)).toBeNull();
+      await store.close();
+    });
+
+    it('lists assets to upload in synced workspaces and marks them uploaded', async () => {
+      const store = await factory();
+      const local = await seedTree(store);
+      const { ws } = await synced(store);
+      const asset = (workspaceId: Id) => ({
+        id: uuidv7(),
+        workspaceId,
+        fileName: 'a.png',
+        contentType: 'image/png',
+        sizeBytes: 1,
+        sha256: 'x',
+        width: null,
+        height: null,
+        createdAt: at(),
+      });
+      const mine = asset(ws.id);
+      await store.putAsset(mine, bytes(1));
+      await store.putAsset(asset(local.ws.id), bytes(2));
+      await store.putAsset({ ...asset(ws.id), uploaded: true }, bytes(3));
+      expect((await store.pendingAssets(10)).map((a) => a.id)).toEqual([mine.id]);
+      await store.markAssetUploaded(mine.id);
+      expect(await store.pendingAssets(10)).toEqual([]);
+      expect((await store.readMirror(ws.id)).assets.find((a) => a.id === mine.id)?.uploaded).toBe(
+        true,
+      );
+      await store.close();
+    });
+  });
 }
+
+/** The account a synced workspace in these tests belongs to. */
+const ACCOUNT = '0193a1b2-c3d4-7e5f-8a9b-000000000001';

@@ -19,6 +19,10 @@ export interface WorkspaceRecord {
   /** Local-only until Phase 2 uploads it. */
   localOnly: boolean;
   deletedAt: string | null;
+  /** The account a synced workspace belongs to; absent while local only. */
+  accountId?: Id | null;
+  /** The account's role in it, as the server last said. */
+  role?: 'owner' | 'admin' | 'member' | 'guest';
 }
 
 export type SectionVisibility = 'workspace' | 'private';
@@ -56,7 +60,16 @@ export interface PageRecord {
   /** Set on every page of a trashed subtree; `trashRootId` names the page the user trashed. */
   trashedAt: string | null;
   trashRootId: Id | null;
+  /** From the server: the account's level on the page (a local page is the user's own). */
+  access?: AccessLevel;
+  restricted?: boolean;
+  /** From the server: the document's validated head, epoch and schema version. */
+  docHeadSeq?: number;
+  docEpoch?: number;
+  docSchemaVersion?: number;
 }
+
+export type AccessLevel = 'full' | 'edit' | 'comment' | 'view' | 'none';
 
 export interface FavouriteRecord {
   workspaceId: Id;
@@ -80,6 +93,8 @@ export interface AssetRecord {
   width: number | null;
   height: number | null;
   createdAt: string;
+  /** True once the server holds the bytes (an upload finished, or they came from it). */
+  uploaded?: boolean;
 }
 
 /** Where a page sits: the top of a section, or under a page. */
@@ -131,8 +146,20 @@ export interface PageMove {
 export interface OpResult {
   opId: Id;
   status: 'applied' | 'rejected';
-  error?: { code: string };
+  error?: { code: string; title?: string };
+  /**
+   * The entity as the server holds it now, which the mirror takes (unless more operations on it
+   * are waiting); with `entity: null` on a refusal, the server has no such entity for this account.
+   */
+  entityType?: EntityType;
+  entity?: EntityRecord | null;
+  /** Something the user is told, such as `tree.parentMissing`. */
+  notice?: string;
 }
+
+export type EntityType = 'workspace' | 'section' | 'page' | 'favourite' | 'visit';
+export type EntityRecord =
+  WorkspaceRecord | SectionRecord | PageRecord | FavouriteRecord | VisitRecord;
 
 /** Why an operation was refused; the codes are the server's (SYNC_DESIGN.md). */
 export type OpErrorCode =
@@ -176,6 +203,65 @@ export interface StoredDoc {
   /** The highest local sequence the snapshot covers; 0 with no snapshot. */
   snapshotCovers: number;
   updates: StoredUpdate[];
+}
+
+/** What this device holds of a page's server log. */
+export interface DocCursor {
+  /** The highest server sequence applied here. */
+  headSeq: number;
+  epoch: number;
+}
+
+export interface RemoteDocUpdate {
+  seq: number;
+  /** The pusher's idempotency key; a device that pushed it already holds it. */
+  updateId?: Id | null;
+  data: Uint8Array;
+}
+
+/** A pull's answer (SYNC_DESIGN.md, Channel 1); a snapshot comes as one update with its sequence. */
+export interface RemoteDocPull {
+  epoch: number;
+  headSeq: number;
+  updates: RemoteDocUpdate[];
+}
+
+export interface UnsentDoc {
+  pageId: Id;
+  updates: StoredUpdate[];
+}
+
+export interface DocAck {
+  updateId: Id;
+  seq: number;
+}
+
+/**
+ * What the server says about a workspace, written in one transaction (applyRemote). Upserts of an
+ * entity with operations still in the outbox are skipped: the local change wins until the server
+ * answers it. Deletes always apply.
+ */
+export interface RemoteBatch {
+  workspaceId: Id;
+  /** The change feed's cursor to keep; absent leaves it. */
+  cursor?: number;
+  workspaces?: WorkspaceRecord[];
+  sections?: SectionRecord[];
+  pages?: PageRecord[];
+  favourites?: FavouriteRecord[];
+  visits?: VisitRecord[];
+  /** The workspace is gone for this account: everything of it is removed. */
+  deleteWorkspace?: boolean;
+  deleteSections?: Id[];
+  deletePages?: Id[];
+  /** Page ids of the account's favourites and visits that are gone. */
+  deleteFavourites?: Id[];
+  deleteVisits?: Id[];
+  /**
+   * The batch is a whole tree (root null) or one subtree: pages of the workspace (under root) it
+   * does not hold are removed, and with root null its sections too, unless they wait in the outbox.
+   */
+  replace?: { root: Id | null };
 }
 
 export interface HistoryEntry {
@@ -228,7 +314,10 @@ export interface LocalStore {
   loadDoc(pageId: Id): Promise<StoredDoc>;
   /** Appends to the page's log and returns the local sequence each update was given. */
   appendDocUpdates(pageId: Id, updates: LocalUpdate[]): Promise<number[]>;
-  /** Replaces the snapshot and drops the updates it covers. */
+  /**
+   * Replaces the snapshot and drops the updates it covers, except, in a synced workspace, those
+   * not yet on the server: they are kept to be pushed (replaying them is harmless).
+   */
   compactDoc(pageId: Id, snapshot: Uint8Array, coversLocalUpTo: number): Promise<void>;
   /** Moves updates that fail to decode out of the log, into the corrupt area (kept for support). */
   quarantineUpdates(pageId: Id, localSeqs: number[], reason: string): Promise<void>;
@@ -248,6 +337,31 @@ export interface LocalStore {
   settleOps(results: OpResult[]): Promise<void>;
   readMirror(workspaceId: Id | null): Promise<MirrorSnapshot>;
   getPage(pageId: Id): Promise<PageRecord | null>;
+
+  // Sync (store schema 2; SYNC_DESIGN.md, The sync loop)
+  /** Oldest first; only one workspace's operations when it is given. */
+  nextOutboxBatch(limit: number, workspaceId?: Id): Promise<Operation[]>;
+  /** Removes answered operations and takes each answer's entity into the mirror. */
+  settleOps(results: OpResult[]): Promise<void>;
+  applyRemote(batch: RemoteBatch): Promise<void>;
+  syncCursor(workspaceId: Id): Promise<number | null>;
+  /**
+   * A local workspace becomes a synced one: its outbox is replaced by `ops` (its records as
+   * creates), `localOnly` goes off and `accountId` is set, in one transaction.
+   */
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void>;
+  /** Updates not yet on the server, of synced workspaces' pages, at most `limit`, oldest first. */
+  unsentDocUpdates(limit: number): Promise<UnsentDoc[]>;
+  ackDocUpdates(pageId: Id, acks: DocAck[]): Promise<void>;
+  /** Stores pulled updates (acknowledged as they arrive) and moves the page's cursor; returns those it did not hold. */
+  applyRemoteDocUpdates(pageId: Id, pull: RemoteDocPull): Promise<StoredUpdate[]>;
+  docCursor(pageId: Id): Promise<DocCursor | null>;
+  docCursors(workspaceId: Id): Promise<Record<Id, DocCursor>>;
+  /** The page's whole log becomes one unsent update, and its cursor goes: an upload, an epoch change. */
+  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void>;
+  /** Assets of synced workspaces the server does not hold yet. */
+  pendingAssets(limit: number): Promise<AssetRecord[]>;
+  markAssetUploaded(assetId: Id): Promise<void>;
 
   // Search: the caller normalises (search.ts); the store only indexes and matches
   putSearchEntry(entry: SearchEntry): Promise<void>;
@@ -270,4 +384,4 @@ export interface LocalStore {
 }
 
 /** The store schema version this build reads and writes (SYNC_DESIGN.md, local migration). */
-export const STORE_SCHEMA_VERSION = 1;
+export const STORE_SCHEMA_VERSION = 2;

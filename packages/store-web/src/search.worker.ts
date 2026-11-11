@@ -39,8 +39,9 @@ function put(entry: SearchEntry) {
 }
 
 async function load(database: string) {
-  // Open without upgrading: the page created the database already.
-  const db = await openDatabase(indexedDB, database, 1, () => {});
+  // Open at the version the page left it, without upgrading: the page created the database
+  // already, and naming a version would fail once the store schema moves past it.
+  const db = await openDatabase(indexedDB, database, undefined, () => {});
   const tx = db.transaction('search');
   const entries = await getAll<SearchEntry>(tx.objectStore('search'));
   await request(tx.objectStore('search').count());

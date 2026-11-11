@@ -60,6 +60,7 @@ export class Mirror implements MirrorReader {
 
   /** Writes a plan's results; the store has already made them durable. */
   apply(plan: Plan) {
+    for (const id of plan.deleteWorkspaces ?? []) this.deleteWorkspace(id);
     for (const w of plan.workspaces) this.workspaces.set(w.id, w);
     for (const s of plan.sections) this.sections.set(s.id, s);
     for (const id of plan.deleteSections) this.sections.delete(id);
@@ -70,6 +71,16 @@ export class Mirror implements MirrorReader {
     for (const v of plan.visits) this.visits.set(favKey(v.workspaceId, v.pageId), v);
     for (const v of plan.deleteVisits) this.visits.delete(favKey(v.workspaceId, v.pageId));
     this.emit();
+  }
+
+  /** A workspace and everything it holds, gone (a synced workspace the account lost). */
+  private deleteWorkspace(id: Id) {
+    this.workspaces.delete(id);
+    for (const [key, s] of this.sections) if (s.workspaceId === id) this.sections.delete(key);
+    for (const p of [...this.pages.values()]) if (p.workspaceId === id) this.deletePage(p.id);
+    for (const [key, f] of this.favourites) if (f.workspaceId === id) this.favourites.delete(key);
+    for (const [key, v] of this.visits) if (v.workspaceId === id) this.visits.delete(key);
+    for (const [key, a] of this.assets) if (a.workspaceId === id) this.assets.delete(key);
   }
 
   putAsset(asset: AssetRecord) {
