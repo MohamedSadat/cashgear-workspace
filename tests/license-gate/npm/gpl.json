@@ -1,0 +1,40 @@
+{
+  "MIT": [
+    {
+      "name": "react",
+      "versions": ["19.3.1"],
+      "license": "MIT",
+      "paths": []
+    },
+    {
+      "name": "react-dom",
+      "versions": ["19.3.1"],
+      "license": "MIT",
+      "paths": []
+    }
+  ],
+  "Apache-2.0 OR MIT": [
+    {
+      "name": "@tauri-apps/api",
+      "versions": ["2.12.4"],
+      "license": "Apache-2.0 OR MIT",
+      "paths": []
+    }
+  ],
+  "GPL-3.0-only": [
+    {
+      "name": "gpl-fixture",
+      "versions": ["1.0.0"],
+      "license": "GPL-3.0-only",
+      "paths": []
+    }
+  ],
+  "UNLICENSED": [
+    {
+      "name": "@cashgear/ui",
+      "versions": ["0.1.0"],
+      "license": "UNLICENSED",
+      "paths": []
+    }
+  ]
+}

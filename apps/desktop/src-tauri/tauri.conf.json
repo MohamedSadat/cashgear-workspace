@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cash Gear Workspace",
+  "version": "0.0.0",
+  "identifier": "com.cashgear.workspace",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../.. dev:web",
+    "devUrl": "http://127.0.0.1:5273",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Cash Gear Workspace",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 500,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost; frame-src https://sheet.cashgearerp.com https://proud-desert-008137810.4.azurestaticapps.net; object-src 'none'; base-uri 'self'; form-action 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "CashGear",
+    "copyright": "© 2026 CashGear",
+    "category": "Productivity",
+    "shortDescription": "Cash Gear Workspace",
+    "longDescription": "Pages, blocks and databases for the Cash Gear ecosystem.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

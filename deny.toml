@@ -1,0 +1,36 @@
+# Rust half of the licence gate (scripts/check-licenses.mjs covers npm).
+# CI runs `cargo deny check licenses sources`; scripts/license-selftest.mjs proves
+# that a GPL dependency makes it fail. Copied from cashgear-sheet.
+
+[graph]
+targets = ["x86_64-pc-windows-msvc", "aarch64-apple-darwin"]
+
+[licenses]
+# No GPL, AGPL, LGPL, SSPL or BUSL in anything shipped.
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "MPL-2.0",
+  "Zlib",
+  "ISC",
+  "0BSD",
+  "CC0-1.0",
+  "Unicode-3.0",
+  "Unlicense",
+]
+confidence-threshold = 0.93
+
+[licenses.private]
+# Our own crates are proprietary and never published.
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

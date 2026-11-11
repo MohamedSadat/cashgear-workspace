@@ -1,0 +1,9 @@
+[package]
+name = "license-gate-app"
+version = "0.1.0"
+edition = "2021"
+license = "LicenseRef-CashGear-Proprietary"
+publish = false
+
+[dependencies]
+gpl-dep = { path = "../gpl-dep" }

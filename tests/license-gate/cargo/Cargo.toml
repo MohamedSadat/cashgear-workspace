@@ -1,0 +1,5 @@
+# Fixture for scripts/license-selftest.mjs: a private crate that depends on a
+# GPL-3.0 crate. cargo-deny, with the repository's deny.toml, must reject it.
+[workspace]
+resolver = "2"
+members = ["app", "gpl-dep"]

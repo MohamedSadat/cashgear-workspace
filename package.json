@@ -1,0 +1,43 @@
+{
+  "name": "cashgear-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": "12.11.2"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @cgw/web dev",
+    "dev:desktop": "pnpm --filter @cgw/desktop dev",
+    "build": "pnpm --filter @cgw/web build && node scripts/third-party-notices.mjs",
+    "preview": "pnpm --filter @cgw/web preview",
+    "check": "node scripts/check.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "rust:fmt": "cargo fmt --all --check",
+    "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rust:test": "cargo test --workspace",
+    "deny": "cargo deny check licenses sources",
+    "licenses:check": "node scripts/check-licenses.mjs",
+    "licenses:selftest": "node scripts/license-selftest.mjs",
+    "notices": "node scripts/third-party-notices.mjs",
+    "desktop:build": "pnpm build && pnpm --filter @cgw/desktop build",
+    "desktop:smoke": "node scripts/desktop-smoke.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.65.0",
+    "eslint": "10.14.0",
+    "globals": "17.14.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2",
+    "vitest": "5.1.0"
+  }
+}
