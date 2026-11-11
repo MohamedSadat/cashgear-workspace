@@ -555,3 +555,21 @@ its own), and the decision it confirms or changes. The harnesses are in `bench/`
 | Accessibility checks | `@axe-core/playwright` 4.14.0 (MPL-2.0, a test tool only, not shipped) on the main screens in both themes and languages and on a phone-sized screen; a keyboard-only e2e pass; the accessibility tree checked for named landmarks, tree and editor | The licence gate allows MPL for tools |
 | Theme screenshots | Each theme's screenshot is read back pixel by pixel: page, sidebar and top bar in that theme's own colours, title contrast above 7:1, the two themes differing almost everywhere. No pixel baselines | CI's fonts render a little differently from a desktop's |
 | Budget gate | `bench/phase1.mjs` in CI after the kill tests: over budget fails; so does worse than the last successful run on `main` by half again and by more than a small margin per figure. The last run's figures come from its uploaded results | Hosted runners are noisy; a margin keeps the gate from flapping |
+
+## 2026-11-12: Phase 2
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Q5. Product domain | Sibling hosts: the web app at `workspace.cashgearerp.com`, the API at `workspace-api.cashgearerp.com`. Same site, so the web session is a `Secure`, `HttpOnly`, `SameSite=Lax` cookie and no token is ever in JavaScript |
+| Q6. Where the API is hosted | IIS beside UnifiedAPI: its own site and app pool; the worker as a Windows service on the same server. Revisited for SignalR in Phase 6 |
+| Deployment | I build, you deploy. The phase ships the deploy package, the migration bundle, scripts and a runbook, rehearsed end to end on a local scratch environment (LocalDB and Azurite). You run the real deployment; "Deployed" is ticked once you have |
+| Q11. Data residency | One region, the same as the Cash Gear ERP's Azure Storage account. No replication to a second region |
+| Q7. Full-text search on the host | Use SQL Server full-text over the normalised text when the server has it (detected at start); otherwise a `LIKE` search on the normalised column |
+| Q8. Email | SMTP settings from environment variables; the provider is chosen at deploy time. In development and tests mail is written to a pickup folder |
+| Q9. Who issues Yjs client ids | The server issues a pool per device; ids a local-only workspace already used are registered at its first sync. The worker refuses structs from ids not registered to the pushing user |
+| Q10. Tiers and quotas | No tiers. A storage quota column per workspace, recorded and shown, not enforced |
+| Q13. Link previews | Yes, in Phase 2, fetched by the server behind an SSRF guard (public addresses only, no redirect into a private range, size and time limits). A bookmark still shows its URL when there is no preview |
+| Q20. When the worker validates pushed updates | Before fan-out. Pushed updates are held as unvalidated until the worker passes them with `cgw-ydoc`; pulls by other clients return only validated ones. A failing update is refused and its pusher told |
+| Who may sign up | Anyone, with the email confirmed before the first sign-in. Rate-limited, with lockout after repeated failed sign-ins |
