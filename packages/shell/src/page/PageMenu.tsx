@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { offlineMenuItems, useCloud } from '../cloud/CloudUi';
 import { navigate } from '../route';
-import type { WorkspaceSession } from '../session';
+import { canEditPage, type WorkspaceSession } from '../session';
 import { PointMenu } from '../sidebar/RowMenu';
 
 export const pageEvents = new EventTarget();
@@ -38,6 +38,8 @@ export function PageMenu({
 }) {
   const { t } = useTranslation();
   const cloud = useCloud();
+  // Only someone who may edit the page changes it (the server checks again).
+  const editable = canEditPage(page);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const favourite =
     !!session.workspaceId && session.mirror.isFavourite(session.workspaceId, page.id);
@@ -92,18 +94,30 @@ export function PageMenu({
               onSelect: () =>
                 pageEvents.dispatchEvent(new CustomEvent('export', { detail: page.id })),
             },
-            {
-              label: t(page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate'),
-              onSelect: () =>
-                void session.updatePage(page.id, { isTemplate: !page.isTemplate }).catch(onError),
-            },
+            ...(editable
+              ? [
+                  {
+                    label: t(page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate'),
+                    onSelect: () =>
+                      void session
+                        .updatePage(page.id, { isTemplate: !page.isTemplate })
+                        .catch(onError),
+                  },
+                ]
+              : []),
             ...offlineMenuItems(cloud, session, page.id, t),
-            {
-              label: t('workspace.moveToTrash'),
-              danger: true,
-              onSelect: () =>
-                void session.trashPage(page.id).then(() => navigate({ kind: 'home' }), onError),
-            },
+            ...(editable
+              ? [
+                  {
+                    label: t('workspace.moveToTrash'),
+                    danger: true,
+                    onSelect: () =>
+                      void session
+                        .trashPage(page.id)
+                        .then(() => navigate({ kind: 'home' }), onError),
+                  },
+                ]
+              : []),
           ]}
         />
       )}

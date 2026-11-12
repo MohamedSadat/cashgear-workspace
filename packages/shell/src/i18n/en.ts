@@ -72,6 +72,7 @@ export const en = {
     notOnDevice: 'This page isn’t on this device yet. It opens when you’re online.',
     notOnDeviceSignedOut: 'This page isn’t on this device yet. It opens once you sign in.',
     tryAgain: 'Try again',
+    viewOnly: 'You can view this page, not edit it.',
     newerVersion:
       'This page was saved by a newer version of Cash Gear Workspace. It is shown read-only; update the app to edit it.',
     saved: 'Saved',

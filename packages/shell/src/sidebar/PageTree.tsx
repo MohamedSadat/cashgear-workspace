@@ -15,7 +15,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useCloud, useOfflineMarks } from '../cloud/CloudUi';
 import { navigate } from '../route';
-import type { WorkspaceSession } from '../session';
+import { canEditPage, type WorkspaceSession } from '../session';
 import { RowMenu } from './RowMenu';
 import { dropTarget, dropZone, treeRows, type DropZone, type TreeRow } from './tree';
 
@@ -170,11 +170,12 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
       navigate({ kind: 'page', pageId: row.page.id });
     } else if (event.key === 'F2') {
       event.preventDefault();
-      setRenaming(row.page.id);
+      if (canEditPage(row.page)) setRenaming(row.page.id);
     } else if (event.key === 'Delete') {
       event.preventDefault();
-      void session.trashPage(row.page.id).catch(onError);
+      if (canEditPage(row.page)) void session.trashPage(row.page.id).catch(onError);
     } else if (
+      canEditPage(row.page) &&
       event.altKey &&
       event.shiftKey &&
       (event.key === 'ArrowUp' || event.key === 'ArrowDown')
@@ -198,12 +199,17 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     }
   };
 
+  /** A page goes inside another only if the account may edit that one (the server checks again). */
+  const mayHold = (parentPageId: Id | null) =>
+    !parentPageId || canEditPage(session.mirror.pages.get(parentPageId));
+
   const onDragOver = (event: DragEvent, row: TreeRow) => {
     if (!dragging.current) return;
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const zone =
       row.kind === 'section' ? 'inside' : dropZone(event.clientY - rect.top, rect.height);
-    if (!dropTarget(session.mirror, dragging.current, row, zone)) return;
+    const target = dropTarget(session.mirror, dragging.current, row, zone);
+    if (!target || !mayHold(target.parentPageId)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     if (drop?.key !== row.key || drop.zone !== zone) setDrop({ key: row.key, zone });
@@ -216,7 +222,7 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     const target = dropTarget(session.mirror, pageId, row, drop.zone);
     setDrop(null);
     dragging.current = null;
-    if (!target) return;
+    if (!target || !mayHold(target.parentPageId)) return;
     if (target.parentPageId) toggle(target.parentPageId, true);
     void session.movePage(pageId, target).catch(onError);
   };
@@ -270,6 +276,8 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
           const { page } = row;
           const active = page.id === activePageId;
           const unavailable = !!marks && !marks.has(page.id);
+          // The account may only view it: no rename, drag, trash or page inside it.
+          const editable = canEditPage(page);
           return (
             <div
               key={row.key}
@@ -285,10 +293,10 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
               aria-selected={active}
               aria-current={active ? 'page' : undefined}
               tabIndex={focused ? 0 : -1}
-              draggable={renaming !== page.id}
+              draggable={editable && renaming !== page.id}
               onKeyDown={(event) => onKeyDown(event, row, index)}
               onClick={() => navigate({ kind: 'page', pageId: page.id })}
-              onDoubleClick={() => setRenaming(page.id)}
+              onDoubleClick={() => editable && setRenaming(page.id)}
               onContextMenu={(event) => {
                 event.preventDefault();
                 setMenu({ pageId: page.id, x: event.clientX, y: event.clientY });
@@ -357,19 +365,21 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
                 >
                   ⋯
                 </button>
-                <button
-                  type="button"
-                  className="cgw-tree-action"
-                  tabIndex={-1}
-                  aria-label={t('workspace.addSubpage')}
-                  title={t('workspace.addSubpage')}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void addPage(page.sectionId, page.id);
-                  }}
-                >
-                  +
-                </button>
+                {editable && (
+                  <button
+                    type="button"
+                    className="cgw-tree-action"
+                    tabIndex={-1}
+                    aria-label={t('workspace.addSubpage')}
+                    title={t('workspace.addSubpage')}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void addPage(page.sectionId, page.id);
+                    }}
+                  >
+                    +
+                  </button>
+                )}
               </span>
             </div>
           );

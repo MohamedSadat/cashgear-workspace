@@ -13,7 +13,12 @@ import { unreachable } from '../cloud/cloud';
 import { useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
 import { formatShortcut } from '../shortcuts';
-import { NewerDocumentError, NotOnDeviceError, type WorkspaceSession } from '../session';
+import {
+  NewerDocumentError,
+  NotOnDeviceError,
+  canEditPage,
+  type WorkspaceSession,
+} from '../session';
 import { registerBlockCommands, slashItems } from './blockCommands';
 import { editorHost, ToggleState } from './editorHost';
 import { exportAndSave } from '../exchange/DataPanel';
@@ -200,11 +205,16 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   const editorRef = useRef<BlockEditor | null>(null);
   const host = usePageHost(session, page);
   // A pulled change can make the page newer than this build while it is open: it turns read-only.
-  const [readOnly, setReadOnly] = useState(doc.readOnly);
+  const [newer, setNewer] = useState(doc.readOnly);
   useEffect(() => {
-    setReadOnly(doc.readOnly);
-    return doc.onEvent((event) => event.kind === 'newerVersion' && setReadOnly(true));
+    setNewer(doc.readOnly);
+    return doc.onEvent((event) => event.kind === 'newerVersion' && setNewer(true));
   }, [doc]);
+  // The account may only view (or comment on) the page: shown, never edited; it follows the page's
+  // access in the mirror (a resync also opens the document again, session.reloadMirror). The
+  // server is still the check.
+  const viewOnly = !canEditPage(page);
+  const readOnly = newer || viewOnly;
   // A notice's "Open the page history" may have come before the page was on screen.
   const [history, setHistory] = useState(false);
   const [editor, setEditor] = useState<BlockEditor | null>(null);
@@ -234,22 +244,42 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   // Saved text goes into the search index a moment after typing stops (M1.8).
   useEffect(() => doc.onSaved(() => session.scheduleIndex(page.id)), [doc, session, page.id]);
 
-  const readOnlyContent = useMemo(
-    () =>
-      readOnly
-        ? readOnlyJSON(fragmentToJSON(doc.fragment), {
-            block: t('editor.readOnlyBlock'),
-            inline: t('editor.readOnlyInline'),
-          })
-        : undefined,
-    [doc, readOnly, t],
+  const strings = useMemo(
+    () => ({ block: t('editor.readOnlyBlock'), inline: t('editor.readOnlyInline') }),
+    [t],
   );
+  const readOnlyContent = useMemo(
+    () => (readOnly ? readOnlyJSON(fragmentToJSON(doc.fragment), strings) : undefined),
+    [doc, readOnly, strings],
+  );
+  // Read-only, the editor is not bound to the document: others' edits as they arrive are shown by
+  // setting its content again shortly after (the same editor, so the reader keeps their place).
+  useEffect(() => {
+    if (!readOnly) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      timer = null;
+      const editor = editorRef.current?.editor;
+      if (!editor || editor.isDestroyed) return;
+      editor.commands.setContent(readOnlyJSON(fragmentToJSON(doc.fragment), strings) as never, {
+        emitUpdate: false,
+      });
+    };
+    const onUpdate = () => {
+      timer ??= setTimeout(refresh, 300);
+    };
+    doc.doc.on('update', onUpdate);
+    return () => {
+      doc.doc.off('update', onUpdate);
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [doc, readOnly, strings]);
 
   return (
     <article className="cgw-page" aria-label={page.title || t('page.untitled')}>
       {readOnly && (
-        <div className="cgw-page-notice" role="status">
-          {t('page.newerVersion')}
+        <div className="cgw-page-notice" role="status" data-testid="page-read-only">
+          {t(newer ? 'page.newerVersion' : 'page.viewOnly')}
         </div>
       )}
       <PageHeader session={session} page={page} readOnly={readOnly} />
@@ -271,13 +301,15 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         readOnlyContent={readOnlyContent}
         host={host}
         label={t('page.content')}
-        overlays={(editor) => <EditorOverlays editor={editor} host={host} />}
+        // Read-only: no block handle, toolbar or menus, which would change what is shown.
+        overlays={readOnly ? undefined : (editor) => <EditorOverlays editor={editor} host={host} />}
         onEditor={(editor) => {
           // The cold-start budget's end: the first editable page (bench/phase1.mjs reads it).
           if (editor && !performance.getEntriesByName('cgw-editable').length)
             performance.mark('cgw-editable');
           editorRef.current = editor;
-          services.editor.current = editor;
+          // The palette's block commands act on an editor that can be edited only.
+          services.editor.current = readOnly ? null : editor;
           setEditor(editor);
           onEditor?.(editor, editor ? doc : null);
         }}
@@ -288,6 +320,7 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
           doc={doc}
           editor={editor}
           host={host}
+          readOnly={readOnly}
           onClose={() => setHistory(false)}
         />
       )}

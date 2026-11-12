@@ -24,12 +24,15 @@ export function HistoryDialog({
   doc,
   editor,
   host,
+  readOnly = false,
   onClose,
 }: {
   session: WorkspaceSession;
   doc: PageDocument;
   editor: BlockEditor | null;
   host: EditorHost;
+  /** The page is shown read-only (newer than this build, or the account may only view it). */
+  readOnly?: boolean;
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -190,7 +193,7 @@ export function HistoryDialog({
         >
           {t('history.keepNow')}
         </button>
-        {synced && (
+        {synced && !readOnly && (
           <>
             <input
               className="cgw-input"
@@ -233,7 +236,7 @@ export function HistoryDialog({
         <button
           type="button"
           className="cgw-button is-primary"
-          disabled={!selected || doc.readOnly}
+          disabled={!selected || doc.readOnly || readOnly}
           onClick={() => void restore()}
         >
           {t('history.restore')}

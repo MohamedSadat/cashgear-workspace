@@ -20,7 +20,7 @@ import { ar, en, flatten } from './i18n';
 import { RECOVERY_CODES, noticeTarget, noticeText, targetLabel } from './notices';
 import type { CloudPlatform } from './platform';
 import { parseRoute, routeHash } from './route';
-import { WorkspaceSession } from './session';
+import { WorkspaceSession, canEditPage } from './session';
 
 const now = () => new Date().toISOString();
 
@@ -438,5 +438,60 @@ describe('the flush before hiding, closing or uploading', () => {
     off();
     await session.flushAll();
     expect(waiting).toBeNull();
+  });
+});
+
+describe('a page the account may only view', () => {
+  it('is not editable, and its open document opens again when access changes', async () => {
+    expect(canEditPage(undefined)).toBe(true);
+    for (const access of ['full', 'edit'] as const)
+      expect(canEditPage({ ...pageRecord(uuidv7(), 'w', 's', 'T'), access })).toBe(true);
+    for (const access of ['comment', 'view', 'none'] as const)
+      expect(canEditPage({ ...pageRecord(uuidv7(), 'w', 's', 'T'), access })).toBe(false);
+
+    const store = new MemoryStore();
+    const workspaceId = uuidv7();
+    const sectionId = uuidv7();
+    const pageId = uuidv7();
+    const workspace = {
+      id: workspaceId,
+      name: 'Team',
+      icon: null,
+      createdAt: now(),
+      version: 1,
+      localOnly: false,
+      deletedAt: null,
+      accountId: 'account',
+    };
+    const remote = (access: 'edit' | 'view') =>
+      store.applyRemote({
+        workspaceId,
+        workspaces: [workspace],
+        sections: [section(sectionId, workspaceId, 'workspace', 'a0')],
+        pages: [{ ...pageRecord(pageId, workspaceId, sectionId, 'Shared'), access }],
+      });
+    await remote('edit');
+    await store.appendDocUpdates(pageId, [
+      { updateId: uuidv7(), data: newDocumentUpdate(pageId, paragraph('Shared text')) },
+    ]);
+    const session = await WorkspaceSession.start(store);
+    const reset: Id[] = [];
+    session.onDocReset((id) => reset.push(id));
+    const first = await session.openDoc(pageId);
+    // The same access after a resync: nothing to do.
+    await session.reloadMirror();
+    expect(reset).toEqual([]);
+    // Edit taken away: opened again (to read, writing nothing on open).
+    await remote('view');
+    await session.reloadMirror();
+    expect(reset).toEqual([pageId]);
+    const second = await session.openDoc(pageId);
+    expect(second).not.toBe(first);
+    expect(plainText(fragmentToJSON(second.fragment))).toContain('Shared text');
+    // And back.
+    await remote('edit');
+    await session.reloadMirror();
+    expect(reset).toEqual([pageId, pageId]);
+    await session.close();
   });
 });

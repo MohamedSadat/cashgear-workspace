@@ -4,7 +4,7 @@ import type { Id } from '@cgw/workspace';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { offlineMenuItems, useCloud } from '../cloud/CloudUi';
-import type { WorkspaceSession } from '../session';
+import { canEditPage, type WorkspaceSession } from '../session';
 
 export interface MenuItem {
   label: string;
@@ -109,31 +109,38 @@ export function RowMenu({
   const page = session.mirror.pages.get(pageId);
   if (!page || !session.workspaceId) return null;
   const favourite = session.mirror.isFavourite(session.workspaceId, pageId);
+  // A page the account may only view: nothing here changes it (the server checks again).
+  const editable = canEditPage(page);
+  const favouriteItem = {
+    label: t(favourite ? 'workspace.unfavourite' : 'workspace.favourite'),
+    onSelect: () => void session.setFavourite(pageId, !favourite).catch(onError),
+  };
   return (
     <PointMenu
       x={x}
       y={y}
       label={t('workspace.pageMenu')}
       onClose={onClose}
-      items={[
-        { label: t('workspace.rename'), onSelect: onRename },
-        { label: t('workspace.addSubpage'), onSelect: onAddInside },
-        {
-          label: t(favourite ? 'workspace.unfavourite' : 'workspace.favourite'),
-          onSelect: () => void session.setFavourite(pageId, !favourite).catch(onError),
-        },
-        {
-          label: t(page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate'),
-          onSelect: () =>
-            void session.updatePage(pageId, { isTemplate: !page.isTemplate }).catch(onError),
-        },
-        ...offlineMenuItems(cloud, session, pageId, t),
-        {
-          label: t('workspace.moveToTrash'),
-          danger: true,
-          onSelect: () => void session.trashPage(pageId).catch(onError),
-        },
-      ]}
+      items={
+        editable
+          ? [
+              { label: t('workspace.rename'), onSelect: onRename },
+              { label: t('workspace.addSubpage'), onSelect: onAddInside },
+              favouriteItem,
+              {
+                label: t(page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate'),
+                onSelect: () =>
+                  void session.updatePage(pageId, { isTemplate: !page.isTemplate }).catch(onError),
+              },
+              ...offlineMenuItems(cloud, session, pageId, t),
+              {
+                label: t('workspace.moveToTrash'),
+                danger: true,
+                onSelect: () => void session.trashPage(pageId).catch(onError),
+              },
+            ]
+          : [favouriteItem, ...offlineMenuItems(cloud, session, pageId, t)]
+      }
     />
   );
 }

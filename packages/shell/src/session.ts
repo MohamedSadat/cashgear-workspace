@@ -76,8 +76,13 @@ export class NewerDocumentError extends Error {
 }
 
 /** Whether the account may change a page's document (a local page is the user's own). */
-const mayEdit = (page: PageRecord | undefined) =>
+/**
+ * Whether the account may change a page: its title, icon, cover, place and document (a local page
+ * is the user's own). The interface opens anything else read-only; the server is still the check.
+ */
+export const canEditPage = (page: PageRecord | undefined) =>
   !page?.access || page.access === 'full' || page.access === 'edit';
+const mayEdit = canEditPage;
 
 /** Nothing of the page's document is on this device: no snapshot, no update. */
 const holdsNothing = (doc: PageDocument) => doc.doc.store.clients.size === 0;
@@ -85,6 +90,8 @@ const holdsNothing = (doc: PageDocument) => doc.doc.store.clients.size === 0;
 export class WorkspaceSession {
   readonly mirror: Mirror;
   private readonly docs = new Map<Id, Promise<PageDocument>>();
+  /** Whether each open document was opened to edit (`canEdit`), to reopen it if access changes. */
+  private readonly editable = new Map<Id, boolean>();
   /** Blank pages made in this session and not yet shown: their title takes focus when shown. */
   private readonly fresh = new Set<Id>();
   private readonly order: Id[] = [];
@@ -143,6 +150,12 @@ export class WorkspaceSession {
   /** The mirror read again from the store, after the sync engine wrote what the server said. */
   async reloadMirror(): Promise<void> {
     this.mirror.reset(await this.store.readMirror(null));
+    // Access changed on the server (a resync): a page opened to edit, or to read, opens again the
+    // other way, so the editor follows and a reader's open never writes.
+    for (const [pageId, editable] of this.editable) {
+      const page = this.mirror.pages.get(pageId);
+      if (page && this.docs.has(pageId) && mayEdit(page) !== editable) this.resetDoc(pageId);
+    }
     // A workspace this device lost goes from view; the first one the account brings opens.
     if (!this.workspace || !this.mirror.workspaces.has(this.workspace)) {
       const next = this.workspaces()[0]?.id ?? null;
@@ -613,6 +626,7 @@ export class WorkspaceSession {
             canEdit: mayEdit(record),
             onEvent: (event) => this.cloud?.docEvent?.(event),
           };
+          this.editable.set(pageId, options.canEdit!);
           let opened = await PageDocument.open(pageId, this.store, options);
           if (holdsNothing(opened)) {
             // Nothing of it on this device (a page made elsewhere, never opened here): the
@@ -681,6 +695,7 @@ export class WorkspaceSession {
     const doc = this.docs.get(pageId);
     if (!doc) return;
     this.docs.delete(pageId);
+    this.editable.delete(pageId);
     const at = this.order.indexOf(pageId);
     if (at >= 0) this.order.splice(at, 1);
     void doc.then((d) => d.close()).catch(() => undefined);
