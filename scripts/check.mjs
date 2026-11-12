@@ -8,6 +8,7 @@ const skipRust = process.argv.includes('--no-rust');
 const skipServer = skipRust || process.argv.includes('--no-server');
 const pnpm = (...args) => pnpmCommand(args);
 const checks = [
+  ['secrets', pnpm('secrets:check')],
   ['format', pnpm('format:check')],
   ['lint', pnpm('lint')],
   ['typecheck', pnpm('typecheck')],

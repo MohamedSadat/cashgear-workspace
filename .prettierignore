@@ -16,3 +16,4 @@ server/**/obj/
 # Generated from the server's code, and checked by pnpm api:check
 server/openapi/
 packages/api/src/schema.ts
+.cgw-dev/

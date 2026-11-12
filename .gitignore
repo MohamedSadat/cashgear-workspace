@@ -24,6 +24,7 @@ bench/previous-run/
 coverage/
 
 # Local files
+.cgw-dev/
 .claude/launch.json
 .env
 .env.*

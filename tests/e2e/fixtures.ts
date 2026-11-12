@@ -46,6 +46,10 @@ class DesktopApp {
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: args,
         CGW_DATA_DIR: join(this.folder, 'data'),
         CGW_SAVE_DIR: join(this.folder, 'saved'),
+        // Sign-in in tests: the authorise URL goes to a file, not the system browser, and the
+        // refresh token to a keychain name of the test's own (never the person's sign-in).
+        CGW_AUTH_URL_FILE: join(this.folder, 'authorize-url.txt'),
+        CGW_KEYCHAIN_SERVICE: 'com.cashgear.workspace.e2e',
       },
     });
     const endpoint = `http://127.0.0.1:${this.port}`;
@@ -83,6 +87,8 @@ export interface Fixtures {
   restart(options?: { fresh?: boolean }): Promise<Page>;
   /** Where the desktop app saves files in tests (CGW_SAVE_DIR); null in a browser. */
   savedFolder: string | null;
+  /** Where the desktop app writes the authorise URL in tests (CGW_AUTH_URL_FILE); null in a browser. */
+  authUrlFile: string | null;
 }
 
 let app: DesktopApp | null = null;
@@ -142,10 +148,16 @@ export const test = (
           void page;
           await use(join(app!.folder, 'saved'));
         },
+        authUrlFile: async ({ page }, use) => {
+          void page;
+          await use(join(app!.folder, 'authorize-url.txt'));
+        },
       })
     : base.extend<Fixtures>({
         restart: browserRestart as never,
         // eslint-disable-next-line no-empty-pattern -- as above
         savedFolder: async ({}, use) => use(null),
+        // eslint-disable-next-line no-empty-pattern -- as above
+        authUrlFile: async ({}, use) => use(null),
       })
 ) as ReturnType<typeof base.extend<Fixtures>>;

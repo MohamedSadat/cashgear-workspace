@@ -37,6 +37,8 @@ jobs:
       - name: cargo-deny (advisories, informational)
         run: cargo deny check advisories
         continue-on-error: true
+      - name: No credential in the repository
+        run: pnpm secrets:check
       - run: pnpm licenses:check
       - uses: actions/setup-dotnet@v4
         with:
@@ -132,6 +134,24 @@ jobs:
       # The SQLite store's conformance suite runs through this binary.
       - run: cargo build -p cgw-store --bin cgw-store-cli
       - run: pnpm test
+      # Phase 2's specs run against the server stack (scripts/server-stack.mjs): SQL Server LocalDB,
+      # the worker's Yjs library, Azurite (a dev dependency) and the server, built there.
+      - name: SQL Server LocalDB for the server stack
+        shell: pwsh
+        run: |
+          $tool = Get-Command sqllocaldb -ErrorAction SilentlyContinue
+          if (-not $tool) {
+            $found = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter SqlLocalDB.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $found) {
+              choco install sqllocaldb -y --no-progress
+              $found = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter SqlLocalDB.exe | Select-Object -First 1
+            }
+            $tool = $found.FullName
+            Add-Content $env:GITHUB_PATH (Split-Path $tool)
+          } else { $tool = $tool.Source }
+          & $tool create MSSQLLocalDB -s
+          & $tool info MSSQLLocalDB
+      - run: cargo build -p cgw-ydoc --profile ffi
       # Browser tests use the runner's installed Chrome and Edge.
       - run: pnpm test:e2e
       # Kill the app while typing, reopen, check nothing reported saved was lost (25 runs each;

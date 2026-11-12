@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { serverStack } from './playwright.config';
 
 // The Phase 1 exit criteria on the built desktop app (pnpm test:e2e:desktop, after
 // pnpm desktop:build): the same specs, each test on target/release/cgw-desktop.exe started with
@@ -24,4 +25,17 @@ export default defineConfig({
   outputDir: 'test-results-desktop',
   use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [{ name: 'desktop' }],
+  // The Phase 2 specs need the server stack; the desktop app is built with its address.
+  // (and the web preview, which desktop-cloud.spec.ts opens in a browser beside the app).
+  webServer: process.env.E2E_API_URL
+    ? []
+    : [
+        {
+          command: 'pnpm preview',
+          url: 'http://127.0.0.1:4273',
+          reuseExistingServer: !process.env.CI,
+          timeout: 30000,
+        },
+        serverStack,
+      ],
 });
