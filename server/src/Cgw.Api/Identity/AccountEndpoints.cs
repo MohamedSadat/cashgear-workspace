@@ -13,6 +13,8 @@ public sealed record ForgotRequest(string Email, string? Locale, string? ReturnU
 public sealed record ResetRequest(Guid UserId, string Code, string Password);
 public sealed record Me(Guid Id, string Email, string DisplayName, string Locale, Guid? DeviceId, string SignInUrl);
 public sealed record MeUpdate(string? DisplayName, string? Locale);
+/// <summary>Whether the caller is signed in, answered 200 either way (browsers log every 401).</summary>
+public sealed record SessionInfo(Me? Account);
 public sealed record DeviceInfo(Guid Id, string Name, string Platform, DateTimeOffset CreatedAt, DateTimeOffset LastSeenAt, bool Current);
 public sealed record CsrfToken(string Token, string HeaderName);
 
@@ -60,6 +62,26 @@ public static class AccountEndpoints
                 return TypedResults.Ok(new Me(user.Id, user.Email!, user.DisplayName, user.Locale, http.User.DeviceId(), $"{service.PublicUrl(http)}/account/signin"));
             })
             .WithName("getMe").RequireAuthorization().RequireRateLimiting(RateLimits.User);
+
+        // The web app asks this at every start: 200 with the account, or with null when signed out.
+        account.MapGet("/session", async (AccountService service, HttpContext http) =>
+            {
+                var user = http.User.Identity?.IsAuthenticated == true ? await service.CurrentAsync(http.User) : null;
+                return TypedResults.Ok(new SessionInfo(user is null
+                    ? null
+                    : new Me(user.Id, user.Email!, user.DisplayName, user.Locale, http.User.DeviceId(), $"{service.PublicUrl(http)}/account/signin")));
+            })
+            .WithName("getSession").AllowAnonymous().RequireRateLimiting(RateLimits.User);
+
+        // Deleting the account (DATA_MODEL.md, Data export and deletion); this session ends with it.
+        account.MapDelete("", async Task<Results<NoContent, ProblemHttpResult>> (AccountDeletion deletion, AccountService service, HttpContext http) =>
+            {
+                var result = await deletion.DeleteAsync(http.User.UserId()!.Value, http.Actor());
+                if (!result.Ok) return Problems.From(result.Failure!);
+                await service.SignOutAsync(http);
+                return TypedResults.NoContent();
+            })
+            .WithName("deleteAccount").RequireAuthorization().RequireRateLimiting(RateLimits.SignIn);
 
         account.MapPatch("/me", async Task<Results<NoContent, ProblemHttpResult>> (MeUpdate body, AccountService service, CgwDb db, HttpContext http) =>
             {

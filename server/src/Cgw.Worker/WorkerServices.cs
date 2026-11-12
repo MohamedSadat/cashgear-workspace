@@ -29,6 +29,13 @@ public static class WorkerServices
         services.AddSingleton<IAssetScanner, NoScanner>();
         services.AddSingleton<IJob, AssetCheckJob>();
         services.AddSingleton<IJob, AssetCleanupJob>();
+        services.AddSingleton<IJob, SnapshotJob>();
+        services.AddSingleton<IJob, HistoryJob>();
+        services.AddSingleton<IJob, HardRestoreJob>();
+        services.AddSingleton<IJob, ExportJob>();
+        services.AddSingleton<IJob, PagePurgeJob>();
+        services.AddSingleton<IJob, WorkspacePurgeJob>();
+        services.AddSingleton<IJob, ReconcileJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

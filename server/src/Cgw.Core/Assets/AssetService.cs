@@ -107,6 +107,12 @@ public sealed class AssetService(CgwDb db, BlobStore blob, Access access, TimePr
         if (asset.Status is AssetStatus.Quarantined or AssetStatus.Deleted) return Failure.NotFound("The file is not available");
         if (asset.Status == AssetStatus.Pending && asset.CreatedBy != member.UserId) return Failure.NotFound("The file is still being checked");
         if (!await CanReadAsync(member, asset, ct)) return Failure.NotFound("No such file");
+        return await SignedUrlAsync(asset, ct);
+    }
+
+    /// <summary>The signed read URL, once the caller's right to it is settled (a member's, or a share link's).</summary>
+    public async Task<AssetUrlDto> SignedUrlAsync(Asset asset, CancellationToken ct = default)
+    {
         var inline = AssetTypes.Images.Contains(asset.ContentType);
         // Images only as images; everything else as a download with a type the browser will not run.
         var type = inline ? asset.ContentType : "application/octet-stream";

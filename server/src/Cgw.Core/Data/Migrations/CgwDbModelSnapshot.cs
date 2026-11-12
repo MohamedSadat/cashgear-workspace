@@ -365,6 +365,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<byte[]>("ParentPageId")
                         .HasColumnType("binary(16)");
 
+                    b.Property<DateTimeOffset?>("PurgedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
                     b.Property<bool>("Restricted")
                         .HasColumnType("bit");
 
@@ -409,6 +412,9 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("binary(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeletedAt")
+                        .HasFilter("[DeletedAt] IS NOT NULL AND [PurgedAt] IS NULL");
 
                     b.HasIndex("WorkspaceId", "TrashedAt");
 
@@ -572,6 +578,9 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("binary(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasFilter("[Status] = 'pending'");
 
                     b.HasIndex("PageId", "Kind", "UpToSeq");
 

@@ -87,10 +87,14 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
     }
 
     public async Task<List<MemberDto>> MembersAsync(CancellationToken ct = default) =>
-        await db.WorkspaceMembers.AsNoTracking()
-            .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new MemberDto(m.UserId, u.DeletedAt == null ? u.DisplayName : "Deleted user", u.DeletedAt == null ? u.Email! : "", m.Role))
-            .OrderBy(m => m.DisplayName)
-            .ToListAsync(ct);
+        // Ordered after reading: EF cannot order by a member of a projected record.
+        (await db.WorkspaceMembers.AsNoTracking()
+            .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new { m.UserId, m.Role, u.DisplayName, u.Email, u.DeletedAt })
+            .ToListAsync(ct))
+        .Select(x => new MemberDto(x.UserId, x.DeletedAt == null ? x.DisplayName : "Deleted user", x.DeletedAt == null ? x.Email ?? "" : "", x.Role))
+        .OrderBy(m => m.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+        .ThenBy(m => m.UserId)
+        .ToList();
 
     /// <summary>Adds someone who already has an account, at once (an admin's action).</summary>
     public async Task<Result<MemberDto>> AddMemberAsync(Member admin, Actor actor, string email, string role, CancellationToken ct = default)

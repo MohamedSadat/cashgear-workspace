@@ -103,7 +103,14 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
         });
     }
 
-    public async Task<PullResponse> PullAsync(Member member, Page page, long after, CancellationToken ct = default)
+    public Task<PullResponse> PullAsync(Member member, Page page, long after, CancellationToken ct = default) =>
+        PullAsync(member.UserId, page, after, ct);
+
+    /// <summary>
+    /// A pull for a reader: a member (whose own refused updates are listed) or a share link's
+    /// anonymous reader (<paramref name="userId"/> null, so nothing is listed as refused).
+    /// </summary>
+    public async Task<PullResponse> PullAsync(Guid? userId, Page page, long after, CancellationToken ct = default)
     {
         after = Math.Max(0, after);
         var snapshot = await db.PageDocSnapshots.AsNoTracking()
@@ -122,9 +129,11 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
             .Select(u => new DocUpdateOut(u.Seq, u.UpdateId, u.Data)).ToListAsync(ct);
         var more = rows.Count > MaxPull;
         if (more) rows.RemoveAt(rows.Count - 1);
-        var rejected = await db.PageDocUpdates.AsNoTracking()
-            .Where(u => u.PageId == page.Id && u.Seq > after && u.Status == UpdateStatus.Rejected && u.UserId == member.UserId)
-            .Select(u => u.UpdateId).ToListAsync(ct);
+        List<Guid> rejected = userId is not { } pusher
+            ? []
+            : await db.PageDocUpdates.AsNoTracking()
+                .Where(u => u.PageId == page.Id && u.Seq > after && u.Status == UpdateStatus.Rejected && u.UserId == pusher)
+                .Select(u => u.UpdateId).ToListAsync(ct);
         var cursor = more ? rows[^1].Seq : Math.Max(page.DocHeadSeq, reference?.UpToSeq ?? 0);
         return new PullResponse(page.DocEpoch, page.DocSchemaVersion, page.DocHeadSeq, cursor, more, reference, rows, rejected);
     }

@@ -143,6 +143,8 @@ public sealed class Page : ITenantOwned
     public Guid? TrashRootId { get; set; }
     /// <summary>Deleted for good: the row stays as a tombstone so a push gets 410.</summary>
     public DateTimeOffset? DeletedAt { get; set; }
+    /// <summary>When the worker removed a deleted page's document, history, links and grants.</summary>
+    public DateTimeOffset? PurgedAt { get; set; }
 }
 
 /// <summary>The closure table, depth 0 included (a page is its own ancestor).</summary>

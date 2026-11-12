@@ -27,7 +27,7 @@ public static class ApiServices
     /// <summary>The browser origins of the web app and the desktop webview (Web__Origins).</summary>
     public static string[] Origins(IConfiguration configuration) =>
         configuration.GetSection("Web:Origins").Get<string[]>()
-        ?? ["http://localhost:5273", "http://localhost:4273", "http://tauri.localhost", "tauri://localhost"];
+        ?? ["http://127.0.0.1:5273", "http://127.0.0.1:4273", "http://localhost:5273", "http://localhost:4273", "http://tauri.localhost", "tauri://localhost"];
 
     public static IServiceCollection AddCgwApi(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -35,7 +35,7 @@ public static class ApiServices
         services.AddCors(o => o.AddPolicy(CorsPolicy, p => p
             .WithOrigins(origins)
             .AllowCredentials()
-            .WithHeaders("Content-Type", "Authorization", CsrfHeader, Correlation.Header, "If-Match")
+            .WithHeaders("Content-Type", "Authorization", CsrfHeader, Correlation.Header, "If-Match", Cgw.Core.Sharing.SharedReader.Header)
             .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After")
             .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
             .SetPreflightMaxAge(TimeSpan.FromHours(1))));
@@ -164,6 +164,7 @@ public static class ApiServices
         services.AddScoped<DeviceGate>();
         services.AddScoped<Devices>();
         services.AddScoped<AccountService>();
+        services.AddScoped<AccountDeletion>();
         services.AddHostedService<StartupTasks>();
         services.AddCgwModules(configuration);
         return services;
@@ -271,6 +272,9 @@ internal sealed class StartupTasks(IServiceProvider services, IConfiguration con
             logger.LogWarning("Applying migrations at start (development only)");
             await Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.MigrateAsync(db.Database, ct);
         }
+        // Q7: search uses full-text where the server has it, LIKE otherwise; asked once, here.
+        var fullText = await scope.ServiceProvider.GetRequiredService<Cgw.Core.Search.FullText>().AvailableAsync(db, ct);
+        logger.LogInformation("Search uses {Mode}", fullText ? "full-text" : "LIKE");
         var blob = scope.ServiceProvider.GetRequiredService<BlobStore>();
         await blob.EnsureContainerAsync(ct);
         if (!environment.IsProduction()) await blob.AllowOriginsAsync(ApiServices.Origins(configuration), ct);

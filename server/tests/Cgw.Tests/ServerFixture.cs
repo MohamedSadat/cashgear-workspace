@@ -166,13 +166,26 @@ public sealed class ServerFixture : IAsyncLifetime
             {
                 var found = Directory.GetFiles(MailDir, "*.eml")
                     .OrderByDescending(f => f)
-                    .Select(File.ReadAllText)
+                    .Select(Read)
                     .FirstOrDefault(m => m.Contains(address, StringComparison.OrdinalIgnoreCase) && (containing is null || m.Contains(containing)));
                 if (found is not null) return found;
             }
             await Task.Delay(100);
         }
         throw new InvalidOperationException($"No mail to {address}.");
+    }
+
+    /// <summary>A mail file, or nothing while the mailer is still writing it (tests run in parallel).</summary>
+    private static string Read(string file)
+    {
+        try
+        {
+            return File.ReadAllText(file);
+        }
+        catch (IOException)
+        {
+            return "";
+        }
     }
 
     public static string Link(string mail, string path)

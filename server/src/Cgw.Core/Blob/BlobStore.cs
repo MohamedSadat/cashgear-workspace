@@ -79,6 +79,13 @@ public sealed class BlobStore
             new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = contentType } },
             ct);
 
+    /// <summary>A large blob from a stream (an export's zip), without holding it in memory.</summary>
+    public async Task PutAsync(string key, Stream content, string contentType, CancellationToken ct = default) =>
+        await Blob(key).UploadAsync(
+            content,
+            new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = contentType } },
+            ct);
+
     public async Task<byte[]?> GetAsync(string key, CancellationToken ct = default)
     {
         try
@@ -230,4 +237,9 @@ public sealed class BlobStore
         $"workspaces/{workspaceId}/pages/{pageId}/snapshots/{snapshotId}";
 
     public static string ExportKey(Guid workspaceId, Guid exportId) => $"workspaces/{workspaceId}/exports/{exportId}.zip";
+
+    /// <summary>Everything a page owns in storage: its snapshots.</summary>
+    public static string PagePrefix(Guid workspaceId, Guid pageId) => $"workspaces/{workspaceId}/pages/{pageId}/";
+
+    public static string WorkspacePrefix(Guid workspaceId) => $"workspaces/{workspaceId}/";
 }

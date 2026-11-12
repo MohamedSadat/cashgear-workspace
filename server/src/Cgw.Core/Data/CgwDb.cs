@@ -123,6 +123,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.WorkspaceId, x.SectionId, x.ParentPageId, x.OrderKey, x.Id });
             e.HasIndex(x => new { x.WorkspaceId, x.TrashedAt });
+            // The purge job's queue: pages deleted for good and not yet purged.
+            e.HasIndex(x => x.DeletedAt).HasFilter("[DeletedAt] IS NOT NULL AND [PurgedAt] IS NULL");
             e.Property(x => x.OrderKey).HasMaxLength(200).UseCollation(BinaryCollation);
             e.Property(x => x.Kind).HasMaxLength(20);
             e.Property(x => x.Title).HasMaxLength(1000);
@@ -157,6 +159,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         {
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.PageId, x.Kind, x.UpToSeq });
+            // The history job's queue: versions asked for and not yet written.
+            e.HasIndex(x => new { x.Status, x.CreatedAt }).HasFilter("[Status] = 'pending'");
             e.Property(x => x.BlobKey).HasMaxLength(300);
             e.Property(x => x.Kind).HasMaxLength(20);
             e.Property(x => x.Name).HasMaxLength(200);

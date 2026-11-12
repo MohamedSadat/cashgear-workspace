@@ -1,7 +1,11 @@
 using Cgw.Core;
 using Cgw.Core.Assets;
 using Cgw.Core.Documents;
+using Cgw.Core.Exports;
+using Cgw.Core.History;
 using Cgw.Core.Previews;
+using Cgw.Core.Search;
+using Cgw.Core.Sharing;
 using Cgw.Core.Sync;
 using Cgw.Core.Workspaces;
 
@@ -21,6 +25,12 @@ public static class Modules
         services.AddScoped<AssetService>();
         services.AddScoped<LinkPreviews>();
         services.AddSingleton<SafeFetcher>();
+        services.AddScoped<SharingService>();
+        services.AddScoped<SharedReader>();
+        services.AddSingleton<FullText>();
+        services.AddScoped<SearchService>();
+        services.AddScoped<VersionService>();
+        services.AddScoped<ExportService>();
         return services;
     }
 
@@ -29,6 +39,8 @@ public static class Modules
         api.MapWorkspaces();
         api.MapDocs();
         api.MapAssets();
+        api.MapSharing();
+        api.MapHistory();
         return api;
     }
 }

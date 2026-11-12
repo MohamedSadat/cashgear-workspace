@@ -231,7 +231,10 @@ public sealed class CompactJob(DocStates states, BlobStore blob, ICompactionFaul
         List<PageDocSnapshot> older;
         await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
         {
-            if (!await AppLock.TryAsync(db, $"compact:{pageId}", ct))
+            // A hard restore holds the same lock; one that committed since the state was read moved
+            // the epoch, and this snapshot of the old one must not replace the restored state.
+            if (!await AppLock.TryAsync(db, $"compact:{pageId}", ct)
+                || await db.Pages.Where(p => p.Id == pageId).Select(p => p.DocEpoch).SingleAsync(ct) != page.DocEpoch)
             {
                 await tx.RollbackAsync(ct);
                 await blob.DeleteAsync(snapshot.BlobKey, ct);
@@ -241,7 +244,7 @@ public sealed class CompactJob(DocStates states, BlobStore blob, ICompactionFaul
             await db.SaveChangesAsync(ct);
             var upTo = snapshot.UpToSeq;
             await db.PageDocUpdates.Where(u => u.PageId == pageId && u.Seq <= upTo && u.Status != UpdateStatus.Pending).ExecuteDeleteAsync(ct);
-            older = await db.PageDocSnapshots.Where(s => s.PageId == pageId && s.Kind == SnapshotKinds.Compaction && s.Id != snapshot.Id).ToListAsync(ct);
+            older = await db.PageDocSnapshots.Where(s => s.PageId == pageId && s.Kind == SnapshotKinds.Compaction && s.Id != snapshot.Id && s.UpToSeq <= upTo).ToListAsync(ct);
             db.PageDocSnapshots.RemoveRange(older);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
