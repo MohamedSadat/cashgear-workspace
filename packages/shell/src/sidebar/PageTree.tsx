@@ -13,6 +13,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCloud, useOfflineMarks } from '../cloud/CloudUi';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
 import { RowMenu } from './RowMenu';
@@ -58,6 +59,8 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
   const { t } = useTranslation();
   const workspaceId = session.workspaceId!;
   const [expanded, updateExpanded] = useExpanded(session, workspaceId);
+  // Offline: the pages this device holds; the others are marked (null when online).
+  const marks = useOfflineMarks(useCloud());
   const revision = session.mirror.getRevision();
   const rows = useMemo(
     () => treeRows(session.mirror, workspaceId, expanded),
@@ -266,11 +269,13 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
             );
           const { page } = row;
           const active = page.id === activePageId;
+          const unavailable = !!marks && !marks.has(page.id);
           return (
             <div
               key={row.key}
               data-key={row.key}
-              className={`cgw-tree-row${active ? ' is-active' : ''}${dropClass}`}
+              className={`cgw-tree-row${active ? ' is-active' : ''}${unavailable ? ' is-unavailable' : ''}${dropClass}`}
+              title={unavailable ? t('offline.notAvailable') : undefined}
               style={{ ...style, paddingInlineStart: 8 + row.depth * 16 }}
               role="treeitem"
               aria-level={row.depth + 2}
@@ -333,6 +338,9 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
                 <span className="cgw-tree-title" dir="auto">
                   {page.title || t('page.untitled')}
                 </span>
+              )}
+              {unavailable && (
+                <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>
               )}
               <span className="cgw-tree-actions">
                 <button

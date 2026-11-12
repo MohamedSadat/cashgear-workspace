@@ -1,7 +1,7 @@
 // The open workspace: the local store, the metadata mirror drawn by the sidebar, and the page
 // documents currently open. Every change to the tree is an operation, planned against the mirror,
 // made durable by the store, then shown (SYNC_DESIGN.md, Channel 2).
-import type { DocJSON, DocumentOptions, PageDocument } from '@cgw/doc';
+import type { DocEvent, DocJSON, DocumentOptions, PageDocument } from '@cgw/doc';
 import {
   Mirror,
   OpError,
@@ -42,7 +42,45 @@ export interface CloudHooks {
   changed(): void;
   /** A workspace was just made here. */
   created?(workspaceId: Id): void;
+  /**
+   * The page is being opened and this device holds nothing of its document: it is pulled now.
+   * True when it was (open the page again), false when its workspace does not sync; throws
+   * NotOnDeviceError when the server cannot be reached or nobody is signed in.
+   */
+  fetchMissing?(pageId: Id): Promise<boolean>;
+  /** What an open document reports (a move conflict, updates still pending after the retry). */
+  docEvent?(event: DocEvent): void;
 }
+
+/** A page whose document this device does not hold, opened while it cannot be fetched. */
+export class NotOnDeviceError extends Error {
+  constructor(
+    readonly pageId: Id,
+    /** `offline`: the server cannot be reached; `signedOut`: nobody is signed in to ask it. */
+    readonly reason: 'offline' | 'signedOut',
+  ) {
+    super('This page is not on this device');
+    this.name = 'NotOnDeviceError';
+  }
+}
+
+/**
+ * A page saved by a newer build whose document this device does not hold: it is shown read-only
+ * from the server's derived JSON, never pulled into an editor that could not keep it (D7).
+ */
+export class NewerDocumentError extends Error {
+  constructor(readonly pageId: Id) {
+    super('This page needs a newer version of the app');
+    this.name = 'NewerDocumentError';
+  }
+}
+
+/** Whether the account may change a page's document (a local page is the user's own). */
+const mayEdit = (page: PageRecord | undefined) =>
+  !page?.access || page.access === 'full' || page.access === 'edit';
+
+/** Nothing of the page's document is on this device: no snapshot, no update. */
+const holdsNothing = (doc: PageDocument) => doc.doc.store.clients.size === 0;
 
 export class WorkspaceSession {
   readonly mirror: Mirror;
@@ -51,6 +89,8 @@ export class WorkspaceSession {
   private readonly fresh = new Set<Id>();
   private readonly order: Id[] = [];
   private queue: Promise<unknown> = Promise.resolve();
+  /** Edits waiting on a delay of their own (a title being typed), written by `flushAll`. */
+  private readonly flushers = new Set<() => Promise<void> | void>();
   private workspace: Id | null;
   private readonly listeners = new Set<() => void>();
   private readonly resetListeners = new Set<(pageId: Id) => void>();
@@ -439,7 +479,10 @@ export class WorkspaceSession {
     let content = json;
     if (!content) {
       const open = this.docs.get(pageId);
-      const doc = open ? await open : await PageDocument.open(pageId, this.store);
+      // Opened to read only: no migration or meta stamp is written.
+      const doc = open
+        ? await open
+        : await PageDocument.open(pageId, this.store, { canEdit: false });
       content = fragmentToJSON(doc.fragment);
       if (!open) await doc.close();
     }
@@ -460,7 +503,7 @@ export class WorkspaceSession {
     const open = this.docs.get(pageId);
     if (open) await (await open).flush();
     const { PageDocument, fragmentToJSON } = await import('@cgw/doc');
-    const doc = await PageDocument.open(pageId, this.store);
+    const doc = await PageDocument.open(pageId, this.store, { canEdit: false });
     const json = fragmentToJSON(doc.fragment);
     await doc.close();
     return json;
@@ -511,6 +554,48 @@ export class WorkspaceSession {
     return records[0];
   }
 
+  /**
+   * A recovered page (cloud/recovery.ts): a page with a given id, in a given workspace and
+   * section, which need not be the open one, and its first document.
+   */
+  async createRecoveredPage(
+    page: { id: Id; workspaceId: Id; sectionId: Id; title: string; orderKey: string },
+    content: DocJSON | undefined,
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const record: PageRecord = {
+      id: page.id,
+      workspaceId: page.workspaceId,
+      sectionId: page.sectionId,
+      parentPageId: null,
+      orderKey: page.orderKey,
+      kind: 'page',
+      title: page.title,
+      icon: null,
+      coverAssetId: null,
+      isTemplate: false,
+      templateOfPageId: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      trashedAt: null,
+      trashRootId: null,
+    };
+    await this.apply([newOp('page.create', record.workspaceId, record.id, record)]);
+    await this.writeFirstDocument(record.id, record.workspaceId, content);
+  }
+
+  /** A page's first document update: the given content, or one empty paragraph. */
+  async writeFirstDocument(pageId: Id, workspaceId: Id, content: DocJSON | undefined) {
+    const { newDocumentUpdate } = await import('@cgw/doc');
+    const clientId = this.cloud ? await this.cloud.clientIdFor(workspaceId) : undefined;
+    await this.store.appendDocUpdates(pageId, [
+      { updateId: uuidv7(), data: newDocumentUpdate(pageId, content, clientId) },
+    ]);
+    this.cloud?.changed();
+    void this.indexPage(pageId, content).catch(() => undefined);
+  }
+
   // Documents ----------------------------------------------------------------------------------
 
   /** Opens (or returns the open) document of a page. A few stay open; older ones are closed. */
@@ -519,14 +604,36 @@ export class WorkspaceSession {
     if (!doc) {
       // The document layer (Yjs) loads with the editor, not with the frame.
       doc = Promise.all([import('@cgw/doc'), this.clientIdFor(pageId)]).then(
-        async ([{ PageDocument }, clientId]) => {
-          const opened = await PageDocument.open(pageId, this.store, {
+        async ([{ PageDocument, SCHEMA_VERSION }, clientId]) => {
+          const record = this.mirror.pages.get(pageId);
+          const options: DocumentOptions = {
             ...this.docOptions,
             clientId,
-          });
-          // Each save is pushed soon after; the server's newer state is pulled now.
+            // A reader's open writes nothing: no migration, no meta stamp (they would be refused).
+            canEdit: mayEdit(record),
+            onEvent: (event) => this.cloud?.docEvent?.(event),
+          };
+          let opened = await PageDocument.open(pageId, this.store, options);
+          if (holdsNothing(opened)) {
+            // Nothing of it on this device (a page made elsewhere, never opened here): the
+            // server's copy first, so the page opens with its content, or says why it cannot.
+            try {
+              if ((record?.docSchemaVersion ?? 0) > SCHEMA_VERSION)
+                throw new NewerDocumentError(pageId);
+              if (await this.cloud?.fetchMissing?.(pageId)) {
+                await opened.close();
+                opened = await PageDocument.open(pageId, this.store, options);
+              }
+            } catch (error) {
+              await opened.close();
+              throw error;
+            }
+          } else {
+            // The server's newer state is pulled now.
+            void this.cloud?.pullPage(pageId).catch(() => undefined);
+          }
+          // Each save is pushed soon after.
           opened.onSaved(() => this.cloud?.changed());
-          void this.cloud?.pullPage(pageId).catch(() => undefined);
           return opened;
         },
       );
@@ -540,11 +647,34 @@ export class WorkspaceSession {
     return doc;
   }
 
-  /** Writes every open document's pending batch: before hiding, closing or quitting. */
+  /**
+   * Something that holds an edit back for a moment (the title field's pause) and writes it when
+   * asked: `flushAll` asks before the page hides, the window closes or a workspace uploads.
+   */
+  onFlush(flush: () => Promise<void> | void): () => void {
+    this.flushers.add(flush);
+    return () => void this.flushers.delete(flush);
+  }
+
+  /**
+   * Writes everything still waiting: titles being typed, then every open document's pending
+   * batch; resolves once the store has them. Before hiding, closing, quitting or uploading.
+   */
   async flushAll(): Promise<void> {
+    await Promise.all(
+      [...this.flushers].map(async (flush) => {
+        try {
+          await flush();
+        } catch (error) {
+          console.warn('A pending edit could not be written:', error);
+        }
+      }),
+    );
     await Promise.all(
       [...this.docs.values()].map((doc) => doc.then((d) => d.flush()).catch(() => undefined)),
     );
+    // Operations planned meanwhile (the titles above) are in the store when this resolves.
+    await this.queue;
   }
 
   private forget(pageId: Id) {

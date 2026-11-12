@@ -348,3 +348,46 @@ body {
   font-family: var(--cg-font-mono, monospace);
   overflow-wrap: anywhere;
 }
+
+/* Phase 3: offline and recovered pages */
+.cgw-tree-row.is-unavailable .cgw-tree-title,
+.cgw-side-link.is-unavailable .cgw-tree-title {
+  color: var(--cg-text-secondary);
+  font-style: italic;
+}
+
+.cgw-notice-action {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.cgw-notice {
+  max-inline-size: min(720px, calc(100vw - 32px));
+  box-sizing: border-box;
+}
+
+.cgw-recovered-item {
+  flex-wrap: wrap;
+}
+
+.cgw-recovered-text {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cgw-facts {
+  display: grid;
+  grid-template-columns: max-content auto;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.cgw-facts dd {
+  margin: 0;
+}
+
+.cgw-refusal {
+  margin-block-start: 12vh;
+}

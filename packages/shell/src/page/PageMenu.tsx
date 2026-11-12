@@ -1,12 +1,28 @@
-// The page's menu in the top bar: favourite, template, history, export, trash.
-import type { PageRecord } from '@cgw/workspace';
+// The page's menu in the top bar: favourite, share, history, export, template, available
+// offline, trash.
+import type { Id, PageRecord } from '@cgw/workspace';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { offlineMenuItems, useCloud } from '../cloud/CloudUi';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
 import { PointMenu } from '../sidebar/RowMenu';
 
 export const pageEvents = new EventTarget();
+
+/** Pages whose history was asked for (by a notice) before the page was on screen. */
+const historyWanted = new Set<Id>();
+
+/** Opens a page's history: now if the page is on screen, else as soon as it is. */
+export function openHistory(pageId: Id) {
+  historyWanted.add(pageId);
+  pageEvents.dispatchEvent(new CustomEvent('history', { detail: pageId }));
+}
+
+/** True once for a page whose history was asked for: the page view opens it. */
+export function takeHistoryRequest(pageId: Id): boolean {
+  return historyWanted.delete(pageId);
+}
 
 export function PageMenu({
   session,
@@ -21,6 +37,7 @@ export function PageMenu({
   canShare?: boolean;
 }) {
   const { t } = useTranslation();
+  const cloud = useCloud();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const favourite =
     !!session.workspaceId && session.mirror.isFavourite(session.workspaceId, page.id);
@@ -80,6 +97,7 @@ export function PageMenu({
               onSelect: () =>
                 void session.updatePage(page.id, { isTemplate: !page.isTemplate }).catch(onError),
             },
+            ...offlineMenuItems(cloud, session, page.id, t),
             {
               label: t('workspace.moveToTrash'),
               danger: true,

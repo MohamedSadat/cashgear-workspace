@@ -1,8 +1,9 @@
-// A page's menu in the tree: rename, add inside, favourite, template, trash. Arrow keys move
-// through it; Escape closes it.
+// A page's menu in the tree: rename, add inside, favourite, template, available offline, trash.
+// Arrow keys move through it; Escape closes it.
 import type { Id } from '@cgw/workspace';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { offlineMenuItems, useCloud } from '../cloud/CloudUi';
 import type { WorkspaceSession } from '../session';
 
 export interface MenuItem {
@@ -104,6 +105,7 @@ export function RowMenu({
   onError: (error: unknown) => void;
 }) {
   const { t } = useTranslation();
+  const cloud = useCloud();
   const page = session.mirror.pages.get(pageId);
   if (!page || !session.workspaceId) return null;
   const favourite = session.mirror.isFavourite(session.workspaceId, pageId);
@@ -125,6 +127,7 @@ export function RowMenu({
           onSelect: () =>
             void session.updatePage(pageId, { isTemplate: !page.isTemplate }).catch(onError),
         },
+        ...offlineMenuItems(cloud, session, pageId, t),
         {
           label: t('workspace.moveToTrash'),
           danger: true,

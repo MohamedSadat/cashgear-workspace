@@ -6,6 +6,8 @@ export const en = {
     loading: 'Loading…',
     storeFailed: 'The local store could not be opened.',
     version: 'Version {{version}}',
+    tooOldTitle: 'This app is older than the data on this device.',
+    tooOldBody: 'Update the app; nothing on this device was changed.',
   },
   language: {
     label: 'Language',
@@ -67,6 +69,9 @@ export const en = {
     title: 'Page title',
     content: 'Page content',
     openFailed: 'This page could not be opened.',
+    notOnDevice: 'This page isn’t on this device yet. It opens when you’re online.',
+    notOnDeviceSignedOut: 'This page isn’t on this device yet. It opens once you sign in.',
+    tryAgain: 'Try again',
     newerVersion:
       'This page was saved by a newer version of Cash Gear Workspace. It is shown read-only; update the app to edit it.',
     saved: 'Saved',
@@ -329,21 +334,100 @@ export const en = {
     offlineWaiting: 'Offline, {{count}} changes waiting',
     signedOut: 'Sign in to sync {{count}} changes',
     signedOutNone: 'Signed out',
-    error: 'Sync paused, trying again',
-    parentMissing:
-      'The page’s parent was removed meanwhile, so the page went to the top of its section.',
-    versionConflict: 'The page changed on another device meanwhile; this shows the latest.',
-    cycle: 'A page cannot go inside one of its own subpages.',
-    accessDenied: 'You cannot change this page any more; your unsent changes are kept aside.',
-    notFound: 'This is no longer available to you.',
-    pageGone: 'This page was deleted for good; your unsent changes are kept aside.',
+    connecting: 'Connecting…',
+    error: 'Retrying sync shortly',
+    errorWaiting: '{{count}} changes waiting, retrying sync shortly',
+  },
+  notices: {
+    openRecovered: 'Open the recovered page',
+    openRecoveredList: 'See recovered pages',
+    openTrash: 'Open the trash',
+    openHistory: 'Open the page history',
+    openPage: 'Open the page',
+    showBlock: 'Show the block',
     epochMismatch:
-      'This page was restored to an earlier version; your unsent changes are kept aside.',
-    clientTooOld: 'This page needs a newer version of the app to edit it.',
-    tooLarge: 'A change was too large to send; it is kept aside on this device.',
-    refused: 'The server refused a change to this page; it is kept aside on this device.',
+      '“{{title}}” was restored to an earlier version on the server. What you had not sent yet is in a recovered page in your private section.',
+    restored:
+      '“{{title}}” was restored to an earlier version on the server, which this device shows now. Nothing waiting to be sent was lost.',
+    pageGone:
+      '“{{title}}” was deleted for good. What you had not sent yet is in a recovered page in your private section.',
+    accessDenied:
+      'You can no longer edit “{{title}}”. What you had not sent yet is in a recovered page in your private section.',
+    pageRemoved:
+      '“{{title}}” was deleted, or you lost access to it. What you had not sent yet is in a recovered page in your private section.',
+    pageTrashed:
+      '“{{title}}” was moved to the trash on another device. Your edits are kept in it; restore it from the trash to go on.',
+    parentMissing:
+      'The parent of “{{title}}” was removed meanwhile, so the page went to the top of its section.',
+    cycle: 'A page cannot go inside one of its own subpages, so “{{title}}” stayed where it was.',
+    versionConflict:
+      '“{{title}}” changed on another device meanwhile; this shows the latest. Make the change again if it is still needed.',
+    clientTooOld:
+      '“{{title}}” needs a newer version of the app to edit it. Your changes stay on this device and are sent once you update.',
+    refused:
+      'The server refused a change to “{{title}}”. It is kept on this device, and the page history has it.',
+    clientTaken:
+      'A change to “{{title}}” was written under an id the server gives to someone else. It is kept on this device, and the page history has it.',
+    repaired:
+      '“{{title}}” was out of step with the server and has been repaired. Nothing was lost.',
+    repairFailed:
+      '“{{title}}” is still out of step with the server. Your copy is kept on this device, and the page history has it.',
+    tooLarge:
+      'A change to “{{title}}” was too large to send. It is kept on this device, and the page history has it.',
     typeNotAllowed: 'A file of a type the server does not take stays on this device only.',
-    workspaceLost: 'You no longer have access to a workspace; it was removed from this device.',
+    workspaceLost:
+      'You no longer have access to a workspace, so it was removed from this device. Anything not sent yet is in recovered pages.',
+    moveEditLost:
+      'Another device moved a block of “{{title}}” you were editing, and your edit in it was lost. The page history has the block as you had it.',
+    moveTwice:
+      'You and another device moved the same block of “{{title}}” at once, so it now appears twice. Delete the copy you do not need.',
+    notFound: 'This is no longer available to you.',
+  },
+  offline: {
+    title: 'Offline',
+    intro:
+      'Pages you open stay on this device. Make a page available offline to keep it, and the pages inside it if you like, ready to open without a network.',
+    makeAvailable: 'Make available offline',
+    makeAvailableSubtree: 'Make available offline, with the pages inside',
+    addSubtree: 'Also keep the pages inside offline',
+    remove: 'Stop keeping offline',
+    removeLabel: 'Stop keeping “{{title}}” offline',
+    inherited: 'Kept offline with “{{title}}”',
+    pinnedSubtree: 'With the pages inside',
+    pinnedPage: 'This page only',
+    none: 'No pages are kept offline yet. Choose “Make available offline” in a page’s menu.',
+    progress:
+      '{{held}} of {{pinned}} pages kept offline are on this device; {{toFetch}} still to fetch.',
+    progressDone: 'All {{pinned}} pages kept offline are on this device.',
+    available: 'Pages of this workspace on this device: {{count}}.',
+    localOnly:
+      'This workspace is on this device only, so every page in it opens without a network.',
+    storage: 'Storage on this device',
+    storagePages: 'Pages held',
+    storageDocs: 'Page content',
+    storageFiles: 'Files',
+    storageHistory: 'Page history',
+    storageSetAside: 'Set aside',
+    browserUsage: 'This browser uses {{usage}} of the {{quota}} it allows this app.',
+    notAvailable: 'Not available offline',
+  },
+  recovered: {
+    title: 'Recovered',
+    intro:
+      'When the server could not take changes made on this device, they were kept and made into pages in your private section.',
+    pageTitle: 'Recovered: {{title}}',
+    empty: 'Nothing has been recovered.',
+    reasonRestored: 'The page was restored to an earlier version on the server.',
+    reasonDeleted: 'The page was deleted for good.',
+    reasonAccess: 'You could no longer edit the page.',
+    reasonRemoved: 'The page was deleted, or you lost access to it.',
+    reasonOther: 'The server did not take the changes.',
+    from: 'From “{{title}}”',
+    at: 'Set aside {{when}}',
+    open: 'Open the recovered page',
+    waiting: 'Waiting: it becomes a page once this workspace has a private section on this device.',
+    dismiss: 'Dismiss',
+    dismissLabel: 'Dismiss “{{title}}” from this list',
   },
   share: {
     open: 'Share…',

@@ -1,13 +1,15 @@
 // Routing by page id, in the URL's hash so it works from a static host and from Tauri's own
-// protocol alike: #/p/{pageId}, #/p/{pageId}/{blockId}, #/trash, #/settings, and from Phase 2
-// #/invite/{token} (a workspace invitation) and #/s/{token} (a page shared by link). Tokens are
-// in the hash, so they never reach a server's logs.
+// protocol alike: #/p/{pageId}, #/p/{pageId}/{blockId}, #/trash, #/settings, from Phase 2
+// #/invite/{token} (a workspace invitation) and #/s/{token} (a page shared by link), and from
+// Phase 3 #/recovered (pages made of changes the server would not take). Tokens are in the hash,
+// so they never reach a server's logs.
 import { useSyncExternalStore } from 'react';
 
 export type Route =
   | { kind: 'home' }
   | { kind: 'page'; pageId: string; blockId?: string }
   | { kind: 'trash' }
+  | { kind: 'recovered' }
   | { kind: 'settings' }
   | { kind: 'invite'; token: string }
   | { kind: 'shared'; token: string; pageId?: string };
@@ -30,6 +32,7 @@ export function parseRoute(hash: string): Route {
       ? { kind: 'shared', token: id, pageId: blockId }
       : { kind: 'shared', token: id };
   if (kind === 'trash') return { kind: 'trash' };
+  if (kind === 'recovered') return { kind: 'recovered' };
   if (kind === 'settings') return { kind: 'settings' };
   return { kind: 'home' };
 }
@@ -40,6 +43,8 @@ export function routeHash(route: Route): string {
       return `#/p/${route.pageId}${route.blockId ? `/${route.blockId}` : ''}`;
     case 'trash':
       return '#/trash';
+    case 'recovered':
+      return '#/recovered';
     case 'settings':
       return '#/settings';
     case 'invite':

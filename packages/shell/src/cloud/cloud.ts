@@ -2,8 +2,15 @@
 // platform's own means (the API's cookie in a browser, a bearer token from the native side on the
 // desktop), and the sync engine that keeps this device's store and the server in step. The
 // workspace layer does the syncing; this wires it to the session and the interface.
-import { createApi, getSigned, type ApiClient } from '@cgw/api';
+//
+// Phase 3: signed in while offline (the account last signed in here, kept by the engine, when the
+// server cannot be reached at start), what is kept offline (offline.ts), recovered pages
+// (recovery.ts), pages this device does not hold fetched when opened, and what an open document
+// reports (a move conflict, updates still pending).
+import type { DocEvent, DocJSON } from '@cgw/doc';
+import { NetworkError, createApi, getSigned, type ApiClient } from '@cgw/api';
 import {
+  OfflineError,
   SyncEngine,
   SyncHttpError,
   httpSyncApi,
@@ -15,9 +22,33 @@ import {
   type SyncStatus,
 } from '@cgw/workspace';
 import type { CloudPlatform } from '../platform';
-import type { WorkspaceSession } from '../session';
+import { NotOnDeviceError, type WorkspaceSession } from '../session';
+import { OfflineState } from './offline';
+import { Recovery } from './recovery';
 
-export type CloudNotice = { code: string; pageId?: Id; workspaceId?: Id };
+export type CloudNotice = {
+  code: string;
+  pageId?: Id;
+  workspaceId?: Id;
+  /** `doc.moveConflict`: the block, and `editLost` or `movedTwice`. */
+  blockId?: string;
+  reason?: string;
+};
+
+export interface CloudOptions {
+  /** A recovered page's title from the original's, in the interface language. */
+  recoveredTitle?: (title: string) => string;
+}
+
+/** How long the first "who is signed in" may take before the app goes on as offline. */
+const ACCOUNT_CHECK_MS = 5000;
+
+/** The server could not be reached, or could not answer now (the loop retries those). */
+export const unreachable = (error: unknown) =>
+  error instanceof OfflineError ||
+  error instanceof NetworkError ||
+  error instanceof TypeError ||
+  (error instanceof SyncHttpError && (error.status >= 500 || error.status === 429));
 
 /** The answer's data, or a SyncHttpError with the server's code. */
 async function data<T>(
@@ -37,8 +68,17 @@ export class Cloud {
   readonly api: ApiClient;
   readonly sync: SyncApi;
   readonly engine: SyncEngine;
+  readonly offline: OfflineState;
+  readonly recovery: Recovery;
   private account_: Account | null = null;
   private checked = false;
+  /** The server said who is signed in, this session (else the account is the cached one). */
+  private verified = false;
+  private usingCached = false;
+  private refreshing: Promise<Account | null> | null = null;
+  private firstCheckDone!: () => void;
+  /** Resolves once the first check has answered, or the app went on without it. */
+  private readonly firstCheck = new Promise<void>((done) => (this.firstCheckDone = done));
   private readonly listeners = new Set<() => void>();
   private readonly noticeListeners = new Set<(notice: CloudNotice) => void>();
   private offEngine: (() => void) | null = null;
@@ -48,6 +88,7 @@ export class Cloud {
     readonly platform: CloudPlatform,
     private readonly session: WorkspaceSession,
     codec: DocCodec,
+    options: CloudOptions = {},
   ) {
     const auth = platform.auth;
     this.api = createApi({
@@ -58,6 +99,20 @@ export class Cloud {
     this.sync = httpSyncApi(this.api);
     this.engine = new SyncEngine(session.store, this.sync, codec);
     this.offEngine = this.engine.on((event) => this.onEngine(event));
+    // A 401 pauses the engine (the session ended elsewhere): the app is signed out until the
+    // person signs in again; nothing local is touched, and the status counts what waits.
+    this.cleanups.push(
+      this.engine.onStatus((status) => {
+        if (status.state === 'signedOut' && this.account_ && !this.engine.signedIn) {
+          this.account_ = null;
+          this.emit();
+        }
+        // Started offline with the cached account, and the server answers now: who is signed in
+        // is asked once, as at a start online.
+        if (status.state === 'synced' && this.usingCached && !this.verified)
+          void this.refreshAccount();
+      }),
+    );
     session.connect({
       clientIdFor: (workspaceId) => this.engine.clientIdFor(workspaceId),
       pullPage: (pageId) => (this.account_ ? this.engine.pullPage(pageId) : Promise.resolve()),
@@ -69,10 +124,21 @@ export class Cloud {
             console.warn('Upload failed:', error),
           );
       },
+      fetchMissing: (pageId) => this.fetchMissing(pageId),
+      docEvent: (event) => this.onDocEvent(event),
     });
     this.session.remoteAssets = (assetId) => this.fetchAsset(assetId);
     this.session.remotePreview = (url) => this.preview(url);
     this.session.remoteSearch = (q, limit) => this.search(q, limit);
+    this.offline = new OfflineState(this, session);
+    this.recovery = new Recovery(
+      session,
+      options.recoveredTitle ?? ((title) => `Recovered: ${title}`),
+    );
+    this.cleanups.push(() => this.offline.dispose());
+    void this.offline.reload();
+    // Entries set aside in an earlier session become pages now, network or not.
+    void this.recovery.run();
   }
 
   /** Who is signed in, or null; undefined until the first check has answered. */
@@ -123,14 +189,47 @@ export class Cloud {
       case 'members':
         this.emit();
         break;
+      case 'recover':
+        void this.recovery.run();
+        break;
+      case 'offline':
+        this.offline.changed(event.workspaceId);
+        break;
+    }
+  }
+
+  /** What an open page's document reports. */
+  private onDocEvent(event: DocEvent) {
+    const page = this.session.mirror.pages.get(event.pageId);
+    const syncs =
+      !!page && this.session.mirror.workspaces.get(page.workspaceId)?.localOnly === false;
+    switch (event.kind) {
+      case 'stillPending':
+        // Something is missing on this device: its state is checked against the server's soon.
+        if (this.account_ && syncs) this.engine.suspect(event.pageId);
+        break;
+      case 'notice':
+        this.notify({
+          code: event.code,
+          pageId: event.pageId,
+          workspaceId: page?.workspaceId,
+          blockId: event.blockId,
+          reason: event.reason,
+        });
+        break;
+      case 'quarantined':
+        console.warn(`Updates of page ${event.pageId} did not decode and were set aside.`);
+        break;
     }
   }
 
   /** Asks the server who is signed in, then starts (or pauses) the loop. */
   async start(): Promise<void> {
-    await this.refreshAccount();
+    // A network that neither answers nor fails holds only the check, not the loop.
+    await Promise.race([this.refreshAccount(), this.firstCheck]);
     this.engine.start();
-    const kick = () => this.engine.kick(0);
+    // Back online after a start without the server: who is signed in is asked again first.
+    const kick = () => (this.verified ? this.engine.kick(0) : void this.refreshAccount());
     const visible = () => document.visibilityState === 'visible' && kick();
     window.addEventListener('online', kick);
     window.addEventListener('focus', kick);
@@ -142,20 +241,101 @@ export class Cloud {
     });
   }
 
-  async refreshAccount(): Promise<Account | null> {
-    let account: Account | null;
+  /**
+   * Who is signed in, from the server. With no network (or no answer within a few seconds, or a
+   * server that cannot answer now), the app goes on signed in as the account last signed in on
+   * this device, offline: its changes are kept and counted, and they sync when the server answers.
+   * Only the server saying nobody is signed in (or a 401) signs the app out.
+   */
+  refreshAccount(): Promise<Account | null> {
+    this.refreshing ??= this.checkAccount().finally(() => (this.refreshing = null));
+    return this.refreshing;
+  }
+
+  private async checkAccount(): Promise<Account | null> {
+    let answered = false;
+    const fallback = setTimeout(() => {
+      if (!answered) void this.useCached();
+    }, ACCOUNT_CHECK_MS);
     try {
-      account = await this.sync.me();
-    } catch {
-      // Offline or the server is down: signed-out until it answers, nothing local is touched.
-      account = null;
+      let account: Account | null;
+      try {
+        account = await this.sync.me();
+      } catch (error) {
+        if (!(error instanceof SyncHttpError && error.status === 401)) throw error;
+        account = null;
+      }
+      answered = true;
+      this.verified = true;
+      this.usingCached = false;
+      this.account_ = account;
+      this.checked = true;
+      this.api.resetCsrf();
+      this.engine.setAccount(account);
+      this.emit();
+      return account;
+    } catch (error) {
+      answered = true;
+      if (!unreachable(error)) console.warn('The account check failed:', error);
+      return await this.useCached();
+    } finally {
+      clearTimeout(fallback);
+      this.firstCheckDone();
     }
-    this.account_ = account;
+  }
+
+  /** Signed in as the cached account, offline (never `setAccount(null)`: that forgets it). */
+  private async useCached(): Promise<Account | null> {
+    if (this.verified) return this.account_;
+    if (!this.usingCached) {
+      const cached = await this.engine.cachedAccount().catch(() => null);
+      if (this.verified) return this.account_;
+      this.usingCached = true;
+      this.account_ = cached;
+      if (cached) this.engine.setAccount(cached, { offline: true });
+    }
     this.checked = true;
-    this.api.resetCsrf();
-    this.engine.setAccount(account);
+    this.firstCheckDone();
     this.emit();
-    return account;
+    return this.account_;
+  }
+
+  /**
+   * A page this device holds nothing of, being opened: pulled now, while the opener waits. Throws
+   * NotOnDeviceError when it cannot be: offline, or nobody signed in.
+   */
+  private async fetchMissing(pageId: Id): Promise<boolean> {
+    const page = this.session.mirror.pages.get(pageId);
+    const workspace = page && this.session.mirror.workspaces.get(page.workspaceId);
+    if (!page || !workspace || workspace.localOnly) return false;
+    await this.firstCheck;
+    if (!this.account_) throw new NotOnDeviceError(pageId, 'signedOut');
+    const offline = () => this.engine.status.state === 'offline';
+    // Known to be offline: no request the network cannot carry (its return opens the page).
+    if (offline()) throw new NotOnDeviceError(pageId, 'offline');
+    try {
+      await this.engine.pullPage(pageId);
+      if (!(await this.session.store.docCursor(pageId))) {
+        // Before the first pass knows the workspace syncs, the engine pulls the page in a pass.
+        await this.engine.syncNow();
+        if (offline()) throw new NotOnDeviceError(pageId, 'offline');
+      }
+    } catch (error) {
+      if (unreachable(error)) throw new NotOnDeviceError(pageId, 'offline');
+      throw error;
+    }
+    return true;
+  }
+
+  /**
+   * A page's document as the worker derived it (ProseMirror JSON), for a page saved by a newer
+   * build that this device does not hold: shown read-only, never stored.
+   */
+  async docJson(pageId: Id): Promise<DocJSON> {
+    const answer = await data(
+      this.api.GET('/api/v1/pages/{pageId}/doc/json', { params: { path: { pageId } } }),
+    );
+    return JSON.parse(answer.json) as DocJSON;
   }
 
   /**
@@ -187,6 +367,8 @@ export class Cloud {
       }
     } finally {
       this.account_ = null;
+      this.verified = true;
+      this.usingCached = false;
       this.engine.setAccount(null);
       this.api.resetCsrf();
       this.emit();

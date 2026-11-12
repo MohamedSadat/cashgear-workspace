@@ -7,6 +7,7 @@ import { DataPanel } from '../exchange/DataPanel';
 import type { WorkspaceSession } from '../session';
 import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
+import { OfflineSettings } from '../cloud/OfflineSettings';
 
 export function Settings({
   onLanguage,
@@ -48,6 +49,7 @@ export function Settings({
       />
       {cloud && <AccountSettings cloud={cloud} />}
       {cloud && session.workspaceId && <MembersSettings cloud={cloud} session={session} />}
+      {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
       {session.workspaceId && <DataPanel session={session} />}
       <h2>{t('settings.about')}</h2>
       <p data-testid="host-info">

@@ -1,6 +1,9 @@
 // The account and sync parts of the interface (Phase 2): signing in and out, the devices signed
 // in, the sync status, uploading a local workspace, members and invites, and accepting an invite.
+// Phase 3: the status while offline or retrying, what is kept offline (the menus' items and the
+// sidebar's marks), and the recovered pages' count.
 import type { Id, SyncStatus } from '@cgw/workspace';
+import type { TFunction } from 'i18next';
 import {
   createContext,
   useContext,
@@ -13,6 +16,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
+import type { MenuItem } from '../sidebar/RowMenu';
 import type { Cloud } from './cloud';
 
 export const CloudContext = createContext<Cloud | null>(null);
@@ -31,35 +35,87 @@ export function useAccount(cloud: Cloud | null) {
 
 const language = () => (document.documentElement.lang === 'ar' ? 'ar' : 'en');
 
-/** The catalogue key for a sync notice's code (SyncEvent notice; the server's stable codes). */
-export function noticeKey(code: string) {
-  switch (code) {
-    case 'tree.parentMissing':
-      return 'sync.parentMissing' as const;
-    case 'version.conflict':
-      return 'sync.versionConflict';
-    case 'tree.cycle':
-      return 'sync.cycle';
-    case 'access.denied':
-      return 'sync.accessDenied';
-    case 'page.gone':
-      return 'sync.pageGone';
-    case 'doc.epochMismatch':
-      return 'sync.epochMismatch';
-    case 'client.tooOld':
-      return 'sync.clientTooOld';
-    case 'limit.size':
-      return 'sync.tooLarge';
-    case 'doc.refused':
-    case 'doc.clientTaken':
-      return 'sync.refused';
-    case 'asset.typeNotAllowed':
-      return 'sync.typeNotAllowed';
-    case 'workspace.lost':
-      return 'sync.workspaceLost';
-    default:
-      return 'sync.notFound';
+const noMarks = () => null;
+const noSubscription = () => () => {};
+
+/**
+ * The pages this device holds, while the server is out of reach in a synced workspace (the tree
+ * marks the others); null otherwise. Renders again only when the marks change, never per pass.
+ */
+export function useOfflineMarks(cloud: Cloud | null): ReadonlySet<Id> | null {
+  return useSyncExternalStore(
+    cloud ? cloud.offline.subscribe : noSubscription,
+    cloud ? cloud.offline.marks : noMarks,
+  );
+}
+
+/** Renders again when what is kept offline changes (pins, held pages, reachability). */
+export function useOfflineRevision(cloud: Cloud | null): number {
+  return useSyncExternalStore(
+    cloud ? cloud.offline.subscribe : noSubscription,
+    cloud ? cloud.offline.getRevision : () => 0,
+  );
+}
+
+/** Renders again when the recovered pages change. */
+export function useRecoveredRevision(cloud: Cloud | null): number {
+  return useSyncExternalStore(
+    cloud ? cloud.recovery.subscribe : noSubscription,
+    cloud ? cloud.recovery.getRevision : () => 0,
+  );
+}
+
+/**
+ * A page menu's "Available offline" items (M3.1): this page, or this page and the pages under it;
+ * a page a parent's pin covers says so and leads there, where it can be unpinned. Only in a
+ * workspace that syncs: a local one holds every page anyway.
+ */
+export function offlineMenuItems(
+  cloud: Cloud | null,
+  session: WorkspaceSession,
+  pageId: Id,
+  t: TFunction,
+): MenuItem[] {
+  if (!cloud) return [];
+  const page = session.mirror.pages.get(pageId);
+  const workspace = page && session.mirror.workspaces.get(page.workspaceId);
+  if (!page || !workspace || workspace.localOnly || page.trashedAt) return [];
+  const failed = (error: unknown) => console.warn('Could not keep the page offline:', error);
+  const state = cloud.offline.pinOf(pageId);
+  if (state?.inherited) {
+    const root = session.mirror.pages.get(state.pin.pageId);
+    return [
+      {
+        label: t('offline.inherited', { title: root?.title || t('page.untitled') }),
+        onSelect: () => navigate({ kind: 'page', pageId: state.pin.pageId }),
+      },
+    ];
   }
+  if (state)
+    return [
+      ...(state.pin.subtree
+        ? []
+        : [
+            {
+              label: t('offline.addSubtree'),
+              onSelect: () => void cloud.offline.pin(pageId, true).catch(failed),
+            },
+          ]),
+      {
+        label: t('offline.remove'),
+        onSelect: () => void cloud.offline.unpin(pageId).catch(failed),
+      },
+    ];
+  return [
+    {
+      label: t('offline.makeAvailable'),
+      onSelect: () => void cloud.offline.pin(pageId, false).catch(failed),
+    },
+    {
+      label: t('offline.makeAvailableSubtree'),
+      onSelect: () => void cloud.offline.pin(pageId, true).catch(failed),
+    },
+  ];
 }
 
 /** The sidebar's sign-in button, or the account's name with sign-out. */
@@ -108,24 +164,31 @@ export function SyncStatusLabel({ cloud, session }: { cloud: Cloud; session: Wor
     const show = () => {
       const local = session.current?.localOnly !== false;
       const status: SyncStatus = cloud.status;
-      const state = local ? 'localOnly' : status.state;
+      // Until the first check has answered (or the app went on offline without it).
+      const state = local ? 'localOnly' : cloud.account === undefined ? 'connecting' : status.state;
+      const count = status.waiting;
       el.dataset.state = state;
       el.textContent =
         state === 'localOnly'
           ? t('sync.localOnly')
-          : state === 'synced'
-            ? t('sync.synced')
-            : state === 'syncing'
-              ? t('sync.syncing')
-              : state === 'offline'
-                ? status.waiting
-                  ? t('sync.offlineWaiting', { count: status.waiting })
-                  : t('sync.offline')
-                : state === 'signedOut'
-                  ? status.waiting
-                    ? t('sync.signedOut', { count: status.waiting })
-                    : t('sync.signedOutNone')
-                  : t('sync.error');
+          : state === 'connecting'
+            ? t('sync.connecting')
+            : state === 'synced'
+              ? t('sync.synced')
+              : state === 'syncing'
+                ? t('sync.syncing')
+                : state === 'offline'
+                  ? count
+                    ? t('sync.offlineWaiting', { count })
+                    : t('sync.offline')
+                  : state === 'signedOut'
+                    ? count
+                      ? t('sync.signedOut', { count })
+                      : t('sync.signedOutNone')
+                    : // The server answered a problem the loop backs off from and retries.
+                      count
+                      ? t('sync.errorWaiting', { count })
+                      : t('sync.error');
     };
     show();
     const off = cloud.subscribe(show);

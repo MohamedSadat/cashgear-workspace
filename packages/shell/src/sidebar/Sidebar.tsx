@@ -1,6 +1,7 @@
 import type { Id, PageRecord } from '@cgw/workspace';
 import { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCloud, useOfflineMarks, useRecoveredRevision } from '../cloud/CloudUi';
 import { Dialog } from '../Dialog';
 import { navigate, routeHash } from '../route';
 import type { WorkspaceSession } from '../session';
@@ -14,18 +15,29 @@ export function useMirror(session: WorkspaceSession): number {
   );
 }
 
-function PageLink({ page, active }: { page: PageRecord; active: boolean }) {
+function PageLink({
+  page,
+  active,
+  unavailable,
+}: {
+  page: PageRecord;
+  active: boolean;
+  /** Offline, and this device does not hold the page. */
+  unavailable: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <a
       href={routeHash({ kind: 'page', pageId: page.id })}
-      className={`cgw-side-link${active ? ' is-active' : ''}`}
+      className={`cgw-side-link${active ? ' is-active' : ''}${unavailable ? ' is-unavailable' : ''}`}
       aria-current={active ? 'page' : undefined}
+      title={unavailable ? t('offline.notAvailable') : undefined}
     >
       <span aria-hidden="true">{page.icon ?? '📄'}</span>
       <span className="cgw-tree-title" dir="auto">
         {page.title || t('page.untitled')}
       </span>
+      {unavailable && <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>}
     </a>
   );
 }
@@ -37,10 +49,16 @@ export interface SidebarProps {
   onError: (error: unknown) => void;
 }
 
-/** Workspace switcher, search, favourites, recent pages, the tree, templates and the trash. */
+/**
+ * Workspace switcher, search, favourites, recent pages, the tree, templates, the trash and, when
+ * there are any, the recovered pages.
+ */
 export function Sidebar({ session, activePageId, onSearch, onError }: SidebarProps) {
   const { t } = useTranslation();
   useMirror(session);
+  const cloud = useCloud();
+  const marks = useOfflineMarks(cloud);
+  useRecoveredRevision(cloud);
   const [switcher, setSwitcher] = useState<{ x: number; y: number } | null>(null);
   const [templates, setTemplates] = useState<{ x: number; y: number } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -50,6 +68,8 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
   const recent = session.mirror.recentOf(workspaceId, 5);
   const templateList = session.mirror.templatesOf(workspaceId);
   const trashCount = session.mirror.trash(workspaceId).length;
+  const recoveredCount = cloud ? cloud.recovery.visible().length : 0;
+  const unavailable = (page: PageRecord) => !!marks && !marks.has(page.id);
   return (
     <div className="cgw-sidebar-inner">
       <button
@@ -73,7 +93,12 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
           <section className="cgw-side-group" aria-label={t('workspace.favourites')}>
             <h2 className="cgw-side-heading">{t('workspace.favourites')}</h2>
             {favourites.map((page) => (
-              <PageLink key={page.id} page={page} active={page.id === activePageId} />
+              <PageLink
+                key={page.id}
+                page={page}
+                active={page.id === activePageId}
+                unavailable={unavailable(page)}
+              />
             ))}
           </section>
         )}
@@ -81,7 +106,7 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
           <section className="cgw-side-group" aria-label={t('workspace.recent')}>
             <h2 className="cgw-side-heading">{t('workspace.recent')}</h2>
             {recent.map((page) => (
-              <PageLink key={page.id} page={page} active={false} />
+              <PageLink key={page.id} page={page} active={false} unavailable={unavailable(page)} />
             ))}
           </section>
         )}
@@ -100,6 +125,12 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
           >
             <span aria-hidden="true">⧉</span> {t('workspace.newFromTemplate')}
           </button>
+        )}
+        {recoveredCount > 0 && (
+          <a href={routeHash({ kind: 'recovered' })} className="cgw-side-button">
+            <span aria-hidden="true">♻</span> {t('recovered.title')}
+            <span className="cgw-count">{recoveredCount}</span>
+          </a>
         )}
         <a href={routeHash({ kind: 'trash' })} className="cgw-side-button">
           <span aria-hidden="true">🗑</span> {t('trash.title')}

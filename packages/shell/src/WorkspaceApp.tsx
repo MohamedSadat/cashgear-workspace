@@ -15,30 +15,31 @@ import { ShellContext, useShell, type CommandContext, type ShellServices } from 
 import { FirstRun } from './FirstRun';
 import { Frame } from './frame/Frame';
 import { Settings } from './frame/Settings';
-import { UpdateButton, useUpdates } from './frame/Updates';
+import { UpdateButton, UpdateCheck, useUpdates } from './frame/Updates';
 import { applyLanguage, createI18n, type Language } from './i18n';
 import { hasCloud, type WorkspacePlatform } from './platform';
-import { navigate, parseRoute, useHash } from './route';
+import { navigate, parseRoute, routeHash, useHash } from './route';
 import { WorkspaceSession } from './session';
 import { Sidebar, useMirror } from './sidebar/Sidebar';
 import { Breadcrumbs } from './page/PageHeader';
-import { PageMenu, pageEvents } from './page/PageMenu';
+import { PageMenu, openHistory, pageEvents } from './page/PageMenu';
 import { useAccount } from './cloud/CloudUi';
-import { Notice } from './Notice';
+import { Notice, type NoticeAction } from './Notice';
+import { RECOVERY_CODES, noticeTarget, noticeText, targetLabel } from './notices';
+import { RecoveredView } from './RecoveredView';
 import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
 // The palette loads with the frame: keys typed straight after Ctrl+K must reach its field.
 import { Palette } from './search/Palette';
 import { ThemeController } from './theme';
 import { normaliseText } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
-import { Cloud } from './cloud/cloud';
+import { Cloud, type CloudNotice } from './cloud/cloud';
 import {
   AccountButton,
   CloudContext,
   InviteView,
   SyncStatusLabel,
   UploadBanner,
-  noticeKey,
 } from './cloud/CloudUi';
 
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
@@ -89,7 +90,11 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
           if (!hasCloud(platform)) return;
           void import('@cgw/doc').then(({ docCodec }) => {
             if (!live) return;
-            connected = new Cloud(platform, started, docCodec);
+            connected = new Cloud(platform, started, docCodec, {
+              // In the language the app is in when the page is made.
+              recoveredTitle: (title) =>
+                i18n.t('recovered.pageTitle', { title: title || i18n.t('page.untitled') }),
+            });
             setCloud(connected);
             void connected.start();
           });
@@ -101,7 +106,7 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
       connected?.dispose();
       void opened?.close();
     };
-  }, [platform]);
+  }, [platform, i18n]);
 
   // Pending saves are written before the page is hidden or closed (SYNC_DESIGN.md, Autosave).
   useEffect(() => {
@@ -122,15 +127,24 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
     <I18nextProvider i18n={i18n}>
       <ShellContext.Provider value={services}>
         <CloudContext.Provider value={cloud}>
-          {session ? <Workspace session={session} cloud={cloud} /> : <Starting failed={failed} />}
+          {session ? (
+            <Workspace session={session} cloud={cloud} />
+          ) : (
+            <Starting failed={failed} platform={platform} />
+          )}
         </CloudContext.Provider>
       </ShellContext.Provider>
     </I18nextProvider>
   );
 }
 
-function Starting({ failed }: { failed: unknown }) {
+/** The stores refuse a store a newer build wrote (and change nothing in it). */
+const newerStore = (error: unknown) =>
+  error instanceof Error && /written by a newer version/.test(error.message);
+
+function Starting({ failed, platform }: { failed: unknown; platform: WorkspacePlatform }) {
   const { t } = useTranslation();
+  if (newerStore(failed)) return <StoreTooNew platform={platform} />;
   return failed ? (
     <main className="cgw-empty" role="alert">
       <h1>{t('app.storeFailed')}</h1>
@@ -209,7 +223,8 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     if (visiting) void session.recordVisit(visiting).catch(() => undefined);
   }, [session, visiting]);
 
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; action?: NoticeAction } | null>(null);
+  const closeNotice = useCallback(() => setNotice(null), []);
   const account = useAccount(cloud);
   const [sharing, setSharing] = useState<string | null>(null);
   useEffect(() => {
@@ -217,27 +232,92 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     pageEvents.addEventListener('share', open);
     return () => pageEvents.removeEventListener('share', open);
   }, []);
-  // What the sync engine has to say (a refused change, a page gone), in the interface language.
-  useEffect(
-    () =>
-      cloud?.onNotice((n) =>
-        setNotice(n.code === 'cloud.uploaded' ? t('cloud.uploaded') : t(noticeKey(n.code))),
-      ),
-    [cloud, t],
-  );
+  // What the sync engine or an open document has to say, in the interface language: what
+  // happened, and a link to where the work is (the recovered page, the trash, the history).
+  useEffect(() => {
+    if (!cloud) return;
+    let live = true;
+    const show = async (n: CloudNotice) => {
+      if (n.code === 'cloud.uploaded') return setNotice({ text: t('cloud.uploaded') });
+      // What was set aside becomes a recovered page first, so the notice can lead to it.
+      if (RECOVERY_CODES.has(n.code)) await cloud.recovery.settled();
+      if (!live) return;
+      const latest = n.pageId ? cloud.recovery.latestFor(n.pageId) : undefined;
+      // The entry this notice speaks of: set aside for this reason, a moment ago.
+      const item =
+        latest && latest.reason === n.code && Date.now() - Date.parse(latest.at) < 600_000
+          ? latest
+          : undefined;
+      const setAside = n.pageId
+        ? !!item
+        : cloud.recovery.items.some(
+            (i) => i.workspaceId === n.workspaceId && i.status !== 'dismissed',
+          );
+      const info = { ...n, setAside };
+      const title =
+        (n.pageId && session.mirror.pages.get(n.pageId)?.title) ||
+        latest?.title ||
+        t('page.untitled');
+      const found = noticeTarget(info, item?.recoveredPageId);
+      // Nothing was set aside (a workspace lost with nothing unsent): no list to lead to.
+      const target = found?.kind === 'recovered' && !setAside ? null : found;
+      const action: NoticeAction | undefined = !target
+        ? undefined
+        : target.kind === 'recovered'
+          ? {
+              label: t(targetLabel(target) as 'notices.openPage'),
+              href: routeHash(
+                target.pageId ? { kind: 'page', pageId: target.pageId } : { kind: 'recovered' },
+              ),
+              onSelect: () => {
+                const page = target.pageId ? session.mirror.pages.get(target.pageId) : undefined;
+                if (page && page.workspaceId !== session.workspaceId)
+                  session.switchTo(page.workspaceId);
+              },
+            }
+          : target.kind === 'trash'
+            ? {
+                label: t(targetLabel(target) as 'notices.openPage'),
+                href: routeHash({ kind: 'trash' }),
+              }
+            : target.kind === 'history'
+              ? {
+                  label: t(targetLabel(target) as 'notices.openPage'),
+                  onSelect: () => {
+                    navigate({ kind: 'page', pageId: target.pageId });
+                    openHistory(target.pageId);
+                  },
+                }
+              : {
+                  label: t(targetLabel(target) as 'notices.openPage'),
+                  href: routeHash({
+                    kind: 'page',
+                    pageId: target.pageId,
+                    ...(target.kind === 'block' ? { blockId: target.blockId } : {}),
+                  }),
+                };
+      // One key at a time is what the typed `t` takes; every key here takes `title` or nothing.
+      setNotice({ text: t(noticeText(info) as 'notices.pageGone', { title }), action });
+    };
+    const off = cloud.onNotice((n) => void show(n));
+    return () => {
+      live = false;
+      off();
+    };
+  }, [cloud, session, t]);
   const onError = useCallback(
     (error: unknown) => {
       const code = (error as { code?: string })?.code;
       console.warn('The change was refused:', error);
-      setNotice(
-        t(
+      setNotice({
+        text: t(
           code === 'tree.cycle'
             ? 'errors.cycle'
             : code === 'version.conflict'
               ? 'errors.conflict'
               : 'errors.generic',
         ),
-      );
+      });
     },
     [t],
   );
@@ -266,7 +346,7 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
       } catch {
         // Without storage the notice shows each time, which is the safer side.
       }
-      setNotice(t('exchange.browserMayClear'));
+      setNotice({ text: t('exchange.browserMayClear') });
     });
   }, [services, session, session.workspaceId, t]);
 
@@ -362,7 +442,7 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
         </>
       }
     >
-      {notice && <Notice text={notice} onClose={() => setNotice(null)} />}
+      {notice && <Notice text={notice.text} action={notice.action} onClose={closeNotice} />}
       {sharing && cloud && session.mirror.pages.get(sharing) && (
         <Suspense fallback={null}>
           <ShareDialog
@@ -379,6 +459,8 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
         <Settings onLanguage={setLanguage} session={session} updates={updates} />
       ) : route.kind === 'trash' ? (
         <TrashView session={session} onError={onError} />
+      ) : route.kind === 'recovered' && cloud ? (
+        <RecoveredView cloud={cloud} session={session} />
       ) : page && !page.trashedAt ? (
         <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
           <PageView session={session} page={page} onEditor={(_, doc) => setOpenDoc(doc)} />
@@ -395,6 +477,23 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
         </div>
       )}
     </Frame>
+  );
+}
+
+/**
+ * The local store was written by a newer version of the app (the person went back to an older
+ * build): the whole window says so and asks for the update. The store is neither opened nor
+ * wiped, since its outbox may hold work not sent yet (SYNC_DESIGN.md, Local schema migration).
+ */
+function StoreTooNew({ platform }: { platform: WorkspacePlatform }) {
+  const { t } = useTranslation();
+  const updates = useUpdates(platform.updates, async () => {});
+  return (
+    <main className="cgw-empty cgw-refusal" role="alert" aria-labelledby="cgw-refusal-title">
+      <h1 id="cgw-refusal-title">{t('app.tooOldTitle')}</h1>
+      <p>{t('app.tooOldBody')}</p>
+      {updates.supported && <UpdateCheck updates={updates} />}
+    </main>
   );
 }
 
