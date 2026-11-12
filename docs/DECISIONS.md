@@ -732,3 +732,15 @@ M3.6, macOS:
 | The test-only bridge | Cargo feature `e2e-bridge`, off by default: JSON lines on 127.0.0.1 with a token, three commands (eval, title, quit). Refused by `build.rs` when `CGW_RELEASE_BUILD` is set (both release workflows set it), and the release check fails if the binary holds any of its names | WKWebView has no CDP; the bridge must never ship |
 | Updates on the Mac | `latest.json` gains `darwin-aarch64` and `darwin-x86_64`, both the universal update; the draft release waits for the Windows and the Mac jobs | One feed for both systems |
 | Device name on the Mac | `scutil --get ComputerName` | An app started from the Dock has no host name in its environment |
+
+The client side (shell and web app):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The first account check | At most 5 s; any answer but the server's own "signed out" (null or 401), or none in time, goes on offline with the cached account; until it is verified, the network returning, focus and the first synced pass ask again | A hanging network must not hold the first editable page |
+| Pins in the app | Only in synced workspaces, from the page and row menus; a page covered by a parent's pin says so and leads there to unpin; pages not on this device are marked (italic, secondary colour) only while offline or signed out | Online, nothing about pins re-renders the tree on a sync pass |
+| A page not on this device | Pulled when opened online; offline, "This page isn't on this device yet" with Try again, opening by itself when the status moves to syncing or synced | Never an endless skeleton, and never a request the client knows will fail |
+| Recovered pages | Ids derived from the quarantine entry's id (its UUIDv7 time and SHA-256 bits), made under a Web Lock across tabs, at the top of the private section; an entry can be dismissed once its page exists, and the page stays | `recover` comes after every pass while entries wait: making the page twice must be impossible |
+| Notices | Every code has its own text and link (the recovered page, the Recovered list, the trash, the page's history, the block); a notice stays while hovered or focused, else 8 s | WCAG 2.2.1 (timing adjustable) |
+| The service worker | Built by a plugin from the bundle and `public/` (no dependency), cache named for a hash of the files; registered only in production web builds; same-origin GETs only, navigations from the cached `index.html`; no `skipWaiting`, so a running page keeps its old lazy chunks and the new build takes over at the next start; `/sw.js` served `no-cache` | The web app starts offline; nothing from the API or Blob Storage is ever kept by it |
+| Flushing | Anything holding an edit back for a moment (the title's 400 ms pause) registers with `session.onFlush`, and every flush (hiding, closing, the desktop's close request, an upload, an update) writes it first | A title typed just before closing was lost on every platform |

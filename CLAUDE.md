@@ -54,24 +54,24 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 
 | Path | What |
 | --- | --- |
-| `apps/web` (`@cgw/web`) | Vite + React entry: picks the platform (web or Tauri) and mounts the shell |
+| `apps/web` (`@cgw/web`) | Vite + React entry: picks the platform (web or Tauri) and mounts the shell; the service worker (`sw/service-worker.js`, built by a plugin in `vite.config.ts`, registered in production web builds only) so the web app starts offline |
 | `packages/shell` (`@cgw/shell`) | App frame (sidebar, top bar, hash routing by page id), i18next catalogues (`en`, `ar`), theme controller, command registry, `event.code` shortcuts, the `WorkspacePlatform` interface |
-| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` (store schema 2) and its conformance suite (`@cgw/workspace/testing`, with an in-memory server for sync tests), the operation planner with the tree rules, the remote planners (`remote.ts`), the sync engine (`sync/`), order keys, UUIDv7, the metadata mirror, search normalisation; shared test vectors in `vectors/`. No React, DOM or ProseMirror |
-| `packages/doc` (`@cgw/doc`) | The block schema (version 1), block-id plugin, the Yjs seam over the patched `@tiptap/y-tiptap`, `PageDocument` (open, autosave, compaction, history), plain text and Markdown out, Markdown in, content builders |
+| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` (store schema 3: pins, quarantine, repair state) and its conformance suite (`@cgw/workspace/testing`, with an in-memory server for sync tests and `syncHarness.ts`), the operation planner with the tree rules, the remote planners (`remote.ts`), the sync engine (`sync/`: the offline loop, batching, resync, repair, pins, set-aside and recover), order keys, UUIDv7, the metadata mirror, search normalisation; shared test vectors in `vectors/`. No React, DOM or ProseMirror |
+| `packages/doc` (`@cgw/doc`) | The block schema (version 2: `tableOfContents`) and its migrations (`migrations.ts`, fixture in `fixtures/`), block-id plugin, the move intent (`moves.ts`), the Yjs seam over the patched `@tiptap/y-tiptap`, `PageDocument` (open, autosave, compaction, history, events), the state hash, recovered content, the read-only view, plain text and Markdown out, Markdown in, content builders; `src/sync-sim/` is the three-client convergence simulator |
 | `packages/editor` (`@cgw/editor`) | The Tiptap editor over a `Y.Doc`: block commands, keymap, input rules, slash menu, bubble toolbar, block handle and drag, block selection, clipboard, tables, plain DOM node views; given an `EditorHost`, never touches storage |
 | `patches/` | The Q18 patch on `@tiptap/y-tiptap` 3.3.0 (`pnpm patch`), made by `scripts/y-tiptap-patch.mjs` |
 | `scripts/eslint` | Workspace's own lint rules: `cgw/no-untranslated-text` |
-| `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json` |
-| `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup |
+| `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json`, the Mac's bundle in `tauri.macos.conf.json`; the test-only bridge (`src/bridge.rs`, feature `e2e-bridge`, refused in release builds) |
+| `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup; the Mac's build, acceptance run and checks (`macos-*.mjs`); the state-hash vectors' generator |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
-| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 1); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
+| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 3, upgraded additively); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
 | `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
-| `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; `cgw-store-cli` for tests |
-| `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe, the desktop's sign-in (PKCE, the loopback listener, token exchange and refresh) and the keychain |
-| `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
+| `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; a copy of the file before each migration (`workspace.v{n}.db`); `cgw-store-cli` for tests; `tests/fixtures/v1`, `v2`: stores written by the released code (`make.mjs`) |
+| `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe, the desktop's sign-in (PKCE, the loopback listener, token exchange and refresh) and the keychain (Windows Credential Manager, the macOS login keychain) |
+| `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate, the state hash), with a C ABI for .NET; build the DLL with `--profile ffi` |
 | `server/` | .NET 10 solution `Cgw.Server.slnx`. `Cgw.Core`: EF Core data (`CgwDb`, the tenant filter, migrations), blob storage with signed URLs, mail, audit. `Cgw.Api`: the API process (ProblemDetails with codes, correlation ids, rate limits, health, Identity, OpenIddict, the sign-in pages, the feature modules). `Cgw.Ydoc`: `cgw-ydoc` by P/Invoke, worker only. `Cgw.Worker`: the jobs. `tests/Cgw.Tests`: xUnit v3 on SQL Server and Azurite. `openapi/v1.json` is written by the build |
-| `packages/shell/src/cloud` | The connection to the API: `cloud.ts` (the typed client, the sync engine wired to the session, account, sharing, versions, search, previews, remote assets), `CloudUi.tsx` (sign-in, devices, sync status, upload, members and invites), `ShareDialog.tsx`, `SharedView.tsx` (a page by link) |
+| `packages/shell/src/cloud` | The connection to the API: `cloud.ts` (the typed client, the sync engine wired to the session, account, sharing, versions, search, previews, remote assets), `CloudUi.tsx` (sign-in, devices, sync status, upload, members and invites, the offline menu items), `offline.ts` and `OfflineSettings.tsx` (pins, held pages, storage), `recovery.ts` (recovered pages), `ShareDialog.tsx`, `SharedView.tsx` (a page by link); beside it `notices.ts` (every notice code's text and link) and `RecoveredView.tsx` |
 | `deploy/iis` | `install.ps1`: the API on IIS and the worker as a service, from the deploy package (docs/OPERATIONS.md) |
 | `packages/api` (`@cgw/api`) | The API client: `schema.ts` generated from `server/openapi/v1.json`, openapi-fetch, cookie with antiforgery header (web) or bearer (desktop) |
 | `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison. `app.html`: the whole app over a seeded 10,000-page store, for `bench/phase1.mjs` |
@@ -80,7 +80,8 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
 | `bench/results/` | What runs write; not committed; CI uploads it |
 | `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test, desktop smoke, kill tests, Phase 1 budgets and the Phase 0 harnesses on Windows |
-| `.github/workflows/release.yml` | On a `v*` tag: release check, installer test, signed NSIS installer and update, a drafted GitHub release |
+| `.github/workflows/release.yml` | On a `v*` tag: release check, installer test, signed NSIS installer and update, the universal Mac app (signed and notarised once the `APPLE_*` secrets exist), one `latest.json`, a drafted GitHub release |
+| `.github/workflows/macos.yml` | On push to `main`: the native crates' tests on macOS, the acceptance run through the test-only bridge (`scripts/macos-acceptance.mjs`), and the release-shaped universal build with its checks |
 | `docs/` | Plan, design, decisions, progress |
 
 ## Commands
@@ -117,6 +118,10 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm bench:sheet-embed` | S9 against Sheet's deployed app |
 | `cargo build -p cgw-store --bin cgw-store-cli` | The binary the SQLite conformance suite runs through (`pnpm check` builds it; without it the suite is skipped locally) |
 | `node scripts/kill-test.mjs --target web|desktop --runs N` | Kill the app while typing, reopen, check nothing saved was lost (web needs `pnpm build`; desktop needs the release build) |
+| `node scripts/state-hash-vectors.mjs [--check]` | The state-hash vectors (`packages/doc/vectors/state-hash-vectors.json`), made by plain Yjs; `--check` fails if they are stale |
+| `node crates/cgw-store/tests/fixtures/make.mjs` | The SQLite migration fixtures, written by `cgw-store` built from the v0.1.0 and v0.2.0 tags (offline, under `target/store-fixtures`) |
+| `SIM_SEEDS=60 SIM_STEPS=200 pnpm exec vitest run packages/doc/src/sync-sim` | The convergence simulator at size (CI runs 4 seeds of 40 rounds); `SIM_SEED` replays one |
+| `node scripts/macos-build.mjs` / `node scripts/macos-acceptance.mjs` | On a Mac (the `macos.yml` runner): the universal app, signed when the `APPLE_*` variables are set; the acceptance run through the test-only bridge (`bench/results/macos-acceptance.json`) |
 | `S1_OPS=10000 S1_SEEDS=3 S1_COMPARE=1 pnpm exec vitest run bench/editor/src/s1-fuzz.test.ts` | The full S1 fuzz, with the rejected configurations for comparison |
 
 ## Related repos on this machine
@@ -240,3 +245,35 @@ Added as they are found, grouped by phase.
   of arrays.
 - Azurite saves its metadata every 5 s and not when killed on Windows: wait out a save before
   copying its folder (the restore drill).
+
+### Phase 3
+
+- `cargo fmt --all` formats every crate, including another session's half-done one: format your
+  own with `-p`.
+- WKWebView has no debugging protocol for Playwright: the Mac app is driven through the
+  test-only bridge (`e2e-bridge`). A LaunchServices start (`open`, a cold deep link, the restart
+  after an update) passes no environment, so the bridge build reads `cgw-e2e-settings.json`
+  beside the bundle.
+- tao 0.37 has no `applicationShouldTerminate`: the macOS menu's stock Quit ended the app without
+  the close request that writes pending saves. The app menu's Quit is the app's own item; the
+  Dock's Quit, log-out and shut-down still end it at once (DECISIONS.md, Phase 3).
+- Clippy for `aarch64-apple-darwin` and `x86_64-apple-darwin` runs on Windows as a check (C
+  dependencies need a stand-in compiler); it catches macOS-only lints Windows clippy cannot see.
+- `ALTER DATABASE` cannot run in a transaction: its EF migration uses `suppressTransaction: true`.
+- The database reads with `READ_COMMITTED_SNAPSHOT`: a read never waits on a writer and sees what
+  committed before its statement. A check that must not race a writer takes the lock that writer
+  takes (the workspace row, a page's `docseq:` application lock).
+- Yjs keeps both pending parts, `pendingStructs` and `pendingDs`, in the V2 encoding: retry both
+  with `applyUpdateV2`.
+- Replaying a device's own log makes Yjs pick a fresh client id ("another client seems to be
+  using it"); `PageDocument.open` puts the session's id back.
+- Through the id-aware binding (Q18) a block whose id changes is written as a new element, so two
+  devices repairing one duplicate made two copies: the id repair writes to Yjs in place.
+- A reader's open of a page must pass `canEdit: false` (as indexing and `pageContent` do), or the
+  open migrates the document and writes it.
+- `@cgw/doc` runs in browsers and WebViews: no `process` or other Node global outside tests (the
+  shell's typecheck catches it).
+- `@cgw/workspace`'s `./testing` export is only `conformance.ts`; the simulator in `packages/doc`
+  imports the fake server by relative path.
+- PowerShell 5.1 mangles double quotes inside a here-string passed to a native program: write a
+  commit message to a file and `git commit -F` it. Bash heredocs holding `|` tables can fail too.
