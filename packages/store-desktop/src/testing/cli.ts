@@ -27,9 +27,22 @@ export function cliTransport(dir = mkdtempSync(join(tmpdir(), 'cgw-store-'))): {
   const path = cliPath();
   if (!path)
     throw new Error('cgw-store-cli is not built: cargo build -p cgw-store --bin cgw-store-cli');
-  const child = spawn(path, [dir], { stdio: ['pipe', 'pipe', 'inherit'] });
-  const waiting: ((frame: Uint8Array) => void)[] = [];
+  const child = spawn(path, [dir], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const waiting: { resolve: (frame: Uint8Array) => void; reject: (error: Error) => void }[] = [];
   let buffer = Buffer.alloc(0);
+  // What the store says when it stops (it refused to open the store, say), for the error.
+  let said = '';
+  child.stderr.on('data', (chunk: Buffer) => {
+    said = (said + chunk.toString('utf8')).slice(-4000);
+  });
+  const exited = () =>
+    new Error(`cgw-store-cli exited (${child.exitCode})${said ? `: ${said.trim()}` : ''}`);
+  // Once its output is all read: what it said is then whole.
+  child.on('close', () => {
+    for (const request of waiting.splice(0)) request.reject(exited());
+  });
+  // A request written as the process stops fails through `close`, not as an unhandled error.
+  child.stdin.on('error', () => {});
   child.stdout.on('data', (chunk: Buffer) => {
     buffer = Buffer.concat([buffer, chunk]);
     while (buffer.length >= 4) {
@@ -37,14 +50,13 @@ export function cliTransport(dir = mkdtempSync(join(tmpdir(), 'cgw-store-'))): {
       if (buffer.length < 4 + length) break;
       const frame = new Uint8Array(buffer.subarray(4, 4 + length));
       buffer = buffer.subarray(4 + length);
-      waiting.shift()?.(frame);
+      waiting.shift()?.resolve(frame);
     }
   });
   const transport: Transport = (frame) =>
     new Promise((resolveFrame, reject) => {
-      if (child.exitCode !== null)
-        return reject(new Error(`cgw-store-cli exited (${child.exitCode})`));
-      waiting.push(resolveFrame);
+      if (child.exitCode !== null) return reject(exited());
+      waiting.push({ resolve: resolveFrame, reject });
       const length = Buffer.alloc(4);
       length.writeUInt32LE(frame.byteLength, 0);
       child.stdin.write(length);

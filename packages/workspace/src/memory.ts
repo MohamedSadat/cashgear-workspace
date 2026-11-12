@@ -18,10 +18,14 @@ import {
   type Operation,
   type OpResult,
   type PageRecord,
+  type PinRecord,
+  type QuarantineEntry,
   type RemoteBatch,
+  type RepairState,
   type RemoteDocPull,
   type SearchEntry,
   type SearchHit,
+  type StorageUsage,
   type StoredDoc,
   type StoredUpdate,
   type UnsentDoc,
@@ -48,6 +52,9 @@ export class MemoryStore implements LocalStore {
   private readonly prefs = new Map<string, unknown>();
   private readonly syncCursors = new Map<Id, number>();
   private readonly docCursors_ = new Map<Id, DocCursor>();
+  private readonly pins_ = new Map<Id, PinRecord>();
+  private readonly quarantine_: QuarantineEntry[] = [];
+  private readonly repairs = new Map<Id, RepairState>();
   /** Serialises calls, as a database transaction would. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -170,6 +177,8 @@ export class MemoryStore implements LocalStore {
     this.docs.delete(pageId);
     this.docCursors_.delete(pageId);
     this.search_.delete(pageId);
+    this.pins_.delete(pageId);
+    this.repairs.delete(pageId);
     for (const [id, h] of this.history) if (h.entry.pageId === pageId) this.history.delete(id);
   }
 
@@ -195,6 +204,8 @@ export class MemoryStore implements LocalStore {
 
   /** Writes a remote plan: the mirror, the outbox and the cursors together. */
   private writeRemote(plan: Plan) {
+    // Nothing unsent goes on the server's word: a removed page's log is set aside first.
+    for (const id of plan.deletePages) this.setAside(id, 'page.removed');
     const settled = new Set(plan.settled ?? []);
     for (let i = this.outbox.length - 1; i >= 0; i--)
       if (settled.has(this.outbox[i].opId)) this.outbox.splice(i, 1);
@@ -416,6 +427,130 @@ export class MemoryStore implements LocalStore {
 
   setPref(key: string, value: unknown): Promise<void> {
     return this.run(() => void this.prefs.set(key, structuredClone(value)));
+  }
+
+  // Offline (store schema 3) ------------------------------------------------------------------
+
+  pin(pin: PinRecord): Promise<void> {
+    return this.run(() => void this.pins_.set(pin.pageId, { ...pin }));
+  }
+
+  unpin(pageId: Id): Promise<void> {
+    return this.run(() => void this.pins_.delete(pageId));
+  }
+
+  pins(workspaceId: Id): Promise<PinRecord[]> {
+    return this.run(() =>
+      [...this.pins_.values()]
+        .filter((p) => p.workspaceId === workspaceId)
+        .sort((a, b) => (a.pageId < b.pageId ? -1 : 1))
+        .map((p) => ({ ...p })),
+    );
+  }
+
+  /** Whether this device holds the page's document: a log, a snapshot or a cursor. */
+  private holds(pageId: Id): boolean {
+    const log = this.docs.get(pageId);
+    return (!!log && (!!log.snapshot || log.updates.length > 0)) || this.docCursors_.has(pageId);
+  }
+
+  heldPages(workspaceId: Id): Promise<Id[]> {
+    return this.run(() =>
+      [...this.mirror.pages.values()]
+        .filter((p) => p.workspaceId === workspaceId && this.holds(p.id))
+        .map((p) => p.id)
+        .sort(),
+    );
+  }
+
+  storageUsage(workspaceId: Id): Promise<StorageUsage> {
+    return this.run(() => {
+      const usage: StorageUsage = {
+        pages: 0,
+        docBytes: 0,
+        assetBytes: 0,
+        historyBytes: 0,
+        quarantineBytes: 0,
+      };
+      for (const page of this.mirror.pages.values()) {
+        if (page.workspaceId !== workspaceId) continue;
+        const log = this.docs.get(page.id);
+        if (this.holds(page.id)) usage.pages++;
+        if (log)
+          usage.docBytes +=
+            (log.snapshot?.byteLength ?? 0) +
+            log.updates.reduce((n, u) => n + u.data.byteLength, 0);
+      }
+      for (const [assetId, bytes] of this.assetBytes)
+        if (this.mirror.assets.get(assetId)?.workspaceId === workspaceId)
+          usage.assetBytes += bytes.byteLength;
+      for (const h of this.history.values())
+        if (this.mirror.pages.get(h.entry.pageId)?.workspaceId === workspaceId)
+          usage.historyBytes += h.data.byteLength;
+      for (const entry of this.quarantine_)
+        if (entry.workspaceId === workspaceId)
+          usage.quarantineBytes += entry.parts.reduce((n, p) => n + p.byteLength, 0);
+      return usage;
+    });
+  }
+
+  /** The page's log into a pending entry, its unsent updates out of the log; null if none. */
+  private setAside(pageId: Id, reason: string): QuarantineEntry | null {
+    const log = this.docs.get(pageId);
+    const page = this.mirror.pages.get(pageId);
+    if (!log || !page || !this.synced(pageId) || !log.updates.some((u) => u.seq === null))
+      return null;
+    const entry: QuarantineEntry = {
+      id: uuidv7(),
+      workspaceId: page.workspaceId,
+      pageId,
+      title: page.title,
+      reason,
+      at: new Date().toISOString(),
+      parts: [
+        ...(log.snapshot ? [copy(log.snapshot)] : []),
+        ...log.updates.map((u) => copy(u.data)),
+      ],
+      status: 'pending',
+      recoveredPageId: null,
+    };
+    this.quarantine_.push(entry);
+    log.updates = log.updates.filter((u) => u.seq !== null);
+    return structuredClone(entry);
+  }
+
+  setAsideDoc(pageId: Id, reason: string): Promise<QuarantineEntry | null> {
+    return this.run(() => this.setAside(pageId, reason));
+  }
+
+  quarantine(workspaceId: Id | null): Promise<QuarantineEntry[]> {
+    return this.run(() =>
+      this.quarantine_
+        .filter((e) => workspaceId === null || e.workspaceId === workspaceId)
+        .sort((a, b) => (a.id < b.id ? 1 : -1))
+        .map((e) => structuredClone(e)),
+    );
+  }
+
+  settleQuarantine(
+    id: Id,
+    status: 'recovered' | 'dismissed',
+    recoveredPageId: Id | null = null,
+  ): Promise<void> {
+    return this.run(() => {
+      const entry = this.quarantine_.find((e) => e.id === id);
+      if (!entry) return;
+      entry.status = status;
+      entry.recoveredPageId = recoveredPageId ?? entry.recoveredPageId;
+    });
+  }
+
+  repairState(pageId: Id): Promise<RepairState | null> {
+    return this.run(() => structuredClone(this.repairs.get(pageId) ?? null));
+  }
+
+  setRepairState(state: RepairState): Promise<void> {
+    return this.run(() => void this.repairs.set(state.pageId, { ...state }));
   }
 
   purgeTrash(workspaceId: Id, before: string): Promise<Id[]> {

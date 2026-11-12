@@ -292,6 +292,58 @@ export interface Prefs {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Offline (store schema 3; SYNC_DESIGN.md, Offline availability, Conflict resolution)
+
+/** A page kept on this device for offline use (M3.1). */
+export interface PinRecord {
+  workspaceId: Id;
+  pageId: Id;
+  /** The pages under it too, including pages added later. */
+  subtree: boolean;
+  pinnedAt: string;
+}
+
+/** What this device set aside so nothing typed is lost; it becomes a recovered page (M3.3). */
+export interface QuarantineEntry {
+  id: Id;
+  workspaceId: Id;
+  /** The original page. */
+  pageId: Id;
+  /** The original's title when it was set aside. */
+  title: string;
+  /** Why: `doc.epochMismatch`, `page.gone`, `access.denied`, `page.removed`. */
+  reason: string;
+  at: string;
+  /** The page's log when it was set aside: its snapshot (if any) first, then every update in order. */
+  parts: Uint8Array[];
+  status: 'pending' | 'recovered' | 'dismissed';
+  /** The recovered page made from it, once made. */
+  recoveredPageId: Id | null;
+}
+
+/** The last state-hash check of a page (M3.2, the repair path). */
+export interface RepairState {
+  pageId: Id;
+  epoch: number;
+  /** The server head at which the local state last matched, or was repaired. */
+  checkedSeq: number;
+  at: string;
+  /** Repairs made at this epoch and head; the engine stops after one that did not help. */
+  repairs: number;
+}
+
+/** What a workspace takes up on this device. */
+export interface StorageUsage {
+  /** Pages whose document this device holds. */
+  pages: number;
+  /** Their snapshots and updates. */
+  docBytes: number;
+  assetBytes: number;
+  historyBytes: number;
+  quarantineBytes: number;
+}
+
+// ---------------------------------------------------------------------------------------------
 // The local store (D11, SYNC_DESIGN.md "The local store")
 
 export interface MirrorSnapshot {
@@ -383,6 +435,33 @@ export interface LocalStore {
   getPref<T>(key: string): Promise<T | undefined>;
   setPref(key: string, value: unknown): Promise<void>;
 
+  // Offline (store schema 3)
+  /** Keeps a page (and, with `subtree`, the pages under it) on this device; replaces its pin. */
+  pin(pin: PinRecord): Promise<void>;
+  unpin(pageId: Id): Promise<void>;
+  pins(workspaceId: Id): Promise<PinRecord[]>;
+  /** Pages of the workspace whose document this device holds: a log, a snapshot or a cursor. */
+  heldPages(workspaceId: Id): Promise<Id[]>;
+  storageUsage(workspaceId: Id): Promise<StorageUsage>;
+  /**
+   * Copies the page's whole log into a pending quarantine entry and removes its unsent updates
+   * from the log (acknowledged ones stay). Null, and nothing changes, when nothing is unsent.
+   *
+   * The stores apply the same rule themselves when the server's word (`applyRemote`,
+   * `settleOps`, a lost workspace) removes a page of a synced workspace with unsent updates: its
+   * log is set aside first, in the same transaction, with reason `page.removed`.
+   */
+  setAsideDoc(pageId: Id, reason: string): Promise<QuarantineEntry | null>;
+  /** Newest first; every workspace's when null. Entries outlive their page and workspace. */
+  quarantine(workspaceId: Id | null): Promise<QuarantineEntry[]>;
+  settleQuarantine(
+    id: Id,
+    status: 'recovered' | 'dismissed',
+    recoveredPageId?: Id | null,
+  ): Promise<void>;
+  repairState(pageId: Id): Promise<RepairState | null>;
+  setRepairState(state: RepairState): Promise<void>;
+
   // Housekeeping
   /** Removes for good every page of the workspace trashed before `before`, with its document. */
   purgeTrash(workspaceId: Id, before: string): Promise<Id[]>;
@@ -391,4 +470,4 @@ export interface LocalStore {
 }
 
 /** The store schema version this build reads and writes (SYNC_DESIGN.md, local migration). */
-export const STORE_SCHEMA_VERSION = 2;
+export const STORE_SCHEMA_VERSION = 3;

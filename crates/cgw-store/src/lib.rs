@@ -13,9 +13,15 @@
 //!
 //! Store schema 2 (Phase 2, cloud sync) adds the sync state: each outbox entry's workspace and
 //! entity, a change-feed cursor per workspace, and a document cursor (head sequence and epoch) per
-//! page. A synced workspace is one whose JSON body has `localOnly: false`. An older store is copied
-//! beside itself (`workspace.v1.db`) and then migrated in one transaction; a newer one is refused,
-//! never wiped.
+//! page. A synced workspace is one whose JSON body has `localOnly: false`.
+//!
+//! Store schema 3 (Phase 3, offline) adds pins, repair state and the quarantine: what was set
+//! aside so nothing typed is lost, to become recovered pages. When the server's word (a remote
+//! plan, sent with `setAside`) removes a page of a synced workspace whose log holds unsent updates,
+//! its log is set aside first, in the same transaction.
+//!
+//! An older store is copied beside itself (`workspace.v{n}.db`) and then migrated in one
+//! transaction; a newer one is refused, never wiped.
 
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::Deserialize;
@@ -25,7 +31,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// The store schema version this build reads and writes.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// The largest frame accepted: a few large images and a page's log fit well inside.
 pub const MAX_FRAME: usize = 256 * 1024 * 1024;
@@ -221,12 +227,32 @@ CREATE INDEX sections_workspace ON sections (workspace_id);
 CREATE INDEX assets_workspace ON assets (workspace_id);
 "#;
 
+/// Schema 3 (Phase 3, offline): pins, the quarantine (an entry and its parts, the page's log as it
+/// was set aside) and the repair state, each keyed by page or entry.
+const MIGRATE_2_TO_3: &str = r#"
+CREATE TABLE pins (page_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, body TEXT NOT NULL);
+CREATE INDEX pins_workspace ON pins (workspace_id);
+CREATE TABLE quarantine (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, page_id TEXT NOT NULL, title TEXT NOT NULL,
+  reason TEXT NOT NULL, at TEXT NOT NULL, status TEXT NOT NULL, recovered_page_id TEXT);
+CREATE INDEX quarantine_workspace ON quarantine (workspace_id);
+CREATE TABLE quarantine_parts (
+  entry_id TEXT NOT NULL, part INTEGER NOT NULL, data BLOB NOT NULL, PRIMARY KEY (entry_id, part));
+CREATE TABLE repairs (page_id TEXT PRIMARY KEY, body TEXT NOT NULL);
+"#;
+
 /// The migrations in order: `MIGRATIONS[n - 1]` takes a store from version `n` to `n + 1`.
-const MIGRATIONS: [&str; 1] = [MIGRATE_1_TO_2];
+const MIGRATIONS: [&str; 2] = [MIGRATE_1_TO_2, MIGRATE_2_TO_3];
 const _: () = assert!(MIGRATIONS.len() as i64 == SCHEMA_VERSION - 1);
 
 /// A workspace that syncs, for a query that names its row `w`: `localOnly` is false in its body.
 const SYNCED: &str = "COALESCE(json_extract(w.body, '$.localOnly'), 0) = 0";
+
+/// A page whose document this device holds, for a query that names its row `p`: a cursor, an
+/// update, or a snapshot.
+const HELD: &str = "(EXISTS (SELECT 1 FROM doc_cursors c WHERE c.page_id = p.id)
+  OR EXISTS (SELECT 1 FROM doc_updates u WHERE u.page_id = p.id)
+  OR EXISTS (SELECT 1 FROM doc_logs l WHERE l.page_id = p.id AND l.snapshot IS NOT NULL))";
 
 /// The schema version a store records; `None` for a new file (no version was ever written).
 fn stored_version(conn: &Connection) -> Result<Option<i64>> {
@@ -278,19 +304,19 @@ fn backup(conn: &Connection, path: &Path, version: i64) -> Result<PathBuf> {
 
 /// Runs the migrations after `from` (and, for a new store, schema 1 first) and records the new
 /// version, in one transaction: a migration that fails leaves the store as it was.
-fn migrate(conn: &mut Connection, from: Option<i64>) -> Result<()> {
+fn migrate(conn: &mut Connection, from: Option<i64>, migrations: &[&str]) -> Result<()> {
     let tx = conn.transaction()?;
     if from.is_none() {
         tx.execute_batch(SCHEMA_V1)?;
     }
     let first = from.unwrap_or(1) as usize - 1;
-    for migration in &MIGRATIONS[first..] {
+    for migration in &migrations[first..] {
         tx.execute_batch(migration)?;
     }
     tx.execute(
         "INSERT INTO meta (key, value) VALUES ('schemaVersion', ?1)
          ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-        params![SCHEMA_VERSION.to_string()],
+        params![(migrations.len() as i64 + 1).to_string()],
     )?;
     tx.commit()?;
     Ok(())
@@ -305,6 +331,12 @@ impl Store {
     /// Opens (or creates) the store in a directory: `workspace.db` and an `assets` folder. An older
     /// store is copied to `workspace.v{n}.db` and migrated; a newer one is refused, never wiped.
     pub fn open(dir: &Path) -> Result<Store> {
+        Store::open_with(dir, &MIGRATIONS)
+    }
+
+    /// `open` with the migrations given (a test makes one fail), up to the version they reach.
+    fn open_with(dir: &Path, migrations: &[&str]) -> Result<Store> {
+        let target = migrations.len() as i64 + 1;
         fs::create_dir_all(dir.join("assets"))?;
         let path = dir.join("workspace.db");
         let mut conn = Connection::open(&path)?;
@@ -313,16 +345,16 @@ impl Store {
             "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;",
         )?;
         match stored_version(&conn)? {
-            None => migrate(&mut conn, None)?,
-            Some(version) if version > SCHEMA_VERSION => {
+            None => migrate(&mut conn, None, migrations)?,
+            Some(version) if version > target => {
                 // Never wipe a newer store: its outbox may hold unsent work (SYNC_DESIGN.md).
                 return fail(format!(
                     "This store was written by a newer version ({version}); update the app."
                 ));
             }
-            Some(version) if version < SCHEMA_VERSION => {
+            Some(version) if version < target => {
                 backup(&conn, &path, version)?;
-                migrate(&mut conn, Some(version))?;
+                migrate(&mut conn, Some(version), migrations)?;
             }
             Some(_) => {}
         }
@@ -358,7 +390,7 @@ impl Store {
             "readMirror" => {
                 none(self.read_mirror(header.get("workspaceId").and_then(Value::as_str))?)
             }
-            "applyPlan" => none(self.apply_plan(&header["plan"])?),
+            "applyPlan" => none(self.apply_plan(&header["plan"], present(&header, "setAside"))?),
             "nextOutboxBatch" => none(self.next_outbox(
                 i64_of(&header, "limit")?,
                 optional_id(&header, "workspaceId")?,
@@ -383,6 +415,16 @@ impl Store {
             "getAssetBytes" => self.get_asset(check_id(str_of(&header, "id")?)?),
             "getPref" => none(self.get_pref(str_of(&header, "key")?)?),
             "setPref" => none(self.set_pref(str_of(&header, "key")?, &header["value"])?),
+            "pin" => none(self.pin(&header["pin"])?),
+            "unpin" => none(self.unpin(check_id(str_of(&header, "pageId")?)?)?),
+            "pins" => none(self.pins(check_id(str_of(&header, "workspaceId")?)?)?),
+            "heldPages" => none(self.held_pages(check_id(str_of(&header, "workspaceId")?)?)?),
+            "storageUsage" => none(self.storage_usage(check_id(str_of(&header, "workspaceId")?)?)?),
+            "setAsideDoc" => self.set_aside_doc(&header),
+            "quarantine" => self.quarantine_entries(optional_id(&header, "workspaceId")?),
+            "settleQuarantine" => none(self.settle_quarantine(&header)?),
+            "repairState" => none(self.repair_state(check_id(str_of(&header, "pageId")?)?)?),
+            "setRepairState" => none(self.set_repair_state(&header["state"])?),
             other => fail(format!("unknown request: {other:.40}")),
         }
     }
@@ -823,7 +865,11 @@ impl Store {
     /// upload's start): the outbox, records, deletes and the change-feed cursor, together. A remote
     /// plan's parts go first: answered operations leave the outbox, lost workspaces go with all they
     /// hold, and an upload's creates replace a workspace's outbox.
-    fn apply_plan(&mut self, plan: &Value) -> Result<Value> {
+    ///
+    /// A remote plan comes with `setAside` (`reason`, `at`, and `ids`, one per deleted page): before
+    /// anything else, each deleted page of a synced workspace whose log holds an unsent update has
+    /// its log set aside under its id. A local plan (the user's own delete) has none.
+    fn apply_plan(&mut self, plan: &Value, set_aside_with: Option<&Value>) -> Result<Value> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Pair {
@@ -838,6 +884,18 @@ impl Store {
         };
         let mut gone_assets = Vec::new();
         let tx = self.conn.transaction()?;
+        if let Some(aside) = set_aside_with {
+            let reason = reason_of(aside)?;
+            let at = time_of(aside, "at")?;
+            let pages = ids_of(plan, "deletePages")?;
+            let ids = ids_of(aside, "ids")?;
+            if ids.len() != pages.len() {
+                return fail("applyPlan: one set-aside id per deleted page");
+            }
+            for (page, id) in pages.iter().zip(&ids) {
+                set_aside(&tx, page, reason, id, at)?;
+            }
+        }
         for id in ids_of(plan, "settled")? {
             tx.execute("DELETE FROM outbox WHERE op_id = ?1", params![id])?;
         }
@@ -1177,12 +1235,303 @@ impl Store {
         )?;
         Ok(Value::Null)
     }
+
+    // Offline (store schema 3) -------------------------------------------------------------------
+
+    /// Keeps a page on this device; pinning it again replaces its pin.
+    fn pin(&mut self, pin: &Value) -> Result<Value> {
+        let page = check_id(str_of(pin, "pageId")?)?;
+        let workspace = check_id(str_of(pin, "workspaceId")?)?;
+        if !pin.get("subtree").is_some_and(Value::is_boolean) {
+            return fail("pin: missing boolean \"subtree\"");
+        }
+        time_of(pin, "pinnedAt")?;
+        self.conn.execute(
+            "INSERT INTO pins (page_id, workspace_id, body) VALUES (?1, ?2, ?3)
+             ON CONFLICT (page_id) DO UPDATE SET workspace_id = excluded.workspace_id,
+               body = excluded.body",
+            params![page, workspace, pin.to_string()],
+        )?;
+        Ok(Value::Null)
+    }
+
+    fn unpin(&mut self, page: &str) -> Result<Value> {
+        self.conn
+            .execute("DELETE FROM pins WHERE page_id = ?1", params![page])?;
+        Ok(Value::Null)
+    }
+
+    /// A workspace's pins, in page order.
+    fn pins(&mut self, workspace: &str) -> Result<Value> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT body FROM pins WHERE workspace_id = ?1 ORDER BY page_id")?;
+        let rows = statement.query_map(params![workspace], |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(serde_json::from_str::<Value>(&row?)?);
+        }
+        Ok(Value::Array(out))
+    }
+
+    /// The workspace's pages whose document this device holds, in id order.
+    fn held_pages(&mut self, workspace: &str) -> Result<Value> {
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT p.id FROM pages p WHERE p.workspace_id = ?1 AND {HELD} ORDER BY p.id"
+        ))?;
+        let rows = statement.query_map(params![workspace], |r| r.get::<_, String>(0))?;
+        Ok(Value::Array(
+            rows.map(|row| row.map(Value::String))
+                .collect::<rusqlite::Result<_>>()?,
+        ))
+    }
+
+    /// What a workspace takes up: the bytes' lengths in SQL (`LENGTH` of each blob), and the asset
+    /// files' sizes from their metadata.
+    fn storage_usage(&mut self, workspace: &str) -> Result<Value> {
+        let tx = self.conn.transaction()?;
+        let (pages, doc_bytes, history_bytes, quarantine_bytes): (i64, i64, i64, i64) = tx
+            .query_row(
+                &format!(
+                    "SELECT
+                   (SELECT COUNT(*) FROM pages p WHERE p.workspace_id = ?1 AND {HELD}),
+                   (SELECT COALESCE(SUM(LENGTH(l.snapshot)), 0) FROM doc_logs l
+                      JOIN pages p ON p.id = l.page_id WHERE p.workspace_id = ?1)
+                   + (SELECT COALESCE(SUM(LENGTH(u.data)), 0) FROM doc_updates u
+                      JOIN pages p ON p.id = u.page_id WHERE p.workspace_id = ?1),
+                   (SELECT COALESCE(SUM(h.size_bytes), 0) FROM history h
+                      JOIN pages p ON p.id = h.page_id WHERE p.workspace_id = ?1),
+                   (SELECT COALESCE(SUM(LENGTH(q.data)), 0) FROM quarantine_parts q
+                      JOIN quarantine e ON e.id = q.entry_id WHERE e.workspace_id = ?1)"
+                ),
+                params![workspace],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )?;
+        let assets: Vec<String> = {
+            let mut statement = tx.prepare("SELECT id FROM assets WHERE workspace_id = ?1")?;
+            let rows = statement.query_map(params![workspace], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        tx.commit()?;
+        let mut asset_bytes = 0u64;
+        for id in assets {
+            match fs::metadata(self.assets.join(check_id(&id)?)) {
+                Ok(file) => asset_bytes += file.len(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(json!({
+            "pages": pages,
+            "docBytes": doc_bytes,
+            "assetBytes": asset_bytes,
+            "historyBytes": history_bytes,
+            "quarantineBytes": quarantine_bytes,
+        }))
+    }
+
+    /// Sets a page's log aside under the id and time the webview made: the entry, and its parts
+    /// as the blobs; null and no blobs when nothing is unsent.
+    fn set_aside_doc(&mut self, header: &Value) -> Result<(Value, Vec<Vec<u8>>)> {
+        let page = check_id(str_of(header, "pageId")?)?;
+        let id = check_id(str_of(header, "id")?)?;
+        let reason = reason_of(header)?;
+        let at = time_of(header, "at")?;
+        let tx = self.conn.transaction()?;
+        let entry = set_aside(&tx, page, reason, id, at)?;
+        tx.commit()?;
+        Ok(entry.unwrap_or((Value::Null, Vec::new())))
+    }
+
+    /// Entries newest first, of a workspace or of all: each says how many parts it has, and the
+    /// parts follow as the blobs, entry by entry.
+    fn quarantine_entries(&mut self, workspace: Option<&str>) -> Result<(Value, Vec<Vec<u8>>)> {
+        let tx = self.conn.transaction()?;
+        let mut entries = Vec::new();
+        let mut blobs = Vec::new();
+        {
+            let mut statement = tx.prepare(
+                "SELECT id, workspace_id, page_id, title, reason, at, status, recovered_page_id
+                 FROM quarantine WHERE ?1 IS NULL OR workspace_id = ?1 ORDER BY id DESC",
+            )?;
+            let mut parts =
+                tx.prepare("SELECT data FROM quarantine_parts WHERE entry_id = ?1 ORDER BY part")?;
+            let mut rows = statement.query(params![workspace])?;
+            while let Some(row) = rows.next()? {
+                let id: String = row.get(0)?;
+                let data = parts
+                    .query_map(params![id], |r| r.get::<_, Vec<u8>>(0))?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                entries.push(json!({
+                    "id": id,
+                    "workspaceId": row.get::<_, String>(1)?,
+                    "pageId": row.get::<_, String>(2)?,
+                    "title": row.get::<_, String>(3)?,
+                    "reason": row.get::<_, String>(4)?,
+                    "at": row.get::<_, String>(5)?,
+                    "status": row.get::<_, String>(6)?,
+                    "recoveredPageId": row.get::<_, Option<String>>(7)?,
+                    "parts": data.len(),
+                }));
+                blobs.extend(data);
+            }
+        }
+        tx.commit()?;
+        Ok((Value::Array(entries), blobs))
+    }
+
+    /// An entry recovered (with the page made from it) or dismissed; a page it named stays named.
+    fn settle_quarantine(&mut self, header: &Value) -> Result<Value> {
+        let id = check_id(str_of(header, "id")?)?;
+        let status = str_of(header, "status")?;
+        if status != "recovered" && status != "dismissed" {
+            return fail(format!("settleQuarantine: not a status: {status:.20}"));
+        }
+        let recovered = optional_id(header, "recoveredPageId")?;
+        self.conn.execute(
+            "UPDATE quarantine SET status = ?2, recovered_page_id = COALESCE(?3, recovered_page_id)
+             WHERE id = ?1",
+            params![id, status, recovered],
+        )?;
+        Ok(Value::Null)
+    }
+
+    fn repair_state(&mut self, page: &str) -> Result<Value> {
+        let body: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT body FROM repairs WHERE page_id = ?1",
+                params![page],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(match body {
+            Some(text) => serde_json::from_str(&text)?,
+            None => Value::Null,
+        })
+    }
+
+    fn set_repair_state(&mut self, state: &Value) -> Result<Value> {
+        let page = check_id(str_of(state, "pageId")?)?;
+        for key in ["epoch", "checkedSeq", "repairs"] {
+            i64_of(state, key)?;
+        }
+        time_of(state, "at")?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO repairs (page_id, body) VALUES (?1, ?2)",
+            params![page, state.to_string()],
+        )?;
+        Ok(Value::Null)
+    }
+}
+
+/// Why a log was set aside: a short code such as `page.removed` or `doc.epochMismatch`.
+fn reason_of(value: &Value) -> Result<&str> {
+    let reason = str_of(value, "reason")?;
+    let ok = !reason.is_empty()
+        && reason.len() <= 64
+        && reason
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if ok {
+        Ok(reason)
+    } else {
+        fail(format!("not a reason: {reason:.40}"))
+    }
+}
+
+/// An ISO time, as the webview wrote it; only its length is checked.
+fn time_of<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
+    let time = str_of(value, key)?;
+    if time.is_empty() || time.len() > 40 {
+        return fail(format!("not a time: \"{key}\""));
+    }
+    Ok(time)
+}
+
+/// Copies a page's whole log (its snapshot, then every update in order) into a pending entry and
+/// removes its unsent updates; acknowledged ones stay. Nothing is written, and `None` comes back,
+/// unless the page is one of a synced workspace with an unsent update.
+fn set_aside(
+    tx: &Transaction,
+    page: &str,
+    reason: &str,
+    id: &str,
+    at: &str,
+) -> Result<Option<(Value, Vec<Vec<u8>>)>> {
+    let found: Option<(String, Option<String>)> = tx
+        .query_row(
+            &format!(
+                "SELECT p.workspace_id, json_extract(p.body, '$.title') FROM pages p
+                 JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = ?1 AND {SYNCED}"
+            ),
+            params![page],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((workspace, title)) = found else {
+        return Ok(None);
+    };
+    let unsent: bool = tx.query_row(
+        "SELECT EXISTS (SELECT 1 FROM doc_updates WHERE page_id = ?1 AND seq IS NULL)",
+        params![page],
+        |r| r.get(0),
+    )?;
+    if !unsent {
+        return Ok(None);
+    }
+    let mut parts = Vec::new();
+    let snapshot: Option<Option<Vec<u8>>> = tx
+        .query_row(
+            "SELECT snapshot FROM doc_logs WHERE page_id = ?1",
+            params![page],
+            |r| r.get(0),
+        )
+        .optional()?;
+    parts.extend(snapshot.flatten());
+    {
+        let mut statement =
+            tx.prepare("SELECT data FROM doc_updates WHERE page_id = ?1 ORDER BY local_seq")?;
+        let rows = statement.query_map(params![page], |r| r.get::<_, Vec<u8>>(0))?;
+        for row in rows {
+            parts.push(row?);
+        }
+    }
+    let title = title.unwrap_or_default();
+    tx.execute(
+        "INSERT INTO quarantine (id, workspace_id, page_id, title, reason, at, status, recovered_page_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', NULL)",
+        params![id, workspace, page, title, reason, at],
+    )?;
+    for (part, data) in parts.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO quarantine_parts (entry_id, part, data) VALUES (?1, ?2, ?3)",
+            params![id, part as i64, data],
+        )?;
+    }
+    tx.execute(
+        "DELETE FROM doc_updates WHERE page_id = ?1 AND seq IS NULL",
+        params![page],
+    )?;
+    let entry = json!({
+        "id": id,
+        "workspaceId": workspace,
+        "pageId": page,
+        "title": title,
+        "reason": reason,
+        "at": at,
+        "status": "pending",
+        "recoveredPageId": null,
+    });
+    Ok(Some((entry, parts)))
 }
 
 /// A page removed for good: its record, document and its cursor, history, search entry,
-/// favourites and visits.
+/// favourites, visits, pin and repair state. What was set aside from it stays.
 fn drop_page(tx: &Transaction, id: &str) -> Result<()> {
     for sql in [
+        "DELETE FROM pins WHERE page_id = ?1",
+        "DELETE FROM repairs WHERE page_id = ?1",
         "DELETE FROM pages WHERE id = ?1",
         "DELETE FROM doc_logs WHERE page_id = ?1",
         "DELETE FROM doc_updates WHERE page_id = ?1",
@@ -1317,20 +1666,40 @@ mod tests {
 
     #[test]
     fn refuses_a_store_from_a_newer_version() {
+        let newer = SCHEMA_VERSION + 1;
         let dir = tempfile::tempdir().unwrap();
-        drop(Store::open(dir.path()).unwrap());
+        let mut store = Store::open(dir.path()).unwrap();
+        call(
+            &mut store,
+            json!({ "op": "appendDocUpdates", "pageId": PAGE, "updateIds": [PAGE] }),
+            &[vec![1, 2]],
+        );
+        drop(store);
         let conn = Connection::open(dir.path().join("workspace.db")).unwrap();
         conn.execute(
-            "UPDATE meta SET value = '99' WHERE key = 'schemaVersion'",
-            [],
+            "UPDATE meta SET value = ?1 WHERE key = 'schemaVersion'",
+            params![newer.to_string()],
         )
         .unwrap();
         drop(conn);
+        let before = fs::read(dir.path().join("workspace.db")).unwrap();
         match Store::open(dir.path()) {
-            Err(error) => assert!(error.0.contains("newer version")),
+            Err(error) => assert_eq!(
+                error.0,
+                format!("This store was written by a newer version ({newer}); update the app.")
+            ),
             Ok(_) => panic!("a newer store opened"),
         }
-        // Refused, not wiped: the store is as it was, and nothing was copied.
+        // Refused, not wiped: the file is byte for byte as it was, and nothing was copied.
+        assert_eq!(fs::read(dir.path().join("workspace.db")).unwrap(), before);
+        let names: Vec<String> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            names.iter().all(|n| !n.starts_with("workspace.v")),
+            "{names:?}"
+        );
         let conn = Connection::open(dir.path().join("workspace.db")).unwrap();
         let version: String = conn
             .query_row(
@@ -1339,8 +1708,344 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(version, "99");
-        assert!(!dir.path().join("workspace.v99.db").exists());
+        assert_eq!(version, newer.to_string());
+    }
+
+    /// A fixture (`tests/fixtures/v{n}`, written by that release's own store: `make.mjs`) copied
+    /// into a fresh directory, and the answers that release gave to its reads.
+    fn fixture(version: i64) -> (tempfile::TempDir, Value) {
+        let source =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/v{version}"));
+        let dir = tempfile::tempdir().unwrap();
+        fs::copy(source.join("workspace.db"), dir.path().join("workspace.db")).unwrap();
+        fs::create_dir_all(dir.path().join("assets")).unwrap();
+        for file in fs::read_dir(source.join("assets")).unwrap() {
+            let file = file.unwrap();
+            fs::copy(
+                file.path(),
+                dir.path().join("assets").join(file.file_name()),
+            )
+            .unwrap();
+        }
+        let expected = fs::read_to_string(source.join("expected.json")).unwrap();
+        (dir, serde_json::from_str(&expected).unwrap())
+    }
+
+    fn blobs_of(value: &Value) -> Vec<Vec<u8>> {
+        serde_json::from_value(value.clone()).unwrap()
+    }
+
+    /// The answer the release gave to a request of the kind, for a key's value.
+    fn answer_to<'a>(expected: &'a Value, op: &str, key: &str, id: &str) -> &'a Value {
+        expected["reads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|read| read["request"]["op"] == op && read["request"][key] == id)
+            .unwrap_or_else(|| panic!("no {op} for {id}"))
+    }
+
+    #[test]
+    fn migrates_every_earlier_store_with_all_it_held() {
+        for version in 1..SCHEMA_VERSION {
+            let (dir, expected) = fixture(version);
+            let original = fs::read(dir.path().join("workspace.db")).unwrap();
+            let mut store = Store::open(dir.path()).unwrap();
+            let (answer, _) = call(&mut store, json!({ "op": "schemaVersion" }), &[]);
+            assert_eq!(answer["ok"], SCHEMA_VERSION);
+
+            // Every read the old store answered is answered the same way.
+            for read in expected["reads"].as_array().unwrap() {
+                let (answer, blobs) = call(&mut store, read["request"].clone(), &[]);
+                assert_eq!(
+                    answer["ok"], read["answer"],
+                    "v{version}: {}",
+                    read["request"]
+                );
+                assert_eq!(
+                    blobs,
+                    blobs_of(&read["blobs"]),
+                    "v{version}: {}",
+                    read["request"]
+                );
+            }
+
+            // The new collections are there, and empty; the held pages and usage add up.
+            let (mirror, _) = call(&mut store, json!({ "op": "readMirror" }), &[]);
+            let pages = mirror["ok"]["pages"].as_array().unwrap();
+            for workspace in expected["workspaces"].as_array().unwrap() {
+                let ws = workspace.as_str().unwrap();
+                let (pins, _) = call(&mut store, json!({ "op": "pins", "workspaceId": ws }), &[]);
+                assert_eq!(pins["ok"], json!([]));
+                let mut held = Vec::new();
+                let mut doc_bytes = 0;
+                for page in pages.iter().filter(|p| p["workspaceId"] == *workspace) {
+                    let id = page["id"].as_str().unwrap();
+                    let doc = answer_to(&expected, "loadDoc", "pageId", id);
+                    let cursor = (version >= 2)
+                        .then(|| &answer_to(&expected, "docCursor", "pageId", id)["answer"]);
+                    let has_doc = doc["answer"]["hasSnapshot"] == true
+                        || !doc["answer"]["updates"].as_array().unwrap().is_empty()
+                        || cursor.is_some_and(|c| !c.is_null());
+                    if has_doc {
+                        held.push(id.to_owned());
+                    }
+                    doc_bytes += blobs_of(&doc["blobs"]).iter().map(Vec::len).sum::<usize>();
+                    let (repair, _) = call(
+                        &mut store,
+                        json!({ "op": "repairState", "pageId": id }),
+                        &[],
+                    );
+                    assert_eq!(repair["ok"], Value::Null);
+                }
+                held.sort();
+                let (answer, _) = call(
+                    &mut store,
+                    json!({ "op": "heldPages", "workspaceId": ws }),
+                    &[],
+                );
+                assert_eq!(answer["ok"], json!(held), "v{version}");
+                let (usage, _) = call(
+                    &mut store,
+                    json!({ "op": "storageUsage", "workspaceId": ws }),
+                    &[],
+                );
+                assert_eq!(usage["ok"]["pages"], held.len(), "v{version}");
+                assert_eq!(usage["ok"]["docBytes"], doc_bytes, "v{version}");
+                assert_eq!(usage["ok"]["quarantineBytes"], 0);
+            }
+            let (entries, blobs) = call(
+                &mut store,
+                json!({ "op": "quarantine", "workspaceId": null }),
+                &[],
+            );
+            assert_eq!((entries["ok"].clone(), blobs.len()), (json!([]), 0));
+
+            // The update kept in the corrupt area is still there, and the rest of its log loads.
+            let corrupt = &expected["corrupt"];
+            let kept: Vec<u8> = store
+                .conn
+                .query_row(
+                    "SELECT data FROM corrupt WHERE page_id = ?1 AND local_seq = ?2",
+                    params![
+                        corrupt["pageId"].as_str().unwrap(),
+                        corrupt["localSeq"].as_i64().unwrap()
+                    ],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(kept, blobs_of(&json!([corrupt["data"]]))[0]);
+
+            // What schema 3 adds works on what the old store wrote.
+            let page = expected["logPage"].as_str().unwrap();
+            let entry_id = "0190f5a0-0000-7000-8000-00000000e001";
+            let (entry, parts) = call(
+                &mut store,
+                json!({ "op": "setAsideDoc", "pageId": page, "reason": "doc.epochMismatch",
+                        "id": entry_id, "at": "2026-11-12T00:00:00.000Z" }),
+                &[],
+            );
+            if version >= 2 {
+                assert_eq!(entry["ok"]["id"], entry_id);
+                let doc = answer_to(&expected, "loadDoc", "pageId", page);
+                assert_eq!(parts, blobs_of(&doc["blobs"]));
+            } else {
+                // A version-1 workspace is local: nothing of it is set aside.
+                assert_eq!(entry["ok"], Value::Null);
+            }
+            drop(store);
+
+            // The copy is the store as the old release left it, byte for byte.
+            let copy = dir.path().join(format!("workspace.v{version}.db"));
+            assert_eq!(fs::read(&copy).unwrap(), original, "v{version}");
+            // Opening again migrates nothing more.
+            let mut store = Store::open(dir.path()).unwrap();
+            let (answer, _) = call(&mut store, json!({ "op": "schemaVersion" }), &[]);
+            assert_eq!(answer["ok"], SCHEMA_VERSION);
+        }
+    }
+
+    #[test]
+    fn copies_a_version_2_store_before_the_migration_changes_anything() {
+        let (dir, _) = fixture(2);
+        // A write still in the WAL (no checkpoint runs while this connection is open): the copy
+        // holds it only if the WAL went in first.
+        let old = Connection::open(dir.path().join("workspace.db")).unwrap();
+        old.execute_batch("PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;")
+            .unwrap();
+        old.execute(
+            "INSERT INTO prefs (key, value) VALUES ('late', '\"in the WAL\"')",
+            [],
+        )
+        .unwrap();
+        let mut store = Store::open(dir.path()).unwrap();
+        drop(old);
+        let (answer, _) = call(&mut store, json!({ "op": "getPref", "key": "late" }), &[]);
+        assert_eq!(answer["ok"], "in the WAL");
+        let copy = Connection::open(dir.path().join("workspace.v2.db")).unwrap();
+        let (version, late, pins): (String, String, i64) = copy
+            .query_row(
+                "SELECT (SELECT value FROM meta WHERE key = 'schemaVersion'),
+                        (SELECT value FROM prefs WHERE key = 'late'),
+                        (SELECT COUNT(*) FROM sqlite_master WHERE name = 'pins')",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (version.as_str(), late.as_str(), pins),
+            ("2", "\"in the WAL\"", 0)
+        );
+        let tables: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name IN
+                   ('pins', 'quarantine', 'quarantine_parts', 'repairs')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(tables, 4);
+    }
+
+    #[test]
+    fn a_migration_that_fails_leaves_the_store_as_it_was() {
+        let (dir, expected) = fixture(2);
+        let path = dir.path().join("workspace.db");
+        let before = fs::read(&path).unwrap();
+        // Schema 3's tables are made, then a statement fails: the whole migration rolls back.
+        let failing = format!("{MIGRATE_2_TO_3}\nINSERT INTO no_such_table VALUES (1);");
+        match Store::open_with(dir.path(), &[MIGRATE_1_TO_2, &failing]) {
+            Err(error) => assert!(error.0.contains("no_such_table"), "{}", error.0),
+            Ok(_) => panic!("the failing migration succeeded"),
+        }
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(
+            fs::read(dir.path().join("workspace.v2.db")).unwrap(),
+            before
+        );
+        let conn = Connection::open(&path).unwrap();
+        let (version, pins): (String, i64) = conn
+            .query_row(
+                "SELECT (SELECT value FROM meta WHERE key = 'schemaVersion'),
+                        (SELECT COUNT(*) FROM sqlite_master WHERE name = 'pins')",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((version.as_str(), pins), ("2", 0));
+        drop(conn);
+        // The next start migrates it, with all it held.
+        let mut store = Store::open(dir.path()).unwrap();
+        let read = &expected["reads"][0];
+        let (answer, _) = call(&mut store, read["request"].clone(), &[]);
+        assert_eq!(answer["ok"], read["answer"]);
+    }
+
+    #[test]
+    fn a_set_aside_is_written_in_its_plans_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(dir.path()).unwrap();
+        let workspace = json!({ "id": WS, "name": "Synced", "localOnly": false });
+        call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": { "workspaces": [workspace], "pages": [page_body()] } }),
+            &[],
+        );
+        call(
+            &mut store,
+            json!({ "op": "appendDocUpdates", "pageId": PAGE, "updateIds": [OP] }),
+            &[vec![7]],
+        );
+        let aside = json!({ "reason": "page.removed", "at": "2026-11-12T00:00:00.000Z",
+                            "ids": [ASSET] });
+        // A plan that fails after its set-aside leaves nothing set aside.
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "setAside": aside,
+                    "plan": { "deletePages": [PAGE], "pages": [{ "id": "not an id" }] } }),
+            &[],
+        );
+        assert!(answer["error"].is_string());
+        // One id per deleted page.
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": { "deletePages": [PAGE] },
+                    "setAside": { "reason": "page.removed", "at": "2026-11-12T00:00:00.000Z",
+                                  "ids": [] } }),
+            &[],
+        );
+        assert!(answer["error"]
+            .as_str()
+            .unwrap()
+            .contains("one set-aside id"));
+        let (entries, _) = call(&mut store, json!({ "op": "quarantine" }), &[]);
+        assert_eq!(entries["ok"], json!([]));
+        let (_, blobs) = call(&mut store, json!({ "op": "loadDoc", "pageId": PAGE }), &[]);
+        assert_eq!(blobs, vec![vec![7]]);
+        // The plan that applies sets the log aside, then drops the page.
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "setAside": aside, "plan": { "deletePages": [PAGE] } }),
+            &[],
+        );
+        assert_eq!(answer["ok"], Value::Null);
+        let (entries, blobs) = call(&mut store, json!({ "op": "quarantine" }), &[]);
+        assert_eq!(
+            entries["ok"],
+            json!([{ "id": ASSET, "workspaceId": WS, "pageId": PAGE, "title": "Kept",
+                     "reason": "page.removed", "at": "2026-11-12T00:00:00.000Z",
+                     "status": "pending", "recoveredPageId": null, "parts": 1 }])
+        );
+        assert_eq!(blobs, vec![vec![7]]);
+        let (_, blobs) = call(&mut store, json!({ "op": "loadDoc", "pageId": PAGE }), &[]);
+        assert!(blobs.is_empty());
+        // A reason is a short code.
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "setAsideDoc", "pageId": PAGE, "reason": "'; DROP TABLE pages",
+                    "id": OP, "at": "2026-11-12T00:00:00.000Z" }),
+            &[],
+        );
+        assert!(answer["error"].as_str().unwrap().contains("not a reason"));
+    }
+
+    #[test]
+    fn keeps_an_undecodable_update_aside_and_loads_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(dir.path()).unwrap();
+        call(
+            &mut store,
+            json!({ "op": "appendDocUpdates", "pageId": PAGE, "updateIds": [OP, ASSET, SECTION] }),
+            &[vec![1], vec![0xde, 0xad], vec![3]],
+        );
+        call(
+            &mut store,
+            json!({ "op": "quarantineUpdates", "pageId": PAGE, "localSeqs": [2],
+                    "reason": "doc.undecodable" }),
+            &[],
+        );
+        drop(store);
+        let mut store = Store::open(dir.path()).unwrap();
+        let (answer, blobs) = call(&mut store, json!({ "op": "loadDoc", "pageId": PAGE }), &[]);
+        assert_eq!(blobs, vec![vec![1], vec![3]]);
+        assert_eq!(answer["ok"]["updates"][1]["localSeq"], 3);
+        let kept: (String, Vec<u8>, String) = store
+            .conn
+            .query_row(
+                "SELECT update_id, data, reason FROM corrupt WHERE page_id = ?1 AND local_seq = 2",
+                params![PAGE],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            kept,
+            (
+                ASSET.to_owned(),
+                vec![0xde, 0xad],
+                "doc.undecodable".to_owned()
+            )
+        );
     }
 
     const WS: &str = "0193a1b2-c3d4-7e5f-8a9b-000000000010";
@@ -1413,7 +2118,7 @@ mod tests {
         let mut store = Store::open(dir.path()).unwrap();
         drop(old);
         let (answer, _) = call(&mut store, json!({ "op": "schemaVersion" }), &[]);
-        assert_eq!(answer["ok"], 2);
+        assert_eq!(answer["ok"], SCHEMA_VERSION);
         let (answer, _) = call(&mut store, json!({ "op": "readMirror" }), &[]);
         assert_eq!(answer["ok"]["workspaces"], json!([workspace]));
         assert_eq!(answer["ok"]["pages"], json!([page_body()]));
@@ -1471,7 +2176,7 @@ mod tests {
         drop(store);
         let mut store = Store::open(dir.path()).unwrap();
         let (answer, _) = call(&mut store, json!({ "op": "schemaVersion" }), &[]);
-        assert_eq!(answer["ok"], 2);
+        assert_eq!(answer["ok"], SCHEMA_VERSION);
     }
 
     #[test]
@@ -1501,6 +2206,12 @@ mod tests {
         };
         assert_eq!(schema(fresh.path()), schema(migrated.path()));
         assert!(!fresh.path().join("workspace.v1.db").exists());
+        // And the same as each release's own store, migrated.
+        for version in 1..SCHEMA_VERSION {
+            let (dir, _) = fixture(version);
+            drop(Store::open(dir.path()).unwrap());
+            assert_eq!(schema(fresh.path()), schema(dir.path()), "v{version}");
+        }
     }
 
     #[test]

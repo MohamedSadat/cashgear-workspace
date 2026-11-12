@@ -1,0 +1,1338 @@
+{
+  "version": 2,
+  "tag": "v0.2.0",
+  "workspaces": ["0190f5a0-0000-7000-8000-000000000100", "0190f5a0-0000-7000-8000-000000000200"],
+  "pages": [
+    "0190f5a0-0000-7000-8000-00000000010a",
+    "0190f5a0-0000-7000-8000-00000000010b",
+    "0190f5a0-0000-7000-8000-00000000010c",
+    "0190f5a0-0000-7000-8000-00000000010d",
+    "0190f5a0-0000-7000-8000-00000000020a",
+    "0190f5a0-0000-7000-8000-00000000020b",
+    "0190f5a0-0000-7000-8000-00000000020c",
+    "0190f5a0-0000-7000-8000-00000000020d"
+  ],
+  "logPage": "0190f5a0-0000-7000-8000-00000000010a",
+  "corrupt": {
+    "pageId": "0190f5a0-0000-7000-8000-00000000010b",
+    "localSeq": 2,
+    "data": [222, 173]
+  },
+  "assets": ["0190f5a0-0000-7000-8000-000000000400", "0190f5a0-0000-7000-8000-000000000401"],
+  "history": "0190f5a0-0000-7000-8000-000000000500",
+  "reads": [
+    {
+      "request": { "op": "readMirror", "workspaceId": null },
+      "answer": {
+        "assets": [
+          {
+            "contentType": "image/png",
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "fileName": "تقرير.png",
+            "height": 2,
+            "id": "0190f5a0-0000-7000-8000-000000000400",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "sizeBytes": 4,
+            "uploaded": false,
+            "width": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "contentType": "image/png",
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "fileName": "تقرير.png",
+            "height": 2,
+            "id": "0190f5a0-0000-7000-8000-000000000401",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "sizeBytes": 4,
+            "uploaded": true,
+            "width": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          }
+        ],
+        "favourites": [
+          {
+            "orderKey": "a0",
+            "pageId": "0190f5a0-0000-7000-8000-00000000010a",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "orderKey": "a0",
+            "pageId": "0190f5a0-0000-7000-8000-00000000020a",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "pages": [
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010a",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000101",
+            "templateOfPageId": null,
+            "title": "Alpha",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010b",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": "0190f5a0-0000-7000-8000-00000000010a",
+            "sectionId": "0190f5a0-0000-7000-8000-000000000101",
+            "templateOfPageId": null,
+            "title": "بيتا",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010c",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a1",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000101",
+            "templateOfPageId": null,
+            "title": "Gamma",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010d",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000102",
+            "templateOfPageId": null,
+            "title": "Old notes",
+            "trashRootId": "0190f5a0-0000-7000-8000-00000000010d",
+            "trashedAt": "2026-03-01T09:30:00.000Z",
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020a",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Alpha",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020b",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": "0190f5a0-0000-7000-8000-00000000020a",
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "بيتا",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020c",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a1",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Gamma",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020d",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000202",
+            "templateOfPageId": null,
+            "title": "Old notes",
+            "trashRootId": "0190f5a0-0000-7000-8000-00000000020d",
+            "trashedAt": "2026-03-01T09:30:00.000Z",
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "sections": [
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000101",
+            "name": "Pages",
+            "orderKey": "a0",
+            "version": 1,
+            "visibility": "workspace",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000102",
+            "name": "Private",
+            "orderKey": "a1",
+            "version": 1,
+            "visibility": "private",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000201",
+            "name": "Pages",
+            "orderKey": "a0",
+            "version": 1,
+            "visibility": "workspace",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000202",
+            "name": "Private",
+            "orderKey": "a1",
+            "version": 1,
+            "visibility": "private",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "visits": [
+          {
+            "lastVisitedAt": "2026-03-01T09:40:00.000Z",
+            "pageId": "0190f5a0-0000-7000-8000-00000000010b",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "lastVisitedAt": "2026-03-01T09:40:00.000Z",
+            "pageId": "0190f5a0-0000-7000-8000-00000000020b",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "workspaces": [
+          {
+            "accountId": "0190f5a0-0000-7000-8000-000000000acc",
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "deletedAt": null,
+            "icon": "📘",
+            "id": "0190f5a0-0000-7000-8000-000000000100",
+            "localOnly": false,
+            "name": "Team",
+            "role": "owner",
+            "version": 4
+          },
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "deletedAt": null,
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-000000000200",
+            "localOnly": true,
+            "name": "Mine",
+            "version": 1
+          }
+        ]
+      },
+      "blobs": []
+    },
+    {
+      "request": { "op": "readMirror", "workspaceId": "0190f5a0-0000-7000-8000-000000000100" },
+      "answer": {
+        "assets": [
+          {
+            "contentType": "image/png",
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "fileName": "تقرير.png",
+            "height": 2,
+            "id": "0190f5a0-0000-7000-8000-000000000400",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "sizeBytes": 4,
+            "uploaded": false,
+            "width": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "contentType": "image/png",
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "fileName": "تقرير.png",
+            "height": 2,
+            "id": "0190f5a0-0000-7000-8000-000000000401",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "sizeBytes": 4,
+            "uploaded": true,
+            "width": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          }
+        ],
+        "favourites": [
+          {
+            "orderKey": "a0",
+            "pageId": "0190f5a0-0000-7000-8000-00000000010a",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          }
+        ],
+        "pages": [
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010a",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000101",
+            "templateOfPageId": null,
+            "title": "Alpha",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010b",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": "0190f5a0-0000-7000-8000-00000000010a",
+            "sectionId": "0190f5a0-0000-7000-8000-000000000101",
+            "templateOfPageId": null,
+            "title": "بيتا",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010c",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a1",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000101",
+            "templateOfPageId": null,
+            "title": "Gamma",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000010d",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000102",
+            "templateOfPageId": null,
+            "title": "Old notes",
+            "trashRootId": "0190f5a0-0000-7000-8000-00000000010d",
+            "trashedAt": "2026-03-01T09:30:00.000Z",
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          }
+        ],
+        "sections": [
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000101",
+            "name": "Pages",
+            "orderKey": "a0",
+            "version": 1,
+            "visibility": "workspace",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          },
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000102",
+            "name": "Private",
+            "orderKey": "a1",
+            "version": 1,
+            "visibility": "private",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          }
+        ],
+        "visits": [
+          {
+            "lastVisitedAt": "2026-03-01T09:40:00.000Z",
+            "pageId": "0190f5a0-0000-7000-8000-00000000010b",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+          }
+        ],
+        "workspaces": [
+          {
+            "accountId": "0190f5a0-0000-7000-8000-000000000acc",
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "deletedAt": null,
+            "icon": "📘",
+            "id": "0190f5a0-0000-7000-8000-000000000100",
+            "localOnly": false,
+            "name": "Team",
+            "role": "owner",
+            "version": 4
+          }
+        ]
+      },
+      "blobs": []
+    },
+    {
+      "request": { "op": "readMirror", "workspaceId": "0190f5a0-0000-7000-8000-000000000200" },
+      "answer": {
+        "assets": [],
+        "favourites": [
+          {
+            "orderKey": "a0",
+            "pageId": "0190f5a0-0000-7000-8000-00000000020a",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "pages": [
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020a",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Alpha",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020b",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": "0190f5a0-0000-7000-8000-00000000020a",
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "بيتا",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020c",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a1",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Gamma",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020d",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000202",
+            "templateOfPageId": null,
+            "title": "Old notes",
+            "trashRootId": "0190f5a0-0000-7000-8000-00000000020d",
+            "trashedAt": "2026-03-01T09:30:00.000Z",
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 2,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "sections": [
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000201",
+            "name": "Pages",
+            "orderKey": "a0",
+            "version": 1,
+            "visibility": "workspace",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000202",
+            "name": "Private",
+            "orderKey": "a1",
+            "version": 1,
+            "visibility": "private",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "visits": [
+          {
+            "lastVisitedAt": "2026-03-01T09:40:00.000Z",
+            "pageId": "0190f5a0-0000-7000-8000-00000000020b",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          }
+        ],
+        "workspaces": [
+          {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "deletedAt": null,
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-000000000200",
+            "localOnly": true,
+            "name": "Mine",
+            "version": 1
+          }
+        ]
+      },
+      "blobs": []
+    },
+    {
+      "request": { "op": "nextOutboxBatch", "limit": 100 },
+      "answer": [
+        {
+          "baseVersion": 1,
+          "createdAt": "2026-03-01T09:48:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000010c",
+          "opId": "0190f5a0-0000-7000-8000-000000000300",
+          "payload": { "title": "Gamma 2" },
+          "type": "page.update",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:04:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-000000000200",
+          "opId": "0190f5a0-0000-7000-8000-000000000310",
+          "payload": {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "deletedAt": null,
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-000000000200",
+            "localOnly": true,
+            "name": "Mine",
+            "version": 1
+          },
+          "type": "workspace.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:05:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-000000000201",
+          "opId": "0190f5a0-0000-7000-8000-000000000311",
+          "payload": {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000201",
+            "name": "Pages",
+            "orderKey": "a0",
+            "version": 1,
+            "visibility": "workspace",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "section.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:06:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-000000000202",
+          "opId": "0190f5a0-0000-7000-8000-000000000312",
+          "payload": {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000202",
+            "name": "Private",
+            "orderKey": "a1",
+            "version": 1,
+            "visibility": "private",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "section.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:07:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020a",
+          "opId": "0190f5a0-0000-7000-8000-000000000313",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020a",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Alpha",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:08:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020b",
+          "opId": "0190f5a0-0000-7000-8000-000000000314",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020b",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": "0190f5a0-0000-7000-8000-00000000020a",
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "بيتا",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:09:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020c",
+          "opId": "0190f5a0-0000-7000-8000-000000000315",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020c",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a1",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Gamma",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:10:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020d",
+          "opId": "0190f5a0-0000-7000-8000-000000000316",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020d",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000202",
+            "templateOfPageId": null,
+            "title": "Old notes",
+            "trashRootId": "0190f5a0-0000-7000-8000-00000000020d",
+            "trashedAt": "2026-03-01T09:30:00.000Z",
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": 1,
+          "createdAt": "2026-03-01T09:11:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020d",
+          "opId": "0190f5a0-0000-7000-8000-000000000317",
+          "payload": {},
+          "type": "page.trash",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:12:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020a",
+          "opId": "0190f5a0-0000-7000-8000-000000000318",
+          "payload": { "favourite": true, "orderKey": "a0" },
+          "type": "favourite.set",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:13:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020b",
+          "opId": "0190f5a0-0000-7000-8000-000000000319",
+          "payload": { "at": "2026-03-01T09:40:00.000Z" },
+          "type": "visit.record",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000010a" },
+      "answer": {
+        "hasSnapshot": true,
+        "snapshotCovers": 1,
+        "updates": [
+          { "localSeq": 2, "seq": null, "updateId": "0190f5a0-0000-7000-8000-000000000602" },
+          { "localSeq": 3, "seq": 2, "updateId": "0190f5a0-0000-7000-8000-000000000603" },
+          { "localSeq": 4, "seq": null, "updateId": "0190f5a0-0000-7000-8000-000000000604" }
+        ]
+      },
+      "blobs": [[9, 9, 9], [2], [34], [3, 3]]
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000010a" },
+      "answer": 3,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000010a" },
+      "answer": [
+        {
+          "createdAt": "2026-03-01T09:50:00.000Z",
+          "id": "0190f5a0-0000-7000-8000-000000000500",
+          "pageId": "0190f5a0-0000-7000-8000-00000000010a",
+          "sizeBytes": 2
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000010b" },
+      "answer": {
+        "hasSnapshot": false,
+        "snapshotCovers": 0,
+        "updates": [
+          { "localSeq": 1, "seq": null, "updateId": "0190f5a0-0000-7000-8000-000000000611" }
+        ]
+      },
+      "blobs": [[11]]
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000010b" },
+      "answer": 1,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000010b" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000010c" },
+      "answer": { "hasSnapshot": true, "snapshotCovers": 1, "updates": [] },
+      "blobs": [[5, 5]]
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000010c" },
+      "answer": 0,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000010c" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000010d" },
+      "answer": { "hasSnapshot": false, "snapshotCovers": 0, "updates": [] },
+      "blobs": []
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000010d" },
+      "answer": 0,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000010d" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000020a" },
+      "answer": {
+        "hasSnapshot": false,
+        "snapshotCovers": 0,
+        "updates": [
+          { "localSeq": 1, "seq": null, "updateId": "0190f5a0-0000-7000-8000-000000000631" }
+        ]
+      },
+      "blobs": [[13]]
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000020a" },
+      "answer": 1,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000020a" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000020b" },
+      "answer": { "hasSnapshot": false, "snapshotCovers": 0, "updates": [] },
+      "blobs": []
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000020b" },
+      "answer": 0,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000020b" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000020c" },
+      "answer": { "hasSnapshot": false, "snapshotCovers": 0, "updates": [] },
+      "blobs": []
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000020c" },
+      "answer": 0,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000020c" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "loadDoc", "pageId": "0190f5a0-0000-7000-8000-00000000020d" },
+      "answer": { "hasSnapshot": false, "snapshotCovers": 0, "updates": [] },
+      "blobs": []
+    },
+    {
+      "request": { "op": "docLogLength", "pageId": "0190f5a0-0000-7000-8000-00000000020d" },
+      "answer": 0,
+      "blobs": []
+    },
+    {
+      "request": { "op": "listHistory", "pageId": "0190f5a0-0000-7000-8000-00000000020d" },
+      "answer": [],
+      "blobs": []
+    },
+    {
+      "request": { "op": "getHistory", "id": "0190f5a0-0000-7000-8000-000000000500" },
+      "answer": true,
+      "blobs": [[8, 8]]
+    },
+    {
+      "request": { "op": "getAssetBytes", "id": "0190f5a0-0000-7000-8000-000000000400" },
+      "answer": true,
+      "blobs": [[137, 80, 78, 71]]
+    },
+    {
+      "request": { "op": "getAssetBytes", "id": "0190f5a0-0000-7000-8000-000000000401" },
+      "answer": true,
+      "blobs": [[137, 80, 78, 71]]
+    },
+    {
+      "request": {
+        "op": "search",
+        "workspaceId": "0190f5a0-0000-7000-8000-000000000100",
+        "query": "quarter",
+        "limit": 10
+      },
+      "answer": [
+        {
+          "pageId": "0190f5a0-0000-7000-8000-00000000010a",
+          "text": "the quarterly report",
+          "title": "alpha"
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": {
+        "op": "search",
+        "workspaceId": "0190f5a0-0000-7000-8000-000000000100",
+        "query": "تقرير",
+        "limit": 10
+      },
+      "answer": [
+        {
+          "pageId": "0190f5a0-0000-7000-8000-00000000010b",
+          "text": "تقرير المبيعات الشهري",
+          "title": "بيتا"
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": { "op": "getPref", "key": "toggles" },
+      "answer": { "0190f5a0-0000-7000-8000-00000000010a": true },
+      "blobs": []
+    },
+    { "request": { "op": "getPref", "key": "theme" }, "answer": "dark", "blobs": [] },
+    { "request": { "op": "getPref", "key": "missing" }, "answer": null, "blobs": [] },
+    {
+      "request": { "op": "outboxIndex" },
+      "answer": [
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000010c",
+          "opId": "0190f5a0-0000-7000-8000-000000000300",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-000000000200",
+          "opId": "0190f5a0-0000-7000-8000-000000000310",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-000000000201",
+          "opId": "0190f5a0-0000-7000-8000-000000000311",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-000000000202",
+          "opId": "0190f5a0-0000-7000-8000-000000000312",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020a",
+          "opId": "0190f5a0-0000-7000-8000-000000000313",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020b",
+          "opId": "0190f5a0-0000-7000-8000-000000000314",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020c",
+          "opId": "0190f5a0-0000-7000-8000-000000000315",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020d",
+          "opId": "0190f5a0-0000-7000-8000-000000000316",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020d",
+          "opId": "0190f5a0-0000-7000-8000-000000000317",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020a",
+          "opId": "0190f5a0-0000-7000-8000-000000000318",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "entityId": "0190f5a0-0000-7000-8000-00000000020b",
+          "opId": "0190f5a0-0000-7000-8000-000000000319",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": {
+        "op": "nextOutboxBatch",
+        "limit": 100,
+        "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+      },
+      "answer": [
+        {
+          "baseVersion": 1,
+          "createdAt": "2026-03-01T09:48:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000010c",
+          "opId": "0190f5a0-0000-7000-8000-000000000300",
+          "payload": { "title": "Gamma 2" },
+          "type": "page.update",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": { "op": "syncCursor", "workspaceId": "0190f5a0-0000-7000-8000-000000000100" },
+      "answer": 42,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursors", "workspaceId": "0190f5a0-0000-7000-8000-000000000100" },
+      "answer": {
+        "0190f5a0-0000-7000-8000-00000000010a": { "epoch": 0, "headSeq": 2 },
+        "0190f5a0-0000-7000-8000-00000000010c": { "epoch": 1, "headSeq": 5 }
+      },
+      "blobs": []
+    },
+    {
+      "request": {
+        "op": "nextOutboxBatch",
+        "limit": 100,
+        "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+      },
+      "answer": [
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:04:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-000000000200",
+          "opId": "0190f5a0-0000-7000-8000-000000000310",
+          "payload": {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "deletedAt": null,
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-000000000200",
+            "localOnly": true,
+            "name": "Mine",
+            "version": 1
+          },
+          "type": "workspace.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:05:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-000000000201",
+          "opId": "0190f5a0-0000-7000-8000-000000000311",
+          "payload": {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000201",
+            "name": "Pages",
+            "orderKey": "a0",
+            "version": 1,
+            "visibility": "workspace",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "section.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:06:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-000000000202",
+          "opId": "0190f5a0-0000-7000-8000-000000000312",
+          "payload": {
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "id": "0190f5a0-0000-7000-8000-000000000202",
+            "name": "Private",
+            "orderKey": "a1",
+            "version": 1,
+            "visibility": "private",
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "section.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:07:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020a",
+          "opId": "0190f5a0-0000-7000-8000-000000000313",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020a",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Alpha",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:08:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020b",
+          "opId": "0190f5a0-0000-7000-8000-000000000314",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020b",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": "0190f5a0-0000-7000-8000-00000000020a",
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "بيتا",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:09:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020c",
+          "opId": "0190f5a0-0000-7000-8000-000000000315",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020c",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a1",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000201",
+            "templateOfPageId": null,
+            "title": "Gamma",
+            "trashRootId": null,
+            "trashedAt": null,
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:10:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020d",
+          "opId": "0190f5a0-0000-7000-8000-000000000316",
+          "payload": {
+            "coverAssetId": null,
+            "createdAt": "2026-03-01T09:00:00.000Z",
+            "icon": null,
+            "id": "0190f5a0-0000-7000-8000-00000000020d",
+            "isTemplate": false,
+            "kind": "page",
+            "orderKey": "a0",
+            "parentPageId": null,
+            "sectionId": "0190f5a0-0000-7000-8000-000000000202",
+            "templateOfPageId": null,
+            "title": "Old notes",
+            "trashRootId": "0190f5a0-0000-7000-8000-00000000020d",
+            "trashedAt": "2026-03-01T09:30:00.000Z",
+            "updatedAt": "2026-03-01T09:00:00.000Z",
+            "version": 1,
+            "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+          },
+          "type": "page.create",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": 1,
+          "createdAt": "2026-03-01T09:11:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020d",
+          "opId": "0190f5a0-0000-7000-8000-000000000317",
+          "payload": {},
+          "type": "page.trash",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:12:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020a",
+          "opId": "0190f5a0-0000-7000-8000-000000000318",
+          "payload": { "favourite": true, "orderKey": "a0" },
+          "type": "favourite.set",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        },
+        {
+          "baseVersion": null,
+          "createdAt": "2026-03-01T09:13:00.000Z",
+          "entityId": "0190f5a0-0000-7000-8000-00000000020b",
+          "opId": "0190f5a0-0000-7000-8000-000000000319",
+          "payload": { "at": "2026-03-01T09:40:00.000Z" },
+          "type": "visit.record",
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000200"
+        }
+      ],
+      "blobs": []
+    },
+    {
+      "request": { "op": "syncCursor", "workspaceId": "0190f5a0-0000-7000-8000-000000000200" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursors", "workspaceId": "0190f5a0-0000-7000-8000-000000000200" },
+      "answer": {},
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000010a" },
+      "answer": { "epoch": 0, "headSeq": 2 },
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000010b" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000010c" },
+      "answer": { "epoch": 1, "headSeq": 5 },
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000010d" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000020a" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000020b" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000020c" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "docCursor", "pageId": "0190f5a0-0000-7000-8000-00000000020d" },
+      "answer": null,
+      "blobs": []
+    },
+    {
+      "request": { "op": "unsentDocUpdates", "limit": 100 },
+      "answer": [
+        {
+          "localSeq": 2,
+          "pageId": "0190f5a0-0000-7000-8000-00000000010a",
+          "updateId": "0190f5a0-0000-7000-8000-000000000602"
+        },
+        {
+          "localSeq": 4,
+          "pageId": "0190f5a0-0000-7000-8000-00000000010a",
+          "updateId": "0190f5a0-0000-7000-8000-000000000604"
+        },
+        {
+          "localSeq": 1,
+          "pageId": "0190f5a0-0000-7000-8000-00000000010b",
+          "updateId": "0190f5a0-0000-7000-8000-000000000611"
+        }
+      ],
+      "blobs": [[2], [3, 3], [11]]
+    },
+    {
+      "request": { "op": "pendingAssets", "limit": 100 },
+      "answer": [
+        {
+          "contentType": "image/png",
+          "createdAt": "2026-03-01T09:00:00.000Z",
+          "fileName": "تقرير.png",
+          "height": 2,
+          "id": "0190f5a0-0000-7000-8000-000000000400",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "sizeBytes": 4,
+          "uploaded": false,
+          "width": 2,
+          "workspaceId": "0190f5a0-0000-7000-8000-000000000100"
+        }
+      ],
+      "blobs": []
+    }
+  ]
+}

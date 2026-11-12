@@ -23,13 +23,17 @@ import {
   type Operation,
   type OpResult,
   type PageRecord,
+  type PinRecord,
   type Plan,
+  type QuarantineEntry,
   type RemoteBatch,
   type RemoteDocPull,
   type RemoteReader,
+  type RepairState,
   type SearchEntry,
   type SearchHit,
   type SectionRecord,
+  type StorageUsage,
   type StoredDoc,
   type StoredUpdate,
   type UnsentDoc,
@@ -62,6 +66,10 @@ const S = {
   syncCursors: 'syncCursors',
   docCursors: 'docCursors',
   unsentPages: 'unsentPages',
+  // Schema 3
+  pins: 'pins',
+  quarantine: 'quarantine',
+  repairs: 'repairs',
 } as const;
 type StoreName = (typeof S)[keyof typeof S];
 
@@ -83,6 +91,19 @@ const PLAN_STORES: StoreName[] = [
   S.history,
   S.historyBytes,
   S.search,
+  S.pins,
+  S.quarantine,
+  S.repairs,
+];
+
+/** What setting a page's log aside reads and writes (setAsideDoc, and inside a remote plan). */
+const SET_ASIDE_STORES: StoreName[] = [
+  S.workspaces,
+  S.pages,
+  S.docLogs,
+  S.docUpdates,
+  S.unsentPages,
+  S.quarantine,
 ];
 
 interface DocLog {
@@ -158,6 +179,14 @@ const STEPS: Record<number, (db: IDBDatabase, tx: IDBTransaction) => void> = {
       for (const pageId of new Set((keys.result as [Id, number][]).map(([pageId]) => pageId)))
         unsent.put({ pageId });
     };
+  },
+  3: (db, tx) => {
+    // Offline (Phase 3): pins, what was set aside to become recovered pages, repair state.
+    db.createObjectStore(S.pins, { keyPath: 'pageId' }).createIndex('workspace', 'workspaceId');
+    db.createObjectStore(S.quarantine, { keyPath: 'id' }).createIndex('workspace', 'workspaceId');
+    db.createObjectStore(S.repairs, { keyPath: 'pageId' });
+    // Logs whose snapshot covers something, so heldPages finds them without reading a snapshot.
+    tx.objectStore(S.docLogs).createIndex('covers', 'snapshotCovers');
   },
 };
 
@@ -569,10 +598,18 @@ export class IndexedDbStore implements LocalStore {
 
   /**
    * Writes a plan in the order the in-memory mirror applies one (Mirror.apply): a lost workspace
-   * first, then upserts before deletes, so a record both put and deleted ends up deleted.
+   * first, then upserts before deletes, so a record both put and deleted ends up deleted. A remote
+   * plan (the server's word) first sets aside the log of every page it removes that holds unsent
+   * updates, before anything of it is written; only pages in `unsentPages` (a superset of those)
+   * are looked at, so a lost workspace of many pages costs little.
    */
-  private async writePlan(tx: IDBTransaction, plan: Plan): Promise<void> {
+  private async writePlan(tx: IDBTransaction, plan: Plan, remote = false): Promise<void> {
     const store = (name: StoreName) => tx.objectStore(name);
+    if (remote && plan.deletePages.length) {
+      const unsent = new Set((await getAllKeys(store(S.unsentPages))) as Id[]);
+      for (const id of plan.deletePages)
+        if (unsent.has(id)) await this.setAside(tx, id, 'page.removed');
+    }
     const outbox = store(S.outbox);
     if (plan.settled?.length) {
       const keys = await Promise.all(
@@ -606,9 +643,20 @@ export class IndexedDbStore implements LocalStore {
     return row ? { ...row, parentPageId: row.parentPageId || null } : undefined;
   }
 
-  /** A page removed for good, with its document log, cursor, history and search entry. */
+  /**
+   * A page removed for good, with its document log, cursor, history, search entry, pin and repair
+   * state. What was set aside from it stays.
+   */
   private async dropPageData(tx: IDBTransaction, pageId: Id) {
-    for (const name of [S.pages, S.docLogs, S.docCursors, S.unsentPages, S.search])
+    for (const name of [
+      S.pages,
+      S.docLogs,
+      S.docCursors,
+      S.unsentPages,
+      S.search,
+      S.pins,
+      S.repairs,
+    ])
       tx.objectStore(name).delete(pageId);
     tx.objectStore(S.docUpdates).delete(pageRange(pageId));
     const entries = await getAll<HistoryEntry>(tx.objectStore(S.history).index('page'), pageId);
@@ -688,7 +736,7 @@ export class IndexedDbStore implements LocalStore {
       const found = await Promise.all(results.map((r) => getAll<Operation>(byOp, r.opId, 1)));
       const ops = new Map(found.flat().map((op) => [op.opId, op]));
       const plan = await planSettle(results, ops, this.reader(tx));
-      await this.writePlan(tx, plan);
+      await this.writePlan(tx, plan, true);
       return plan.deletePages;
     });
     this.index?.remove(deleted);
@@ -697,7 +745,7 @@ export class IndexedDbStore implements LocalStore {
   async applyRemote(batch: RemoteBatch): Promise<void> {
     const deleted = await this.transact(PLAN_STORES, async (tx) => {
       const plan = await planRemote(batch, this.reader(tx));
-      await this.writePlan(tx, plan);
+      await this.writePlan(tx, plan, true);
       return plan.deletePages;
     });
     this.index?.remove(deleted);
@@ -887,6 +935,183 @@ export class IndexedDbStore implements LocalStore {
   async setPref(key: string, value: unknown): Promise<void> {
     const tx = this.tx([S.prefs], 'readwrite');
     tx.objectStore(S.prefs).put(value, key);
+    await done(tx);
+  }
+
+  // Offline (store schema 3) -------------------------------------------------------------------
+
+  async pin(pin: PinRecord): Promise<void> {
+    const tx = this.tx([S.pins], 'readwrite');
+    tx.objectStore(S.pins).put(pin);
+    await done(tx);
+  }
+
+  async unpin(pageId: Id): Promise<void> {
+    const tx = this.tx([S.pins], 'readwrite');
+    tx.objectStore(S.pins).delete(pageId);
+    await done(tx);
+  }
+
+  /** In page order: the index keeps a workspace's pins by their key. */
+  async pins(workspaceId: Id): Promise<PinRecord[]> {
+    return getAll<PinRecord>(this.tx([S.pins]).objectStore(S.pins).index('workspace'), workspaceId);
+  }
+
+  /**
+   * Pages with a cursor or an update are held; the rest only if their log has a snapshot, which
+   * the `covers` index finds without reading one (a snapshot covering nothing is read to know).
+   */
+  async heldPages(workspaceId: Id): Promise<Id[]> {
+    const tx = this.tx([S.pages, S.docLogs, S.docUpdates, S.docCursors]);
+    const logs = tx.objectStore(S.docLogs);
+    const [pageIds, cursors, withLog, covering] = await Promise.all([
+      getAllKeys(tx.objectStore(S.pages).index('workspace'), workspaceId) as Promise<Id[]>,
+      getAllKeys(tx.objectStore(S.docCursors)) as Promise<Id[]>,
+      getAllKeys(logs) as Promise<Id[]>,
+      getAllKeys(logs.index('covers'), IDBKeyRange.lowerBound(1)) as Promise<Id[]>,
+    ]);
+    const held = new Set([...cursors, ...covering]);
+    const logged = new Set(withLog);
+    const found = await Promise.all(
+      pageIds.map(async (pageId) => {
+        if (held.has(pageId)) return true;
+        if (!logged.has(pageId)) return false;
+        if ((await request(tx.objectStore(S.docUpdates).count(pageRange(pageId)))) > 0) return true;
+        return !!((await request(logs.get(pageId))) as DocLog | undefined)?.snapshot;
+      }),
+    );
+    return pageIds.filter((_, i) => found[i]).sort();
+  }
+
+  /**
+   * Reads the workspace's documents one page at a time, so a large workspace is never in memory
+   * at once. Assets count by their records' sizes (their bytes are not read).
+   */
+  async storageUsage(workspaceId: Id): Promise<StorageUsage> {
+    const tx = this.tx([
+      S.pages,
+      S.docLogs,
+      S.docUpdates,
+      S.docCursors,
+      S.assets,
+      S.assetBytes,
+      S.history,
+      S.quarantine,
+    ]);
+    const usage: StorageUsage = {
+      pages: 0,
+      docBytes: 0,
+      assetBytes: 0,
+      historyBytes: 0,
+      quarantineBytes: 0,
+    };
+    const pageIds = (await getAllKeys(
+      tx.objectStore(S.pages).index('workspace'),
+      workspaceId,
+    )) as Id[];
+    for (const pageId of pageIds) {
+      const [log, rows, cursor] = await Promise.all([
+        request(tx.objectStore(S.docLogs).get(pageId)) as Promise<DocLog | undefined>,
+        getAll<UpdateRow>(tx.objectStore(S.docUpdates), pageRange(pageId)),
+        request(tx.objectStore(S.docCursors).count(pageId)),
+      ]);
+      if (log?.snapshot || rows.length || cursor) usage.pages++;
+      usage.docBytes +=
+        (log?.snapshot?.byteLength ?? 0) + rows.reduce((n, row) => n + row.data.byteLength, 0);
+    }
+    const mine = new Set(pageIds);
+    const [assets, history, entries] = await Promise.all([
+      getAll<AssetRecord>(tx.objectStore(S.assets).index('workspace'), workspaceId),
+      getAll<HistoryEntry>(tx.objectStore(S.history)),
+      getAll<QuarantineEntry>(tx.objectStore(S.quarantine).index('workspace'), workspaceId),
+    ]);
+    const held = await Promise.all(
+      assets.map((asset) => request(tx.objectStore(S.assetBytes).count(asset.id))),
+    );
+    assets.forEach((asset, i) => {
+      if (held[i]) usage.assetBytes += asset.sizeBytes;
+    });
+    for (const entry of history) if (mine.has(entry.pageId)) usage.historyBytes += entry.sizeBytes;
+    for (const entry of entries)
+      usage.quarantineBytes += entry.parts.reduce((n, part) => n + part.byteLength, 0);
+    return usage;
+  }
+
+  /**
+   * The page's log into a pending entry and its unsent updates out of the log, inside `tx`; null,
+   * and nothing written, when the page is not one of a synced workspace or nothing is unsent.
+   */
+  private async setAside(
+    tx: IDBTransaction,
+    pageId: Id,
+    reason: string,
+  ): Promise<QuarantineEntry | null> {
+    const page = this.pageOf(
+      (await request(tx.objectStore(S.pages).get(pageId))) as PageRow | undefined,
+    );
+    if (!page) return null;
+    const [workspace, log, rows] = await Promise.all([
+      request(tx.objectStore(S.workspaces).get(page.workspaceId)) as Promise<
+        WorkspaceRecord | undefined
+      >,
+      request(tx.objectStore(S.docLogs).get(pageId)) as Promise<DocLog | undefined>,
+      getAll<UpdateRow>(tx.objectStore(S.docUpdates), pageRange(pageId)),
+    ]);
+    if (!workspace || workspace.localOnly || !rows.some((row) => row.seq === null)) return null;
+    const entry: QuarantineEntry = {
+      id: uuidv7(),
+      workspaceId: page.workspaceId,
+      pageId,
+      title: page.title,
+      reason,
+      at: new Date().toISOString(),
+      parts: [...(log?.snapshot ? [log.snapshot] : []), ...rows.map((row) => row.data)],
+      status: 'pending',
+      recoveredPageId: null,
+    };
+    tx.objectStore(S.quarantine).add(entry);
+    for (const row of rows)
+      if (row.seq === null) tx.objectStore(S.docUpdates).delete([pageId, row.localSeq]);
+    tx.objectStore(S.unsentPages).delete(pageId);
+    return entry;
+  }
+
+  async setAsideDoc(pageId: Id, reason: string): Promise<QuarantineEntry | null> {
+    return this.transact(SET_ASIDE_STORES, (tx) => this.setAside(tx, pageId, reason));
+  }
+
+  async quarantine(workspaceId: Id | null): Promise<QuarantineEntry[]> {
+    const store = this.tx([S.quarantine]).objectStore(S.quarantine);
+    const entries =
+      workspaceId === null
+        ? await getAll<QuarantineEntry>(store)
+        : await getAll<QuarantineEntry>(store.index('workspace'), workspaceId);
+    return entries.sort((a, b) => (a.id < b.id ? 1 : -1));
+  }
+
+  async settleQuarantine(
+    id: Id,
+    status: 'recovered' | 'dismissed',
+    recoveredPageId: Id | null = null,
+  ): Promise<void> {
+    await this.transact([S.quarantine], async (tx) => {
+      const store = tx.objectStore(S.quarantine);
+      const entry = (await request(store.get(id))) as QuarantineEntry | undefined;
+      if (entry)
+        store.put({ ...entry, status, recoveredPageId: recoveredPageId ?? entry.recoveredPageId });
+    });
+  }
+
+  async repairState(pageId: Id): Promise<RepairState | null> {
+    return (
+      ((await request(this.tx([S.repairs]).objectStore(S.repairs).get(pageId))) as
+        RepairState | undefined) ?? null
+    );
+  }
+
+  async setRepairState(state: RepairState): Promise<void> {
+    const tx = this.tx([S.repairs], 'readwrite');
+    tx.objectStore(S.repairs).put(state);
     await done(tx);
   }
 

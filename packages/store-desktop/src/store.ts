@@ -3,6 +3,8 @@
 // are planned here against the in-memory mirror (the desktop app is one instance), and the plan is
 // written by the Rust store in one transaction. The server's answers and change feed are planned
 // the same way (planSettle, planRemote), against the mirror and an in-memory index of the outbox.
+// A remote plan goes with the ids its set-aside entries would take (one per deleted page): the Rust
+// store sets aside, in the plan's transaction, the logs it must not drop (schema 3).
 import {
   Mirror,
   STORE_SCHEMA_VERSION,
@@ -24,12 +26,16 @@ import {
   type Operation,
   type OpResult,
   type PageRecord,
+  type PinRecord,
   type Plan,
+  type QuarantineEntry,
   type RemoteBatch,
   type RemoteDocPull,
   type RemoteReader,
+  type RepairState,
   type SearchEntry,
   type SearchHit,
+  type StorageUsage,
   type StoredDoc,
   type StoredUpdate,
   type UnsentDoc,
@@ -41,6 +47,17 @@ import { OutboxIndex, type OutboxEntry } from './outbox';
 export type Transport = (frame: Uint8Array) => Promise<Uint8Array>;
 
 export class StoreRequestError extends Error {}
+
+/** A quarantine entry as the Rust store answers it: its parts follow as blobs. */
+type EntryHeader = Omit<QuarantineEntry, 'parts'> & { parts?: number };
+
+/** What a remote plan's request carries so the Rust store can set logs aside (applyPlan). */
+interface SetAside {
+  reason: string;
+  at: string;
+  /** One new entry id per deleted page, in the plan's order; only those set aside are used. */
+  ids: Id[];
+}
 
 export class DesktopStore implements LocalStore {
   readonly kind = 'sqlite' as const;
@@ -87,8 +104,8 @@ export class DesktopStore implements LocalStore {
    * store moved the database: answered operations go, lost workspaces' operations go, an upload's
    * creates replace its workspace's operations, and the plan's own operations are added.
    */
-  private async write(plan: Plan): Promise<void> {
-    await this.call({ op: 'applyPlan', plan });
+  private async write(plan: Plan, setAside?: SetAside): Promise<void> {
+    await this.call({ op: 'applyPlan', plan, ...(setAside ? { setAside } : {}) });
     this.mirror.apply(plan);
     this.outbox.remove(plan.settled ?? []);
     for (const id of plan.deleteWorkspaces ?? []) this.outbox.removeWorkspace(id);
@@ -104,7 +121,8 @@ export class DesktopStore implements LocalStore {
   /**
    * A remote plan, written. Its records come from the caller (the server's answers), so the mirror
    * takes copies; and since the Rust store drops a deleted page's favourites and visits with it,
-   * the plan drops them from the mirror too.
+   * the plan drops them from the mirror too. The pages it deletes are set aside first where their
+   * logs hold unsent updates (the server's word never drops what was typed here).
    */
   private writeRemote(remote: Plan): Promise<void> {
     const plan = structuredClone(remote);
@@ -117,7 +135,14 @@ export class DesktopStore implements LocalStore {
         if (gone.has(v.pageId))
           plan.deleteVisits.push({ workspaceId: v.workspaceId, pageId: v.pageId });
     }
-    return this.write(plan);
+    const setAside = plan.deletePages.length
+      ? {
+          reason: 'page.removed',
+          at: new Date().toISOString(),
+          ids: plan.deletePages.map(() => uuidv7()),
+        }
+      : undefined;
+    return this.write(plan, setAside);
   }
 
   /** What the remote planners read: the mirror, and the outbox index. */
@@ -436,6 +461,82 @@ export class DesktopStore implements LocalStore {
   setPref(key: string, value: unknown): Promise<void> {
     return this.serial(async () => {
       await this.call({ op: 'setPref', key, value });
+    });
+  }
+
+  // Offline (store schema 3) -------------------------------------------------------------------
+
+  pin(pin: PinRecord): Promise<void> {
+    return this.serial(async () => {
+      await this.call({ op: 'pin', pin });
+    });
+  }
+
+  unpin(pageId: Id): Promise<void> {
+    return this.serial(async () => {
+      await this.call({ op: 'unpin', pageId });
+    });
+  }
+
+  pins(workspaceId: Id): Promise<PinRecord[]> {
+    return this.serial(
+      async () => (await this.call<PinRecord[]>({ op: 'pins', workspaceId })).value,
+    );
+  }
+
+  heldPages(workspaceId: Id): Promise<Id[]> {
+    return this.serial(async () => (await this.call<Id[]>({ op: 'heldPages', workspaceId })).value);
+  }
+
+  storageUsage(workspaceId: Id): Promise<StorageUsage> {
+    return this.serial(
+      async () => (await this.call<StorageUsage>({ op: 'storageUsage', workspaceId })).value,
+    );
+  }
+
+  setAsideDoc(pageId: Id, reason: string): Promise<QuarantineEntry | null> {
+    return this.serial(async () => {
+      const { value, blobs } = await this.call<EntryHeader | null>({
+        op: 'setAsideDoc',
+        pageId,
+        reason,
+        id: uuidv7(),
+        at: new Date().toISOString(),
+      });
+      return value && { ...value, parts: blobs };
+    });
+  }
+
+  quarantine(workspaceId: Id | null): Promise<QuarantineEntry[]> {
+    return this.serial(async () => {
+      const { value, blobs } = await this.call<EntryHeader[]>({ op: 'quarantine', workspaceId });
+      let at = 0;
+      return value.map(({ parts = 0, ...entry }) => ({
+        ...entry,
+        parts: blobs.slice(at, (at += parts)),
+      }));
+    });
+  }
+
+  settleQuarantine(
+    id: Id,
+    status: 'recovered' | 'dismissed',
+    recoveredPageId: Id | null = null,
+  ): Promise<void> {
+    return this.serial(async () => {
+      await this.call({ op: 'settleQuarantine', id, status, recoveredPageId });
+    });
+  }
+
+  repairState(pageId: Id): Promise<RepairState | null> {
+    return this.serial(
+      async () => (await this.call<RepairState | null>({ op: 'repairState', pageId })).value,
+    );
+  }
+
+  setRepairState(state: RepairState): Promise<void> {
+    return this.serial(async () => {
+      await this.call({ op: 'setRepairState', state });
     });
   }
 
