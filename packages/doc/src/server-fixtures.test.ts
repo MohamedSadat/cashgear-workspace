@@ -77,6 +77,17 @@ function make(): Fixture[] {
     block.insert(0, [body]);
     content.push([block]);
   };
+  /** Client 1002 typing again after `edit`: its blocks start past clock 0. */
+  const editAgain = () => {
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, page);
+    Y.applyUpdate(doc, edit(1002, appendWorld));
+    doc.clientID = 1002;
+    const before = Y.encodeStateVector(doc);
+    const body = (doc.getXmlFragment(CONTENT).get(0) as Y.XmlElement).get(0) as Y.XmlElement;
+    (body.get(0) as Y.XmlText).insert(11, '!');
+    return Y.encodeStateAsUpdate(doc, before);
+  };
   const paragraph = (text: Y.XmlText) => {
     const body = new Y.XmlElement('textBody');
     body.setAttribute('kind', 'paragraph');
@@ -98,6 +109,13 @@ function make(): Fixture[] {
       data: b64(edit(1002, appendWorld)),
       expect: 'valid',
       why: 'typing from a second registered client',
+    },
+    {
+      name: 'editAgain',
+      client: 1002,
+      data: b64(editAgain()),
+      expect: 'rejected',
+      why: 'pushed by someone else on top of edit: client 1002 is not theirs, though its clocks no longer start at 0',
     },
     {
       name: 'forged',

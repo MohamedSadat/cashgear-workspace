@@ -126,7 +126,8 @@ public sealed class DocTests(ServerFixture server)
         var ws = await Ws.Create(server);
         var peer = await server.NewAccount();
         await Kit.Join(server, ws, "member", peer);
-        foreach (var fixture in Fixtures.Value.Values.Where(f => f.Name != "page"))
+        // editAgain continues edit: its own test below pushes the two in order.
+        foreach (var fixture in Fixtures.Value.Values.Where(f => f.Name is not ("page" or "editAgain")))
         {
             var page = await NewPage(ws, 1001, 1002);
             await PushOk(ws.Client, page.Id, (Guid.CreateVersion7(), F("page").Bytes));
@@ -148,6 +149,34 @@ public sealed class DocTests(ServerFixture server)
         }
         await using var db = server.NewDb(ws.Id);
         Assert.True(await db.AuditLog.AnyAsync(a => a.Action == "doc.forgedClient"));
+    }
+
+    /// <summary>
+    /// Writing as someone else's Yjs client is refused not only at its first keystroke: an update
+    /// that continues the client (its blocks start past clock 0) names it too.
+    /// </summary>
+    [Fact]
+    public async Task Continuing_someone_elses_client_is_refused_too()
+    {
+        var page = await NewPage();
+        var member = await server.NewAccount();
+        await Kit.Join(server, page.Ws, "member", member);
+        await PushOk(page.Ws.Client, page.Id, (Guid.CreateVersion7(), F("page").Bytes));
+        await PushOk(page.Ws.Client, page.Id, (Guid.CreateVersion7(), F("edit").Bytes));
+        await Validate();
+        // The member registers ids of its own, then writes as the owner's client 1002.
+        Assert.Equal(HttpStatusCode.OK, (await member.Client.PostAsJsonAsync($"/api/v1/workspaces/{page.Ws.Id}/yjs-clients", new { register = new[] { 7007 } })).StatusCode);
+        var forged = Guid.CreateVersion7();
+        await PushOk(member.Client, page.Id, (forged, F("editAgain").Bytes));
+        await Validate();
+        var seen = await Pull(page.Ws.Client, page.Id);
+        Assert.DoesNotContain(forged, seen.GetProperty("updates").EnumerateArray().Select(u => u.GetProperty("updateId").GetGuid()));
+        Assert.Contains(forged, (await Pull(member.Client, page.Id)).GetProperty("rejected").EnumerateArray().Select(r => r.GetGuid()));
+        // Pushed by its owner, the same update is fine.
+        var own = Guid.CreateVersion7();
+        await PushOk(page.Ws.Client, page.Id, (own, F("editAgain").Bytes));
+        await Validate();
+        Assert.Contains(own, (await Pull(member.Client, page.Id)).GetProperty("updates").EnumerateArray().Select(u => u.GetProperty("updateId").GetGuid()));
     }
 
     /// <summary>S8 again, through the API: 50 writers, readers pulling "after N" never miss one.</summary>

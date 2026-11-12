@@ -126,6 +126,19 @@ fn lists_client_ranges() {
 }
 
 #[test]
+fn lists_a_client_whose_blocks_start_past_clock_zero() {
+    // The second update continues client 1: its first block is not at clock 0. It must still
+    // name client 1, or the worker's check that the client is the pusher's never runs.
+    let (a, b) = sample();
+    let (first, _) = client_ranges(&a).unwrap();
+    let (ranges, _) = client_ranges(&b).unwrap();
+    assert_eq!(ranges.len(), 1);
+    assert_eq!(ranges[0].client, 1);
+    assert_eq!(ranges[0].start, first[0].end);
+    assert!(ranges[0].end > ranges[0].start);
+}
+
+#[test]
 fn the_c_abi_reports_errors_and_frees() {
     use crate::ffi::*;
     let mut out = empty_buffer();

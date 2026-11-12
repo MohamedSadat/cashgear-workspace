@@ -146,16 +146,23 @@ pub struct ClientRange {
 /// content it deletes. The worker checks these against the pushing device's pool (S7).
 pub fn client_ranges(update: &[u8]) -> Result<(Vec<ClientRange>, Vec<u64>)> {
     let parsed = decode(update)?;
-    let upper = parsed.state_vector();
-    let lower = parsed.state_vector_lower();
-    let mut ranges: Vec<ClientRange> = upper
+    // From the blocks the update inserts, deleted and collected ones included: every client it
+    // writes as, wherever its clocks start. (`Update::state_vector` counts a client only when its
+    // blocks start at clock 0, so an update continuing a client, the second keystroke on, named
+    // no client at all, and the check that it is the pusher's never ran.)
+    let mut ranges: Vec<ClientRange> = parsed
+        .insertions(true)
         .iter()
-        .map(|(client, end)| ClientRange {
-            client: client.get(),
-            start: lower.get(client),
-            end: *end,
+        .filter_map(|(client, clocks)| {
+            let (start, end) = clocks.iter().fold((u32::MAX, 0), |(start, end), range| {
+                (start.min(range.start), end.max(range.end))
+            });
+            (end > start).then(|| ClientRange {
+                client: client.get(),
+                start,
+                end,
+            })
         })
-        .filter(|range| range.end > range.start)
         .collect();
     ranges.sort_by_key(|r| r.client);
     let mut deleting: Vec<u64> = parsed

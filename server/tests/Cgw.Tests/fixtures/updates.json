@@ -14,6 +14,13 @@
     "why": "typing from a second registered client"
   },
   {
+    "name": "editAgain",
+    "client": 1002,
+    "data": "AQHqBwaE6gcFASEA",
+    "expect": "rejected",
+    "why": "pushed by someone else on top of edit: client 1002 is not theirs, though its clocks no longer start at 0"
+  },
+  {
     "name": "forged",
     "client": 999,
     "data": "AQHnBwCE6QcJBiB3b3JsZAA=",
