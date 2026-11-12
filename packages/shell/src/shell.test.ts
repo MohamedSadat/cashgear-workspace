@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CommandRegistry, type Command } from './commands';
-import { parseRoute, routeHash } from './route';
+import { leavePage, parseRoute, routeHash } from './route';
 import { formatShortcut, matchesShortcut, parseShortcut } from './shortcuts';
 import { ThemeController, type ThemeEnvironment } from './theme';
 
@@ -106,6 +106,23 @@ describe('routes', () => {
   it('ignore what is not a page id', () => {
     expect(parseRoute('#/p/javascript:alert(1)')).toEqual({ kind: 'home' });
     expect(parseRoute(`#/p/${id}/<script>`)).toEqual({ kind: 'page', pageId: id });
+  });
+
+  it('leave a page that went only while it is still the one showing', () => {
+    const location = { hash: '#/trash' };
+    vi.stubGlobal('location', location);
+    try {
+      // Trashed, and the person went to the trash before the trash was written: they stay there.
+      leavePage(id);
+      expect(location.hash).toBe('#/trash');
+      location.hash = `#/p/${id}`;
+      leavePage('0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c');
+      expect(location.hash).toBe(`#/p/${id}`);
+      leavePage(id);
+      expect(location.hash).toBe('#/');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -67,6 +67,15 @@ export function navigate(route: Route, replace = false) {
   window.dispatchEvent(new HashChangeEvent('hashchange'));
 }
 
+/**
+ * A page is gone (trashed, deleted): home, if it is still the one showing. The trash is written
+ * after the click, so a route the person chose meanwhile (the trash itself, say) stands.
+ */
+export function leavePage(pageId: string) {
+  const route = parseRoute(location.hash);
+  if (route.kind === 'page' && route.pageId === pageId) navigate({ kind: 'home' });
+}
+
 const subscribe = (listener: () => void) => {
   window.addEventListener('hashchange', listener);
   return () => window.removeEventListener('hashchange', listener);

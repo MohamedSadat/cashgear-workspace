@@ -4,7 +4,7 @@ import type { Id, PageRecord } from '@cgw/workspace';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { offlineMenuItems, useCloud } from '../cloud/CloudUi';
-import { navigate } from '../route';
+import { leavePage } from '../route';
 import { canEditPage, type WorkspaceSession } from '../session';
 import { PointMenu } from '../sidebar/RowMenu';
 
@@ -112,9 +112,7 @@ export function PageMenu({
                     label: t('workspace.moveToTrash'),
                     danger: true,
                     onSelect: () =>
-                      void session
-                        .trashPage(page.id)
-                        .then(() => navigate({ kind: 'home' }), onError),
+                      void session.trashPage(page.id).then(() => leavePage(page.id), onError),
                   },
                 ]
               : []),

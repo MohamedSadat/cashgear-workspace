@@ -229,6 +229,7 @@ test('a page edited offline and deleted for good elsewhere comes back as a recov
   await row(other.page, 'Doomed').click();
   await pageActions(other.page).click();
   await other.page.getByRole('menuitem', { name: 'Move to trash' }).click();
+  await expect(row(other.page, 'Doomed')).toHaveCount(0);
   await other.page.goto(`${APP}/#/trash`);
   await other.page.getByRole('button', { name: 'Delete for good' }).first().click();
   await other.page
