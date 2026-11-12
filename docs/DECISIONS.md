@@ -755,3 +755,13 @@ M3.5, the proof (kill tests, the old build, the benchmarks):
 | Making compaction frequent for tests | No switch in the app: `--until-compaction` runs wait for the 200th save (about 40 s a run) | A test-only setting in the product for a test that already runs |
 | The old build | v0.2.0's web build from its tag with its own lockfile (`scripts/old-build.mjs`), served beside the current build: the same document code the v0.2.0 desktop app embeds | Driving an installed old desktop app adds an installer to CI and tests nothing more |
 | Phase 3's benchmarks in CI | `bench/phase3.mjs -- --desktop` after the kill tests, against a server stack started for them, gated against the budgets and the last run on `main`; the CI job's timeout raised from 100 to 130 minutes | The same gate as Phases 1 and 2 |
+
+Answered by you, 2026-11-12, after CI's load test measured an edit reaching others at p95 5.25 s
+on GitHub's 4-core runner (3.5 to 4.5 s in the four runs before, 2.2 s on the reference machine):
+speed up validation first, then tag; if that cannot hold CI under 5 s, ask again.
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Who may edit, between passes | Remembered per workspace with the feed's head it holds at; one query asks whether an access, member or workspace change committed since, and only then is it read again (four queries); kept 10 minutes and 50,000 answers at most; forgotten when the check under the lock finds a change | The same rule the recheck under the lock rests on: every change to who may edit writes one of those changes. A validation pass spent half its reading time here |
+| Validation passes under load | Back to back while they find pending rows (100 ms apart when idle); the job loop goes again at once when a job has more, and writes a job's row at most once a second unless it failed (the runs in between are counted) | An edit waits for the pass after the one running when it came: the gap between passes was 150 ms, and the row a write each pass |
+| The workspace lock | Taken and its sequence read in one statement (`UPDATE … OUTPUT`); validation writes its rows' statuses and the pages' heads in one batch, which throws if any head did not move | Under load every round trip costs about 35 ms: the pass was bound by their number, not by the Yjs work (67 ms of about 650) |

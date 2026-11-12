@@ -65,19 +65,38 @@ public sealed class JobLoop(IServiceProvider services, IEnumerable<IJob> jobs, I
     private async Task LoopAsync(IReadOnlyList<IJob> list, CancellationToken ct)
     {
         var due = list.ToDictionary(j => j.Name, _ => DateTimeOffset.MinValue);
+        var records = list.ToDictionary(j => j.Name, _ => new JobRecord());
         while (!ct.IsCancellationRequested)
         {
+            var busy = false;
             foreach (var job in list)
             {
                 if (clock.GetUtcNow() < due[job.Name]) continue;
-                var more = await RunOnceAsync(services, job, logger, clock, ct);
+                var more = await RunOnceAsync(services, job, logger, clock, ct, records[job.Name]);
                 due[job.Name] = more ? DateTimeOffset.MinValue : clock.GetUtcNow() + job.Interval;
+                busy |= more;
             }
-            await Task.Delay(TimeSpan.FromMilliseconds(50), ct);
+            // A job with more to do goes again at once (validation under load: an edit waits for
+            // the pass after the one running when it came, and no longer).
+            if (!busy) await Task.Delay(TimeSpan.FromMilliseconds(50), ct);
         }
     }
 
-    public static async Task<bool> RunOnceAsync(IServiceProvider services, IJob job, ILogger logger, TimeProvider clock, CancellationToken ct)
+    /// <summary>When a loop last wrote a job's row, and its runs since.</summary>
+    public sealed class JobRecord
+    {
+        public DateTimeOffset At = DateTimeOffset.MinValue;
+        public int Unrecorded;
+    }
+
+    /// <summary>
+    /// A loop writes a job's row at most this often, unless the run failed: busy validation would
+    /// otherwise write it between every two passes. The health check allows a minute.
+    /// </summary>
+    private static readonly TimeSpan RecordEvery = TimeSpan.FromSeconds(1);
+
+    public static async Task<bool> RunOnceAsync(IServiceProvider services, IJob job, ILogger logger, TimeProvider clock, CancellationToken ct,
+        JobRecord? record = null)
     {
         await using var scope = services.CreateAsyncScope();
         var started = clock.GetUtcNow();
@@ -92,24 +111,30 @@ public sealed class JobLoop(IServiceProvider services, IEnumerable<IJob> jobs, I
             logger.LogError(e, "Job {Job} failed", job.Name);
             error = e.Message.Length > 2000 ? e.Message[..2000] : e.Message;
         }
-        await RecordAsync(scope.ServiceProvider.GetRequiredService<CgwDb>(), job.Name, started, error, clock);
+        var now = clock.GetUtcNow();
+        if (record is null || error is not null || now - record.At >= RecordEvery)
+        {
+            await RecordAsync(scope.ServiceProvider.GetRequiredService<CgwDb>(), job.Name, started, error, clock, 1 + (record?.Unrecorded ?? 0));
+            if (record is not null) (record.At, record.Unrecorded) = (now, 0);
+        }
+        else record.Unrecorded++;
         return more;
     }
 
     /// <summary>The job's last run and last success, for its lag and the API's health check.</summary>
-    private static async Task RecordAsync(CgwDb db, string name, DateTimeOffset ran, string? error, TimeProvider clock)
+    private static async Task RecordAsync(CgwDb db, string name, DateTimeOffset ran, string? error, TimeProvider clock, int runs)
     {
         db.ChangeTracker.Clear();
         var ok = error is null ? clock.GetUtcNow() : (DateTimeOffset?)null;
         var changed = await db.JobStates.Where(j => j.Name == name).ExecuteUpdateAsync(s => s
             .SetProperty(j => j.LastRunAt, ran)
-            .SetProperty(j => j.Runs, j => j.Runs + 1)
+            .SetProperty(j => j.Runs, j => j.Runs + runs)
             .SetProperty(j => j.LastError, error)
             .SetProperty(j => j.LastOkAt, j => ok ?? j.LastOkAt));
         if (changed > 0) return;
         try
         {
-            db.JobStates.Add(new JobState { Name = name, LastRunAt = ran, LastOkAt = ok, LastError = error, Runs = 1 });
+            db.JobStates.Add(new JobState { Name = name, LastRunAt = ran, LastOkAt = ok, LastError = error, Runs = runs });
             await db.SaveChangesAsync();
         }
         catch (DbUpdateException)

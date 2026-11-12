@@ -1,5 +1,7 @@
 using Cgw.Core.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Cgw.Core.Sync;
 
@@ -19,6 +21,19 @@ public sealed class ChangeLog(CgwDb db, TimeProvider clock)
     public async Task LockAsync(Guid workspaceId, CancellationToken ct = default)
     {
         workspace = workspaceId;
+        if (db.Database.CurrentTransaction is { } transaction)
+        {
+            // In one statement: the row's lock and its sequence (every writer and the worker's
+            // validation take this lock, so a round trip less is felt everywhere).
+            await using var command = db.Database.GetDbConnection().CreateCommand();
+            command.Transaction = transaction.GetDbTransaction();
+            command.CommandText = "UPDATE [Workspaces] SET [ChangeSeq] = [ChangeSeq] OUTPUT inserted.[ChangeSeq] WHERE [Id] = @id";
+            command.Parameters.Add(new SqlParameter("@id", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspaceId) });
+            head = next = await command.ExecuteScalarAsync(ct) is long seq
+                ? seq
+                : throw new InvalidOperationException("The workspace is not there to lock.");
+            return;
+        }
         await db.Workspaces.Where(w => w.Id == workspaceId)
             .ExecuteUpdateAsync(s => s.SetProperty(w => w.ChangeSeq, w => w.ChangeSeq), ct);
         head = next = await db.Workspaces.Where(w => w.Id == workspaceId).Select(w => w.ChangeSeq).SingleAsync(ct);
@@ -36,10 +51,16 @@ public sealed class ChangeLog(CgwDb db, TimeProvider clock)
     public Task<bool> AccessChangedSinceAsync(long seq, CancellationToken ct = default)
     {
         if (workspace == Guid.Empty) throw new InvalidOperationException("Lock the workspace first.");
-        var id = workspace;
-        return db.WorkspaceChanges.IgnoreQueryFilters([CgwDb.Tenant]).AnyAsync(c => c.WorkspaceId == id && c.Seq > seq
-            && (c.EntityType == "access" || c.EntityType == "member" || c.EntityType == "workspace"), ct);
+        return AccessChangedAsync(db, workspace, seq, ct);
     }
+
+    /// <summary>
+    /// The same question without the lock: what has committed so far. True answers are final;
+    /// a false one holds only up to the moment the statement ran.
+    /// </summary>
+    public static Task<bool> AccessChangedAsync(CgwDb db, Guid workspaceId, long seq, CancellationToken ct = default) =>
+        db.WorkspaceChanges.IgnoreQueryFilters([CgwDb.Tenant]).AnyAsync(c => c.WorkspaceId == workspaceId && c.Seq > seq
+            && (c.EntityType == "access" || c.EntityType == "member" || c.EntityType == "workspace"), ct);
 
     public void Add(string entityType, Guid entityId, string kind, long version, Guid? actor, Guid? userId = null)
     {

@@ -192,7 +192,10 @@ The server does not decode updates on this path. The rows are stored as pending;
 validates them in sequence order (see "What the server checks") and moves the page's validated
 head past them, so they are served to other clients only once they have passed (Q20): spike S7
 showed that one update with a node type the schema lacks stops every client's binding from
-syncing that page. The worker polls for pending rows every 100 ms.
+syncing that page. The worker polls for pending rows every 100 ms, and while it finds some its
+passes run back to back. Who may edit is remembered per workspace between passes and read again
+only when an access, member or workspace change has committed since (every change to who may
+edit writes one: the same rule the check under the lock rests on).
 
 **Pull**
 
