@@ -6,79 +6,9 @@ import { newOp } from '../build';
 import { keyBetween } from '../order';
 import { uuidv7, type Id } from '../ids';
 import { decode, fakeCodec, fakeUpdate, FakeServer } from '../testing/fakeServer';
-import type { LocalStore, PageRecord, SectionRecord, WorkspaceRecord } from '../types';
-import { SyncEngine, type SyncEvent } from './engine';
-import type { Account } from './api';
-
-const ALICE: Account = {
-  id: '0193a1b2-c3d4-7e5f-8a9b-00000000000a',
-  email: 'a@x.test',
-  displayName: 'A',
-  deviceId: null,
-};
-
-function device(server: FakeServer, account = ALICE) {
-  const store = new MemoryStore();
-  const engine = new SyncEngine(store, server.api(account), fakeCodec, {
-    setTimer: () => null,
-    clearTimer: () => undefined,
-    random: () => 0.5,
-  });
-  const events: SyncEvent[] = [];
-  engine.on((e) => events.push(e));
-  engine.setAccount(account);
-  return { store, engine, events };
-}
-
-const now = () => new Date().toISOString();
-
-async function localWorkspace(store: LocalStore) {
-  const ws: WorkspaceRecord = {
-    id: uuidv7(),
-    name: 'Mine',
-    icon: null,
-    createdAt: now(),
-    version: 1,
-    localOnly: true,
-    deletedAt: null,
-  };
-  const section: SectionRecord = {
-    id: uuidv7(),
-    workspaceId: ws.id,
-    name: 'Pages',
-    orderKey: 'a0',
-    visibility: 'workspace',
-    version: 1,
-    createdAt: now(),
-  };
-  const page = (title: string, parent: Id | null, orderKey: string): PageRecord => ({
-    id: uuidv7(),
-    workspaceId: ws.id,
-    sectionId: section.id,
-    parentPageId: parent,
-    orderKey,
-    kind: 'page',
-    title,
-    icon: null,
-    coverAssetId: null,
-    isTemplate: false,
-    templateOfPageId: null,
-    version: 1,
-    createdAt: now(),
-    updatedAt: now(),
-    trashedAt: null,
-    trashRootId: null,
-  });
-  const a = page('Alpha', null, 'a0');
-  const b = page('Beta', a.id, 'a0');
-  const c = page('Gamma', null, 'a1');
-  await store.applyLocalOps([
-    newOp('workspace.create', ws.id, ws.id, ws),
-    newOp('section.create', ws.id, section.id, section),
-    ...[a, b, c].map((p) => newOp('page.create', ws.id, p.id, p)),
-  ]);
-  return { ws, section, a, b, c };
-}
+import { ALICE, device, localWorkspace, now } from '../testing/syncHarness';
+import type { LocalStore, PageRecord } from '../types';
+import { SyncEngine } from './engine';
 
 const titles = async (store: LocalStore, ws: Id) =>
   Object.fromEntries(

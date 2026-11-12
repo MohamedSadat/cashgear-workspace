@@ -92,6 +92,28 @@ export interface DocPull {
   rejected: Id[];
 }
 
+/** The server's state hash of a page's document at its validated head (the repair check). */
+export interface DocStateHash {
+  epoch: number;
+  /** The validated head the hash is for. */
+  upToSeq: number;
+  /** Null until the worker has computed it for the current head. */
+  hash: string | null;
+}
+
+export interface DocRepairRequest {
+  epoch: number;
+  clientSchemaVersion: number;
+  /** The device's full state, when the account may edit the page; null for a reader. */
+  update: { updateId: Id; data: Uint8Array } | null;
+}
+
+export interface DocRepairAnswer {
+  ack: { updateId: Id; seq: number } | null;
+  /** The page from the start, as `pullDoc(pageId, 0)` answers. */
+  pull: DocPull;
+}
+
 export interface AssetTicket {
   assetId: Id;
   uploadUrl: string;
@@ -115,6 +137,10 @@ export interface SyncApi {
     request: DocPushRequest,
   ): Promise<{ acks: { updateId: Id; seq: number }[]; headSeq: number }>;
   pullDoc(pageId: Id, after: number): Promise<DocPull>;
+  /** The state hash of the page's validated head (SYNC_DESIGN.md, Repair). */
+  docStateHash(pageId: Id): Promise<DocStateHash>;
+  /** Sends the device's full state (or nothing, for a reader) and pulls the page from the start. */
+  repairDoc(pageId: Id, request: DocRepairRequest): Promise<DocRepairAnswer>;
   /** Bytes from a signed URL (a snapshot, an asset): no credentials are sent. */
   fetchBytes(url: string): Promise<Uint8Array>;
   yjsClients(
@@ -137,6 +163,8 @@ export class SyncHttpError extends Error {
     readonly status: number,
     readonly code: string,
     message = `${status} ${code}`,
+    /** How long the server asked to be left alone (`Retry-After` on a 429 or 503). */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'SyncHttpError';
@@ -159,4 +187,6 @@ export interface DocCodec {
   clientIds(update: Uint8Array): number[];
   /** The document schema version this build writes. */
   schemaVersion: number;
+  /** The canonical state hash (state vector and delete set) of the document these parts make. */
+  stateHash(parts: Uint8Array[]): Promise<string>;
 }

@@ -1,6 +1,7 @@
 // The SyncApi over HTTP, through @cgw/api (typed from the server's OpenAPI document). Bytes travel
 // as base64 in JSON in Phase 2 (SYNC_DESIGN.md: a binary framing waits for Phase 6). Problems
-// become SyncHttpError with the server's stable code; an unreachable server, OfflineError.
+// become SyncHttpError with the server's stable code (and `Retry-After` on a 429 or 503, which the
+// loop waits out); an unreachable server, OfflineError.
 import {
   ApiError,
   NetworkError,
@@ -49,6 +50,15 @@ export function fromBase64(text: string): Uint8Array {
 
 const num = (value: number | string) => (typeof value === 'number' ? value : Number(value));
 
+/** `Retry-After` in milliseconds: delay-seconds or an HTTP date (RFC 9110); undefined if absent. */
+export function retryAfterMs(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const text = value.trim();
+  if (/^\d+$/.test(text)) return Number(text) * 1000;
+  const at = Date.parse(text);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+}
+
 /** The data of an answer, or its problem as SyncHttpError; an unreachable server as OfflineError. */
 async function call<T>(
   request: () => Promise<{ data?: T; error?: unknown; response: Response }>,
@@ -62,12 +72,66 @@ async function call<T>(
     throw error;
   }
   if (result.response.ok) return result.data as T;
-  let code = result.response.status === 401 ? 'auth.required' : 'server.error';
+  const status = result.response.status;
+  let code = status === 401 ? 'auth.required' : status === 429 ? 'limit.rate' : 'server.error';
   let title = result.response.statusText;
   const body = result.error as { code?: string; title?: string } | undefined;
   if (body?.code) code = body.code;
   if (body?.title) title = body.title;
-  throw new SyncHttpError(result.response.status, code, title);
+  const wait =
+    status === 429 || status === 503
+      ? retryAfterMs(result.response.headers.get('Retry-After'))
+      : undefined;
+  throw new SyncHttpError(status, code, title, wait);
+}
+
+type Pull = Schemas['PullResponse'];
+
+const docPull = (pull: Pull): DocPull => ({
+  epoch: num(pull.epoch),
+  schemaVersion: num(pull.schemaVersion),
+  headSeq: num(pull.headSeq),
+  cursor: num(pull.cursor),
+  more: pull.more,
+  snapshot: pull.snapshot ? { upToSeq: num(pull.snapshot.upToSeq), url: pull.snapshot.url } : null,
+  updates: pull.updates.map((u) => ({
+    seq: num(u.seq),
+    updateId: u.updateId,
+    data: fromBase64(u.data),
+  })),
+  rejected: pull.rejected,
+});
+
+/**
+ * The two Phase 3 routes (contracts §2), typed to the contract until the generated schema holds
+ * them: `GET /pages/{pageId}/doc/state-hash` and `POST /pages/{pageId}/doc/repair`.
+ */
+interface StateHashAnswer {
+  epoch: number | string;
+  upToSeq: number | string;
+  hash: string | null;
+}
+interface RepairAnswer {
+  ack: { updateId: Id; seq: number | string } | null;
+  pull: Pull;
+}
+type Answer<T> = Promise<{ data?: T; error?: unknown; response: Response }>;
+interface Phase3Routes {
+  GET(
+    path: '/api/v1/pages/{pageId}/doc/state-hash',
+    init: { params: { path: { pageId: Id } } },
+  ): Answer<StateHashAnswer>;
+  POST(
+    path: '/api/v1/pages/{pageId}/doc/repair',
+    init: {
+      params: { path: { pageId: Id } };
+      body: {
+        epoch: number;
+        clientSchemaVersion: number;
+        update: { updateId: Id; data: string } | null;
+      };
+    },
+  ): Answer<RepairAnswer>;
 }
 
 type Page = Schemas['PageDto'];
@@ -153,6 +217,7 @@ function entityRecord(
 }
 
 export function httpSyncApi(api: ApiClient): SyncApi {
+  const phase3 = api as unknown as Phase3Routes;
   return {
     // Asked at every start: 200 signed in or not, so a signed-out start logs no error.
     async me(): Promise<Account | null> {
@@ -254,24 +319,36 @@ export function httpSyncApi(api: ApiClient): SyncApi {
     },
 
     async pullDoc(pageId, after): Promise<DocPull> {
-      const pull = await call(() =>
-        api.GET('/api/v1/pages/{pageId}/doc', { params: { path: { pageId }, query: { after } } }),
+      return docPull(
+        await call(() =>
+          api.GET('/api/v1/pages/{pageId}/doc', { params: { path: { pageId }, query: { after } } }),
+        ),
+      );
+    },
+
+    async docStateHash(pageId) {
+      const answer = await call(() =>
+        phase3.GET('/api/v1/pages/{pageId}/doc/state-hash', { params: { path: { pageId } } }),
+      );
+      return { epoch: num(answer.epoch), upToSeq: num(answer.upToSeq), hash: answer.hash ?? null };
+    },
+
+    async repairDoc(pageId, request) {
+      const answer = await call(() =>
+        phase3.POST('/api/v1/pages/{pageId}/doc/repair', {
+          params: { path: { pageId } },
+          body: {
+            epoch: request.epoch,
+            clientSchemaVersion: request.clientSchemaVersion,
+            update: request.update
+              ? { updateId: request.update.updateId, data: toBase64(request.update.data) }
+              : null,
+          },
+        }),
       );
       return {
-        epoch: num(pull.epoch),
-        schemaVersion: num(pull.schemaVersion),
-        headSeq: num(pull.headSeq),
-        cursor: num(pull.cursor),
-        more: pull.more,
-        snapshot: pull.snapshot
-          ? { upToSeq: num(pull.snapshot.upToSeq), url: pull.snapshot.url }
-          : null,
-        updates: pull.updates.map((u) => ({
-          seq: num(u.seq),
-          updateId: u.updateId,
-          data: fromBase64(u.data),
-        })),
-        rejected: pull.rejected,
+        ack: answer.ack ? { updateId: answer.ack.updateId, seq: num(answer.ack.seq) } : null,
+        pull: docPull(answer.pull),
       };
     },
 
