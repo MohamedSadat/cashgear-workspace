@@ -758,14 +758,14 @@ async function main() {
 
     // 7. The update, from the top bar.
     await quit(app);
+    // What the app asked the feed for, in the results.
+    const feedRequests = [];
     feed = createServer((request, response) => {
-      const file = join(
-        work,
-        'feed',
-        decodeURIComponent(new URL(request.url, 'http://feed').pathname),
-      );
-      if (!file.startsWith(join(work, 'feed')) || !existsSync(file))
-        return response.writeHead(404).end();
+      const path = decodeURIComponent(new URL(request.url, 'http://feed').pathname);
+      const file = join(work, 'feed', path);
+      const found = file.startsWith(join(work, 'feed')) && existsSync(file);
+      feedRequests.push(`${request.method} ${path} ${found ? 200 : 404}`);
+      if (!found) return response.writeHead(404).end();
       response.writeHead(200, { 'Content-Length': statSync(file).size });
       response.end(readFileSync(file));
     });
@@ -773,8 +773,26 @@ async function main() {
     app = await start(['-a', appPath]);
     await openPage(app, offline.id, offline.text);
     const before = pids();
-    // The first check is 10 s after start.
-    await app.waitForText({ testId: 'update-status' }, `Update to ${next}`, { timeoutMs: 90_000 });
+    // The first check is 10 s after start. Should the offer not show, the updater's own answer
+    // (or its error) and what the top bar holds go into the results.
+    await app
+      .waitForText({ testId: 'update-status' }, `Update to ${next}`, { timeoutMs: 90_000 })
+      .catch(async (error) => {
+        const updater = await app
+          .invoke('update_check')
+          .then((value) => ({ offers: value }))
+          .catch((failure) => ({ error: failure.message }));
+        const topBar = await app
+          .page((lib) =>
+            lib.all('[data-testid="update-status"]').map((el) => lib.words(lib.shown(el))),
+          )
+          .catch((failure) => failure.message);
+        results.steps.update = { feedRequests, updater, topBar };
+        throw new Error(
+          `${error.message}; the updater says ${JSON.stringify(updater)}, the top bar ${JSON.stringify(topBar)}`,
+          { cause: error },
+        );
+      });
     step = Date.now();
     await app.click({ testId: 'update-status' });
     await app.waitFor({ testId: 'update-install' });
@@ -804,6 +822,7 @@ async function main() {
     await openPage(app, offline.id, offline.text);
     const stillOpens = handlerOf(`${SCHEME}://`);
     results.steps.update = {
+      feedRequests,
       from: conf.version,
       to: after,
       seconds: (Date.now() - step) / 1000,

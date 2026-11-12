@@ -41,6 +41,13 @@ function pageLib() {
       : typeof want === 'string'
         ? value === want
         : new RegExp(want.source, want.flags).test(value);
+  // What a person reads: a text box's value, else the text. (A button has a value too, "".)
+  const shown = (el) =>
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement
+      ? el.value
+      : el.textContent;
   const visible = (el) =>
     !!el &&
     el.isConnected &&
@@ -89,8 +96,7 @@ function pageLib() {
             ? byLabel(spec.label)
             : [];
     if (spec.name !== undefined) found = found.filter((el) => matches(name(el), spec.name));
-    if (spec.text !== undefined)
-      found = found.filter((el) => matches(words(el.value ?? el.textContent), spec.text));
+    if (spec.text !== undefined) found = found.filter((el) => matches(words(shown(el)), spec.text));
     if (spec.visible !== false) found = found.filter(visible);
     return found;
   }
@@ -105,6 +111,7 @@ function pageLib() {
     one,
     name,
     words,
+    shown,
     describe: (el) =>
       el
         ? `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : ''}`
@@ -334,7 +341,7 @@ export class Bridge {
       `${JSON.stringify(plain(spec))} to show`,
       (lib, spec) => {
         const [el] = lib.all(spec);
-        return el ? lib.words(el.value ?? el.textContent) || true : false;
+        return el ? lib.words(lib.shown(el)) || true : false;
       },
       [spec],
       options,
@@ -355,7 +362,7 @@ export class Bridge {
   text(spec) {
     return this.page((lib, spec) => {
       const el = lib.one(spec);
-      return lib.words(el.value ?? el.textContent);
+      return lib.words(lib.shown(el));
     }, spec);
   }
 
