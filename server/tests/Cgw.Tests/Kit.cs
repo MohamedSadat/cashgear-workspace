@@ -27,10 +27,14 @@ public static class Kit
         var before = server.MailFiles();
         var invited = await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/invites", new { email = account.Email, role });
         Assert.Equal(HttpStatusCode.OK, invited.StatusCode);
-        var accepted = await account.Client.PostAsync($"/api/v1/invites/{await InviteToken(server, account.Email, before)}/accept", null);
+        var accepted = await Accept(account.Client, await InviteToken(server, account.Email, before));
         Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         return account;
     }
+
+    /// <summary>Accepts an invitation as the app does: the token in the body, never in the path.</summary>
+    public static Task<HttpResponseMessage> Accept(HttpClient client, string token) =>
+        client.PostAsJsonAsync("/api/v1/invites/accept", new { token });
 
     /// <summary>The token in an invitation mailed after <paramref name="before"/>.</summary>
     public static async Task<string> InviteToken(ServerFixture server, string email, HashSet<string> before)

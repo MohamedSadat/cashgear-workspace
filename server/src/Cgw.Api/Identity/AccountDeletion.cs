@@ -12,7 +12,9 @@ namespace Cgw.Api.Identity;
 /// is the only owner of a workspace that has other members (they hand it over first). Otherwise:
 /// workspaces nobody else is in are deleted (purged after 30 days); the caller leaves the rest,
 /// and their private sections there go with them; their personal data is scrubbed, while their
-/// edits in shared pages stay, shown as "Deleted user"; every device and token is revoked.
+/// edits in shared pages stay, shown as "Deleted user"; every device and token is revoked. The
+/// owner check and the leaving happen in one transaction under every one of those workspaces'
+/// locks, as role changes take them.
 /// </summary>
 public sealed class AccountDeletion(
     CgwDb db,
@@ -29,26 +31,43 @@ public sealed class AccountDeletion(
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null, ct);
         if (user is null) return Failure.NotFound("No such account");
-        var members = db.WorkspaceMembers.IgnoreQueryFilters([CgwDb.Tenant]);
-        var memberships = await members.AsNoTracking()
-            .Where(m => m.UserId == userId)
-            .Join(db.Workspaces.Where(w => w.DeletedAt == null), m => m.WorkspaceId, w => w.Id, (m, _) => m)
-            .Select(m => new Membership(
-                m.WorkspaceId,
-                m.Role,
-                members.Count(o => o.WorkspaceId == m.WorkspaceId && o.UserId != userId),
-                members.Count(o => o.WorkspaceId == m.WorkspaceId && o.UserId != userId && o.Role == Roles.Owner)))
-            .ToListAsync(ct);
-        if (memberships.FirstOrDefault(m => m.Role == Roles.Owner && m.Others > 0 && m.OtherOwners == 0) is { } held)
-            return Failure.Conflict(Codes.Conflict, $"You are the only owner of workspace {held.WorkspaceId}, which has other members: make someone else an owner first");
+        // A quick answer for the page; the answer that counts is the one under the locks below.
+        if (SoleOwner(await MembershipsAsync(userId, ct)) is { } held) return held;
 
         var now = clock.GetUtcNow();
-        foreach (var membership in memberships)
+        List<Membership> memberships;
+        await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
         {
-            db.ChangeTracker.Clear();
-            db.Scope.Switch(membership.WorkspaceId);
-            if (membership.Others == 0) await DeleteWorkspaceAsync(membership.WorkspaceId, userId, actor, now, ct);
-            else await LeaveAsync(membership.WorkspaceId, userId, actor, now, ct);
+            // Every workspace's lock, taken in one order and held to the end, then the check again:
+            // a role change or another deletion in any of them waits for this one, or this for it,
+            // so two owners leaving at once cannot both pass and leave a workspace with no owner.
+            var locked = new HashSet<Guid>();
+            while (true)
+            {
+                memberships = await MembershipsAsync(userId, ct);
+                var unlocked = memberships.Select(m => m.WorkspaceId).Where(id => !locked.Contains(id)).Order().ToList();
+                if (unlocked.Count == 0) break;
+                foreach (var id in unlocked)
+                {
+                    await changes.LockAsync(id, ct);
+                    locked.Add(id);
+                }
+            }
+            if (SoleOwner(memberships) is { } raced)
+            {
+                await tx.RollbackAsync(ct);
+                return raced;
+            }
+            foreach (var membership in memberships)
+            {
+                db.ChangeTracker.Clear();
+                db.Scope.Switch(membership.WorkspaceId);
+                // Held already: this points the change log at the workspace.
+                await changes.LockAsync(membership.WorkspaceId, ct);
+                if (membership.Others == 0) await DeleteWorkspaceAsync(membership.WorkspaceId, userId, actor, now, ct);
+                else await LeaveAsync(membership.WorkspaceId, userId, actor, now, ct);
+            }
+            await tx.CommitAsync(ct);
         }
         db.ChangeTracker.Clear();
         db.Scope.Switch(null);
@@ -95,10 +114,29 @@ public sealed class AccountDeletion(
         return true;
     }
 
+    private async Task<List<Membership>> MembershipsAsync(Guid userId, CancellationToken ct)
+    {
+        var members = db.WorkspaceMembers.IgnoreQueryFilters([CgwDb.Tenant]);
+        return await members.AsNoTracking()
+            .Where(m => m.UserId == userId)
+            .Join(db.Workspaces.Where(w => w.DeletedAt == null), m => m.WorkspaceId, w => w.Id, (m, _) => m)
+            .Select(m => new Membership(
+                m.WorkspaceId,
+                m.Role,
+                members.Count(o => o.WorkspaceId == m.WorkspaceId && o.UserId != userId),
+                members.Count(o => o.WorkspaceId == m.WorkspaceId && o.UserId != userId && o.Role == Roles.Owner)))
+            .ToListAsync(ct);
+    }
+
+    /// <summary>A workspace the caller is the only owner of while others are in it: they hand it over first.</summary>
+    private static Failure? SoleOwner(List<Membership> memberships) =>
+        memberships.FirstOrDefault(m => m.Role == Roles.Owner && m.Others > 0 && m.OtherOwners == 0) is { } held
+            ? Failure.Conflict(Codes.Conflict, $"You are the only owner of workspace {held.WorkspaceId}, which has other members: make someone else an owner first")
+            : null;
+
+    /// <summary>Inside the deletion's transaction, under the workspace's lock.</summary>
     private async Task DeleteWorkspaceAsync(Guid workspaceId, Guid userId, Actor actor, DateTimeOffset now, CancellationToken ct)
     {
-        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-        await changes.LockAsync(workspaceId, ct);
         var workspace = await db.Workspaces.FirstAsync(w => w.Id == workspaceId, ct);
         workspace.DeletedAt = now;
         workspace.DeletedBy = userId;
@@ -107,13 +145,11 @@ public sealed class AccountDeletion(
         audit.Add(actor, "workspace.delete", workspaceId, "workspace", workspaceId, new { reason = "account.delete" });
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
-        await tx.CommitAsync(ct);
     }
 
+    /// <summary>Inside the deletion's transaction, under the workspace's lock.</summary>
     private async Task LeaveAsync(Guid workspaceId, Guid userId, Actor actor, DateTimeOffset now, CancellationToken ct)
     {
-        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-        await changes.LockAsync(workspaceId, ct);
         // Their private sections were theirs alone: the pages are deleted for good (the purge
         // job removes their documents), and the sections go.
         var sections = await db.Sections.Where(s => s.Visibility == "private" && s.OwnerUserId == userId).ToListAsync(ct);
@@ -146,6 +182,5 @@ public sealed class AccountDeletion(
         audit.Add(actor, "member.remove", workspaceId, "user", userId, new { reason = "account.delete" });
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
-        await tx.CommitAsync(ct);
     }
 }

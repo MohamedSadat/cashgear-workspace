@@ -13,6 +13,7 @@ namespace Cgw.Api.Modules;
 public sealed record WorkspaceUpdate(string? Name, string? Icon);
 public sealed record RoleUpdate(string Role);
 public sealed record NewInvite(string Email, string Role);
+public sealed record InviteAcceptance(string Token);
 
 /// <summary>
 /// Routes under <c>/workspaces/{workspaceId}</c>: the caller's membership is checked before any
@@ -58,8 +59,10 @@ public static class WorkspaceEndpoints
             })
             .WithName("createWorkspace");
 
-        api.MapPost("/invites/{token}/accept", async Task<Results<Ok<WorkspaceDto>, ProblemHttpResult>> (string token, WorkspaceService service, HttpContext http) =>
+        // The token in the body: a path is written to request logs, a body is not.
+        api.MapPost("/invites/accept", async Task<Results<Ok<WorkspaceDto>, ProblemHttpResult>> (InviteAcceptance body, WorkspaceService service, HttpContext http) =>
             {
+                if (body.Token is not { Length: > 0 and <= 100 } token) return Problems.From(Failure.NotFound("The invitation is not valid or has expired"));
                 var result = await service.AcceptAsync(http.User.UserId()!.Value, http.Actor(), token);
                 return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
             })
@@ -94,7 +97,7 @@ public static class WorkspaceEndpoints
                 Answer(await service.DeleteAsync(http.Member(), http.Actor()), _ => TypedResults.NoContent()))
             .WithName("deleteWorkspace");
 
-        one.MapGet("/members", async (WorkspaceService service) => TypedResults.Ok(await service.MembersAsync()))
+        one.MapGet("/members", async (WorkspaceService service, HttpContext http) => TypedResults.Ok(await service.MembersAsync(http.Member())))
             .WithName("listMembers");
 
         // Someone joins only through an invitation they accept (POST /invites): an answer that

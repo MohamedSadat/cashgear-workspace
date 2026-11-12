@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text.Json;
+using Cgw.Core.Assets;
 using Cgw.Core.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,8 +19,10 @@ public sealed class OpFailure(string code, string title) : Exception(title)
 /// rise, the change feed and the closure table are written, and the result is stored, together.
 /// A rejected operation does not stop the batch, except that operations on a rejected create are
 /// rejected too. "Last" always means the order the server received them; no clock is compared.
+/// The tree never changes who may see a page behind anyone's back: a page that leaves the page
+/// deciding its access keeps that access as its own rows, and the feed says to fetch the subtree.
 /// </summary>
-public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit audit, TimeProvider clock)
+public sealed class OpsService(CgwDb db, Access access, AssetService assets, ChangeLog changes, Audit audit, TimeProvider clock)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -211,7 +214,7 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
                     page.SearchTitle = TextNormaliser.Normalise(page.Title);
                 }
                 if (Has(payload, "icon")) page.Icon = Icon(payload);
-                if (Has(payload, "coverAssetId")) page.CoverAssetId = OptionalId(payload, "coverAssetId");
+                if (Has(payload, "coverAssetId")) page.CoverAssetId = await CoverAsync(member, payload, page.CoverAssetId, ct);
                 if (payload.TryGetProperty("isTemplate", out var template) && template.ValueKind is JsonValueKind.True or JsonValueKind.False)
                     page.IsTemplate = template.GetBoolean();
                 if (Has(payload, "templateOfPageId")) page.TemplateOfPageId = OptionalId(payload, "templateOfPageId");
@@ -248,6 +251,8 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
                 if (page.TrashedAt is null) throw new OpFailure("page.notTrashed", "Pages are deleted for good only from the trash");
                 var subtree = await SubtreeAsync(page.Id, ct);
                 var ids = subtree.Select(p => p.Id).ToList();
+                // For good means every page of it, so it needs full access to every page of it.
+                await NeedFullOnAllAsync(member, ids, "Deleting for good needs full access to every page under this one");
                 foreach (var record in subtree)
                 {
                     // A tombstone: the title goes now; the document goes with the worker's purge.
@@ -311,19 +316,26 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
         var parentId = OptionalId(p, "parentPageId");
         string? notice = null;
         Page? parent = null;
+        var fellBack = false;
+        Guid? accessFrom = null;
         if (parentId is { } pid)
         {
             parent = await db.Pages.FirstOrDefaultAsync(x => x.Id == pid && x.DeletedAt == null, ct);
+            // The parent's level first: nothing else is said of a page the caller may not see.
+            if (parent is not null) await NeedLevelAsync(member, parent.Id, Levels.Edit);
             if (parent is not null && parent.SectionId != section.Id) throw new OpFailure("tree.section", "The parent is in another section");
             if (parent is null || parent.TrashedAt is not null)
             {
                 // SYNC_DESIGN.md, Metadata: made at the top of its section, and the user is told.
+                accessFrom = parent?.Id;
                 parent = null;
                 notice = Codes.TreeParentMissing;
+                fellBack = true;
             }
         }
-        if (parent is not null) await NeedLevelAsync(member, parent.Id, Levels.Edit);
-        else if (member.IsGuest && section.Visibility != "private") throw new OpFailure(Codes.AccessDenied, "Guests add pages only under pages shared with them");
+        if (parent is null && member.IsGuest && section.Visibility != "private")
+            throw new OpFailure(Codes.AccessDenied, "Guests add pages only under pages shared with them");
+        var cover = await CoverAsync(member, p, null, ct);
 
         var orderKey = Key(p);
         if (notice is not null) orderKey = OrderKeys.Between(await LastTopKeyAsync(section.Id, null, ct), null);
@@ -340,7 +352,7 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
             Title = title,
             SearchTitle = TextNormaliser.Normalise(title),
             Icon = Icon(p),
-            CoverAssetId = OptionalId(p, "coverAssetId"),
+            CoverAssetId = cover,
             IsTemplate = p.TryGetProperty("isTemplate", out var t) && t.ValueKind == JsonValueKind.True,
             TemplateOfPageId = OptionalId(p, "templateOfPageId"),
             Version = 1,
@@ -350,9 +362,14 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
             UpdatedAt = now,
         };
         db.Pages.Add(page);
+        // Not under the parent it was made for: it keeps that parent's access, never the section's
+        // default. With no trace of the parent, only its maker (and admins) may see it.
+        var kept = fellBack && section.Visibility != "private";
+        if (kept) await KeepAccessAsync(member, page, await AccessToKeepAsync(member, accessFrom), now, ct);
         await db.SaveChangesAsync(ct);
         await AddClosureAsync(page.Id, parent?.Id, ct);
         changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
+        if (kept) changes.Add("access", page.Id, "grant", page.Version, member.UserId);
         return (await AppliedPage(member, op, page)) with { Notice = notice };
     }
 
@@ -369,27 +386,46 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
         if (parentId is { } pid)
         {
             var parent = await db.Pages.FirstOrDefaultAsync(x => x.Id == pid && x.DeletedAt == null, ct) ?? throw new OpFailure("not.found", "Parent page not found");
+            // The parent's level first: nothing else is said of a page the caller may not see.
+            await NeedLevelAsync(member, pid, Levels.Edit);
             if (parent.TrashedAt is not null) throw new OpFailure("page.trashed", "The parent is in the trash");
             if (parent.SectionId != section.Id) throw new OpFailure("tree.section", "The parent is in another section");
             // No cycles: the new parent may not be the page or anything under it.
             if (pid == page.Id || await db.PageAncestors.AnyAsync(a => a.PageId == pid && a.AncestorPageId == page.Id, ct))
                 throw new OpFailure(Codes.TreeCycle, "A page cannot move under itself");
-            await NeedLevelAsync(member, pid, Levels.Edit);
         }
         else if (member.IsGuest && section.Visibility != "private") throw new OpFailure(Codes.AccessDenied, "Guests move pages only under pages shared with them");
 
-        var orderKey = await FreeKeyAsync(section.Id, parentId, Key(p), page.Id, ct);
         var sectionChanged = section.Id != page.SectionId;
         var parentChanged = parentId != page.ParentPageId;
+        var from = await db.Sections.AsNoTracking().FirstAsync(s => s.Id == page.SectionId, ct);
+        var subtree = await SubtreeAsync(page.Id, ct);
+        // Between a shared and a private section, everyone else loses or gains the whole subtree:
+        // only someone holding every page of it may move it.
+        var crossing = from.Visibility != section.Visibility;
+        if (crossing)
+            await NeedFullOnAllAsync(member, subtree.Select(x => x.Id).ToList(), "Moving pages between a shared and a private section needs full access to every page moved");
+        // Leaving the page that decides who sees it would hand it the section's default: only full
+        // access moves it so, and it keeps what it had as its own rows.
+        List<AccessRow>? kept = null;
+        if (!crossing && section.Visibility != "private" && !page.Restricted && parentChanged
+            && await access.DecidingPageAsync(page.ParentPageId) != await access.DecidingPageAsync(parentId))
+        {
+            await NeedLevelAsync(member, page.Id, Levels.Full);
+            kept = await access.EffectiveRowsAsync(member.WorkspaceId, page.Id);
+        }
+
+        var orderKey = await FreeKeyAsync(section.Id, parentId, Key(p), page.Id, ct);
         page.SectionId = section.Id;
         page.ParentPageId = parentId;
         page.OrderKey = orderKey;
         page.Version++;
         page.UpdatedAt = now;
         page.UpdatedBy = member.UserId;
+        if (kept is not null) await KeepAccessAsync(member, page, kept, now, ct);
         changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
         if (sectionChanged)
-            foreach (var child in (await SubtreeAsync(page.Id, ct)).Where(x => x.Id != page.Id))
+            foreach (var child in subtree.Where(x => x.Id != page.Id))
             {
                 child.SectionId = section.Id;
                 child.Version++;
@@ -397,6 +433,9 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
             }
         await db.SaveChangesAsync(ct);
         if (parentChanged) await MoveClosureAsync(page.Id, parentId, ct);
+        // Clients fetch the subtree again whenever who sees it may have changed, or pages moved with it.
+        if (crossing || kept is not null || ((parentChanged || sectionChanged) && subtree.Count > 1))
+            changes.Add("access", page.Id, crossing && section.Visibility == "private" ? "revoke" : "grant", page.Version, member.UserId);
         return await AppliedPage(member, op, page);
     }
 
@@ -406,9 +445,13 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
         if (page.TrashRootId != page.Id) throw new OpFailure("page.notTrashed", "The page is not in the trash");
         var parent = page.ParentPageId is { } pid ? await db.Pages.FirstOrDefaultAsync(x => x.Id == pid && x.DeletedAt == null, ct) : null;
         var moved = false;
+        List<AccessRow>? kept = null;
         if (page.ParentPageId is not null && (parent is null || parent.TrashedAt is not null))
         {
-            // The old parent is gone: back to the top of its section.
+            // The old parent is gone: back to the top of its section, keeping the access it had
+            // under that parent (read before the closure table forgets the parent).
+            var section = await db.Sections.AsNoTracking().FirstAsync(s => s.Id == page.SectionId, ct);
+            if (section.Visibility != "private" && !page.Restricted) kept = await AccessToKeepAsync(member, page.Id);
             page.ParentPageId = null;
             page.OrderKey = OrderKeys.Between(await LastTopKeyAsync(page.SectionId, page.Id, ct), null);
             moved = true;
@@ -417,6 +460,7 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
         page.TrashRootId = null;
         page.TrashedBy = null;
         page.Version++;
+        if (kept is not null) await KeepAccessAsync(member, page, kept, clock.GetUtcNow(), ct);
         changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
         foreach (var record in (await SubtreeAsync(page.Id, ct)).Where(x => x.Id != page.Id && x.TrashRootId == page.Id))
         {
@@ -427,8 +471,63 @@ public sealed class OpsService(CgwDb db, Access access, ChangeLog changes, Audit
             changes.Add("page", record.Id, "upsert", record.Version, member.UserId);
         }
         await db.SaveChangesAsync(ct);
-        if (moved) await MoveClosureAsync(page.Id, null, ct);
+        if (moved)
+        {
+            await MoveClosureAsync(page.Id, null, ct);
+            changes.Add("access", page.Id, "grant", page.Version, member.UserId);
+        }
         return await AppliedPage(member, op, page);
+    }
+
+    /// <summary>
+    /// The rows a page falling back to the top of its section keeps: what the chain from
+    /// <paramref name="from"/> gave it, and the actor's own full row when that gives them nothing.
+    /// </summary>
+    private async Task<List<AccessRow>> AccessToKeepAsync(Member member, Guid? from)
+    {
+        var rows = await access.EffectiveRowsAsync(member.WorkspaceId, from);
+        if (Access.LevelUnder(member, rows) == Levels.None) rows.Add(new AccessRow("user", member.UserId, Levels.Full));
+        return rows;
+    }
+
+    /// <summary>Makes the page restricted to <paramref name="rows"/>: its access no longer depends on where it is.</summary>
+    private async Task KeepAccessAsync(Member member, Page page, IReadOnlyList<AccessRow> rows, DateTimeOffset now, CancellationToken ct)
+    {
+        // Deleted in the database, not tracked: a row can come back with the same key and a new level.
+        await db.PagePermissions.Where(r => r.PageId == page.Id).ExecuteDeleteAsync(ct);
+        foreach (var row in rows)
+            db.PagePermissions.Add(new PagePermission
+            {
+                PageId = page.Id,
+                PrincipalType = row.PrincipalType,
+                PrincipalId = row.PrincipalId,
+                Level = row.Level,
+                WorkspaceId = member.WorkspaceId,
+                CreatedBy = member.UserId,
+                CreatedAt = now,
+            });
+        page.Restricted = true;
+    }
+
+    /// <summary>A cover is taken only from a file the actor may read: knowing its id is not enough.</summary>
+    private async Task<Guid?> CoverAsync(Member member, JsonElement payload, Guid? current, CancellationToken ct)
+    {
+        var cover = OptionalId(payload, "coverAssetId");
+        if (cover is not { } id || id == current) return cover;
+        var asset = await db.Assets.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (asset is null || !await assets.CanReadAsync(member, asset, ct))
+            throw new OpFailure(Codes.AccessDenied, "The cover is a file you may not read");
+        return cover;
+    }
+
+    private async Task NeedFullOnAllAsync(Member member, List<Guid> ids, string why)
+    {
+        var levels = ids.Count > 1 ? await access.AllLevelsAsync(member) : null;
+        foreach (var id in ids)
+        {
+            var level = levels is not null ? levels.GetValueOrDefault(id, Levels.None) : await access.PageLevelAsync(member, id);
+            if (level != Levels.Full) throw new OpFailure(Codes.AccessDenied, why);
+        }
     }
 
     // ------------------------------------------------------------------------------------------

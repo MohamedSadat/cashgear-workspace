@@ -255,8 +255,8 @@ public sealed class SyncTests(ServerFixture server)
         Assert.NotEmpty(token);
         // Someone else cannot use the invite.
         var stranger = await server.NewAccount();
-        Assert.Equal(HttpStatusCode.Forbidden, (await stranger.Client.PostAsync($"/api/v1/invites/{token}/accept", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await other.Client.PostAsync($"/api/v1/invites/{token}/accept", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Kit.Accept(stranger.Client, token)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Kit.Accept(other.Client, token)).StatusCode);
 
         var tree = await ws.Tree(other.Client);
         var pages = tree.GetProperty("pages").EnumerateArray().Select(p => p.GetProperty("title").GetString()).ToList();

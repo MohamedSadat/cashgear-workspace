@@ -112,8 +112,16 @@ public sealed partial class AuthorizationTests(ServerFixture server)
 
                 var permissions = await client.GetAsync($"/api/v1/pages/{page}/permissions");
                 Check("permissions.get", Status(permissions));
-                if (permissions.IsSuccessStatusCode && (await Kit.Json(permissions)).GetProperty("yourLevel").GetString() != level)
-                    failures.Add($"[{setup.Name}] {role}: yourLevel is not {level}");
+                if (permissions.IsSuccessStatusCode)
+                {
+                    var answer = await Kit.Json(permissions);
+                    if (answer.GetProperty("yourLevel").GetString() != level)
+                        failures.Add($"[{setup.Name}] {role}: yourLevel is not {level}");
+                    // Who else is on the list is for full access only.
+                    var listed = answer.GetProperty("entries").GetArrayLength();
+                    if (listed != (level == "full" ? entries.Count : 0))
+                        failures.Add($"[{setup.Name}] {role} ({level}): {listed} entries listed");
+                }
                 Check("pull", Status(await client.GetAsync($"/api/v1/pages/{page}/doc?after=0")));
                 Check("push", Status(await Kit.Push(client, page, Kit.Update("page"))));
                 Check("permissions.put", Status(await client.PutAsJsonAsync($"/api/v1/pages/{page}/permissions", body)));
@@ -162,8 +170,6 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["userId"] = member.Id.ToString(),
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
-            // A token is the credential itself, not an id: a caller who does not hold it sends another.
-            ["token"] = "not-the-invitation-token",
         };
 
         var outsider = await server.NewAccount();

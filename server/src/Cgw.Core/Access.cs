@@ -123,4 +123,116 @@ public sealed class Access(CgwDb db)
     /// <summary>Whether the caller sees a section at all.</summary>
     public static bool SeesSection(Member member, Section section) =>
         section.Visibility != "private" || section.OwnerUserId == member.UserId;
+
+    /// <summary>
+    /// The level a page deleted for good gave the caller, as far as what is left of it says: its
+    /// tombstone and those above it, then the live ancestor where the chain is whole again. Once the
+    /// purge has removed a tombstone's rows, a restricted one gives no one anything.
+    /// </summary>
+    public async Task<string> DeletedLevelAsync(Member member, Page page)
+    {
+        var section = await db.Sections.AsNoTracking().Where(s => s.Id == page.SectionId)
+            .Select(s => new { s.Visibility, s.OwnerUserId }).FirstOrDefaultAsync();
+        if (section is null) return Levels.None;
+        if (section.Visibility == "private") return section.OwnerUserId == member.UserId ? Levels.Full : Levels.None;
+        if (member.IsAdmin) return Levels.Full;
+        Guid? cursor = page.Id;
+        for (var steps = 0; cursor is { } id && steps < 1000; steps++)
+        {
+            var node = await db.Pages.AsNoTracking().Where(p => p.Id == id)
+                .Select(p => new { p.ParentPageId, p.Restricted, p.DeletedAt }).FirstOrDefaultAsync();
+            if (node is null) break;
+            if (node.DeletedAt is null) return await PageLevelAsync(member, id);
+            var rows = await db.PagePermissions.AsNoTracking()
+                .Where(r => r.PageId == id && ((r.PrincipalType == "user" && r.PrincipalId == member.UserId) || r.PrincipalType == "workspace"))
+                .ToListAsync();
+            if (Decide(member, node.Restricted, rows) is { } decided) return decided;
+            cursor = node.ParentPageId;
+        }
+        return Default(member);
+    }
+
+    /// <summary>
+    /// The nearest page, from <paramref name="from"/> up, that decides access for some principal
+    /// (restricted, or holding any row); null when only the role defaults apply.
+    /// </summary>
+    public async Task<Guid?> DecidingPageAsync(Guid? from)
+    {
+        if (from is not { } start) return null;
+        var chain = await db.PageAncestors.AsNoTracking().Where(a => a.PageId == start)
+            .Join(db.Pages, a => a.AncestorPageId, p => p.Id, (a, p) => new
+            {
+                p.Id,
+                a.Depth,
+                Decides = p.Restricted || db.PagePermissions.Any(r => r.PageId == p.Id),
+            })
+            .OrderBy(x => x.Depth).ToListAsync();
+        return chain.FirstOrDefault(c => c.Decides)?.Id;
+    }
+
+    /// <summary>
+    /// The rows a restricted page needs to give everyone what the chain from <paramref name="from"/>
+    /// (that page and its ancestors) gives a page under it now: the workspace's level, and each
+    /// person whose own row decides theirs. Nothing (only admins) when there is no chain.
+    /// </summary>
+    public async Task<List<AccessRow>> EffectiveRowsAsync(Guid workspaceId, Guid? from)
+    {
+        if (from is not { } start) return [];
+        var chain = await db.PageAncestors.AsNoTracking().Where(a => a.PageId == start)
+            .Join(db.Pages, a => a.AncestorPageId, p => p.Id, (a, p) => new { p.Id, p.Restricted, a.Depth })
+            .OrderBy(x => x.Depth).ToListAsync();
+        if (chain.Count == 0) return [];
+        // Nothing above the first restricted page reaches below it.
+        var cut = chain.TakeWhile(c => !c.Restricted).ToList();
+        if (cut.Count < chain.Count) cut.Add(chain[cut.Count]);
+        var ids = cut.Select(c => c.Id).ToList();
+        var rows = (await db.PagePermissions.AsNoTracking().Where(r => ids.Contains(r.PageId)).ToListAsync()).ToLookup(r => r.PageId);
+
+        // A member with no row of their own: the first workspace row, else what the chain ends in.
+        var workspace = cut[^1].Restricted ? Levels.None : Levels.Edit;
+        foreach (var link in cut)
+            if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == "workspace") is { } row)
+            {
+                workspace = row.Level;
+                break;
+            }
+        var result = new List<AccessRow>();
+        if (workspace != Levels.None) result.Add(new AccessRow("workspace", workspaceId, workspace));
+
+        var people = rows.SelectMany(g => g).Where(r => r.PrincipalType == "user").Select(r => r.PrincipalId).Distinct().ToList();
+        var roles = await db.WorkspaceMembers.AsNoTracking().Where(m => people.Contains(m.UserId)).ToDictionaryAsync(m => m.UserId, m => m.Role);
+        foreach (var person in people)
+        {
+            // Someone no longer in the workspace has nothing to keep.
+            if (!roles.TryGetValue(person, out var role)) continue;
+            var member = new Member(workspaceId, person, role);
+            foreach (var link in cut)
+            {
+                if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == "user" && r.PrincipalId == person) is { } own)
+                {
+                    result.Add(new AccessRow("user", person, own.Level));
+                    break;
+                }
+                // Decided by the workspace's row or a restriction: the rows above say the same.
+                if (Decide(member, link.Restricted, rows[link.Id]) is not null) break;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>What a restricted page holding <paramref name="rows"/> gives someone.</summary>
+    public static string LevelUnder(Member member, IEnumerable<AccessRow> rows)
+    {
+        if (member.IsAdmin) return Levels.Full;
+        string? workspace = null;
+        foreach (var row in rows)
+        {
+            if (row.PrincipalType == "user" && row.PrincipalId == member.UserId) return row.Level;
+            if (row.PrincipalType == "workspace" && !member.IsGuest) workspace = row.Level;
+        }
+        return workspace ?? Levels.None;
+    }
 }
+
+/// <summary>A row of a page's access list: who, and at which level.</summary>
+public sealed record AccessRow(string PrincipalType, Guid PrincipalId, string Level);

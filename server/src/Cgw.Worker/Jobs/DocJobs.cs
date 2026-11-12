@@ -15,8 +15,10 @@ namespace Cgw.Worker.Jobs;
 /// pushed updates still pending, in sequence order: the update must decode; every struct in it
 /// must be written as a Yjs client id registered to the pushing user; the document after it must
 /// hold only the schema version's elements, well-formed block ids and safe link schemes, keep its
-/// page id and schema version, and stay under 10 MB. A failing update is refused (its pusher sees
-/// it in their next pull); the page's validated head then moves, so pulls serve what passed.
+/// page id and schema version, and stay under 10 MB; and its pusher must still be able to edit the
+/// page, checked again under the workspace's lock, so a push that passed the API's check just
+/// before access was taken away is not served. A failing update is refused (its pusher sees it in
+/// their next pull); the page's validated head then moves, so pulls serve what passed.
 /// </summary>
 public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) : IJob
 {
@@ -53,6 +55,9 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         var elements = Schema.For(page.DocSchemaVersion);
         var verdicts = new Dictionary<long, List<string>>();
         var forged = new List<PageDocUpdate>();
+        var denied = new List<PageDocUpdate>();
+        var access = new Access(db);
+        var editors = await EditorsAsync(access, page, users);
 
         // Each update's own checks; then, if all pass, the whole batch in one merge.
         foreach (var row in rows)
@@ -61,6 +66,11 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
             if (page.DeletedAt is not null) problems.Add("the page was deleted");
             else if (elements is null) problems.Add($"schema version {page.DocSchemaVersion} is newer than this worker");
             else if (row.Epoch != page.DocEpoch) problems.Add($"epoch {row.Epoch}, the page is at {page.DocEpoch}");
+            else if (!editors.Contains(row.UserId))
+            {
+                problems.Add($"{Codes.AccessDenied}: the pusher may no longer edit the page");
+                denied.Add(row);
+            }
             else
             {
                 try
@@ -124,6 +134,13 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         {
             // The workspace row first, then the page's: the order every writer takes them in.
             await changes.LockAsync(page.WorkspaceId, ct);
+            // Access changes take the same lock: if one landed since the check above, decide again
+            // on the next pass rather than serve what someone may no longer write.
+            if (!(await EditorsAsync(access, page, editors)).SetEquals(editors))
+            {
+                await tx.RollbackAsync(ct);
+                return;
+            }
             foreach (var (seq, problems) in verdicts)
             {
                 var status = problems.Count == 0 ? UpdateStatus.Valid : UpdateStatus.Rejected;
@@ -136,6 +153,8 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
             changes.Add("page", pageId, "upsert", page.Version, null);
             foreach (var row in forged)
                 audit.Add(new Actor(row.UserId, null, null), "doc.forgedClient", page.WorkspaceId, "page", pageId, new { row.Seq, row.UpdateId });
+            foreach (var row in denied)
+                audit.Add(new Actor(row.UserId, null, null), "doc.accessDenied", page.WorkspaceId, "page", pageId, new { row.Seq, row.UpdateId });
             await db.SaveChangesAsync(ct);
             await changes.FlushAsync(ct);
             await tx.CommitAsync(ct);
@@ -143,6 +162,17 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         states.Put(pageId, page.DocEpoch, head, state);
         var refused = verdicts.Count(v => v.Value.Count > 0);
         if (refused > 0) logger.LogWarning("Refused {Count} of {Total} updates to page {Page}", refused, rows.Count, pageId);
+    }
+
+    /// <summary>Which of these pushers may edit the page now.</summary>
+    private static async Task<HashSet<Guid>> EditorsAsync(Access access, Page page, IEnumerable<Guid> users)
+    {
+        var editors = new HashSet<Guid>();
+        foreach (var user in users)
+            if (await access.MemberAsync(page.WorkspaceId, user) is { } member
+                && Levels.AtLeast(await access.PageLevelAsync(member, page.Id), Levels.Edit))
+                editors.Add(user);
+        return editors;
     }
 
     /// <summary>What the whole document must keep: its page, its schema version, its size.</summary>

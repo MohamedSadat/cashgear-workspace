@@ -225,7 +225,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/invites/{token}/accept': {
+  '/api/v1/invites/accept': {
     parameters: {
       query?: never;
       header?: never;
@@ -417,14 +417,14 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/shared/pages/{pageId}/doc': {
+  '/api/v1/shared/pages/{pageId}/json': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get: operations['pullSharedDoc'];
+    get: operations['getSharedDocJson'];
     put?: never;
     post?: never;
     delete?: never;
@@ -803,6 +803,9 @@ export interface components {
       email: string;
       locale: null | string;
       returnUrl: null | string;
+    };
+    InviteAcceptance: {
+      token: string;
     };
     InviteDto: {
       /** Format: date-time */
@@ -1491,12 +1494,14 @@ export interface operations {
     parameters: {
       query?: never;
       header?: never;
-      path: {
-        token: string;
-      };
+      path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InviteAcceptance'];
+      };
+    };
     responses: {
       /** @description OK */
       200: {
@@ -1842,11 +1847,9 @@ export interface operations {
       };
     };
   };
-  pullSharedDoc: {
+  getSharedDocJson: {
     parameters: {
-      query?: {
-        after?: number | string;
-      };
+      query?: never;
       header?: {
         'X-Share-Token'?: string;
       };
@@ -1863,7 +1866,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PullResponse'];
+          'application/json': components['schemas']['DocJsonResponse'];
         };
       };
     };

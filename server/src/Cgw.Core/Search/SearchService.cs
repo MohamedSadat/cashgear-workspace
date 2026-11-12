@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Cgw.Core.Data;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -39,14 +41,19 @@ public sealed class FullText
 /// and every term must begin a word of the page's title or of its text. Titles rank first. Pages
 /// in the trash or deleted are left out, and what the caller may not read is filtered at query
 /// time, never by the client. Pages come in keyset order (title terms matched, then most recently
-/// changed, then id) under an opaque cursor.
+/// changed, then id) under a cursor sealed with Data Protection to its user and workspace: it may
+/// hold the key of a page the caller cannot see (the last one scanned), and says nothing of it.
 /// </summary>
-public sealed class SearchService(CgwDb db, Access access, FullText fullText)
+public sealed class SearchService(CgwDb db, Access access, FullText fullText, IDataProtectionProvider protection)
 {
     public const int DefaultLimit = 20;
     public const int MaxLimit = 50;
     public const int MaxTerms = 8;
     private const int Rounds = 10;
+    public const string CursorPurpose = "Cgw.Search.Cursor.v1";
+
+    private IDataProtector Protector(Member member) =>
+        protection.CreateProtector(CursorPurpose, member.WorkspaceId.ToString("N"), member.UserId.ToString("N"));
 
     private sealed record Key(int TitleHits, DateTimeOffset UpdatedAt, Guid PageId);
 
@@ -66,9 +73,10 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText)
             .Select(t => t.Length > 100 ? t[..100] : t).ToArray();
         if (terms.Length == 0) return new SearchResultDto([], null);
         Key? after = null;
+        var protector = Protector(member);
         if (!string.IsNullOrEmpty(cursor))
         {
-            after = Decode(cursor);
+            after = Decode(protector, cursor);
             if (after is null) return Failure.Invalid("The cursor is not valid");
         }
 
@@ -99,9 +107,9 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText)
         if (hits.Count > size)
         {
             hits.RemoveRange(size, hits.Count - size);
-            next = Encode(hits[^1].Key);
+            next = Encode(protector, hits[^1].Key);
         }
-        else next = exhausted || scanned is null ? null : Encode(scanned);
+        else next = exhausted || scanned is null ? null : Encode(protector, scanned);
 
         var ids = hits.Select(h => h.Key.PageId).ToList();
         var texts = await db.PageDocDerived.AsNoTracking().Where(d => ids.Contains(d.PageId))
@@ -169,22 +177,23 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText)
     private static string EscapeLike(string term) =>
         term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_").Replace("[", "\\[");
 
-    private static string Encode(Key key) =>
-        WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(
-            $"{key.TitleHits}|{key.UpdatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)}|{key.PageId:N}"));
+    private static string Encode(IDataProtector protector, Key key) =>
+        WebEncoders.Base64UrlEncode(protector.Protect(Encoding.UTF8.GetBytes(
+            $"{key.TitleHits}|{key.UpdatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)}|{key.PageId:N}")));
 
-    private static Key? Decode(string cursor)
+    /// <summary>The key a cursor holds; null when it was not sealed for this caller in this workspace.</summary>
+    private static Key? Decode(IDataProtector protector, string cursor)
     {
         try
         {
-            var parts = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(cursor)).Split('|');
+            var parts = Encoding.UTF8.GetString(protector.Unprotect(WebEncoders.Base64UrlDecode(cursor))).Split('|');
             if (parts.Length == 3
                 && int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var hits)
                 && DateTimeOffset.TryParseExact(parts[1], "O", CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
                 && Guid.TryParseExact(parts[2], "N", out var id))
                 return new Key(hits, at, id);
         }
-        catch (FormatException)
+        catch (Exception e) when (e is FormatException or CryptographicException)
         {
         }
         return null;

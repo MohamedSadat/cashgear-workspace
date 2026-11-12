@@ -1,13 +1,12 @@
 // `#/s/{token}`: a page shared by link (M2.6), read without an account. The token goes only in a
 // request header (it is in the address's hash, which browsers never send), and the page is drawn
-// read-only from its document; nothing is stored on this device.
-import { fragmentToJSON, type DocJSON } from '@cgw/doc';
+// read-only from the worker's JSON of its document (never its Yjs updates, which still hold text
+// deleted since the last compaction); nothing is stored on this device.
+import { knownTypes, readableJSON, type DocJSON } from '@cgw/doc';
 import { BlockEditorView, type EditorHost, type EditorStrings } from '@cgw/editor';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import * as Y from 'yjs';
 import { navigate } from '../route';
-import { fromBase64 } from '@cgw/workspace';
 
 interface SharedPage {
   id: string;
@@ -17,37 +16,45 @@ interface SharedPage {
   orderKey?: string;
 }
 
+class SharedError extends Error {
+  constructor(readonly status: number) {
+    super(String(status));
+  }
+}
+
 async function call<T>(apiBase: string, token: string, path: string): Promise<T> {
   const response = await fetch(`${apiBase}/api/v1/shared${path}`, {
     headers: { 'X-Share-Token': token },
     credentials: 'omit',
   });
-  if (!response.ok) throw new Error(String(response.status));
+  if (!response.ok) throw new SharedError(response.status);
   return (await response.json()) as T;
 }
 
-/** The page's document from the shared pull: the snapshot (by its signed URL) and the updates. */
-async function loadDoc(apiBase: string, token: string, pageId: string): Promise<DocJSON> {
-  const doc = new Y.Doc();
-  let after = 0;
-  for (;;) {
-    const pull = await call<{
-      cursor: number | string;
-      more: boolean;
-      snapshot: { url: string } | null;
-      updates: { data: string }[];
-    }>(apiBase, token, `/pages/${pageId}/doc?after=${after}`);
-    if (pull.snapshot) {
-      const response = await fetch(pull.snapshot.url, { credentials: 'omit' });
-      if (response.ok) Y.applyUpdate(doc, new Uint8Array(await response.arrayBuffer()));
+/** A page written a moment ago is derived by the worker within seconds: asked again this often. */
+const RETRIES = 5;
+const RETRY_MS = 1500;
+
+/**
+ * The page's document as the worker derived it (the JSON `fragmentToJSON` gives). A 404 is a page
+ * not derived yet, asked for again a few times; past that, or for any other answer, it fails.
+ */
+async function loadDoc(
+  apiBase: string,
+  token: string,
+  pageId: string,
+  live: () => boolean,
+): Promise<DocJSON> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const answer = await call<{ json: string }>(apiBase, token, `/pages/${pageId}/json`);
+      return JSON.parse(answer.json) as DocJSON;
+    } catch (error) {
+      if (!(error instanceof SharedError) || error.status !== 404 || attempt >= RETRIES || !live())
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
     }
-    for (const update of pull.updates) Y.applyUpdate(doc, fromBase64(update.data));
-    after = Number(pull.cursor);
-    if (!pull.more) break;
   }
-  const json = fragmentToJSON(doc.getXmlFragment('content'));
-  doc.destroy();
-  return json;
 }
 
 export function SharedView({
@@ -101,14 +108,20 @@ export function SharedView({
   useEffect(() => {
     if (!shown) return;
     let live = true;
-    void loadDoc(apiBase, token, shown).then(
-      (json) => live && setContent({ id: shown, json }),
+    // Unknown blocks (a newer document) are drawn as a note, as a newer page is in the app.
+    void loadDoc(apiBase, token, shown, () => live).then(
+      (json) =>
+        live &&
+        setContent({
+          id: shown,
+          json: readableJSON(json, knownTypes(), t('editor.readOnlyBlock')),
+        }),
       () => live && setFailed(true),
     );
     return () => {
       live = false;
     };
-  }, [apiBase, token, shown]);
+  }, [apiBase, token, shown, t]);
 
   if (failed)
     return (

@@ -20,12 +20,15 @@ public sealed record SharedScope(ShareLink Link, Page Root, IReadOnlyList<Page> 
 /// Reading by share link, with no account (M2.6). The token arrives in a header and is compared by
 /// its SHA-256; a link that is unknown, revoked or expired, or whose page is trashed, deleted or in
 /// a private section, opens nothing, and every such answer is the same 404. A link opens its page
-/// and the pages under it, except a restricted page (which has its own list) and what is under it,
-/// and only three reads: the tree, a page's document and the files those pages show.
+/// and the pages under it, except a page hidden from the workspace (restricted, or with a
+/// workspace row of none) and what is under it, and only three reads: the tree, a page's document
+/// as the worker's JSON (never the Yjs updates, which still hold recently deleted text) and the
+/// files those pages show.
 /// </summary>
 public sealed class SharedReader(CgwDb db, DocService docs, AssetService assets, TimeProvider clock)
 {
     public const string Header = "X-Share-Token";
+    public const string EmptyDoc = """{"type":"doc","content":[]}""";
 
     public async Task<SharedScope?> OpenAsync(string? token, CancellationToken ct = default)
     {
@@ -45,9 +48,15 @@ public sealed class SharedReader(CgwDb db, DocService docs, AssetService assets,
             .Where(p => p.DeletedAt == null && p.TrashedAt == null && p.Id != root.Id
                 && db.PageAncestors.Any(a => a.PageId == p.Id && a.AncestorPageId == root.Id))
             .ToListAsync(ct);
+        // Pages of the subtree the whole workspace may not open, by a row of none: hidden from a link too.
+        var hidden = (await db.PagePermissions.AsNoTracking()
+                .Where(r => r.PrincipalType == "workspace" && r.Level == Levels.None
+                    && db.PageAncestors.Any(a => a.PageId == r.PageId && a.AncestorPageId == root.Id && a.Depth > 0))
+                .Select(r => r.PageId).ToListAsync(ct))
+            .ToHashSet();
         var children = under.ToLookup(p => p.ParentPageId);
         var pages = new List<Page> { root };
-        // Parents before children, siblings in drawn order; a restricted page stops the walk.
+        // Parents before children, siblings in drawn order; a hidden page stops the walk.
         var stack = new Stack<Page>();
         Push(root.Id);
         while (stack.TryPop(out var page))
@@ -59,7 +68,7 @@ public sealed class SharedReader(CgwDb db, DocService docs, AssetService assets,
 
         void Push(Guid parent)
         {
-            foreach (var child in children[parent].Where(c => !c.Restricted)
+            foreach (var child in children[parent].Where(c => !c.Restricted && !hidden.Contains(c.Id))
                          .OrderByDescending(c => c.OrderKey, StringComparer.Ordinal).ThenByDescending(c => c.Id.ToString(), StringComparer.Ordinal))
                 stack.Push(child);
         }
@@ -69,10 +78,16 @@ public sealed class SharedReader(CgwDb db, DocService docs, AssetService assets,
         new SharedPageDto(scope.Root.Id, scope.Root.Title, scope.Root.Icon),
         scope.Pages.Select(p => new SharedTreePageDto(p.Id, p.Title, p.Icon, p.Id == scope.Root.Id ? null : p.ParentPageId, p.OrderKey)).ToList());
 
-    public async Task<PullResponse?> PullAsync(SharedScope scope, Guid pageId, long after, CancellationToken ct = default)
+    /// <summary>
+    /// A page of the subtree as the worker's derived JSON; an empty document for a page never
+    /// written; null outside the subtree or while the worker has not derived it yet.
+    /// </summary>
+    public async Task<DocJsonResponse?> JsonAsync(SharedScope scope, Guid pageId, CancellationToken ct = default)
     {
         var page = scope.Pages.FirstOrDefault(p => p.Id == pageId);
-        return page is null ? null : await docs.PullAsync((Guid?)null, page, after, ct);
+        if (page is null) return null;
+        if (page.DocHeadSeq == 0) return new DocJsonResponse(0, page.DocSchemaVersion, EmptyDoc);
+        return await docs.JsonAsync(page, ct);
     }
 
     /// <summary>A file that a page of the subtree shows, in its content or as its cover.</summary>

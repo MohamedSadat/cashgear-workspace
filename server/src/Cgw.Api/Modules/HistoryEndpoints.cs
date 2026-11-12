@@ -9,7 +9,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Api.Modules;
 
-/// <summary>An export's requester, checked before any handler runs; anyone else gets 404.</summary>
+/// <summary>
+/// An export's requester, while still an owner or admin, checked before any handler runs: a
+/// whole-workspace zip is no one's once their role no longer allows asking for it. Anyone else gets 404.
+/// </summary>
 public sealed record ExportAccess(Member Member, WorkspaceExport Export);
 
 public sealed class ExportFilter(Access access, TenantScope scope, CgwDb db) : IEndpointFilter
@@ -22,7 +25,7 @@ public sealed class ExportFilter(Access access, TenantScope scope, CgwDb db) : I
         if (http.User.UserId() is not { } userId) return Problems.Of(Codes.AuthRequired, 401, "Not signed in");
         if (!Guid.TryParse(http.Request.RouteValues["exportId"]?.ToString(), out var exportId)) return Problems.From(Failure.NotFound("No such export"));
         var export = await db.WorkspaceExports.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().FirstOrDefaultAsync(e => e.Id == exportId);
-        if (export is null || export.RequestedBy != userId || await access.MemberAsync(export.WorkspaceId, userId) is not { } member)
+        if (export is null || export.RequestedBy != userId || await access.MemberAsync(export.WorkspaceId, userId) is not { IsAdmin: true } member)
             return Problems.From(Failure.NotFound("No such export"));
         scope.Enter(export.WorkspaceId);
         http.Items[Key] = new ExportAccess(member, export);

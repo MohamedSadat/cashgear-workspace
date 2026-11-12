@@ -13,7 +13,7 @@ public sealed record PageAccess(Member Member, Page Page, string Level);
 /// <summary>
 /// Routes under <c>/pages/{pageId}</c>: the page's workspace is found, the caller's membership in
 /// it checked and the tenant scope entered before any handler runs. A page the caller may not see
-/// is 404, as if it did not exist; a page deleted for good is 410.
+/// is 404, as if it did not exist; a page deleted for good is 410, to those who could see it.
 /// </summary>
 public sealed class PageFilter(Access access, TenantScope scope, CgwDb db) : IEndpointFilter
 {
@@ -27,9 +27,10 @@ public sealed class PageFilter(Access access, TenantScope scope, CgwDb db) : IEn
         var page = await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().FirstOrDefaultAsync(p => p.Id == pageId);
         if (page is null || await access.MemberAsync(page.WorkspaceId, userId) is not { } member) return Problems.From(Failure.NotFound("No such page"));
         scope.Enter(page.WorkspaceId);
-        if (page.DeletedAt is not null) return Problems.Of(Codes.PageGone, 410, "The page was deleted for good");
-        var level = await access.PageLevelAsync(member, page.Id);
+        // The level first: that a page was deleted is said only to those who could see it.
+        var level = page.DeletedAt is null ? await access.PageLevelAsync(member, page.Id) : await access.DeletedLevelAsync(member, page);
         if (level == Levels.None) return Problems.From(Failure.NotFound("No such page"));
+        if (page.DeletedAt is not null) return Problems.Of(Codes.PageGone, 410, "The page was deleted for good");
         http.Items[Key] = new PageAccess(member, page, level);
         return await next(context);
     }

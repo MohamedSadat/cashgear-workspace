@@ -36,8 +36,13 @@ public sealed class SharingService(CgwDb db, Access access, ChangeLog changes, A
     public const int DefaultLinkDays = 30;
     public const int MaxLinkDays = 365;
 
+    /// <summary>
+    /// The page's list, to those who may change it (full access); everyone else learns only
+    /// whether it is restricted and their own level, not who else is on it.
+    /// </summary>
     public async Task<PermissionsDto> PermissionsAsync(Page page, string yourLevel, CancellationToken ct = default)
     {
+        if (yourLevel != Levels.Full) return new PermissionsDto(page.Restricted, yourLevel, []);
         var rows = await db.PagePermissions.AsNoTracking().Where(r => r.PageId == page.Id).ToListAsync(ct);
         var userIds = rows.Where(r => r.PrincipalType == Principals.User).Select(r => r.PrincipalId).ToList();
         var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))

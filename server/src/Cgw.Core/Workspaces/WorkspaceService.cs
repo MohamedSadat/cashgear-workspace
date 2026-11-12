@@ -12,7 +12,7 @@ public sealed record InviteDto(Guid Id, string Email, string Role, DateTimeOffse
 public sealed record CreatedInvite(InviteDto Invite, string Token);
 
 /// <summary>Workspaces, members, roles and invites (M2.3).</summary>
-public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, TimeProvider clock)
+public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes, Audit audit, TimeProvider clock)
 {
     public static readonly TimeSpan InviteLifetime = TimeSpan.FromDays(7);
 
@@ -28,7 +28,8 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
 
     /// <summary>
     /// Makes a workspace with the client's id (a local workspace keeps its id when it uploads).
-    /// Repeating the same request is answered with the workspace; someone else's id is a conflict.
+    /// Repeating the same request is answered with the workspace while the caller is one of its
+    /// members (not because they once made it); anyone else's id is a conflict.
     /// </summary>
     public async Task<Result<WorkspaceDto>> CreateAsync(Guid userId, Actor actor, NewWorkspace request, CancellationToken ct = default)
     {
@@ -36,11 +37,7 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
         if (request.Id == Guid.Empty || name.Length is 0 or > 200) return Failure.Invalid("An id and a name of 1 to 200 characters are needed");
         if (request.Icon is { Length: > 64 }) return Failure.Invalid("The icon is too long");
         var existing = await db.Workspaces.AsNoTracking().FirstOrDefaultAsync(w => w.Id == request.Id, ct);
-        if (existing is not null)
-        {
-            if (existing.OwnerUserId == userId && existing.DeletedAt is null) return WorkspaceDto.From(existing, Roles.Owner);
-            return Failure.Conflict(Codes.Conflict, "That id is taken");
-        }
+        if (existing is not null) return await AgainAsync(existing, userId, ct);
         var now = clock.GetUtcNow();
         db.Workspaces.Add(new Workspace { Id = request.Id, Name = name, Icon = request.Icon, OwnerUserId = userId, CreatedAt = now, Version = 1 });
         db.Scope.Switch(request.Id);
@@ -54,8 +51,7 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
         {
             // A concurrent create of the same id: answer as above.
             db.ChangeTracker.Clear();
-            var raced = await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == request.Id, ct);
-            return raced.OwnerUserId == userId ? WorkspaceDto.From(raced, Roles.Owner) : Failure.Conflict(Codes.Conflict, "That id is taken");
+            return await AgainAsync(await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == request.Id, ct), userId, ct);
         }
         await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
         {
@@ -67,6 +63,13 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
         }
         var created = await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == request.Id, ct);
         return WorkspaceDto.From(created, Roles.Owner);
+    }
+
+    /// <summary>A create for an id that exists: the workspace, to its current members only.</summary>
+    private async Task<Result<WorkspaceDto>> AgainAsync(Workspace existing, Guid userId, CancellationToken ct)
+    {
+        var member = existing.DeletedAt is null ? await access.MemberAsync(existing.Id, userId) : null;
+        return member is null ? Failure.Conflict(Codes.Conflict, "That id is taken") : WorkspaceDto.From(existing, member.Role);
     }
 
     public async Task<Result<bool>> DeleteAsync(Member member, Actor actor, CancellationToken ct = default)
@@ -86,15 +89,35 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
         return true;
     }
 
-    public async Task<List<MemberDto>> MembersAsync(CancellationToken ct = default) =>
+    /// <summary>
+    /// The workspace's people. A guest sees only themselves and the people named in the access
+    /// lists of pages they can see, by name and role, with no address but their own.
+    /// </summary>
+    public async Task<List<MemberDto>> MembersAsync(Member caller, CancellationToken ct = default)
+    {
+        HashSet<Guid>? shown = null;
+        if (caller.IsGuest)
+        {
+            var levels = await access.AllLevelsAsync(caller);
+            var named = await db.PagePermissions.AsNoTracking().Where(r => r.PrincipalType == "user")
+                .Select(r => new { r.PageId, r.PrincipalId }).ToListAsync(ct);
+            shown = named.Where(r => levels.GetValueOrDefault(r.PageId, Levels.None) != Levels.None).Select(r => r.PrincipalId).ToHashSet();
+            shown.Add(caller.UserId);
+        }
         // Ordered after reading: EF cannot order by a member of a projected record.
-        (await db.WorkspaceMembers.AsNoTracking()
-            .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new { m.UserId, m.Role, u.DisplayName, u.Email, u.DeletedAt })
-            .ToListAsync(ct))
-        .Select(x => new MemberDto(x.UserId, x.DeletedAt == null ? x.DisplayName : "Deleted user", x.DeletedAt == null ? x.Email ?? "" : "", x.Role))
-        .OrderBy(m => m.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-        .ThenBy(m => m.UserId)
-        .ToList();
+        return (await db.WorkspaceMembers.AsNoTracking()
+                .Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new { m.UserId, m.Role, u.DisplayName, u.Email, u.DeletedAt })
+                .ToListAsync(ct))
+            .Where(x => shown is null || shown.Contains(x.UserId))
+            .Select(x => new MemberDto(
+                x.UserId,
+                x.DeletedAt == null ? x.DisplayName : "Deleted user",
+                x.DeletedAt != null || (caller.IsGuest && x.UserId != caller.UserId) ? "" : x.Email ?? "",
+                x.Role))
+            .OrderBy(m => m.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(m => m.UserId)
+            .ToList();
+    }
 
     // There is no direct add: someone joins by accepting an invitation sent to their address, so
     // nothing an admin does tells them whether an address has an account.
@@ -149,6 +172,13 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
             return Failure.Conflict(Codes.Conflict, "A workspace keeps at least one owner");
         db.WorkspaceMembers.Remove(row);
         await db.YjsClients.Where(c => c.UserId == userId).ExecuteDeleteAsync(ct);
+        // Nothing waits for them if they come back: no rows of theirs, no invitation still open.
+        await db.PagePermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        var email = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.NormalizedEmail).FirstOrDefaultAsync(ct);
+        var now = clock.GetUtcNow();
+        if (email is not null)
+            await db.WorkspaceInvites.Where(i => i.Email.ToUpper() == email && i.AcceptedAt == null && i.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(i => i.RevokedAt, now), ct);
         changes.Add("member", userId, "delete", 1, caller.UserId);
         changes.Add("access", caller.WorkspaceId, "revoke", 1, caller.UserId, userId);
         audit.Add(actor, "member.remove", caller.WorkspaceId, "user", userId);
@@ -219,7 +249,12 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
         if (workspace is null) return Failure.NotFound("The workspace is gone");
         db.Scope.Switch(invite.WorkspaceId);
         var already = await db.WorkspaceMembers.AsNoTracking().FirstOrDefaultAsync(m => m.UserId == userId, ct);
-        if (invite.AcceptedAt is not null && invite.AcceptedBy != userId) return Failure.NotFound("The invitation is not valid or has expired");
+        // A used invitation answers again only while its person is still a member: it never brings
+        // back someone who was removed or left.
+        if (invite.AcceptedAt is not null)
+            return invite.AcceptedBy == userId && already is not null
+                ? WorkspaceDto.From(workspace, already.Role)
+                : Failure.NotFound("The invitation is not valid or has expired");
         if (already is null) await JoinAsync(invite.WorkspaceId, userId, invite.Role, actor, ct);
         db.ChangeTracker.Clear();
         await db.WorkspaceInvites.Where(i => i.Id == invite.Id).ExecuteUpdateAsync(s => s.SetProperty(i => i.AcceptedAt, now).SetProperty(i => i.AcceptedBy, userId), ct);

@@ -283,9 +283,8 @@ export class Cloud {
   }
 
   async acceptInvite(token: string) {
-    const workspace = await data(
-      this.api.POST('/api/v1/invites/{token}/accept', { params: { path: { token } } }),
-    );
+    // In the body: a path is written to request logs, a body is not.
+    const workspace = await data(this.api.POST('/api/v1/invites/accept', { body: { token } }));
     this.engine.kick(0);
     return workspace;
   }

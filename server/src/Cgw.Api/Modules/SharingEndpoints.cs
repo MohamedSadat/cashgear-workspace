@@ -81,13 +81,14 @@ public static class SharingEndpoints
             await reader.OpenAsync(shareToken) is { } scope ? TypedResults.Ok(SharedReader.Tree(scope)) : Missing())
             .WithName("getShared");
 
-        shared.MapGet("/pages/{pageId:guid}/doc", async Task<Results<Ok<PullResponse>, ProblemHttpResult>> (
-                Guid pageId, long? after, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader) =>
+        // The worker's JSON, not the Yjs updates: those still hold text deleted since the last compaction.
+        shared.MapGet("/pages/{pageId:guid}/json", async Task<Results<Ok<DocJsonResponse>, ProblemHttpResult>> (
+                Guid pageId, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader) =>
             {
                 if (await reader.OpenAsync(shareToken) is not { } scope) return Missing();
-                return await reader.PullAsync(scope, pageId, after ?? 0) is { } pull ? TypedResults.Ok(pull) : Missing();
+                return await reader.JsonAsync(scope, pageId) is { } json ? TypedResults.Ok(json) : Missing();
             })
-            .WithName("pullSharedDoc");
+            .WithName("getSharedDocJson");
 
         shared.MapGet("/assets/{assetId:guid}/url", async Task<Results<Ok<AssetUrlDto>, ProblemHttpResult>> (
                 Guid assetId, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader) =>

@@ -26,22 +26,22 @@
         }
       }
     },
-    "/api/v1/invites/{token}/accept": {
+    "/api/v1/invites/accept": {
       "post": {
         "tags": [
           "Workspaces"
         ],
         "operationId": "acceptInvite",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteAcceptance"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -1328,12 +1328,12 @@
         }
       }
     },
-    "/api/v1/shared/pages/{pageId}/doc": {
+    "/api/v1/shared/pages/{pageId}/json": {
       "get": {
         "tags": [
           "Sharing"
         ],
-        "operationId": "pullSharedDoc",
+        "operationId": "getSharedDocJson",
         "parameters": [
           {
             "name": "pageId",
@@ -1342,18 +1342,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "after",
-            "in": "query",
-            "schema": {
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ],
-              "format": "int64"
             }
           },
           {
@@ -1370,7 +1358,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PullResponse"
+                  "$ref": "#/components/schemas/DocJsonResponse"
                 }
               }
             }
@@ -2194,6 +2182,17 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "InviteAcceptance": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
           }
         }
       },

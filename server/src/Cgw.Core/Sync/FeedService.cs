@@ -37,6 +37,7 @@ public sealed class FeedService(CgwDb db, Access access)
 
         var sectionIds = latest.Where(r => r.EntityType == "section").Select(r => r.EntityId).ToList();
         var sections = await db.Sections.AsNoTracking().Where(s => sectionIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);
+        var guestSections = member.IsGuest && sectionIds.Count > 0 ? await GuestSectionsAsync(levels ?? await access.AllLevelsAsync(member), ct) : null;
         var favourites = await db.Favourites.AsNoTracking().Where(f => f.UserId == member.UserId && pageIds.Contains(f.PageId)).ToDictionaryAsync(f => f.PageId, ct);
         var visits = await db.PageVisits.AsNoTracking().Where(v => v.UserId == member.UserId && pageIds.Contains(v.PageId)).ToDictionaryAsync(v => v.PageId, ct);
 
@@ -57,7 +58,7 @@ public sealed class FeedService(CgwDb db, Access access)
                 case "section":
                 {
                     var section = sections.GetValueOrDefault(row.EntityId);
-                    changes.Add(section is null || !Access.SeesSection(member, section)
+                    changes.Add(section is null || !Access.SeesSection(member, section) || guestSections?.Contains(section.Id) == false
                         ? new ChangeDto(row.Seq, "section", row.EntityId, "delete", null)
                         : new ChangeDto(row.Seq, "section", row.EntityId, "upsert", new EntityDto(Section: SectionDto.From(section))));
                     break;
@@ -80,7 +81,9 @@ public sealed class FeedService(CgwDb db, Access access)
                     break;
                 }
                 case "member":
-                    changes.Add(new ChangeDto(row.Seq, "member", row.EntityId, row.Kind, null));
+                    // A guest is told of themselves, never of who else joins or leaves.
+                    if (!member.IsGuest || row.EntityId == member.UserId)
+                        changes.Add(new ChangeDto(row.Seq, "member", row.EntityId, row.Kind, null));
                     break;
                 case "access":
                     // A grant or revoke naming the root of what changed: the client refetches it.
@@ -107,7 +110,10 @@ public sealed class FeedService(CgwDb db, Access access)
             .Where(p => levels.GetValueOrDefault(p.Id, Levels.None) != Levels.None)
             .Select(p => PageDto.From(p, levels[p.Id]))
             .ToList();
-        var sections = (await db.Sections.AsNoTracking().ToListAsync(ct)).Where(s => Access.SeesSection(member, s)).Select(SectionDto.From).ToList();
+        var guestSections = member.IsGuest ? await GuestSectionsAsync(levels, ct) : null;
+        var sections = (await db.Sections.AsNoTracking().ToListAsync(ct))
+            .Where(s => Access.SeesSection(member, s) && guestSections?.Contains(s.Id) != false)
+            .Select(SectionDto.From).ToList();
         var visible = pages.Select(p => p.Id).ToHashSet();
         var favourites = (await db.Favourites.AsNoTracking().Where(f => f.UserId == member.UserId).ToListAsync(ct))
             .Where(f => visible.Contains(f.PageId)).Select(f => new FavouriteDto(f.WorkspaceId, f.PageId, f.OrderKey)).ToList();
@@ -115,4 +121,10 @@ public sealed class FeedService(CgwDb db, Access access)
             .Where(v => visible.Contains(v.PageId)).Select(v => new VisitDto(v.WorkspaceId, v.PageId, v.LastVisitedAt)).ToList();
         return new TreeDto(WorkspaceDto.From(workspace, member.Role), sections, pages, favourites, visits, cursor);
     }
+
+    /// <summary>The sections a guest sees: those holding a page they may open, anywhere in the workspace.</summary>
+    private async Task<HashSet<Guid>> GuestSectionsAsync(Dictionary<Guid, string> levels, CancellationToken ct) =>
+        (await db.Pages.AsNoTracking().Where(p => p.DeletedAt == null).Select(p => new { p.Id, p.SectionId }).ToListAsync(ct))
+            .Where(p => levels.GetValueOrDefault(p.Id, Levels.None) != Levels.None)
+            .Select(p => p.SectionId).ToHashSet();
 }

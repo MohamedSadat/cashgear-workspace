@@ -163,7 +163,7 @@ public sealed class AccountSecurityTests(ServerFixture server)
         Assert.NotEmpty(await Kit.InviteToken(server, unknown, before));
         var token = await Kit.InviteToken(server, known.Email, before);
         Assert.Equal(HttpStatusCode.NotFound, (await known.Client.GetAsync($"/api/v1/workspaces/{ws.Id}")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await known.Client.PostAsync($"/api/v1/invites/{token}/accept", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Kit.Accept(known.Client, token)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await known.Client.GetAsync($"/api/v1/workspaces/{ws.Id}")).StatusCode);
         // There is no direct add, which told an admin whether an address had an account.
         var direct = await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/members", new { email = unknown, role = "member" });

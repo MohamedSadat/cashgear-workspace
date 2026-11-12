@@ -182,11 +182,10 @@ public sealed class SharingTests(ServerFixture server)
         Assert.Equal(JsonValueKind.Null, pages[0].GetProperty("parentPageId").ValueKind);
         Assert.Equal(chapter, pages[2].GetProperty("parentPageId").GetGuid());
 
-        var doc = await reader.GetFromJsonAsync<JsonElement>($"/api/v1/shared/pages/{chapter}/doc?after=0");
-        Assert.Equal(2, doc.GetProperty("updates").GetArrayLength());
-        Assert.Empty(doc.GetProperty("rejected").EnumerateArray());
+        var doc = await reader.GetFromJsonAsync<JsonElement>($"/api/v1/shared/pages/{chapter}/json");
+        Assert.Contains("Hello world", doc.GetProperty("json").GetString());
         foreach (var hidden in new[] { secret, underSecret, binned, outside, Guid.CreateVersion7() })
-            Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/shared/pages/{hidden}/doc")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/shared/pages/{hidden}/json")).StatusCode);
         var url = await reader.GetFromJsonAsync<JsonElement>($"/api/v1/shared/assets/{picture}/url");
         Assert.True(url.GetProperty("inline").GetBoolean());
         Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/shared/assets/{unrelated}/url")).StatusCode);
@@ -205,7 +204,7 @@ public sealed class SharingTests(ServerFixture server)
         // Revoked: every read is 404.
         Assert.Equal(HttpStatusCode.NoContent, (await ws.Client.DeleteAsync($"/api/v1/pages/{root}/share-links/{link.GetProperty("id").GetGuid()}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync("/api/v1/shared")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/shared/pages/{chapter}/doc")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/shared/pages/{chapter}/json")).StatusCode);
         Assert.Empty((await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/pages/{root}/share-links")).EnumerateArray());
         await using (var db = server.NewDb(ws.Id))
             Assert.True(await db.AuditLog.AnyAsync(a => a.Action == "share.revoke" && a.TargetId == root));
