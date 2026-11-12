@@ -16,7 +16,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { cpus, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -368,7 +368,13 @@ const figures = {
   durableWebP95: killWeb?.durable?.p95,
   durableDesktopP95: killDesktop?.durable?.p95,
 };
-const previous = readJson(previousFile)?.figures ?? null;
+// GitHub's runners are not all the same machine: a figure is compared with the last run on main
+// only when that ran on the same processor (desktop cold start was 521 ms on one and 840 on
+// another, CI runs 43154795775 and 43157160401); otherwise the budgets alone decide.
+results.machine = { cpu: cpus()[0]?.model?.trim() ?? null, threads: cpus().length };
+const last = readJson(previousFile);
+const sameMachine = !!last && last.machine?.cpu === results.machine.cpu;
+const previous = sameMachine ? (last.figures ?? null) : null;
 const gate = [];
 for (const [name, value] of Object.entries(figures)) {
   if (value === undefined || value === null) continue;
@@ -396,5 +402,9 @@ for (const g of gate)
   log(
     `${g.overBudget || g.regressed ? 'FAIL' : 'ok  '} ${g.name.padEnd(20)} ${String(g.value).padStart(7)} ${g.unit.padEnd(3)} ${String(g.budget).padStart(6)}   ${g.previous ?? '-'}${g.regressed ? '  (regressed)' : ''}`,
   );
-if (!previous) log('(No run on main to compare with: budgets only.)');
+if (!last) log('(No run on main to compare with: budgets only.)');
+else if (!sameMachine)
+  log(
+    `(The last run on main ran on ${last.machine?.cpu ?? 'a processor it did not record'}, this one on ${results.machine.cpu}: budgets only.)`,
+  );
 process.exitCode = gate.some((g) => g.overBudget || g.regressed) ? 1 : 0;

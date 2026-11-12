@@ -24,7 +24,7 @@ CI uploads it as an artifact.
 | `sheet-embed/`                                                                               | S9                 | Sheet's deployed web app in a sandboxed iframe, from a parent without COEP and from an isolated one, in Chrome and WebView2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `pnpm bench:sheet-embed` (needs the network and a local `cashgear-sheet` checkout for its fixture workbook; not in CI) |
 
 CI runs S1, S2, S3, S5 and S7 (Chrome) on every push, S6 (Chrome), and `phase1.mjs`, which
-fails the build on a figure over its budget or worse than the last run on `main`; `phase2.mjs`
+fails the build on a figure over its budget or worse than the last run on `main` (compared only when that ran on the same processor: GitHub's runners differ); `phase2.mjs`
 gates the same way, its server part in the Linux server job (SQL Server with full-text) and its
 first sync in the Windows job. WebView2 runs of S5 to S7 are local: on a
 hosted runner the WebView2 host is elevated and ignores the debugging switch.

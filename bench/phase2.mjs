@@ -487,7 +487,10 @@ const figures = {
   loadMissed: s?.load ? s.load.missed + s.load.missingInState + s.load.textsWrong : undefined,
   loadErrorRatePct: s?.load?.errorRatePct,
 };
-const previous = readJson(previousFile)?.figures ?? null;
+// Compared with the last run on main only on the same processor (runners differ; phase1.mjs).
+const last = readJson(previousFile);
+const sameMachine = !!last && last.machine?.cpu === out.machine.cpu;
+const previous = sameMachine ? (last.figures ?? null) : null;
 const gate = [];
 for (const [name, value] of Object.entries(figures)) {
   if (value === undefined || value === null) continue;
@@ -527,5 +530,9 @@ if (s) {
     );
   if (!s.testsPassed) log('The server benchmark tests failed: see their output above.');
 }
-if (!previous) log('(No run on main to compare with: budgets only.)');
+if (!last) log('(No run on main to compare with: budgets only.)');
+else if (!sameMachine)
+  log(
+    `(The last run on main ran on ${last.machine?.cpu ?? 'a processor it did not record'}, this one on ${out.machine.cpu}: budgets only.)`,
+  );
 process.exitCode = gate.some((g) => g.overBudget || g.regressed) || (s && !s.testsPassed) ? 1 : 0;
