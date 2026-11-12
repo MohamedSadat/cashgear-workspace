@@ -146,11 +146,29 @@ public sealed class HistoryJob(DocStates states, BlobStore blob, TimeProvider cl
         foreach (var chunk in extra.Chunk(500))
         {
             var ids = chunk.Select(e => GuidBytes.FromBytes(e.Id)).ToList();
-            await db.PageDocSnapshots.IgnoreQueryFilters([CgwDb.Tenant]).Where(s => ids.Contains(s.Id)).ExecuteDeleteAsync(ct);
+            // A background prune that loses a deadlock to someone's write tries again: deleting the
+            // same rows twice is harmless.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await db.PageDocSnapshots.IgnoreQueryFilters([CgwDb.Tenant]).Where(s => ids.Contains(s.Id)).ExecuteDeleteAsync(ct);
+                    break;
+                }
+                catch (Exception error) when (attempt < 5 && IsDeadlock(error))
+                {
+                    await Task.Delay(50 * attempt, ct);
+                }
+            }
             foreach (var row in chunk) await blob.DeleteAsync(row.BlobKey, ct);
         }
         return extra.Count;
     }
+
+    /// <summary>SQL Server's deadlock victim (1205), however EF Core wraps it.</summary>
+    internal static bool IsDeadlock(Exception error) =>
+        error is Microsoft.Data.SqlClient.SqlException { Number: 1205 }
+        || (error.InnerException is { } inner && IsDeadlock(inner));
 }
 
 /// <summary>

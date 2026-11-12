@@ -190,9 +190,11 @@ async function web() {
       // One pass over every query first, not counted: the worker's first look at each prefix is
       // the slowest, and with 16 samples one of those decided the p95 (CI run 43101522303).
       for (const query of queries) await searchOnce(query);
+      // Eight rounds, 64 samples: with 24, the p95 was the second slowest, and two slow queries on
+      // a busy runner failed the regression gate at 49.6 ms beside 18.4 (CI run 43145303890).
       const search = [];
       const hits = {};
-      for (let r = 0; r < 3; r++)
+      for (let r = 0; r < 8; r++)
         for (const query of queries) {
           search.push(await searchOnce(query));
           hits[query] = await page
