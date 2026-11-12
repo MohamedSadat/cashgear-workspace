@@ -679,3 +679,14 @@ The client side (shell, desktop sign-in, the server stack for development):
 | A share link in the app | `#/s/<token>` on the web app; the page is read as the worker's JSON with the token in an `X-Share-Token` header, signed out, read-only (a page the worker has not derived yet is retried for a few seconds) | The fragment never reaches a server log; the token never sits in a query string |
 | Images and files from the server | Read by a fresh signed URL when shown and kept in the local store, marked as uploaded | An image opened once shows offline |
 | The development stack | `scripts/server-stack.mjs` (`pnpm dev:server`): Azurite, the API and the worker from their build output, on LocalDB; mail to a pickup folder. Playwright starts it with `--e2e` on a fresh database with raised rate limits | One command for a working server; e2e never shares state with a developer's database |
+
+## 2026-11-12: Phase 3
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Trash retention and the longest offline window | 60 and 30 days. The server purges pages that have been in the trash for 60 days (as a permanent delete, leaving the tombstone), and a device-only workspace purges its own trash the same way. A device may sync after up to 30 days offline: the desktop's refresh token already lasts 30 days, and the web session goes from 14 to 30 days, sliding, to match. Past that the device signs in again before it syncs; nothing on it is lost |
+| What "pin for offline" covers | A page, or a page and its subtree. Pages added later under a pinned subtree are fetched too; pinned pages are refreshed in the background, and the storage they use is shown. Pages a person opens are cached anyway; there is no "whole workspace" pin |
+| macOS signing, notarisation and proof | A universal app built on GitHub's macOS runner, signed with a Developer ID certificate and notarised from repository secrets you add; until they exist it is ad-hoc signed and the release notes say Gatekeeper will warn. The runner installs it and drives it through a test-only bridge that is compiled into test builds only, never a release: start, offline edits, a new page, the keychain, the deep link, the update. Sign-in and sync on macOS run against your deployed API with a CI test account once it is up; until then that step is yours, like Phase 2's "Deployed" |
+| Items Phase 2 left open | Two taken on. The worker's lock waits are fixed in M3.2, and a new budget is gated: an edit reaches other people's pulls within 5 s at p95 with 200 people typing (26 to 65 s at the end of Phase 2). The server's workspace export gets a button in Settings for owners and admins, beside the local export. Not taken: tying files to the page they were uploaded for; the risk stays accepted as recorded on 2026-11-12 (Phase 2, after the M2.6 review) |
