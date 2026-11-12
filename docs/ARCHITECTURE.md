@@ -8,9 +8,11 @@ This document says what the parts are and how data moves between them. Why each 
 is in `DECISIONS.md`. The stored shapes are in `DATA_MODEL.md`, sync in `SYNC_DESIGN.md`, and the
 Sheet and ERP contracts in `INTEGRATIONS.md`.
 
-Status: Phase 0 is done. What exists is listed in `CLAUDE.md` (the web app and desktop shell
-scaffold, `crates/cgw-ydoc`, the harnesses in `bench/`); the rest are proposals. Spike results
-are in `DECISIONS.md` (2026-11-11: Phase 0 results).
+Status: Phases 0 to 2 are built: the local-first editor and page tree (Phase 1), and the server,
+accounts, sync while online, sharing, server search and history (Phase 2). What exists is listed
+in `CLAUDE.md`; later phases' parts are proposals. Spike results are in `DECISIONS.md`
+(2026-11-11: Phase 0 results); Phase 2's answers and defaults under 2026-11-12. Deployment is in
+`OPERATIONS.md`.
 
 ## What already exists in the Cash Gear ecosystem
 
@@ -197,17 +199,27 @@ Modelled on `SheetPlatform`, with different members:
 ```ts
 interface WorkspacePlatform {
   kind: 'web' | 'desktop';
-  store(): LocalStore;
+  apiBase?: string;                         // the Workspace API's origin (Q5); absent: this device only
+  auth?: AuthPlatform;                      // the API's cookie, or PKCE with the keychain (below)
+  webBase?: string;                         // the web app's, for share links made on the desktop
+  openStore(): Promise<LocalStore>;
   setWindowTheme(theme: Theme | null): Promise<void>;
-  pickFiles(accept: string[]): Promise<File[]>;
-  saveFile(suggestedName: string, bytes: Blob): Promise<void>;       // export
+  saveFile(suggestedName: string, bytes: Uint8Array, type: string): Promise<void>;   // export
   openExternal(url: string): Promise<void>;
-  onDeepLink?(handler: (url: string) => void): () => void;           // desktop
-  auth: AuthPlatform;                                                 // cookie session or PKCE + keychain (Phase 2)
-  updates?: { check(): Promise<UpdateInfo | null>; install(onProgress: Progress): Promise<void> };
-  onCloseRequested?(ask: () => Promise<boolean>): () => void;
+  requestPersistence?(): Promise<boolean>;  // browser
+  onDeepLink?(open: (hash: string) => void): () => void;                            // desktop
+  updates?: PlatformUpdates;                                                         // desktop
+  onCloseRequested?(flush: () => Promise<void>): () => void;
 }
+
+type AuthPlatform =
+  | { kind: 'cookie' }                      // the browser: nothing here holds a credential
+  | { kind: 'bearer'; signIn(language): Promise<boolean>; token(): Promise<string | null>; signOut(): Promise<void> };
 ```
+
+As built (`packages/shell/src/platform.ts`). The shell's `cloud/` folder holds the connection to
+the API: the typed client (`@cgw/api`) authenticated by the platform's `auth`, the sync engine
+(`@cgw/workspace`) wired to the open session, and the account, sharing and history screens.
 
 ### The editor
 
@@ -295,7 +307,7 @@ Conventions:
 | Client | Flow | Credential at rest |
 | --- | --- | --- |
 | Web app | Sign in on the API's own pages; `Secure`, `HttpOnly`, `SameSite=Lax` cookie; antiforgery token on writes | Cookie only. Nothing in `localStorage` |
-| Desktop app | Authorisation code with PKCE through the system browser, returning by deep link or loopback | Refresh token in the OS keychain; access token in memory |
+| Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager), never in the webview; access token in memory |
 | Sheet (opening a workbook) | One-time launch ticket → file session | In memory |
 | ERP blocks | One-time ticket from the ERP → ERP session | In memory |
 
@@ -369,8 +381,11 @@ Paint does not wait for storage, and storage does not wait for the network.
 - **Version history.** Full-state snapshots written by the worker; restore is a forward edit.
 - **Backup.** SQL Server full, differential and log backups with point-in-time restore; Blob soft
   delete and versioning with a retention of at least 30 days. SQL and Blob can drift by minutes
-  after a restore, so the worker has a reconcile job: a snapshot row without a blob is dropped,
-  and the page falls back to the previous snapshot plus updates.
+  after a restore, so the worker has a reconcile job (every 6 hours): a row whose blob is missing
+  is first restored from Blob soft delete; failing that, a snapshot row is dropped (the page falls
+  back to the previous snapshot plus updates) and an asset is marked missing; a blob with no row
+  and older than a day is deleted. Every "missing" blob is looked up again before anything
+  changes.
 - **Restore drill.** Restoring to a scratch environment and opening pages is an exit criterion of
   Phase 2, and is repeated each release.
 
@@ -390,12 +405,12 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Links | Scheme allow-list checked when parsed, when drawn and when clicked; external links open with `noopener noreferrer` |
 | Embedded content | Sandboxed iframes from an allow-list of origins; bookmarks are static cards, with previews fetched by the server |
 | Link previews | Server-side fetch behind an SSRF guard: public addresses only, no redirects to private ranges, size and time limits |
-| Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the Sheet origin; `img-src 'self' blob: data:` and the blob host; `connect-src` the API, the blob host and linked ERP origins. No COEP |
+| Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the Sheet origin; `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and, later, linked ERP origins. No COEP. The API's own sign-in pages send a CSP of their own (no script at all; forms only to itself, the web app and the loopback listener) |
 | Tauri | Minimal capabilities; typed commands only; no command takes SQL, a path outside the app's data directory, or a URL to fetch; `frame-src` as on the web |
 | Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption, push and search |
 | Audit | Append-only log of sign-ins, member and role changes, sharing changes, exports, restores, permanent deletions, ERP link changes, with a correlation id |
 | Token storage | Web: cookie only. Desktop: OS keychain. ERP and file sessions: memory only. Tickets and sessions are stored hashed on the server |
-| Secrets | Not in the repo and not in settings files. Environment or a secret store; managed identity for Blob where the host allows it. A CI check fails on a committed secret |
+| Secrets | Not in the repo and not in settings files. Environment or a secret store; managed identity for Blob where the host allows it. A check fails on a secret in the repository (`scripts/check-secrets.mjs`, first in `pnpm check` and in CI): private keys, storage keys and SAS signatures, tokens, the updater's key, connection-string passwords, key and environment files |
 | Transport | HTTPS only, HSTS |
 | Export and deletion | A workspace exports as a zip. Workspace and account deletion are described in `DATA_MODEL.md` |
 | Backup and restore | Above |

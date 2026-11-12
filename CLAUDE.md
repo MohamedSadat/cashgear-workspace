@@ -55,7 +55,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | --- | --- |
 | `apps/web` (`@cgw/web`) | Vite + React entry: picks the platform (web or Tauri) and mounts the shell |
 | `packages/shell` (`@cgw/shell`) | App frame (sidebar, top bar, hash routing by page id), i18next catalogues (`en`, `ar`), theme controller, command registry, `event.code` shortcuts, the `WorkspacePlatform` interface |
-| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` and its conformance suite (`@cgw/workspace/testing`), the operation planner with the tree rules, order keys, UUIDv7, the metadata mirror, search normalisation; shared test vectors in `vectors/`. No React, DOM or ProseMirror |
+| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` (store schema 2) and its conformance suite (`@cgw/workspace/testing`, with an in-memory server for sync tests), the operation planner with the tree rules, the remote planners (`remote.ts`), the sync engine (`sync/`), order keys, UUIDv7, the metadata mirror, search normalisation; shared test vectors in `vectors/`. No React, DOM or ProseMirror |
 | `packages/doc` (`@cgw/doc`) | The block schema (version 1), block-id plugin, the Yjs seam over the patched `@tiptap/y-tiptap`, `PageDocument` (open, autosave, compaction, history), plain text and Markdown out, Markdown in, content builders |
 | `packages/editor` (`@cgw/editor`) | The Tiptap editor over a `Y.Doc`: block commands, keymap, input rules, slash menu, bubble toolbar, block handle and drag, block selection, clipboard, tables, plain DOM node views; given an `EditorHost`, never touches storage |
 | `patches/` | The Q18 patch on `@tiptap/y-tiptap` 3.3.0 (`pnpm patch`), made by `scripts/y-tiptap-patch.mjs` |
@@ -67,9 +67,11 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 1); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
 | `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
 | `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; `cgw-store-cli` for tests |
-| `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe |
+| `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe, the desktop's sign-in (PKCE, the loopback listener, token exchange and refresh) and the keychain |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate), with a C ABI for .NET; build the DLL with `--profile ffi` |
 | `server/` | .NET 10 solution `Cgw.Server.slnx`. `Cgw.Core`: EF Core data (`CgwDb`, the tenant filter, migrations), blob storage with signed URLs, mail, audit. `Cgw.Api`: the API process (ProblemDetails with codes, correlation ids, rate limits, health, Identity, OpenIddict, the sign-in pages, the feature modules). `Cgw.Ydoc`: `cgw-ydoc` by P/Invoke, worker only. `Cgw.Worker`: the jobs. `tests/Cgw.Tests`: xUnit v3 on SQL Server and Azurite. `openapi/v1.json` is written by the build |
+| `packages/shell/src/cloud` | The connection to the API: `cloud.ts` (the typed client, the sync engine wired to the session, account, sharing, versions, search, previews, remote assets), `CloudUi.tsx` (sign-in, devices, sync status, upload, members and invites), `ShareDialog.tsx`, `SharedView.tsx` (a page by link) |
+| `deploy/iis` | `install.ps1`: the API on IIS and the worker as a service, from the deploy package (docs/OPERATIONS.md) |
 | `packages/api` (`@cgw/api`) | The API client: `schema.ts` generated from `server/openapi/v1.json`, openapi-fetch, cookie with antiforgery header (web) or bearer (desktop) |
 | `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison. `app.html`: the whole app over a seeded 10,000-page store, for `bench/phase1.mjs` |
 | `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
@@ -93,6 +95,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm deny` | `cargo deny check licenses sources` |
 | `pnpm licenses:check` / `pnpm licenses:selftest` | npm licence gate, and proof that both gates reject a GPL dependency |
 | `pnpm licenses:nuget` | NuGet licence gate over the server's packages |
+| `pnpm secrets:check` | No credential in any tracked or unignored file (`scripts/check-secrets.mjs`), and its self-test |
 | `pnpm server:build` / `pnpm server:test` | Build the server (writes `server/openapi/v1.json`); its tests on LocalDB, or the server in `CGW_TEST_SQL`, with an Azurite they start (needs `cargo build -p cgw-ydoc --profile ffi`) |
 | `pnpm api:generate` / `pnpm api:check` | `@cgw/api`'s types from the OpenAPI document; fail if stale |
 | `dotnet ef migrations add <Name> --project server/src/Cgw.Core --startup-project server/src/Cgw.Core --output-dir Data/Migrations` | A migration (`dotnet tool restore` installs `dotnet-ef`) |
@@ -104,6 +107,9 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm bench:phase1 [-- --desktop]` | Phase 1's budgets, gated against the budgets and `bench/previous/phase1.json` |
 | `node scripts/updater-key.mjs` | Made the updater's key once: private half straight into the repo's secrets, public half into `tauri.conf.json`. Refuses to replace it |
 | `pnpm dev:web` / `pnpm dev:desktop` | Vite dev server on port 5273; Tauri dev window on it |
+| `pnpm dev:server` | The server stack (`scripts/server-stack.mjs`): Azurite, the API on `http://127.0.0.1:5280` and the worker, database `cgw_dev` on LocalDB, mail in `.cgw-dev/mail`. `--e2e` (Playwright starts it) uses a fresh `cgw_e2e` and `test-results/mail` |
+| `node scripts/server-publish.mjs` | The deploy package: `target/deploy/cgw-server-<version>.zip` |
+| `node scripts/deploy-rehearsal.mjs` | The package installed on a scratch database, smoke-tested, then backed up, restored elsewhere and compared (`bench/results/deploy-rehearsal.json`) |
 | `pnpm bench:s3` | S3: Yjs writes a corpus, `cgw-ydoc` processes it from .NET, Yjs checks it (`S3_DOCS`, `S3_BIG_BYTES`) |
 | `pnpm bench:webview2-host` then `pnpm bench:browser [-- --s5 --s6 --s7 --chrome --webview2]` | Browser harnesses on port 4290 |
 | `pnpm bench:sequence` | S8 on LocalDB (creates and drops `cgw_spike_s8`) |
@@ -203,3 +209,24 @@ Added as they are found, grouped by phase.
   entry point is `WorkerProgram`.
 - OpenIddict 7's application manager takes the store, not a resolver;
   `LoopbackApplicationManager` makes loopback redirect ports not count.
+- `127.0.0.1` and `localhost` are different sites for cookies: the web app is served on
+  `127.0.0.1`, so the development API is too (`http://127.0.0.1:5280`), or its `SameSite=Lax`
+  session cookie is not sent.
+- Browsers log every 4xx answer as a console error, which the e2e specs fail on: the app asks
+  `GET /api/v1/account/session` (200 signed in or not), never `/account/me`, at start.
+- The OpenAPI generator leaves out route parameters no handler binds (the membership filters
+  read them): `RouteParameters` (`Cgw.Api/Infrastructure/OpenApiSetup.cs`) declares them.
+- Raw SQL bypasses EF's value converters: ids are `binary(16)` in RFC byte order
+  (`GuidBytes.ToBytes`); a `Guid` parameter would compare as `uniqueidentifier`.
+- EF expression trees cannot hold a collection expression: `IgnoreQueryFilters([CgwDb.Tenant])`
+  inside a query is hoisted into a variable first.
+- One Windows credential holds at most 2,560 bytes: the keychain splits a long refresh token into
+  parts. `keyring` 4 is a wrapper; `keyring-core` with a per-OS store is used directly.
+- Desktop tests set `CGW_AUTH_URL_FILE` (the authorise URL goes to a file, not the browser) and
+  `CGW_KEYCHAIN_SERVICE` (never the person's own sign-in).
+- Minimal API endpoint names (`WithName`) are global and become OpenAPI operation ids:
+  `getVersion` is `/version`'s, so a page version is `getPageVersion`.
+- EF Core cannot order by a member of a record it projected to; order before the projection.
+- `SqlQueryRaw` rows read `binary(16)` ids as `byte[]` (`GuidBytes.FromBytes`).
+- The server stack runs the API and worker from a copy of their build output
+  (`.cgw-dev/run`, `test-results/server/run`), so a build while it runs is not blocked.

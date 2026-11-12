@@ -28,7 +28,6 @@ interface LocalStore {
   compactDoc(pageId: Id, snapshot: Uint8Array, coversLocalUpTo: number): Promise<void>;
   quarantineUpdates(pageId: Id, localSeqs: number[], reason: string): Promise<void>;
   docLogLength(pageId: Id): Promise<number>;
-  // Phase 2 adds ackDocUpdates, applyRemoteDocUpdates and unsentDocUpdates.
 
   // Local page history
   addHistory(pageId: Id, snapshot: Uint8Array, keep: number): Promise<HistoryEntry>;
@@ -41,7 +40,21 @@ interface LocalStore {
   settleOps(results: OpResult[]): Promise<void>;
   readMirror(workspaceId: Id | null): Promise<MirrorSnapshot>;
   getPage(pageId: Id): Promise<PageRecord | null>;
-  // Phase 2 adds applyChanges(workspaceId, changes, cursor).
+
+  // Sync (store schema 2, Phase 2)
+  nextOutboxBatch(limit: number, workspaceId?: Id): Promise<Operation[]>;
+  settleOps(results: OpResult[]): Promise<void>;          // answers' entities enter the mirror
+  applyRemote(batch: RemoteBatch): Promise<void>;         // feed or tree: upserts, deletes, cursor
+  syncCursor(workspaceId: Id): Promise<number | null>;
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void>;
+  unsentDocUpdates(limit: number): Promise<UnsentDoc[]>;
+  ackDocUpdates(pageId: Id, acks: DocAck[]): Promise<void>;
+  applyRemoteDocUpdates(pageId: Id, pull: RemoteDocPull): Promise<StoredUpdate[]>;
+  docCursor(pageId: Id): Promise<DocCursor | null>;
+  docCursors(workspaceId: Id): Promise<Record<Id, DocCursor>>;
+  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void>;
+  pendingAssets(limit: number): Promise<AssetRecord[]>;
+  markAssetUploaded(assetId: Id): Promise<void>;
 
   // Search: the caller normalises text (D25); the store indexes and matches word prefixes
   putSearchEntry(entry: SearchEntry): Promise<void>;
@@ -61,9 +74,14 @@ interface LocalStore {
 }
 ```
 
-As built in Phase 1 (`packages/workspace/src/types.ts`). Both stores run the same operation
-planner (`planOps`), which holds the tree rules: IndexedDB inside its own transaction, the desktop
-against its in-memory mirror before it sends the plan to SQLite as one transaction.
+As built in Phase 1 and extended in Phase 2 (`packages/workspace/src/types.ts`, store schema 2).
+Both stores run the same operation planner (`planOps`), which holds the tree rules: IndexedDB
+inside its own transaction, the desktop against its in-memory mirror before it sends the plan to
+SQLite as one transaction. What the server says is planned by shared code too (`remote.ts`):
+`planSettle` for the answers to pushed operations, `planRemote` for a page of the change feed or
+a tree. In both, an entity with operations still in the outbox keeps its local state until the
+server has answered them; deletes always apply. A compaction in a synced workspace keeps the
+updates the server does not hold yet, so they are still pushed.
 
 Rules for both implementations, checked by one conformance suite run against each:
 
@@ -123,8 +141,11 @@ POST /api/v1/pages/{pageId}/doc/updates
   "updates": [ { "updateId": "0193…", "data": "<base64 Yjs update>" } ]
 }
 
-200 { "acks": [ { "updateId": "0193…", "seq": 1042 } ], "headSeq": 1042 }
+200 { "acks": [ { "updateId": "0193…", "seq": 1042 } ], "headSeq": 1040 }
 ```
+
+`headSeq` is the page's validated head (below): the pushed updates have their numbers, but are
+served to other clients only once the worker has passed them.
 
 The server, in one transaction per request:
 
@@ -137,9 +158,11 @@ The server, in one transaction per request:
 6. Locks the page row, assigns the next sequence numbers, inserts the rows, and moves the page's
    head sequence.
 
-The server does not decode updates on this path. The worker validates them (see "What the server
-checks") before they are served to other clients (Q20): spike S7 showed that one update with a
-node type the schema lacks stops every client's binding from syncing that page.
+The server does not decode updates on this path. The rows are stored as pending; the worker
+validates them in sequence order (see "What the server checks") and moves the page's validated
+head past them, so they are served to other clients only once they have passed (Q20): spike S7
+showed that one update with a node type the schema lacks stops every client's binding from
+syncing that page. The worker polls for pending rows every 100 ms.
 
 **Pull**
 
@@ -149,14 +172,21 @@ GET /api/v1/pages/{pageId}/doc?after=1040
 200 {
   "epoch": 3,
   "schemaVersion": 4,
-  "headSeq": 1042,
+  "headSeq": 1042,                          // every update up to here is decided
+  "cursor": 1042,                           // the next "after"
+  "more": false,                            // at most 1,000 updates an answer
   "snapshot": null,                         // or { "upToSeq": 1000, "url": "<SAS, 5 min>" }
-  "updates": [ { "seq": 1041, "data": "…" }, { "seq": 1042, "data": "…" } ]
+  "updates": [ { "seq": 1041, "updateId": "0193…", "data": "…" }, … ],
+  "rejected": [ "0193…" ]                   // the caller's own updates the worker refused
 }
 ```
 
 - `after` is the highest sequence the client has applied. With `after=0`, or when the rows after
   `after` have been compacted away, the answer includes a snapshot and the updates after it.
+- Only valid updates up to the validated head are served; a refused one is never served, and its
+  pusher finds it in `rejected` and keeps it aside (the store's corrupt area).
+- A device that pushed an update recognises it in a pull by its `updateId` and only records its
+  sequence.
 - A client applies updates in any order and any number of times; Yjs makes that safe.
 - A client whose epoch differs from the answer's follows "Epoch change" below.
 - Workspace-wide: the change feed (channel 2) says which pages have a new head sequence, so a
@@ -233,7 +263,11 @@ GET /api/v1/workspaces/{workspaceId}/changes?after={cursor}&limit=500
 
 ### The sync loop
 
-The same engine in the browser and on the desktop:
+The same engine in the browser and on the desktop (`packages/workspace/src/sync/engine.ts`, over
+the `LocalStore` and a `SyncApi`; `sync/http.ts` is the API over @cgw/api). It runs every 1.5
+seconds while signed in, and soon after any local change, when the network returns and when the
+window gains focus; the workspaces the account gained or lost elsewhere are checked every tenth
+pass.
 
 1. On start, on regaining the network, on a timer while online, and after any local change:
 2. Push the outbox, oldest first.
@@ -243,7 +277,20 @@ The same engine in the browser and on the desktop:
 6. Upload queued assets (each with its own retry state).
 
 Failures back off exponentially with jitter, capped at 5 minutes. A 401 pauses the loop until the
-user signs in again; nothing is discarded.
+user signs in again; nothing is discarded. A refused move, trash, restore or delete fetches that
+subtree again from the server (a scoped resync), so its pages show the server's state.
+
+Before a page's updates are pushed, the Yjs client ids they write as are registered to the user
+(Q9): a session writes as an id from the pool the server issued to the device, so registering is
+needed only for ids used before the device synced (a local workspace's history) or when the pool
+ran out. An id another user holds in the workspace is refused, and the updates written with it
+are kept aside.
+
+**Uploading a local workspace** (Phase 2): the workspace is made on the server with its own id;
+each page's log (snapshot and updates) is merged into one update, its client ids registered; the
+outbox is replaced by the workspace's records as creates, parents first, then trash roots
+(deepest first) and favourites; the loop then sends the rest, assets included. An interrupted
+upload resumes from the outbox.
 
 ### What the user sees
 
@@ -327,7 +374,10 @@ Client clocks are never compared. "Last" always means the order the server recei
 ### Epoch change
 
 The epoch rises when the server replaces a document's history rather than adding to it: a hard
-restore, a schema migration that cannot be a forward edit, or a corruption repair.
+restore, a schema migration that cannot be a forward edit, or a corruption repair. As built in
+Phase 2: unsent updates go to the store's corrupt area, the page's log is replaced by an empty
+update marked sent, the page is pulled from the start, and the user is told; the recovered page
+below is Phase 3 (M3.3).
 
 - A push with the old epoch gets 409 `doc.epochMismatch`.
 - The client quarantines its unsent updates as a recovered page (the old state plus its edits),
@@ -351,7 +401,20 @@ An ordinary "restore this version" does not bump the epoch; it is a forward edit
   syncs like any edit, and a snapshot of the state before the restore is kept. An offline client
   with edits against the pre-restore state still merges: its edits inside content the restore
   removed are gone, the rest stand. The restore dialog says this.
-- **Hard restore** (admin, for a corrupt document) replaces the state and bumps the epoch.
+- **Hard restore** (admin, for a corrupt document) replaces the state and bumps the epoch. As
+  built: `POST /pages/{id}/versions/{vid}/restore` with `{ "mode": "hard" }` (owners and admins;
+  202 with a command the worker carries out, 409 while the version is not ready or another restore
+  of the page waits). The worker first keeps the live state as a `preRestore` version, so the
+  hard restore can be undone like any restore; then, under the page's lock, it writes the chosen
+  state as the new epoch's snapshot, and sequence numbers keep rising across the epochs. The copy
+  of the epoch inside the document (`meta.epoch`) is not rewritten (the worker has no Yjs write
+  call): clients take the epoch from the page and the pull answer, never from the document. A
+  compaction of the old epoch checks the epoch under its lock, so it cannot remove the new
+  snapshot.
+- **As built in Phase 2:** the worker writes a history snapshot after an hour of activity on a
+  page, keeps one a day after 30 days, keeps every named and `preRestore` version, and writes a
+  version someone names within a second (`GET /pages/{id}/versions/{vid}` gives its signed URL
+  once it is ready).
 
 Deleted text does not live for ever: once a compaction snapshot covers an update row, the row is
 deleted, and the snapshot is written with garbage collection on. History snapshots age out as
@@ -367,10 +430,10 @@ rest.
 | The caller may edit this page | Web process, every push | 403 |
 | Epoch and client schema version | Web process | 409, 426 |
 | Size of one update (1 MB), of one request (4 MB), and updates per minute per user and per page | Web process | 413, 429 |
-| The update decodes as a Yjs update | Worker, within seconds | The update row is marked bad and removed from what pulls return; the page is flagged; the pusher's device is asked to resend from its full state |
-| Every struct in the update belongs to a Yjs client id registered to the pushing user | Worker | Same as above, and an audit entry |
-| The resulting document fits the schema (known nodes, known attributes, attribute types) | Worker | The page is flagged for review; clients still render only what the schema allows |
-| Document size (10 MB of state) | Worker | The page is flagged; further pushes are refused until it is compacted or split |
+| The update decodes as a Yjs update | Worker, before it is served (Q20) | Refused: never served; the pusher's next pull lists it, and its device keeps it aside |
+| Every struct in the update belongs to a Yjs client id registered to the pushing user | Worker, before it is served | Refused, and an audit entry (`doc.forgedClient`) |
+| The resulting document fits the schema: only the schema version's elements, block ids of 12 base-62 characters, attributes that are plain values, link schemes from the allow-list; `meta.pageId` stays the page's and `meta.schemaVersion` no higher than the page's | Worker, before it is served | Refused. Attributes the schema does not know are not judged: clients keep them (Q18) and draw them inert (S7) |
+| Document size (10 MB of state) | Worker, before it is served | The update that would pass it is refused |
 
 What the server cannot check is intent. "Delete everything" is a valid update. The remedies are
 version history and, for a document bloated on purpose with tiny structs, a hard restore.

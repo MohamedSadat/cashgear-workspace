@@ -173,16 +173,20 @@ it. Plugin blocks are described in `INTEGRATIONS.md`.
 ## Relational records
 
 Column lists give the fields that matter to the design, not final DDL. Every table has
-`CreatedAt`; every tenant-owned table has `WorkspaceId` and is covered by the tenant filter.
+`CreatedAt`; every tenant-owned table has `WorkspaceId` and is covered by the tenant filter. As
+built in Phase 2 (`server/src/Cgw.Core/Data`): ids are `binary(16)` in RFC byte order, order keys
+are binary-collated, and one EF Core query filter scopes every tenant-owned table to the request's
+workspace (a test fails if a table with `WorkspaceId` lacks it).
 
 ### Accounts and tenancy
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `Users` | `Id`, `Email` (unique), `DisplayName`, `Locale`, `AvatarAssetId` | ASP.NET Core Identity tables hang off this |
-| `Devices` | `Id`, `UserId`, `Name`, `Platform`, `LastSeenAt`, `RevokedAt` | A desktop install or a browser profile |
-| `YjsClients` | `ClientId`, `WorkspaceId`, `UserId`, `DeviceId` | Unique on (`WorkspaceId`, `ClientId`) |
-| `Workspaces` | `Id`, `Name`, `IconAssetId`, `OwnerUserId`, `ChangeSeq`, `StorageQuotaBytes`, `DeletedAt` | `ChangeSeq` is the head of the change feed |
+| `Users` | `Id`, `Email` (unique), `DisplayName`, `Locale`, `AvatarAssetId`, `DeletedAt` | ASP.NET Core Identity tables hang off this (`Roles`, `UserClaims`, `UserLogins`, `UserTokens`, `RoleClaims`); OpenIddict's applications, authorisations and tokens beside them |
+| `Devices` | `Id`, `UserId`, `Name`, `Platform`, `LastSeenAt`, `RevokedAt`, `AuthorizationId` | A desktop install or a browser profile. A cookie session carries its device id and is refused once it is revoked; a desktop's OpenIddict authorisation is revoked with it |
+| `DataProtectionKeys` | `FriendlyName`, `Xml` | The key ring for cookies and Identity tokens, shared by every API instance, DPAPI-protected on Windows hosts |
+| `YjsClients` | `ClientId`, `WorkspaceId`, `UserId`, `DeviceId`, `Origin` | Unique on (`WorkspaceId`, `ClientId`). `Origin` is `issued` (a device's pool) or `registered` (used before the device synced) |
+| `Workspaces` | `Id`, `Name`, `Icon`, `OwnerUserId`, `ChangeSeq`, `Version`, `StorageQuotaBytes`, `StorageUsedBytes`, `DeletedAt` | `ChangeSeq` is the head of the change feed, given out under the row's lock. The quota is recorded and shown, not enforced (Q10) |
 | `WorkspaceMembers` | (`WorkspaceId`, `UserId`), `Role` | `owner`, `admin`, `member`, `guest` |
 | `WorkspaceInvites` | `Id`, `WorkspaceId`, `Email`, `Role`, `TokenHash`, `ExpiresAt`, `AcceptedAt` | The token is stored hashed |
 
@@ -191,7 +195,7 @@ Column lists give the fields that matter to the design, not final DDL. Every tab
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `Sections` | `Id`, `WorkspaceId`, `Name`, `OrderKey`, `Visibility`, `OwnerUserId`, `Version` | `Visibility` is `workspace` or `private` |
-| `Pages` | `Id`, `WorkspaceId`, `SectionId`, `ParentPageId` (null at the top of a section), `OrderKey`, `Kind`, `Title`, `Icon`, `CoverAssetId`, `Version`, `DocHeadSeq`, `DocSchemaVersion`, `DocEpoch`, `Restricted`, `TemplateOfPageId`, `IsTemplate`, `CreatedBy`, `UpdatedBy`, `UpdatedAt`, `TrashedAt`, `TrashedBy` | `Kind` is `page`, `database` or `row`. `Version` rises on every metadata change |
+| `Pages` | `Id`, `WorkspaceId`, `SectionId`, `ParentPageId` (null at the top of a section), `OrderKey`, `Kind`, `Title`, `SearchTitle`, `Icon`, `CoverAssetId`, `Version`, `DocSeq`, `DocHeadSeq`, `DocSchemaVersion`, `DocEpoch`, `Restricted`, `TemplateOfPageId`, `IsTemplate`, `CreatedBy`, `UpdatedBy`, `UpdatedAt`, `TrashedAt`, `TrashedBy`, `TrashRootId`, `DeletedAt` | `Kind` is `page`, `database` or `row`. `Version` rises on every metadata change. `DocSeq` is the last document sequence given out, `DocHeadSeq` the validated head pulls serve up to (Q20). `SearchTitle` is the normalised title. A page deleted for good stays as a tombstone (`DeletedAt`, no title) so a push gets 410; the worker purges its document |
 | `PageAncestors` | (`PageId`, `AncestorPageId`), `Depth` | A closure table, kept by the server in the same transaction as a move. Gives "all descendants" and "all ancestors" in one indexed read, for permissions, trash and breadcrumbs |
 | `Favourites` | (`UserId`, `PageId`), `OrderKey` | Per user |
 | `PageVisits` | (`UserId`, `PageId`), `LastVisitedAt` | Recent pages, capped per user |
@@ -216,10 +220,11 @@ document is loaded to draw the tree.
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `PageDocUpdates` | (`PageId`, `Seq`), `UpdateId` (unique), `Epoch`, `UserId`, `YjsClientId`, `Data` (`varbinary(max)`), `CreatedAt` | Rows are deleted once a snapshot covers them |
+| `PageDocUpdates` | (`PageId`, `Seq`), `UpdateId` (unique), `Epoch`, `UserId`, `DeviceId`, `Data` (`varbinary(max)`), `Status`, `Problem`, `CreatedAt` | `Status` is pending until the worker decides: valid (served) or refused (never served; `Problem` says why). Rows are deleted once a snapshot covers them |
 | `PageDocSnapshots` | `Id`, `PageId`, `Epoch`, `UpToSeq`, `BlobKey`, `SizeBytes`, `Kind`, `Name`, `CreatedBy`, `CreatedAt` | `Kind` is `compaction`, `auto` (kept as history) or `named` |
 | `PageDocDerived` | `PageId`, `UpToSeq`, `Json` (compressed ProseMirror JSON), `PlainText`, `SearchText`, `Outgoing` (JSON: linked page ids, asset ids) | Written by the worker. `SearchText` is the normalised text the full-text index reads |
 | `PageLinks` | (`FromPageId`, `ToPageId`) | Backlinks, rebuilt by the worker from `Outgoing` |
+| `PageDocCommands` | `Id`, `PageId`, `Kind`, `SnapshotId`, `RequestedBy`, `Status`, `Error` | Work the worker does on a document: a hard restore |
 
 A page's current content is the newest compaction snapshot plus the update rows after it.
 
@@ -227,8 +232,9 @@ A page's current content is the newest compaction snapshot plus the update rows 
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `Assets` | `Id`, `WorkspaceId`, `BlobKey`, `FileName`, `ContentType`, `SizeBytes`, `Sha256`, `Status`, `Width`, `Height`, `CreatedBy` | `Status` is `pending`, `ready`, `quarantined` or `deleted` |
-| `AssetRefs` | (`AssetId`, `PageId`) | Rebuilt by the worker. An asset with no references for 30 days is deleted |
+| `Assets` | `Id`, `WorkspaceId`, `BlobKey`, `FileName`, `ContentType`, `SizeBytes`, `Sha256`, `Status`, `Problem`, `Width`, `Height`, `CreatedBy`, `UnreferencedSince` | `Status` is `pending` (until the worker has checked the bytes against the type), `ready`, `quarantined` or `deleted` |
+| `AssetRefs` | (`AssetId`, `PageId`) | Rebuilt by the worker. An asset nothing refers to (content, cover, link preview, avatar) for 30 days is deleted |
+| `LinkPreviews` | (`WorkspaceId`, `UrlHash`), `Url`, `Status`, `Title`, `Description`, `SiteName`, `ImageAssetId`, `FetchedAt` | Bookmark previews (Q13), fetched behind the SSRF guard and kept 7 days; the image is a workspace asset |
 
 Blob layout: `workspaces/{workspaceId}/assets/{assetId}` and
 `workspaces/{workspaceId}/pages/{pageId}/snapshots/{snapshotId}`. Names never contain user text.
@@ -251,6 +257,14 @@ How access is decided, on the server, for every request:
    ancestors, that has `Restricted` set or an explicit row for the caller; failing that, the
    workspace default for the caller's role (`member`: edit, `guest`: none).
 5. A `guest` sees only pages shared with them by name.
+
+As built in Phase 2 (`Cgw.Core/Access.cs`, `Cgw.Core/Sharing`): a page in a private section takes
+no access list and no link. Changing a page's list raises its `Version` (`GET` sends it as an
+`ETag`, `PUT` takes `If-Match`) and writes an `access` change to the feed, `revoke` when anyone
+could lose access, else `grant`, so clients refetch the subtree. A share link reads its page and
+the pages under it, except restricted pages and everything under them, and trashed pages; the
+token is 32 random bytes, stored as its SHA-256, sent in the `X-Share-Token` header, and an
+unknown, revoked or expired link gets the same 404 as a missing page.
 
 Granularity stops at the page (D8). Field names in `PagePermissions` leave room for groups as a
 `PrincipalType` later.
@@ -313,7 +327,9 @@ ERP data is never written to any Workspace table or document.
 | --- | --- | --- |
 | `WorkspaceChanges` | (`WorkspaceId`, `Seq`), `EntityType`, `EntityId`, `Kind`, `Version`, `ActorUserId`, `CreatedAt` | The change feed. `Kind` is `upsert`, `delete`, `grant` or `revoke` |
 | `AppliedOps` | `OpId`, `WorkspaceId`, `UserId`, `Result` (JSON), `CreatedAt` | Idempotency. Written in the same transaction as the operation |
-| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins, sharing changes, member changes, exports, permanent deletions, restores, ERP link changes |
+| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes. Account events have no workspace |
+| `WorkspaceExports` | `Id`, `WorkspaceId`, `RequestedBy`, `Status`, `BlobKey`, `SizeBytes`, `Error` | A workspace's export zip, written by the worker |
+| `JobStates` | `Name`, `LastRunAt`, `LastOkAt`, `LastError`, `Runs` | Each worker job's last run: the worker's lag and the API's health check |
 
 ### Comments (Phase 6)
 
@@ -331,15 +347,17 @@ Both local stores hold the same logical data, behind the `LocalStore` interface.
 | `workspaces`, `sections`, `pages` | The metadata mirror, with each record's server version |
 | `docUpdates` | Yjs updates per page, each marked local or acknowledged, with the server sequence once known |
 | `docSnapshots` | The latest compacted state per page |
-| `outbox` | Operations not yet acknowledged, in order |
-| `cursors` | The change-feed cursor per workspace; the head sequence and epoch per page |
-| `assets` | Asset metadata, cached bytes, and uploads not yet sent |
+| `outbox` | Operations not yet acknowledged, in order, findable by workspace and by entity |
+| `cursors` | The change-feed cursor per workspace (`syncCursors`); the server head sequence and epoch this device holds per page (`docCursors`) |
+| `assets` | Asset metadata (with `uploaded` once the server holds the bytes), cached bytes, and uploads not yet sent |
 | `searchIndex` | Desktop: an FTS5 table. Browser: rebuilt in memory from `pages` and cached text |
 | `prefs` | Theme, language, sidebar state, toggle state, pinned-offline pages |
-| `meta` | The store's own schema version |
+| `meta` | The store's own schema version: 2 from Phase 2 (IndexedDB upgrades additively; SQLite copies its file to `workspace.v1.db` first) |
 
-The first milestone has no server, so a workspace starts as local-only: the same collections,
-with nothing in `outbox` ever sent. Signing in later uploads it (Phase 2).
+A workspace made while signed out starts as local-only: the same collections, with nothing in
+`outbox` ever sent. Uploading it (Phase 2) keeps its id and every record's: the workspace is made
+on the server, each page's log is merged into one update, and the outbox is replaced by the
+workspace's records as creates. A workspace made while signed in is uploaded at once.
 
 ## Data export and deletion
 
@@ -347,6 +365,15 @@ with nothing in `outbox` ever sent. Signing in later uploads it (Phase 2).
   follow the tree, an `assets` folder, and a manifest of ids. Available from the first milestone,
   because a browser may evict local storage.
 - Deleting a workspace marks it deleted, removes access at once, and purges rows and blobs after
-  30 days.
-- Deleting an account removes the user's memberships and personal data, and keeps their edits in
-  shared pages under "Deleted user".
+  30 days (the worker's `purgeWorkspaces` job). Its audit rows stay: the log is append-only.
+- Deleting a page for good (from the trash) leaves a tombstone row; the worker purges its
+  document, versions, derived rows and blobs (`purgePages`, `Pages.PurgedAt`).
+- Deleting an account removes the user's memberships, their private sections and their personal
+  data, revokes every device and token, and keeps their edits in shared pages under "Deleted
+  user". It is refused while the user is the only owner of a workspace others are in: they hand
+  it over first. Workspaces no one else is in are deleted with the account.
+- As built in Phase 2, the server's export (`POST /workspaces/{id}/exports`, owners and admins)
+  holds the pages the requester may read, their own private section included and other people's
+  not; the worker writes the zip, and it is kept 7 days behind a signed URL for the requester
+  only. Its Markdown is written by the server's own writer (`Cgw.Core/Documents/Markdown.cs`),
+  held to the client's by shared vectors (`packages/doc/vectors/markdown-vectors.json`).
