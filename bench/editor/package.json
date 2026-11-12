@@ -1,6 +1,6 @@
 {
   "name": "@cgw/bench-editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Phase 0's harnesses, now on the product's packages (@cgw/doc, @cgw/editor): fuzz (S1), version gate (S2), Yjs corpus and check (S3), RTL checklist, budgets and hostile content in browsers (S5, S6, S7). The rejected S1 configurations are kept for comparison runs.",

@@ -3,9 +3,10 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 2 are done (0.2.0: the local-first editor, then accounts, sync while online,
-sharing, server search and history); the next step is Phase 3 (offline). Evidence is in
-`docs/PROGRESS.md`; spike results and the decisions they changed are in `docs/DECISIONS.md`.
+Status: Phases 0 to 3 are done (0.3.0: the local-first editor; accounts, sync, sharing, server
+search and history; then offline, conflicts, migrations and the Mac app); the next step is Phase 4
+(workspace databases). Evidence is in `docs/PROGRESS.md`; spike results and the decisions they
+changed are in `docs/DECISIONS.md`.
 
 ## Workflow
 
@@ -117,7 +118,10 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm bench:sequence` | S8 on LocalDB (creates and drops `cgw_spike_s8`) |
 | `pnpm bench:sheet-embed` | S9 against Sheet's deployed app |
 | `cargo build -p cgw-store --bin cgw-store-cli` | The binary the SQLite conformance suite runs through (`pnpm check` builds it; without it the suite is skipped locally) |
-| `node scripts/kill-test.mjs --target web|desktop --runs N` | Kill the app while typing, reopen, check nothing saved was lost (web needs `pnpm build`; desktop needs the release build) |
+| `node scripts/kill-test.mjs --target web|desktop --runs N` | Kill the app while typing, reopen, check nothing saved was lost (web needs `pnpm build`; desktop needs the release build). `--sync`: signed in, against the e2e server stack (started if not running), the network cut in some runs, the server's text checked every `--check-every` runs; `--until-compaction`: each run waits to kill during a compaction; `--kill tree` (the web's default) or `immediate`; failures in full to `<out>.failures.jsonl` |
+| `node scripts/kill-migration.mjs --runs N` | Kill the desktop store's migration from the v1 and v2 fixtures at every moment, then check every read against the release's answers and the copy against the old file |
+| `node scripts/old-build.mjs [--serve]` | v0.2.0's web build from its tag, with its own lockfile, into `target/old-build` (served on 127.0.0.1:4279 for `old-build.spec.ts`) |
+| `pnpm bench:phase3 [-- --desktop]` | Phase 3's budgets (reconnect with 1,000 waiting updates, pinning 500 pages while typing, the store for 1,000 pages, the desktop's cold start offline), gated against the budgets and `bench/previous/phase3.json` |
 | `node scripts/state-hash-vectors.mjs [--check]` | The state-hash vectors (`packages/doc/vectors/state-hash-vectors.json`), made by plain Yjs; `--check` fails if they are stale |
 | `node crates/cgw-store/tests/fixtures/make.mjs` | The SQLite migration fixtures, written by `cgw-store` built from the v0.1.0 and v0.2.0 tags (offline, under `target/store-fixtures`) |
 | `SIM_SEEDS=60 SIM_STEPS=200 pnpm exec vitest run packages/doc/src/sync-sim` | The convergence simulator at size (CI runs 4 seeds of 40 rounds); `SIM_SEED` replays one |
@@ -277,3 +281,7 @@ Added as they are found, grouped by phase.
   imports the fake server by relative path.
 - PowerShell 5.1 mangles double quotes inside a here-string passed to a native program: write a
   commit message to a file and `git commit -F` it. Bash heredocs holding `|` tables can fail too.
+- Chrome loses IndexedDB writes it reported committed when only its browser process is ended at
+  once; the web kill tests end the whole tree (`--kill tree`), as a crash of the browser does.
+- Desktop runs going at once must not share a `CGW_KEYCHAIN_SERVICE`: each rolls the other's
+  refresh token and the other comes back signed out. Every harness names its own.

@@ -1,6 +1,6 @@
 {
   "name": "@cgw/shell",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "The app frame and everything around the editor: sidebar, top bar, routing, search, settings, theme, languages, commands and the platform interface.",

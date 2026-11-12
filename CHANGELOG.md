@@ -4,6 +4,47 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.3.0] - 2026-11-12
+
+Offline: keep working with no network, on the desktop and in the browser, and everything syncs
+when the network returns. A Mac app.
+
+- **Offline.** The app starts with no network, still signed in, and says "Offline, N changes
+  waiting" (the web app too, after one visit online). Pages you have opened before open as usual,
+  edits are saved and new pages can be made; when the network returns everything is sent, with
+  nothing to do. A page that is not on this device says so, and opens by itself once you are
+  online.
+- **Available offline.** "Make available offline" keeps a page, or a page and every page inside it,
+  on this device and up to date in the background. Settings → Offline lists them and shows how
+  much space this device uses.
+- **Nothing you typed is lost.** If a page you edited offline was deleted for good, had an
+  earlier version put back, or was taken out of your hands meanwhile, your copy becomes
+  "Recovered: {title}" in your private section, and a notice links to it. The Recovered list,
+  beside the Trash, shows them all. Every other conflict is told in a notice that says what
+  happened and where your work is.
+- **Moves while you type.** Yjs cannot move a block and keep someone's edit inside it; if that
+  happens to you, you are told, and pointed to the page's history.
+- **Table of contents.** A new block (`/toc`) that lists the page's headings, each a link.
+- **View-only pages** now open read-only: nothing can be typed there to be refused later.
+- **Export from the account.** Owners and admins can download the server's export of a workspace
+  from Settings, beside the export from this device.
+- **The Mac.** A universal app for Apple silicon and Intel Macs, macOS 13 or later, with the
+  sign-in kept in the Mac's keychain and `cashgear-workspace://` links. Until the Apple signing
+  credentials are set up, macOS warns when it is first opened.
+- **Faster under load.** An edit now reaches other people within about 2 seconds with 200 people
+  typing (it was up to a minute).
+- **Keeping things.** Pages in the trash are deleted for good after 60 days. A device may be
+  offline for up to 30 days and still sync; after that it signs in again first, and nothing on it
+  is lost.
+- **Versions.** Pages edited in 0.3.0 move to document version 2; 0.2.0 opens them read-only and
+  asks for an update (a page 0.2.0 has never had, once it is reopened; anything typed there before
+  that is refused, and the page stays as it was). This device's store moves to version 3 (the desktop keeps a copy of the old
+  file); an older app refuses a newer store rather than touch it.
+- **Fixed.** The Windows release talked to a development address instead of the server. A page
+  title typed just before closing could be lost. Two devices repairing the same duplicated block
+  at once multiplied it. A reopened page wrote as a new editing session's id. Error, warning and
+  delete text was too faint in the dark theme.
+
 ## [0.2.0] - 2026-11-12
 
 Accounts and the cloud: sign in, and a workspace is kept on the Cash Gear Workspace server and

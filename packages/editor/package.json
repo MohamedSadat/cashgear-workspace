@@ -1,6 +1,6 @@
 {
   "name": "@cgw/editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "The block editor: Tiptap extensions, plain DOM node views, slash menu, bubble toolbar, block handle, drag and drop, clipboard. Given a Y.Doc and callbacks; never saves, loads or calls the network.",
