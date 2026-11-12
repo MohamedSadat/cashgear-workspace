@@ -34,13 +34,21 @@ public sealed class DocStates(BlobStore blob)
     private readonly ConcurrentDictionary<Guid, (int Epoch, long Head, byte[] State)> cache = new();
     public static readonly byte[] Empty = [0, 0];
 
-    public async Task<byte[]> LoadAsync(CgwDb db, Page page, CancellationToken ct)
+    /// <summary>
+    /// The page's validated state, up to its head or, with <paramref name="upTo"/>, up to that
+    /// sequence (a version as it was named). Rows a compaction has since removed are in its snapshot,
+    /// so a state up to an earlier point is built from the latest compaction at or before it.
+    /// </summary>
+    public async Task<byte[]> LoadAsync(CgwDb db, Page page, CancellationToken ct, long? upTo = null)
     {
-        if (cache.TryGetValue(page.Id, out var hit) && hit.Epoch == page.DocEpoch && hit.Head == page.DocHeadSeq) return hit.State;
+        var head = upTo is { } point ? Math.Min(point, page.DocHeadSeq) : page.DocHeadSeq;
+        if (cache.TryGetValue(page.Id, out var hit) && hit.Epoch == page.DocEpoch && hit.Head == head) return hit.State;
         var parts = new List<byte[]>();
-        var snapshot = await db.PageDocSnapshots.AsNoTracking()
-            .Where(s => s.PageId == page.Id && s.Kind == SnapshotKinds.Compaction && s.Epoch == page.DocEpoch && s.Status == "ready")
-            .OrderByDescending(s => s.UpToSeq).FirstOrDefaultAsync(ct);
+        var compactions = db.PageDocSnapshots.AsNoTracking()
+            .Where(s => s.PageId == page.Id && s.Kind == SnapshotKinds.Compaction && s.Epoch == page.DocEpoch && s.Status == "ready");
+        var snapshot = await compactions.Where(s => s.UpToSeq <= head).OrderByDescending(s => s.UpToSeq).FirstOrDefaultAsync(ct)
+            // Only a later compaction is left (its rows are gone): the nearest state there is.
+            ?? await compactions.OrderBy(s => s.UpToSeq).FirstOrDefaultAsync(ct);
         long from = 0;
         if (snapshot is not null)
         {
@@ -50,7 +58,7 @@ public sealed class DocStates(BlobStore blob)
             from = snapshot.UpToSeq;
         }
         parts.AddRange(await db.PageDocUpdates.AsNoTracking()
-            .Where(u => u.PageId == page.Id && u.Seq > from && u.Seq <= page.DocHeadSeq && u.Status == UpdateStatus.Valid)
+            .Where(u => u.PageId == page.Id && u.Seq > from && u.Seq <= head && u.Status == UpdateStatus.Valid)
             .OrderBy(u => u.Seq).Select(u => u.Data).ToListAsync(ct));
         var state = parts.Count switch
         {
@@ -58,7 +66,7 @@ public sealed class DocStates(BlobStore blob)
             1 => parts[0],
             _ => Yjs.Merge(parts),
         };
-        Put(page.Id, page.DocEpoch, page.DocHeadSeq, state);
+        if (head == page.DocHeadSeq) Put(page.Id, page.DocEpoch, head, state);
         return state;
     }
 

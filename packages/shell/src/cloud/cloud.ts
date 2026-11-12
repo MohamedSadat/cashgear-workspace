@@ -61,7 +61,7 @@ export class Cloud {
     session.connect({
       clientIdFor: (workspaceId) => this.engine.clientIdFor(workspaceId),
       pullPage: (pageId) => (this.account_ ? this.engine.pullPage(pageId) : Promise.resolve()),
-      changed: () => this.engine.kick(),
+      changed: () => this.engine.changed(),
       // A workspace made while signed in goes to the account at once.
       created: (workspaceId) => {
         if (this.account_)
@@ -347,7 +347,9 @@ export class Cloud {
     return data(this.api.GET('/api/v1/pages/{pageId}/versions', { params: { path: { pageId } } }));
   }
 
-  nameVersion(pageId: Id, name: string | null, kind: 'named' | 'preRestore' = 'named') {
+  /** A version of the page as this device has it: its last edits are sent first. */
+  async nameVersion(pageId: Id, name: string | null, kind: 'named' | 'preRestore' = 'named') {
+    await this.engine.syncNow();
     return data(
       this.api.POST('/api/v1/pages/{pageId}/versions', {
         params: { path: { pageId } },

@@ -120,6 +120,14 @@ async function launch() {
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     console.error('Console error: ' + message.text());
+    // No server runs here: the app's check of the account cannot reach the API, as on any
+    // offline start (it works on this device then). Only that refusal is expected.
+    const url = message.location()?.url ?? '';
+    if (
+      message.text().includes('net::ERR_CONNECTION_REFUSED') &&
+      /^http:\/\/(127\.0\.0\.1|localhost):5280\//.test(url)
+    )
+      return;
     if (message.text().includes('Content Security Policy')) policyViolations.push(message.text());
     else pageErrors.push(message.text());
   });

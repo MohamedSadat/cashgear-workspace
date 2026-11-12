@@ -324,6 +324,21 @@ describe('sync engine', () => {
     expect(pool.every((id) => server.spaces.get(ws.id)!.yjs.get(id) === ALICE.id)).toBe(true);
   });
 
+  it('says syncing as soon as a local change waits, and synced only once nothing does', async () => {
+    const server = new FakeServer();
+    const one = device(server);
+    const { ws, a } = await localWorkspace(one.store);
+    await one.engine.upload(ws.id);
+    await one.engine.syncOnce();
+    expect(one.engine.status.state).toBe('synced');
+    await one.store.applyLocalOps([newOp('page.update', ws.id, a.id, { title: 'Changed' })]);
+    one.engine.changed();
+    // Before any pass has run: the change is not on the server, and the status does not say so.
+    expect(one.engine.status.state).toBe('syncing');
+    await one.engine.syncOnce();
+    expect(one.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+  });
+
   it('reports signed out, and offline with what waits, without discarding anything', async () => {
     const server = new FakeServer();
     const one = device(server);

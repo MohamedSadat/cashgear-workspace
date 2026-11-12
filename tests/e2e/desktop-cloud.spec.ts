@@ -53,5 +53,9 @@ test('signs in through the browser, syncs a workspace, and a browser sees its pa
   // Signing out revokes the device's tokens; the pages stay in the app.
   await page.goto('/#/settings');
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByRole('button', { name: 'Sign in to sync' })).toBeVisible();
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Sidebar' })
+      .getByRole('button', { name: 'Sign in to sync' }),
+  ).toBeVisible();
 });

@@ -53,7 +53,9 @@ public sealed class VersionService(CgwDb db, BlobStore blob, Audit audit, TimePr
             PageId = page.Id,
             WorkspaceId = page.WorkspaceId,
             Epoch = page.DocEpoch,
-            UpToSeq = page.DocHeadSeq,
+            // Everything given out by now, decided or not: the version is the page as it was when
+            // it was named; the worker writes it once those updates are decided (SnapshotJob).
+            UpToSeq = page.DocSeq,
             Kind = kind,
             Name = name,
             Status = "pending",

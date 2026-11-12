@@ -221,3 +221,49 @@ test('a guest sees only the page shared with them; a view link opens it read-onl
   await guestContext.close();
   await anonymousContext.close();
 });
+
+test('a version kept in the account is viewed and restored, and the restore can be undone', async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  const account = await newAccount('Historian');
+  await page.goto('/');
+  await signIn(page, account);
+  await signedIn(page, account);
+  await createWorkspace(page, 'Versioned');
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+  await newPage(page, 'Minutes');
+  await page.keyboard.type('First draft');
+  await waitSaved(page);
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 20000 });
+
+  // Named in the account: the worker writes it within a second.
+  await page.getByRole('button', { name: 'Page actions' }).click();
+  await page.getByRole('menuitem', { name: 'Page history' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Page history' });
+  await dialog.getByLabel('Name this version').fill('Before the meeting');
+  await dialog.getByRole('button', { name: 'Name this version' }).click();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+
+  await editor(page).click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type(' and what was agreed');
+  await waitSaved(page);
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 20000 });
+
+  const named = dialog.getByRole('option', { name: /^Before the meeting · (?!Being saved)/ });
+  await expect(async () => {
+    if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'Page actions' }).click();
+    await page.getByRole('menuitem', { name: 'Page history' }).click();
+    await expect(named).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000 });
+  await named.click();
+  await expect(dialog.locator('.cgw-editor')).toHaveText('First draft');
+  await dialog.getByRole('button', { name: 'Restore this version' }).click();
+  await expect(editor(page)).toHaveText('First draft');
+  await editor(page).click();
+  await page.keyboard.press('Control+z');
+  await expect(editor(page)).toContainText('what was agreed');
+  expect(errors).toEqual([]);
+});

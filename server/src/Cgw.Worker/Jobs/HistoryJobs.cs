@@ -44,11 +44,15 @@ public sealed class SnapshotJob(DocStates states, BlobStore blob) : IJob
             await db.SaveChangesAsync(ct);
             return;
         }
-        var state = Yjs.Compact(await states.LoadAsync(db, page, ct));
+        // A version is the page as it was named: once the worker has decided every update given out
+        // by then, the state up to that point (a version of an earlier epoch is taken as it is now).
+        var upTo = snapshot.Epoch == page.DocEpoch ? snapshot.UpToSeq : page.DocHeadSeq;
+        if (upTo > page.DocHeadSeq) return;
+        var state = Yjs.Compact(await states.LoadAsync(db, page, ct, upTo));
         // The blob first, then the row says ready: a reader never sees a ready row without its blob.
         await blob.PutAsync(snapshot.BlobKey, state, "application/octet-stream", ct);
         snapshot.Epoch = page.DocEpoch;
-        snapshot.UpToSeq = page.DocHeadSeq;
+        snapshot.UpToSeq = upTo;
         snapshot.SizeBytes = state.Length;
         snapshot.Status = "ready";
         await db.SaveChangesAsync(ct);

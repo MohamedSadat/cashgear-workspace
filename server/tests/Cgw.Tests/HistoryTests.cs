@@ -35,6 +35,32 @@ public sealed class HistoryTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task A_version_is_the_page_as_it_was_when_it_was_named()
+    {
+        var ws = await Ws.Create(server);
+        var page = (await ws.NewPage("Minutes")).GetProperty("id").GetGuid();
+        await Kit.Register(ws.Client, ws.Id);
+        await Kit.PushOk(ws.Client, page, Kit.Update("page"));
+        await server.RunJob<ValidateJob>();
+        // Named, then edited before the worker writes it: the version is still "Hello".
+        var before = (await Version(ws.Client, page, new { name = "Before" })).GetProperty("id").GetGuid();
+        await Kit.PushOk(ws.Client, page, Kit.Update("edit"));
+        await server.RunJob<ValidateJob>();
+        await server.RunJob<SnapshotJob>();
+        Assert.Equal("Hello", await TextAt(ws.Client, page, before));
+
+        // Named while an update given out before it is still being checked: written once it is.
+        var other = (await ws.NewPage("Agenda")).GetProperty("id").GetGuid();
+        await Kit.PushOk(ws.Client, other, Kit.Update("page"));
+        await Kit.PushOk(ws.Client, other, Kit.Update("edit"));
+        var named = (await Version(ws.Client, other, new { name = "With the edit" })).GetProperty("id").GetGuid();
+        await server.RunJob<SnapshotJob>(); // Too early: it waits (unless another test's worker ran).
+        await server.RunJob<ValidateJob>();
+        await server.RunJob<SnapshotJob>();
+        Assert.Equal("Hello world", await TextAt(ws.Client, other, named));
+    }
+
+    [Fact]
     public async Task A_named_version_is_written_by_the_worker_and_read_by_a_signed_url()
     {
         var ws = await Ws.Create(server);

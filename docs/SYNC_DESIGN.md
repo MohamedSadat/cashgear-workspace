@@ -277,6 +277,9 @@ pass.
 5. Pull documents for held pages whose head sequence moved.
 6. Upload queued assets (each with its own retry state).
 
+The status says "syncing" from the moment a local change waits (not only once a pass starts), and
+"synced" only when a pass ends with nothing waiting.
+
 Failures back off exponentially with jitter, capped at 5 minutes. A 401 pauses the loop until the
 user signs in again; nothing is discarded. A refused move, trash, restore or delete fetches that
 subtree again from the server (a scoped resync), so its pages show the server's state.
@@ -425,7 +428,9 @@ An ordinary "restore this version" does not bump the epoch; it is a forward edit
   snapshot.
 - **As built in Phase 2:** the worker writes a history snapshot after an hour of activity on a
   page, keeps one a day after 30 days, keeps every named and `preRestore` version, and writes a
-  version someone names within a second (`GET /pages/{id}/versions/{vid}` gives its signed URL
+  version someone names within a second, as the page was when it was named: the app sends the
+  page's last edits first, the server records the last sequence given out, and the worker writes
+  the state up to it once every update before it is decided (`GET /pages/{id}/versions/{vid}` gives its signed URL
   once it is ready).
 
 Deleted text does not live for ever: once a compaction snapshot covers an update row, the row is

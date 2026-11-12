@@ -122,6 +122,28 @@ export class SyncEngine {
     this.clear();
   }
 
+  /**
+   * A local change: nothing is "synced" while it waits, so the status says so at once (a pass
+   * starts only after the change settles), and a pass comes soon.
+   */
+  changed() {
+    if (this.account && this.status_.state === 'synced') {
+      this.status_ = { ...this.status_, state: 'syncing', waiting: this.status_.waiting + 1 };
+      for (const listener of this.statusListeners) listener(this.status_);
+    }
+    this.kick();
+  }
+
+  /**
+   * A pass now, awaited (after one already running): what was written here is on the server when
+   * it returns, unless the network or the server failed (the status says which).
+   */
+  async syncNow(): Promise<void> {
+    while (this.running) await new Promise((done) => setTimeout(done, 50));
+    this.clear();
+    await this.run();
+  }
+
   /** A pass soon: after a local change, when the network returns, when a page opens. */
   kick(delayMs = 300) {
     if (this.stopped) return;
@@ -159,9 +181,13 @@ export class SyncEngine {
   private async report(state: SyncState) {
     const waiting =
       (await this.store.nextOutboxBatch(1000)).filter((op) => this.isMine(op.workspaceId)).length +
-      (await this.store.unsentDocUpdates(1000)).reduce((n, d) => n + d.updates.length, 0);
+      (await this.store.unsentDocUpdates(1000))
+        // A page held back (this build is too old for it) waits for an update, not for a pass.
+        .filter((d) => !this.held.has(d.pageId))
+        .reduce((n, d) => n + d.updates.length, 0);
     this.status_ = {
-      state,
+      // A pass that ends with changes waiting (made while it ran) has not synced them.
+      state: state === 'synced' && waiting > 0 ? 'syncing' : state,
       waiting,
       lastSynced: state === 'synced' ? new Date().toISOString() : this.status_.lastSynced,
     };
