@@ -11,7 +11,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Planning documents | Done, 2026-11-11 | |
 | Phase 0: Scaffold and spikes | Done, 2026-11-11 (S6 misses one budget by 1 to 3 ms; Q18 to Q20 raised) | `phase-0` |
 | Phase 1: Core block editor (MVP) | Done, 2026-11-11 (0.1.0; the screen-reader pass is by the accessibility tree) | `phase-1`, `v0.1.0` |
-| Phase 2: Cloud document platform | Not started | |
+| Phase 2: Cloud document platform | Done, 2026-11-12 (0.2.0; deployment is yours: the package is rehearsed) | `phase-2`, `v0.2.0` |
 | Phase 3: Offline | Not started | |
 | Phase 4: Workspace databases | Not started | |
 | Phase 5: Cash Gear ecosystem | Not started | |
@@ -194,35 +194,113 @@ Defects in `@cashgear/ui` worked around here, for Track U
 
 ## Phase 2: Cloud document platform
 
+Done 2026-11-12. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43154795775 (commit `85d92d8`, all jobs green). Local
+results are from `bench/results/` on the reference machine (Windows 10 19045, Chrome, Edge, WebView2,
+SQL Server LocalDB without full-text, Azurite 3.37.0). Answers and defaults are in `DECISIONS.md`
+(2026-11-12: Phase 2); what changed for users is in `CHANGELOG.md` (0.2.0).
+
 Milestones
 
-- [ ] M2.1 Server scaffold
-- [ ] M2.2 Identity
-- [ ] M2.3 Workspaces and metadata sync
-- [ ] M2.4 Documents in the cloud
-- [ ] M2.5 Assets
-- [ ] M2.6 Permissions and sharing
-- [ ] M2.7 Search and history
-- [ ] M2.8 Operations
+- [x] M2.1 Server scaffold. Commit `edb52c7`
+- [x] M2.2 Identity. Commits `edb52c7`, `3a7ad68` (desktop sign-in), `2ef4837` (the separate review's findings)
+- [x] M2.3 Workspaces and metadata sync. Commits `aa269d0`, `2af864f`, `9ba6f67`, `ad601ec`, `b80abb7`
+- [x] M2.4 Documents in the cloud. Commits `aa269d0`, `9ba6f67`, `ad601ec`, `537a9b0`
+- [x] M2.5 Assets. Commit `aa269d0`
+- [x] M2.6 Permissions and sharing. Commits `b084c08`, `ad601ec`, `9ba0e78` (the separate review's findings)
+- [x] M2.7 Search and history. Commits `b084c08`, `ad601ec`, `207800e`
+- [x] M2.8 Operations. Commits `b084c08`, `7f8f569`, `742200b`; deployment is yours (below)
+
+Notes
+
+- Two reviews, separate from the work, as the plan's risks ask: M2.2 (accounts and sign-in, 13
+  findings) and M2.6 (permissions and sharing, 18 findings). Every finding was fixed with a test
+  that failed before the fix, or accepted and recorded in `DECISIONS.md` (two: answers that tell an
+  id exists across workspaces, which need a guessed random id; and a file id named in a page's
+  content making that file readable through it). The worst of them: a web session ended a minute
+  after sign-in (the device claim was lost at the security-stamp refresh); any link could sign a
+  desktop in without asking; five wrong passwords by anyone signed every desktop out; a member
+  could move a shared page into their private section and take its restricted pages with it; a
+  removed admin could rejoin with the old invitation.
+- The e2e specs against the real stack found four client bugs the unit tests had not: a page's
+  first update pushed before the page and set aside on the 404; an upload replacing operations and
+  updates written while it ran (the first-run pages of a workspace made while signed in); a guest's
+  open of a page writing its meta (refused, and the guest told their changes were kept aside); a
+  named version written with edits made after it was named. Each has a test now.
+- Full-text search runs only in CI (SQL Server 2022 with full-text in a container); LocalDB here has
+  none and takes the `LIKE` path. Both paths are tested (`SearchTests`), and CI requires full-text.
+- Under load the worker's validation falls behind, and edits reach other people late, though none is lost: the time from an update's push to others' pulls serving it was, at p95, 0.75 s with 50 people, 1.1 s with 100, 2.4 s with 150 and 26 to 60 s with 200 here (65 s in CI). The cause is lock waits, not CPU: `ValidateJob` holds the workspace row through each page's validation while every request's membership check reads it. No budget measures it and none fails, but the 5-second criterion would not hold at that load. Left to Phase 3 (M3.2, the robust sync loop); its brief says so.
+- The load test's author found the worker's Yjs client-id check (Q9) bypassable: an update continuing a client named no client, so a member could write as the owner's client. Fixed in `fc928d1` (the ranges come from the update's blocks), with a Rust test, a fixture made by Yjs and a server test. It also made search's `LIKE` side compare code points (`85d92d8`), which took search at 10,000 pages from 992 ms to about 210 ms on LocalDB.
 
 Exit criteria
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| Sign-up to a second device seeing an edit within 5 s | | |
-| A local-only workspace uploads intact | | |
-| Authorisation matrix: role × level × endpoint | | |
-| Tenant isolation: every entity filtered; cross-workspace requests fail | | |
-| Assets unreachable without a fresh signed URL | | |
-| Search returns only readable pages, Arabic and English | | |
-| View and restore a version; restore undoable | | |
-| Two clients converge; outbox replay; 50 writers | | |
-| Hostile updates against the real push path | | |
-| Compaction killed at each step | | |
-| Restore drill from backup | | |
-| Security table checked row by row | | |
-| Benchmarks and load test within budget | | |
-| Deployed | | |
+| A new user signs up, creates a workspace, and a second device sees an edit within 5 s | Pass | `cloud.spec.ts` "signs up, keeps a workspace in the account, and a second device sees an edit within 5 seconds" (Chrome and Edge; the time is attached to the report: 1.87 s in Chrome and 1.90 s in Edge in CI run 43148561258); `desktop-cloud.spec.ts` "signs in through the browser, syncs a workspace, and a browser sees its pages" (the built desktop app, signing in through the system browser and its loopback listener) |
+| A local-only workspace from Phase 1 uploads intact: tree, documents, assets, ids | Pass | `cloud.spec.ts` "a workspace made before signing in uploads intact: tree, documents and ids"; `engine.test.ts` "uploads a local workspace intact, and a second device gets the same tree and documents", "uploads assets of a synced workspace and keeps them when offline"; the store conformance case "an upload keeps operations written while it was prepared" on memory, IndexedDB and SQLite |
+| A member with view cannot push; a guest sees only what was shared; another workspace's user gets 404 for every id | Pass | `AuthorizationTests` "Every_role_and_page_level_gets_what_the_rules_say_on_every_page_endpoint" (6 page set-ups × 4 roles × 10 endpoints) and "Every_route_with_an_id_is_404_to_another_workspace_and_401_without_a_session" (a sweep of every route with an id, which fails on a route it does not know); `SharingTests` "A_guest_sees_only_pages_shared_with_them_by_name"; `cloud.spec.ts` "a guest sees only the page shared with them; a view link opens it read-only until withdrawn" |
+| An image is unreachable without a fresh signed URL, and a signed URL stops working after its lifetime | Pass | `AssetTests` "A_signed_url_stops_working_after_its_lifetime", "Others_read_an_asset_only_through_a_page_they_can_read", "An_image_uploads_by_signed_url_is_checked_and_reads_by_a_fresh_one"; the container is private (`BlobStore`) |
+| Search returns only pages the caller may read, in Arabic and English | Pass | `SearchTests` "Search_returns_only_pages_the_caller_may_read", "Words_are_found_by_their_start_in_titles_and_text_in_arabic_and_english", "A_document_edited_through_the_real_path_is_found_by_its_text", "Full_text_is_used_where_the_server_has_it" (required in CI); `AccessReviewTests` "A_search_cursor_is_sealed_to_its_user_and_workspace" |
+| A version can be viewed and restored; the restore is undoable | Pass | `cloud.spec.ts` "a version kept in the account is viewed and restored, and the restore can be undone"; `HistoryTests` "A_version_is_the_page_as_it_was_when_it_was_named", "A_named_version_is_written_by_the_worker_and_read_by_a_signed_url", "A_hard_restore_moves_the_epoch_and_can_itself_be_undone" |
+| A restore from backup into a scratch environment opens pages correctly | Pass | `node scripts/deploy-rehearsal.mjs` (`bench/results/deploy-rehearsal.json`): rehearsal and drill pass with the 0.2.0 package (from `85d92d8`): the migration bundle applied to a scratch database, the published API and worker started as Staging, sign-up confirmed by mail and sign-in on the API's page, three pages pushed, checked by the worker and read back, an image checked, a named version written, server search found all three; then the database was backed up and restored under a new name, Blob storage copied, and the restored environment opened every page exactly as written, with its tree and its image (`identical: true`) |
+| Unit and integration tests per module against real SQL Server and Azurite | Pass | 148 server tests (`pnpm server:test`), on LocalDB here and on SQL Server 2022 with full-text in CI |
+| Contract: the generated client matches the OpenAPI document; every error code has a test | Pass | `pnpm api:check` in `pnpm check` and CI; `ErrorCodeTests` "Every_code_clients_use_is_asserted_by_a_test" (a guard over `Codes.All`) and one test per code no other test reaches |
+| Authorisation matrix: role × page level × endpoint | Pass | `AuthorizationTests` (above) |
+| Tenant isolation: every entity filtered; cross-workspace requests fail | Pass | `InfraTests` "Tenant_rows_are_invisible_without_a_scope" (fails for a table with `WorkspaceId` and no filter); the 404 sweep above; `SyncTests` "A_non_member_gets_404_for_every_workspace_route" |
+| Sync: two clients converge on documents and on the tree; outbox replay after a lost response; 50 concurrent writers on one page | Pass | `engine.test.ts` "carries edits both ways within a pass", "replays the outbox after a lost answer without duplicating anything", "pushes a page's document only once the page itself is on the server"; `SyncTests` "A_second_device_converges_from_the_feed", "A_repeated_batch_is_answered_from_applied_ops"; `DocTests` "Fifty_concurrent_writers_and_no_reader_misses_an_update" |
+| Hostile updates (S7's corpus) against the real push path and worker | Pass | `DocTests` "Hostile_updates_are_refused_before_any_other_client_receives_them" (the fixtures from `packages/doc/src/server-fixtures.test.ts`, made by Yjs); `AccessReviewTests` "The_worker_refuses_an_update_whose_pusher_may_no_longer_edit_the_page" |
+| Compaction killed at each step | Pass | `DocTests` "Compaction_replaces_the_rows_with_a_snapshot_and_a_crash_at_each_step_loses_nothing" |
+| e2e: sign-up to shared page, in the browser and the desktop app | Pass | `cloud.spec.ts` (5 specs, Chrome and Edge) and `desktop-cloud.spec.ts` (the built app), against the server stack Playwright starts (`scripts/server-stack.mjs --e2e`); the Phase 1 specs still pass beside them: 72 browser tests passed and 2 skipped (desktop-only), 0 flaky; 23 desktop tests passed and 5 skipped (browser-only) |
+| The security table checked row by row | Pass | Below |
+| Benchmarks within budget | Pass | Below |
+| Deployed | Yours | The deploy package (`node scripts/server-publish.mjs`), `deploy/iis/install.ps1` and `docs/OPERATIONS.md` are ready and rehearsed on this machine; the answer to the deployment question was "I build, you deploy". The row is ticked when the web app and the API answer at `workspace.cashgearerp.com` and `workspace-api.cashgearerp.com` |
+
+Benchmarks (`bench/phase2.mjs`, gated in CI against the budgets and the last run on `main`)
+
+| Budget | Limit | CI (run 43154795775) | Local |
+| --- | --- | --- | --- |
+| Push round trip at the server, p95 | 200 ms | 14.7 ms | 8.0 ms |
+| Pull of 200 updates, p95 | 300 ms | 9.3 ms | 7.9 ms |
+| Change feed, 1,000 changes, p95 | 500 ms | 81.5 ms | 143 ms |
+| Search at 10,000 pages, Arabic and English, p95 | 300 ms | 182 ms (full-text) | 211 ms (`LIKE`) |
+| Compaction of a 1 MB document, p95 (merge and compact) | 200 ms | 59.2 ms | 195 ms |
+| First sync of a 1,000-page workspace, median of 5 | 5 s | 262 ms | 592 ms |
+| Load test: 200 people typing for 60 s, updates missed | 0 | 0 of 12,496 (49,984 deliveries checked) | 0 of 20,774 (83,096 checked) |
+| Load test: error rate | 0.1 % | 0 % of 57,515 requests | 0 % of 68,813 requests |
+
+The server figures are in process on SQL Server and Azurite, in Release (`server/tests/Cgw.Tests/Phase2Bench.cs`, run by `pnpm bench:phase2 -- --server`); CI's are on a 4-core Linux runner with SQL Server 2022 Developer and full-text search, the local ones on this machine's LocalDB Express (4 cores at most). First sync is the real app in Chrome: from landing back from sign-in to the 1,000 pages in IndexedDB. The load test is 200 people in 5 workspaces, 4 to a page, each making a sync pass every 500 ms while the worker's jobs run beside them; afterwards every update is checked against every reader of its page, and each page rebuilt from scratch. The first gated run has no run on `main` to compare with: the regression half of the gate starts with the next one.
+
+Security (`ARCHITECTURE.md`, Security), row by row
+
+| Row | Checked by |
+| --- | --- |
+| Authentication | ASP.NET Core Identity and OpenIddict as documented: cookie for the web, PKCE with a loopback listener for the desktop, a consent page before a desktop code; lockout (5 tries, 15 minutes) that slows guessing without signing devices out; per-IP limits on the forms and on the token endpoint. `AccountTests`, `AccountSecurityTests` (22), the M2.2 review |
+| Authorisation | Every request decided on the server from membership, role and page level (`Access.cs`); the client's hidden buttons are never the check. `AuthorizationTests`, `TreeAccessTests`, `AccessReviewTests`, the M2.6 review |
+| Tenant isolation | Workspace from the route, membership filter, one EF query filter on every tenant table (a test fails for one without it), blob keys under the workspace id, 404 for every id of another workspace (the sweep) |
+| Workspace roles | Owner, admin, member, guest; only owners change owners; the last owner protected under the workspace lock (`SyncTests`, `AccessReviewTests`) |
+| Page sharing | Access lists with inheritance, restricted pages, private sections; moves and fallbacks never loosen access; share links made by a person, 32 random bytes stored hashed, expiring, revocable, view only, reading the worker's JSON (`SharingTests`, `TreeAccessTests`) |
+| No public URLs | Nothing without a session or a link (the 401 sweep); the container private; signed URLs short-lived (`AssetTests`) |
+| Attachments | A signed URL for one blob after a permission check; files served as `attachment` with `application/octet-stream`, raster images inline as images (`AssetTests` "Files_download_as_attachments…") |
+| Upload safety | Allow-list, 25 MB, the bytes sniffed against the type, SVG never inline, quarantine; the scan hook (`IAssetScanner`) before `ready`, none configured (`AssetTests` "A_file_the_scan_refuses_is_quarantined_and_never_served") |
+| XSS | The editor's schema (Phase 1, S7); the worker refuses unknown elements and unsafe link schemes before anyone receives them (`DocTests` hostile updates); the API's pages encode every value and send no script |
+| Links | Scheme allow-list in the editor (Phase 1) and in the worker's check |
+| Embedded content | Bookmarks are static cards; previews fetched by the server (below); frames from Sheet only (Phase 5) |
+| Link previews | The SSRF guard: public addresses only, the connection pinned to the checked address, every redirect checked, 5 s and 1 MB (`AssetTests` "Previews_refuse_private_addresses_even_through_a_redirect") |
+| Content Security Policy | The web app's from `apps/web/vite.config.ts`, sent by `vite preview` (so every e2e run is under it) and written into `staticwebapp.config.json`; the desktop's in `tauri.conf.json`; the API pages' own (no script) |
+| Tauri | Typed commands only; the sign-in commands talk only to the API bases fixed when the app was built, whatever the page asks; the refresh token never reaches the webview |
+| Rate limiting | Per IP on anonymous routes, the sign-in forms and the token endpoint; per user on the rest, tighter on push, search and previews; per page on pushes (`ErrorCodeTests` limit.rate) |
+| Audit | Sign-ins and failures, sign-ups, resets, devices signed out, sharing and member changes, exports, permanent deletions, restores, refused updates; with the correlation id (`SharingTests` audit row, `AccountTests`) |
+| Token storage | Web: the cookie only (`__Host-` in production). Desktop: Windows Credential Manager. Invitation and link tokens stored hashed |
+| Secrets | `scripts/check-secrets.mjs` first in `pnpm check` and in CI (with a self-test); production refuses to start without its required settings and refuses development shortcuts; no key in a file: certificates by thumbprint, Blob by managed identity |
+| Transport | HTTPS only on IIS (`install.ps1` binds https), HSTS outside development, `__Host-` cookies |
+| Export and deletion | `OperationsTests` (export of what the requester may read, purges, account deletion); deletion on the API's page after the password |
+| Backup and restore | The rehearsal's restore drill and the reconcile job (`OperationsTests` "Reconcile_puts_rows_and_blobs_back_in_step_and_can_run_any_time") |
+| Dependencies | npm, cargo and NuGet licence gates with a self-test; `cargo deny`; lockfiles committed |
+
+Stand-ins waiting on Track U
+
+| Component | Stand-in in | Replaced |
+| --- | --- | --- |
+| U7 Avatar and avatar stack | `packages/shell/src/cloud/CloudUi.tsx` (the account button shows the name; members are a list without pictures) | |
 
 ## Phase 3: Offline
 

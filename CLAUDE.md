@@ -3,8 +3,9 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phase 0 (scaffold and spikes) is done; the next step is Phase 1. Spike results and the
-decisions they changed are in `docs/DECISIONS.md` (2026-11-11: Phase 0 results).
+Status: Phases 0 to 2 are done (0.2.0: the local-first editor, then accounts, sync while online,
+sharing, server search and history); the next step is Phase 3 (offline). Evidence is in
+`docs/PROGRESS.md`; spike results and the decisions they changed are in `docs/DECISIONS.md`.
 
 ## Workflow
 

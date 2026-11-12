@@ -4,10 +4,36 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-12
 
-- Pressing Enter in search straight after typing opens the first result for what was typed. Before,
-  an Enter that came before the search had answered acted on the earlier list.
+Accounts and the cloud: sign in, and a workspace is kept on the Cash Gear Workspace server and
+shared across devices and people. Without signing in, everything works on this device as before.
+
+- **Accounts.** Sign up with an email address (confirmed by a link), sign in, reset a forgotten
+  password, and see and sign out the devices signed in to the account. The desktop app signs in
+  through the system browser, which asks you to confirm it; its sign-in is kept in Windows
+  Credential Manager.
+- **Sync.** A workspace made while signed in lives on the server: pages, the tree and every
+  document follow you to each device and update while you are online. Two people typing in the
+  same page both keep their text. The sidebar shows whether everything is saved to the server.
+- **Upload.** A workspace made on this device before signing in can be uploaded, keeping every
+  page, its text and files, and the links between them. A workspace made while signed in goes to
+  the account at once.
+- **Members and invites.** Invite people to a workspace by email as admins, members or guests,
+  change their roles and remove them. A guest sees only the pages shared with them.
+- **Sharing.** Give chosen people (or the whole workspace) access to a page at a level, restrict
+  it to them, or make a view link that anyone holding it can open read-only, and withdraw it.
+- **Search across the account.** Ctrl+K also finds pages kept on the server, by title and text,
+  in Arabic and English.
+- **History on the server.** Earlier versions of a page are kept on the server too: name a
+  version (it holds the page as it was when named), look at it, restore it as a new change that
+  Ctrl+Z takes back, or, as an admin, replace a damaged page with it for everyone.
+- **Files and bookmarks.** Images and files are kept on the server and shown on every device. A
+  web bookmark shows the page's title, description and picture.
+- **Deleting an account.** Delete an account and its data from the server, on the account's own
+  page, after typing the password again. What is on your devices stays there.
+- **Search.** Pressing Enter straight after typing opens the first result for what was typed.
+  Before, an Enter that came before the search had answered acted on the earlier list.
 
 ## [0.1.0] - 2026-11-11
 

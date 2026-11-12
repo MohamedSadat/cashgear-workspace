@@ -1,6 +1,6 @@
 {
   "name": "@cgw/workspace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "The page tree and its rules, order keys, operations and the outbox, the metadata mirror, search normalisation and the LocalStore interface with its conformance suite. No React, no DOM, no ProseMirror.",
