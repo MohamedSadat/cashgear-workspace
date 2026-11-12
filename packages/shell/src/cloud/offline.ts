@@ -23,6 +23,8 @@ export class OfflineState {
   private pins = new Map<Id, PinRecord>();
   private available: ReadonlySet<Id> = new Set();
   private cut = false;
+  /** The status says the server is out of reach; `cut` follows once the held pages are read. */
+  private wantCut = false;
   private revision = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private loading: Promise<void> | null = null;
@@ -74,9 +76,19 @@ export class OfflineState {
 
   private statusChanged() {
     const cut = this.cloud.account !== undefined && CUT.has(this.cloud.status.state);
-    if (cut === this.cut) return;
-    this.cut = cut;
-    this.bump();
+    if (cut === this.wantCut) return;
+    this.wantCut = cut;
+    if (!cut) {
+      this.cut = false;
+      return this.bump();
+    }
+    // What this device holds grows while online with no `offline` event (a page opened or made
+    // here): it is read again before anything is marked, or those pages would be.
+    void this.reload().finally(() => {
+      if (!this.wantCut || this.cut || this.disposed) return;
+      this.cut = true;
+      this.bump();
+    });
   }
 
   /**

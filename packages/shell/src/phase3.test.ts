@@ -300,13 +300,14 @@ describe('what is kept offline', () => {
     const session = await WorkspaceSession.start(store);
     let notify = () => {};
     const status = { state: 'synced' as string };
+    const held = new Set([parent]);
     const cloud = {
       account: { id: 'account' },
       get status() {
         return status;
       },
       subscribe: (listener: () => void) => ((notify = listener), () => {}),
-      engine: { availableOffline: async () => new Set([parent]) },
+      engine: { availableOffline: async () => new Set(held) },
     } as unknown as Cloud;
     const offline = new OfflineState(cloud, session);
     await offline.reload();
@@ -314,11 +315,19 @@ describe('what is kept offline', () => {
     expect(offline.pinOf(child)).toMatchObject({ inherited: true, pin: { pageId: parent } });
     expect(offline.pinOf(other)).toBeNull();
     expect(offline.marks()).toBeNull();
+    // Online, this device came to hold another page (opened, or made here) with no event: the
+    // network going reads the held pages again before anything is marked.
+    held.add(other);
     status.state = 'offline';
     notify();
-    expect(offline.marks()).toEqual(new Set([parent]));
+    expect(offline.marks()).toBeNull();
+    await offline.reload();
+    expect(offline.marks()).toEqual(new Set([parent, other]));
     // The same object until it changes: the tree renders again only then.
     expect(offline.marks()).toBe(offline.marks());
+    status.state = 'synced';
+    notify();
+    expect(offline.marks()).toBeNull();
     offline.dispose();
   });
 });

@@ -190,7 +190,7 @@ body {
 }
 
 .cgw-save-status[data-state='error'] {
-  color: var(--cg-danger, #c4383a);
+  color: var(--cg-danger-text, #b42318);
 }
 
 .cgw-first-run {
@@ -254,7 +254,7 @@ body {
 
 .cgw-sync-status[data-state='error'],
 .cgw-sync-status[data-state='offline'] {
-  color: var(--cg-warning, #9a6700);
+  color: var(--cg-warning-text, #98600a);
 }
 
 .cgw-sidebar-footer {
@@ -354,6 +354,11 @@ body {
 .cgw-side-link.is-unavailable .cgw-tree-title {
   color: var(--cg-text-secondary);
   font-style: italic;
+}
+
+/* On the selected row's background the secondary colour is too faint; the italic still says it. */
+.cgw-tree-row.is-unavailable.is-active .cgw-tree-title {
+  color: inherit;
 }
 
 .cgw-notice-action {

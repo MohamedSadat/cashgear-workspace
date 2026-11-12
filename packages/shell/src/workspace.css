@@ -254,7 +254,7 @@
 }
 
 .cgw-menu-item.is-danger {
-  color: var(--cg-danger, #c4383a);
+  color: var(--cg-danger-text, #b42318);
 }
 
 .cgw-dialog-backdrop {
@@ -341,7 +341,7 @@
 }
 
 .cgw-button.is-danger {
-  color: var(--cg-danger, #c4383a);
+  color: var(--cg-danger-text, #b42318);
 }
 
 .cgw-link-button {
