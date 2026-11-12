@@ -50,6 +50,31 @@ describe('signed in with no network', () => {
     expect(await one.engine.cachedAccount()).toBeNull();
   });
 
+  it('never shows a report that a later one overtook (signed out at start, then signed in)', async () => {
+    const server = new FakeServer();
+    server.offline = true;
+    // The first read of the mirror is slow: the sign-out's report finishes after the sign-in's.
+    let slow = true;
+    class SlowStore extends MemoryStore {
+      override async readMirror(...args: Parameters<MemoryStore['readMirror']>) {
+        if (slow) {
+          slow = false;
+          await new Promise((resolve) => setTimeout(resolve, 30));
+        }
+        return super.readMirror(...args);
+      }
+    }
+    const again = device(server, ALICE, { store: new SlowStore(), signIn: false });
+    const seen: string[] = [];
+    again.engine.onStatus((s) => seen.push(s.state));
+    again.engine.setAccount(null);
+    again.engine.setAccount(ALICE, { offline: true });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await again.engine.idle();
+    expect(again.engine.status.state).toBe('offline');
+    expect(seen).not.toContain('signedOut');
+  });
+
   it('starts offline with the cached account, says what waits, then syncs with no action', async () => {
     const server = new FakeServer();
     const { one, ws, a } = await sharedWorkspace(server);

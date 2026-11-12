@@ -181,6 +181,9 @@ export class SyncEngine {
   private backlog = false;
   private storeChecked = false;
   private status_: SyncStatus = { state: 'signedOut', waiting: 0, lastSynced: null };
+  /** Reports started, and the latest one shown: one that finishes after a later one is dropped. */
+  private reportsStarted = 0;
+  private reportShown = 0;
   private readonly listeners = new Set<(event: SyncEvent) => void>();
   private readonly statusListeners = new Set<(status: SyncStatus) => void>();
   /** Session Yjs client ids, one per workspace (Q9). */
@@ -384,6 +387,9 @@ export class SyncEngine {
   }
 
   private async report(state: SyncState) {
+    // Reports read the store, so they can finish out of order: the sign-out a start begins with
+    // must not land after the sign-in that follows it and say "Signed out" while signed in.
+    const order = ++this.reportsStarted;
     const owner = this.account ?? this.known;
     if (!this.mine.size) {
       const workspaces = (await this.store.readMirror(null)).workspaces.filter(
@@ -399,6 +405,8 @@ export class SyncEngine {
       .filter((d) => !this.heldBack.has(d.pageId))
       .reduce((n, d) => n + d.updates.length, 0);
     const waiting = ops + docs;
+    if (order < this.reportShown) return;
+    this.reportShown = order;
     this.status_ = {
       // A pass that ends with changes waiting (made while it ran) has not synced them.
       state: state === 'synced' && waiting > 0 ? 'syncing' : state,
