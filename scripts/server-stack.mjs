@@ -33,6 +33,8 @@ const origins = [
   'http://localhost:5273',
   'http://tauri.localhost',
   'tauri://localhost',
+  // The v0.2.0 web build that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs).
+  'http://127.0.0.1:4279',
 ];
 
 const children = [];

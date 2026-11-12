@@ -125,7 +125,7 @@ jobs:
   windows:
     name: Build and test (Windows)
     runs-on: windows-latest
-    timeout-minutes: 100
+    timeout-minutes: 130
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -152,6 +152,12 @@ jobs:
       - run: pnpm rust:fmt
       # Tauri embeds apps/web/dist, so the web build comes before clippy.
       - run: pnpm build
+      # Phase 3: the v0.2.0 web build (target/old-build, from the tag and its own lockfile), which
+      # tests/e2e/old-build.spec.ts serves beside this build.
+      - name: The old build (v0.2.0's web app)
+        run: |
+          git fetch --tags --force
+          node scripts/old-build.mjs
       - run: pnpm rust:clippy
       - run: pnpm rust:test
       - run: pnpm typecheck
@@ -182,14 +188,37 @@ jobs:
       - run: pnpm test:e2e
       # Kill the app while typing, reopen, check nothing reported saved was lost (25 runs each;
       # 1,000 locally for the exit criterion).
+      # In Chrome the kill is taskkill over the whole tree, as in Phase 1: ending only the browser
+      # process at once sometimes loses a whole session's IndexedDB writes in Chrome itself
+      # (scripts/kill-test.mjs, --kill); the desktop's kill is the immediate one.
       - name: Kill test (Chrome, IndexedDB)
-        run: node scripts/kill-test.mjs --target web --runs 25
+        run: node scripts/kill-test.mjs --target web --runs 25 --kill tree
       - run: pnpm --filter @cgw/desktop build
       - run: pnpm desktop:smoke
       # The exit criteria's specs again, on the built desktop app over CDP.
       - run: pnpm test:e2e:desktop
       - name: Kill test (desktop, SQLite)
         run: node scripts/kill-test.mjs --target desktop --runs 25
+      # Phase 3 (M3.5): kills during a store migration (the v1 and v2 fixtures; 10 runs, many
+      # locally), then kills during sync on both targets against one server stack started here
+      # and kept for the benchmarks below (25 runs each; 1,000 locally for the exit criterion).
+      - name: Kill test during a store migration (desktop, the v1 and v2 fixtures)
+        run: node scripts/kill-migration.mjs --runs 10
+      - name: Server stack for the Phase 3 runs and the benchmarks
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bench/results | Out-Null
+          Start-Process -FilePath node -ArgumentList 'scripts/server-stack.mjs','--e2e' -RedirectStandardOutput bench/results/server-stack.log -RedirectStandardError bench/results/server-stack.err.log -WindowStyle Hidden
+          for ($i = 0; $i -lt 300; $i++) {
+            try { if ((Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:5280/health/live).StatusCode -eq 200) { exit 0 } } catch { }
+            Start-Sleep -Seconds 2
+          }
+          Get-Content bench/results/server-stack.log -Tail 50
+          exit 1
+      - name: Kill test during sync (Chrome, IndexedDB, signed in)
+        run: node scripts/kill-test.mjs --target web --sync --runs 25 --check-every 10 --kill tree
+      - name: Kill test during sync (desktop, SQLite, signed in)
+        run: node scripts/kill-test.mjs --target desktop --sync --runs 25 --check-every 10
       # Phase 0's harnesses, kept (bench/README.md). pnpm test above already ran the S1 fuzz,
       # the S1 scenarios, the S2 gate and the Yjs pending test; cargo test ran S7's server side.
       - name: S3 – cgw-ydoc against Yjs 13, from .NET
@@ -211,7 +240,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -222,12 +251,18 @@ jobs:
         run: pnpm bench:phase2 -- --first-sync
       - name: Phase 1 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase1 -- --desktop
+      # Phase 3's (bench/phase3.mjs): reconnect with 1,000 waiting updates, pinning a 500-page
+      # subtree while typing, the store for 1,000 cached pages, and the desktop's cold start with
+      # no server answering; against the server stack started above.
+      - name: Phase 3 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase3 -- --desktop
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: phase-verification
           path: |
             bench/results/
+            !bench/results/phase3-corpus/
             playwright-report/
             playwright-report-desktop/
             test-results/

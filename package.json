@@ -44,6 +44,7 @@
     "bench:browser": "pnpm --filter @cgw/bench-editor build && node bench/editor/run-browser.mjs",
     "bench:phase1": "pnpm --filter @cgw/bench-editor build && node bench/phase1.mjs",
     "bench:phase2": "node bench/phase2.mjs",
+    "bench:phase3": "node bench/phase3.mjs",
     "bench:webview2-host": "cargo build -p cgw-webview2-host --release",
     "bench:sequence": "dotnet run -c Release --project bench/sequence-dotnet/S8Harness.csproj -- \"Server=(localdb)\\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true\" bench/results/s8-sequence.json",
     "bench:sheet-embed": "node bench/sheet-embed/run.mjs"

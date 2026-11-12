@@ -1,9 +1,9 @@
 // Accounts for the Phase 2 specs, against the local server stack Playwright starts
 // (scripts/server-stack.mjs --e2e): sign-up through the API, the confirmation mail read from the
 // stack's pickup folder (.cgw-dev/e2e/mail), sign-in on the API's own page as a person does.
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Browser, type Page } from '@playwright/test';
 
 export const API = process.env.E2E_API_URL ?? 'http://127.0.0.1:5280';
 const root = resolve(import.meta.dirname, '../..');
@@ -104,3 +104,27 @@ export async function signedIn(page: Page, account: TestAccount) {
 }
 
 export const syncStatus = (page: Page) => page.getByTestId('sync-status');
+
+/**
+ * The desktop app's sign-in, as desktop-cloud.spec.ts does it: the app writes the authorise URL to
+ * CGW_AUTH_URL_FILE instead of opening the system browser; a Chrome page signs in there, confirms,
+ * and is sent to the app's loopback listener.
+ */
+export async function signInDesktop(
+  page: Page,
+  browser: Browser,
+  authUrlFile: string,
+  account: TestAccount,
+) {
+  await page.getByRole('button', { name: 'Sign in to sync' }).first().click();
+  await expect.poll(() => existsSync(authUrlFile), { timeout: 15000 }).toBe(true);
+  const tab = await browser.newPage();
+  await tab.goto(readFileSync(authUrlFile, 'utf8').trim());
+  await tab.getByLabel('Email').fill(account.email);
+  await tab.getByLabel('Password').fill(account.password);
+  await tab.getByRole('button', { name: 'Sign in' }).click();
+  await tab.getByRole('button', { name: 'Continue' }).click();
+  await tab.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback/);
+  await tab.close();
+  await signedIn(page, account);
+}
