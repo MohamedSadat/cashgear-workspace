@@ -127,8 +127,11 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
     /// <summary>
     /// The named search query. Both columns hold normalised text (single spaces between words),
     /// so a word starting with a term is <c>' ' + column LIKE '% term%'</c>; with full-text, the
-    /// text side is <c>CONTAINS(SearchText, '"term*"')</c> instead. Ids are binary(16) here, as
-    /// raw SQL bypasses EF's converters.
+    /// text side is <c>CONTAINS(SearchText, '"term*"')</c> instead. LIKE compares code points (a
+    /// binary collation): both sides are already lowercased and folded, so the database's
+    /// linguistic collation would change nothing but the time, four to eight times as long over
+    /// 10,000 pages (bench/phase2.mjs). Ids are binary(16) here, as raw SQL bypasses EF's
+    /// converters.
     /// </summary>
     private async Task<List<Row>> QueryAsync(Guid workspaceId, string[] terms, bool full, Key? after, int take, CancellationToken ct)
     {
@@ -142,7 +145,7 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
         for (var i = 0; i < terms.Length; i++)
         {
             parameters.Add(new SqlParameter($"@t{i}", System.Data.SqlDbType.NVarChar, 300) { Value = "% " + EscapeLike(terms[i]) + "%" });
-            var title = $"N' ' + p.SearchTitle LIKE @t{i} ESCAPE N'\\'";
+            var title = $"(N' ' + p.SearchTitle) COLLATE {CgwDb.BinaryCollation} LIKE @t{i} ESCAPE N'\\'";
             titleHits.Add($"CASE WHEN {title} THEN 1 ELSE 0 END");
             string text;
             if (full)
@@ -150,7 +153,7 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
                 parameters.Add(new SqlParameter($"@f{i}", System.Data.SqlDbType.NVarChar, 300) { Value = "\"" + terms[i] + "*\"" });
                 text = $"EXISTS (SELECT 1 FROM PageDocDerived d WHERE d.PageId = p.Id AND CONTAINS(d.SearchText, @f{i}))";
             }
-            else text = $"EXISTS (SELECT 1 FROM PageDocDerived d WHERE d.PageId = p.Id AND N' ' + d.SearchText LIKE @t{i} ESCAPE N'\\')";
+            else text = $"EXISTS (SELECT 1 FROM PageDocDerived d WHERE d.PageId = p.Id AND (N' ' + d.SearchText) COLLATE {CgwDb.BinaryCollation} LIKE @t{i} ESCAPE N'\\')";
             where.Add($"({title} OR {text})");
         }
         var keyset = "";

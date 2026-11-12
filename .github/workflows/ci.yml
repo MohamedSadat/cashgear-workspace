@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  # The Phase 1 budget gate compares with the last run on main's uploaded results.
+  # The Phase 1 and Phase 2 budget gates compare with the last run on main's uploaded results.
   actions: read
 concurrency:
   group: ci-${{ github.ref }}
@@ -51,7 +51,7 @@ jobs:
   server:
     name: Server (.NET, SQL Server with full-text, Azurite)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -95,6 +95,32 @@ jobs:
         env:
           CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
           CGW_TEST_FULLTEXT: required
+      - name: The last run on main's Phase 2 server figures
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -n "$run" ]; then
+            gh run download "$run" --name phase2-server --dir bench/previous-run
+            found=$(find bench/previous-run -name phase2.json | head -n 1)
+            if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" bench/previous/phase2.json; fi
+          fi
+      # Phase 2's server budgets (bench/phase2.mjs): push, pull, feed, search on the full-text path,
+      # compaction and the 200-user load test, in Release, gated against the last run on main.
+      - name: Phase 2 server budgets and load test
+        run: pnpm bench:phase2 -- --server
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+          CGW_TEST_FULLTEXT: required
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase2-server
+          path: |
+            bench/results/
+            !bench/results/phase2-corpus/
 
   windows:
     name: Build and test (Windows)
@@ -185,9 +211,15 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            $found = Get-ChildItem bench/previous-run -Recurse -Filter phase1.json | Select-Object -First 1
-            if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName bench/previous/phase1.json }
+            foreach ($name in 'phase1.json', 'phase2.json') {
+              $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
+              if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
+            }
           }
+      # Phase 2's first sync (bench/phase2.mjs): a 1,000-page workspace into a fresh Chrome
+      # context's IndexedDB, against the server stack it starts, after the e2e specs.
+      - name: Phase 2 first sync, gated against the budget and the last run on main
+        run: pnpm bench:phase2 -- --first-sync
       - name: Phase 1 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase1 -- --desktop
       - uses: actions/upload-artifact@v4
