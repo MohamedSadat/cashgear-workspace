@@ -3,7 +3,8 @@
 // (LocalDB unless CGW_DEV_SQL names a server). Migrations run at the API's start, which only
 // development does; a real deployment runs the migration bundle (docs/OPERATIONS.md).
 //   pnpm dev:server                 the development stack: database cgw_dev, data in .cgw-dev
-//   node scripts/server-stack.mjs --e2e   a fresh database cgw_e2e, mail in test-results/mail
+//   node scripts/server-stack.mjs --e2e   a fresh database cgw_e2e, data and mail in .cgw-dev/e2e
+// (outside Playwright's test-results, which it empties when a run starts, a reused stack too)
 // Mail is written to a pickup folder, never sent. Ctrl+C stops all three.
 import { spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
@@ -14,8 +15,8 @@ import { root } from './lib.mjs';
 const e2e = process.argv.includes('--e2e');
 const port = Number(process.env.CGW_API_PORT ?? 5280);
 const blobPort = Number(process.env.CGW_BLOB_PORT ?? 10000);
-const data = join(root, e2e ? 'test-results/server' : '.cgw-dev');
-const mail = join(root, e2e ? 'test-results/mail' : '.cgw-dev/mail');
+const data = join(root, e2e ? '.cgw-dev/e2e' : '.cgw-dev');
+const mail = join(data, 'mail');
 const database = e2e ? 'cgw_e2e' : 'cgw_dev';
 const server =
   process.env.CGW_DEV_SQL ??

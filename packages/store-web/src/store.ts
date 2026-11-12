@@ -484,10 +484,14 @@ export class IndexedDbStore implements LocalStore {
     return out;
   }
 
-  async replaceDoc(pageId: Id, update: LocalUpdate): Promise<void> {
+  async replaceDoc(pageId: Id, update: LocalUpdate, upTo?: number): Promise<void> {
     const tx = this.tx([S.docLogs, S.docUpdates, S.docCursors, S.unsentPages], 'readwrite');
     const logs = tx.objectStore(S.docLogs);
     const found = (await request(logs.get(pageId))) as DocLog | undefined;
+    if (upTo !== undefined && (found?.snapshotCovers ?? 0) > upTo) {
+      tx.abort();
+      throw new Error('The page was compacted meanwhile');
+    }
     const log: DocLog = {
       pageId,
       nextSeq: found?.nextSeq ?? 1,
@@ -495,10 +499,13 @@ export class IndexedDbStore implements LocalStore {
       snapshotCovers: 0,
     };
     const updates = tx.objectStore(S.docUpdates);
-    updates.delete(pageRange(pageId));
+    // With `upTo`, later updates stay; the merged one stands where the last it replaces stood.
+    updates.delete(
+      upTo === undefined ? pageRange(pageId) : IDBKeyRange.bound([pageId, 0], [pageId, upTo]),
+    );
     updates.put({
       pageId,
-      localSeq: log.nextSeq++,
+      localSeq: upTo === undefined ? log.nextSeq++ : upTo,
       updateId: update.updateId,
       data: own(update.data),
       seq: null,
@@ -703,15 +710,28 @@ export class IndexedDbStore implements LocalStore {
     return row?.cursor ?? null;
   }
 
-  async beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void> {
+  async beginUpload(
+    workspaceId: Id,
+    accountId: Id,
+    ops: Operation[],
+    replaced?: Id[],
+  ): Promise<void> {
     await this.transact([S.workspaces, S.outbox], async (tx) => {
       const workspace = (await request(tx.objectStore(S.workspaces).get(workspaceId))) as
         WorkspaceRecord | undefined;
       if (!workspace) throw new Error('No such workspace');
       const outbox = tx.objectStore(S.outbox);
-      for (const key of await getAllKeys(outbox.index('workspace'), workspaceId))
-        outbox.delete(key);
-      for (const op of ops) outbox.add(op);
+      const keys = await getAllKeys(outbox.index('workspace'), workspaceId);
+      // Operations written while the upload was prepared stay, after its creates, in order.
+      const gone = replaced ? new Set(replaced) : null;
+      const kept: Operation[] = [];
+      if (gone)
+        for (const key of [...keys].sort((a, b) => Number(a) - Number(b))) {
+          const op = (await request(outbox.get(key))) as Operation;
+          if (!gone.has(op.opId)) kept.push(op);
+        }
+      for (const key of keys) outbox.delete(key);
+      for (const op of [...ops, ...kept]) outbox.add(op);
       tx.objectStore(S.workspaces).put({ ...workspace, localOnly: false, accountId });
     });
   }

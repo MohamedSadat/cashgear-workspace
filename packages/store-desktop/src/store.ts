@@ -93,8 +93,10 @@ export class DesktopStore implements LocalStore {
     this.outbox.remove(plan.settled ?? []);
     for (const id of plan.deleteWorkspaces ?? []) this.outbox.removeWorkspace(id);
     if (plan.replaceOutbox) {
-      this.outbox.removeWorkspace(plan.replaceOutbox.workspaceId);
-      this.outbox.add(plan.replaceOutbox.ops);
+      const { workspaceId, ops, replaced } = plan.replaceOutbox;
+      if (replaced) this.outbox.remove(replaced);
+      else this.outbox.removeWorkspace(workspaceId);
+      this.outbox.add(ops);
     }
     this.outbox.add(plan.outbox);
   }
@@ -253,13 +255,13 @@ export class DesktopStore implements LocalStore {
     );
   }
 
-  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void> {
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[], replaced?: Id[]): Promise<void> {
     return this.serial(async () => {
       const workspace = this.mirror.workspaces.get(workspaceId);
       if (!workspace) throw new StoreRequestError('No such workspace');
       const plan = emptyPlan();
       plan.workspaces.push({ ...workspace, localOnly: false, accountId });
-      plan.replaceOutbox = { workspaceId, ops };
+      plan.replaceOutbox = replaced ? { workspaceId, ops, replaced } : { workspaceId, ops };
       await this.writeRemote(plan);
     });
   }
@@ -339,9 +341,17 @@ export class DesktopStore implements LocalStore {
     );
   }
 
-  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void> {
+  replaceDoc(pageId: Id, update: LocalUpdate, upTo?: number): Promise<void> {
     return this.serial(async () => {
-      await this.call({ op: 'replaceDoc', pageId, updateId: update.updateId }, [update.data]);
+      await this.call(
+        {
+          op: 'replaceDoc',
+          pageId,
+          updateId: update.updateId,
+          ...(upTo === undefined ? {} : { upTo }),
+        },
+        [update.data],
+      );
     });
   }
 

@@ -321,6 +321,13 @@ export class FakeServer {
       },
       pushDoc: async (pageId, request) => {
         this.gate('pushDoc');
+        // As the server: a page it does not hold (not created yet, or not this account's) is 404.
+        if (
+          ![...this.spaces.values()].some(
+            (s) => s.members.has(account.id) && s.mirror.pages.has(pageId),
+          )
+        )
+          throw new SyncHttpError(404, 'not.found');
         let doc = this.docs.get(pageId);
         if (!doc) this.docs.set(pageId, (doc = { epoch: 0, rows: [] }));
         if (request.epoch !== doc.epoch) throw new SyncHttpError(409, 'doc.epochMismatch');

@@ -1,13 +1,13 @@
 // Accounts for the Phase 2 specs, against the local server stack Playwright starts
 // (scripts/server-stack.mjs --e2e): sign-up through the API, the confirmation mail read from the
-// stack's pickup folder, sign-in on the API's own page as a person does.
+// stack's pickup folder (.cgw-dev/e2e/mail), sign-in on the API's own page as a person does.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { expect, type Page } from '@playwright/test';
 
 export const API = process.env.E2E_API_URL ?? 'http://127.0.0.1:5280';
 const root = resolve(import.meta.dirname, '../..');
-const MAIL = join(root, 'test-results/mail');
+const MAIL = join(root, '.cgw-dev/e2e/mail');
 
 export interface TestAccount {
   email: string;

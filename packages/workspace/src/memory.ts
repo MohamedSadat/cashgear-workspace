@@ -225,13 +225,19 @@ export class MemoryStore implements LocalStore {
     return this.run(() => this.syncCursors.get(workspaceId) ?? null);
   }
 
-  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void> {
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[], replaced?: Id[]): Promise<void> {
     return this.run(() => {
       const workspace = this.mirror.workspaces.get(workspaceId);
       if (!workspace) throw new Error('No such workspace');
-      for (let i = this.outbox.length - 1; i >= 0; i--)
-        if (this.outbox[i].workspaceId === workspaceId) this.outbox.splice(i, 1);
-      this.outbox.push(...ops.map((op) => structuredClone(op)));
+      const gone = replaced ? new Set(replaced) : null;
+      const kept: Operation[] = [];
+      for (let i = this.outbox.length - 1; i >= 0; i--) {
+        const op = this.outbox[i];
+        if (op.workspaceId !== workspaceId) continue;
+        this.outbox.splice(i, 1);
+        if (gone && !gone.has(op.opId)) kept.unshift(op);
+      }
+      this.outbox.push(...ops.map((op) => structuredClone(op)), ...kept);
       const plan = emptyPlan();
       plan.workspaces.push({ ...workspace, localOnly: false, accountId });
       this.mirror.apply(plan);
@@ -311,13 +317,19 @@ export class MemoryStore implements LocalStore {
     });
   }
 
-  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void> {
+  replaceDoc(pageId: Id, update: LocalUpdate, upTo?: number): Promise<void> {
     return this.run(() => {
       const log = this.log(pageId);
+      if (upTo !== undefined && log.snapshotCovers > upTo)
+        throw new Error('The page was compacted meanwhile');
+      const later = upTo === undefined ? [] : log.updates.filter((u) => u.localSeq > upTo);
       log.snapshot = null;
       log.snapshotCovers = 0;
+      // The merged update stands where the last one it replaces stood, before those that follow.
+      const localSeq = upTo === undefined ? log.nextSeq++ : upTo;
       log.updates = [
-        { updateId: update.updateId, data: copy(update.data), localSeq: log.nextSeq++, seq: null },
+        { updateId: update.updateId, data: copy(update.data), localSeq, seq: null },
+        ...later,
       ];
       this.docCursors_.delete(pageId);
     });

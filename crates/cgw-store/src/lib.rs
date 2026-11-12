@@ -685,18 +685,44 @@ impl Store {
         let Some(data) = blobs.pop() else {
             return fail("replaceDoc: no update");
         };
+        // With `upTo`, only the snapshot and the updates up to it give way; later ones stay, and
+        // the merged update stands where the last one it replaces stood.
+        let up_to = header.get("upTo").and_then(Value::as_i64);
         let tx = self.conn.transaction()?;
         let next = next_seq(&tx, &page)?;
-        tx.execute("DELETE FROM doc_updates WHERE page_id = ?1", params![page])?;
+        let covers: i64 = tx
+            .query_row(
+                "SELECT snapshot_covers FROM doc_logs WHERE page_id = ?1",
+                params![page],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0);
+        if up_to.is_some_and(|up_to| covers > up_to) {
+            return fail("replaceDoc: the page was compacted meanwhile");
+        }
+        let (local_seq, next_after) = match up_to {
+            Some(up_to) => {
+                tx.execute(
+                    "DELETE FROM doc_updates WHERE page_id = ?1 AND local_seq <= ?2",
+                    params![page, up_to],
+                )?;
+                (up_to, next)
+            }
+            None => {
+                tx.execute("DELETE FROM doc_updates WHERE page_id = ?1", params![page])?;
+                (next, next + 1)
+            }
+        };
         tx.execute(
             "INSERT INTO doc_updates (page_id, local_seq, update_id, data, seq) VALUES (?1, ?2, ?3, ?4, NULL)",
-            params![page, next, update_id, data],
+            params![page, local_seq, update_id, data],
         )?;
         tx.execute(
             "INSERT INTO doc_logs (page_id, next_seq, snapshot, snapshot_covers) VALUES (?1, ?2, NULL, 0)
              ON CONFLICT (page_id) DO UPDATE SET next_seq = excluded.next_seq, snapshot = NULL,
                snapshot_covers = 0",
-            params![page, next + 1],
+            params![page, next_after],
         )?;
         tx.execute("DELETE FROM doc_cursors WHERE page_id = ?1", params![page])?;
         tx.commit()?;
@@ -820,6 +846,25 @@ impl Store {
         }
         if let Some(replace) = present(plan, "replaceOutbox") {
             let workspace = check_id(str_of(replace, "workspaceId")?)?;
+            // With `replaced`, only those give way; the workspace's other operations (written
+            // while the upload was prepared) follow the new ones, in their order.
+            let mut kept = Vec::new();
+            if present(replace, "replaced").is_some() {
+                let replaced: std::collections::HashSet<String> =
+                    ids_of(replace, "replaced")?.into_iter().collect();
+                let mut statement = tx.prepare(
+                    "SELECT op_id, body FROM outbox WHERE workspace_id = ?1 ORDER BY seq",
+                )?;
+                let rows = statement.query_map(params![workspace], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })?;
+                for row in rows {
+                    let (id, body) = row?;
+                    if !replaced.contains(&id) {
+                        kept.push(serde_json::from_str::<Value>(&body)?);
+                    }
+                }
+            }
             tx.execute(
                 "DELETE FROM outbox WHERE workspace_id = ?1",
                 params![workspace],
@@ -829,6 +874,7 @@ impl Store {
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
+                .chain(kept.iter())
             {
                 insert_op(&tx, op)?;
             }

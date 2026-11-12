@@ -530,6 +530,22 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.close();
     });
 
+    it('an upload keeps operations written while it was prepared, after its creates', async () => {
+      const store = await factory();
+      const { ws, a, c } = await seedTree(store);
+      const before = (await store.nextOutboxBatch(1000, ws.id)).map((o) => o.opId);
+      // Written after the upload read the workspace: not in its creates.
+      const later = op('page.update', ws.id, c.id, { title: 'Typed meanwhile' });
+      await store.applyLocalOps([later]);
+      const create = op('page.update', ws.id, a.id, { title: 'Upload' });
+      await store.beginUpload(ws.id, ACCOUNT, [create], before);
+      expect((await store.nextOutboxBatch(100, ws.id)).map((o) => o.opId)).toEqual([
+        create.opId,
+        later.opId,
+      ]);
+      await store.close();
+    });
+
     it("settles operations and takes the server's entity, unless more wait for it", async () => {
       const store = await factory();
       const { ws, a, c } = await synced(store);
@@ -755,6 +771,46 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
         [id, null, [7, 7]],
       ]);
       expect(await store.docCursor(a.id)).toBeNull();
+      await store.close();
+    });
+
+    it('replaces only what was merged: later updates stay, after the merged one', async () => {
+      const store = await factory();
+      const { a } = await seedTree(store);
+      await store.appendDocUpdates(a.id, [
+        { updateId: uuidv7(), data: bytes(1) },
+        { updateId: uuidv7(), data: bytes(2) },
+      ]);
+      const merged = await store.loadDoc(a.id);
+      const upTo = Math.max(merged.snapshotCovers, ...merged.updates.map((u) => u.localSeq));
+      // Typed while the upload merged the log.
+      const typed = uuidv7();
+      await store.appendDocUpdates(a.id, [{ updateId: typed, data: bytes(3) }]);
+      const id = uuidv7();
+      await store.replaceDoc(a.id, { updateId: id, data: bytes(1, 2) }, upTo);
+      const loaded = await store.loadDoc(a.id);
+      expect(loaded.updates.map((u) => [u.updateId, u.seq, [...u.data]])).toEqual([
+        [id, null, [1, 2]],
+        [typed, null, [3]],
+      ]);
+      // And the next append still comes after them.
+      const next = await store.appendDocUpdates(a.id, [{ updateId: uuidv7(), data: bytes(4) }]);
+      expect(next[0]).toBeGreaterThan(loaded.updates[1].localSeq);
+      await store.close();
+    });
+
+    it('refuses to replace what a compaction has covered since', async () => {
+      const store = await factory();
+      const { a } = await seedTree(store);
+      const appended = await store.appendDocUpdates(a.id, [
+        { updateId: uuidv7(), data: bytes(1) },
+        { updateId: uuidv7(), data: bytes(2) },
+      ]);
+      await store.compactDoc(a.id, bytes(9), appended[1]);
+      await expect(
+        store.replaceDoc(a.id, { updateId: uuidv7(), data: bytes(1) }, appended[0]),
+      ).rejects.toThrow();
+      expect((await store.loadDoc(a.id)).snapshot).not.toBeNull();
       await store.close();
     });
 

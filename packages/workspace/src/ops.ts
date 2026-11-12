@@ -45,7 +45,8 @@ export interface Plan {
   /** Remote plans only: the change feed's cursor to keep. */
   cursor?: { workspaceId: Id; value: number };
   /** Remote plans only: a local workspace's outbox replaced by an upload's creates. */
-  replaceOutbox?: { workspaceId: Id; ops: Operation[] };
+  /** An upload: `replaced` (all the workspace's when absent) gives way to `ops`; the rest follow. */
+  replaceOutbox?: { workspaceId: Id; ops: Operation[]; replaced?: Id[] };
 }
 
 const favKey = (workspaceId: Id, pageId: Id) => `${workspaceId}/${pageId}`;

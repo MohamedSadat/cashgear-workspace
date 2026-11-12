@@ -126,6 +126,56 @@ describe('sync engine', () => {
     expect(b.parentPageId).toBe(a.id);
   });
 
+  it("pushes a page's document only once the page itself is on the server", async () => {
+    const server = new FakeServer();
+    const store = new MemoryStore();
+    const { ws, section } = await localWorkspace(store);
+    const base = server.api(ALICE);
+    const made: PageRecord = {
+      ...(await store.readMirror(ws.id)).pages[0],
+      id: uuidv7(),
+      sectionId: section.id,
+      parentPageId: null,
+      orderKey: 'a5',
+      title: 'Made during a pass',
+    };
+    let typed = false;
+    const engine = new SyncEngine(
+      store,
+      {
+        ...base,
+        // The person makes a page and types in it while the pass pushes the outbox: its create
+        // waits in the outbox when the pass pushes documents.
+        pushOps: async (...args: Parameters<typeof base.pushOps>) => {
+          const answer = await base.pushOps(...args);
+          if (!typed) {
+            typed = true;
+            await store.applyLocalOps([newOp('page.create', ws.id, made.id, made)]);
+            await store.appendDocUpdates(made.id, [
+              { updateId: uuidv7(), data: fakeUpdate(901, 'typed') },
+            ]);
+          }
+          return answer;
+        },
+      },
+      fakeCodec,
+      { setTimer: () => null, clearTimer: () => undefined, random: () => 0.5 },
+    );
+    engine.setAccount(ALICE);
+    await engine.upload(ws.id);
+    await engine.syncOnce();
+    // Not refused and set aside: still waiting to be sent.
+    expect((await store.unsentDocUpdates(100)).map((d) => d.pageId)).toEqual([made.id]);
+    await engine.syncOnce();
+    expect(await store.unsentDocUpdates(100)).toEqual([]);
+
+    const two = device(server);
+    await two.engine.syncOnce();
+    await two.engine.pullPage(made.id);
+    const doc = await two.store.loadDoc(made.id);
+    expect(decode(fakeCodec.merge(doc.updates.map((u) => u.data))).text).toBe('typed');
+  });
+
   it('carries edits both ways within a pass: titles, moves and document updates', async () => {
     const server = new FakeServer();
     const one = device(server);

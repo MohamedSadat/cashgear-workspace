@@ -329,8 +329,15 @@ export class SyncEngine {
 
   private async pushDocs(workspace: WorkspaceRecord) {
     for (;;) {
+      // A page whose creation has not reached the server yet waits for it: its push would be 404.
+      // (Made between this pass's push of the outbox and now; the next pass sends both.)
+      const creating = new Set(
+        (await this.store.nextOutboxBatch(OUTBOX_ALL, workspace.id))
+          .filter((op) => op.type === 'page.create')
+          .map((op) => op.entityId),
+      );
       const unsent = (await this.store.unsentDocUpdates(200)).filter(
-        (doc) => !this.held.has(doc.pageId),
+        (doc) => !this.held.has(doc.pageId) && !creating.has(doc.pageId),
       );
       let pushed = 0;
       for (const doc of unsent) {
@@ -650,28 +657,41 @@ export class SyncEngine {
   async upload(workspaceId: Id): Promise<void> {
     const account = this.account;
     if (!account) throw new SyncHttpError(401, 'auth.required');
-    const mirror = await this.store.readMirror(workspaceId);
-    const workspace = mirror.workspaces[0];
+    const current = await this.store.readMirror(workspaceId);
+    const workspace = current.workspaces[0];
     if (!workspace) throw new Error('No such workspace');
     if (!workspace.localOnly) return;
+    // What the records below stand for. Anything written while the upload runs (a page made at
+    // the same time, a key typed into an open page) is not replaced, and is sent after them.
+    const replaced = (await this.store.nextOutboxBatch(OUTBOX_ALL, workspaceId)).map(
+      (op) => op.opId,
+    );
+    const snapshot = await this.store.readMirror(workspaceId);
     await this.api.createWorkspace({
       id: workspace.id,
       name: workspace.name,
       icon: workspace.icon,
     });
     const ids = new Set<number>();
-    for (const page of mirror.pages) {
+    for (const page of snapshot.pages) {
       const doc = await this.store.loadDoc(page.id);
       const parts = [...(doc.snapshot ? [doc.snapshot] : []), ...doc.updates.map((u) => u.data)];
       if (!parts.length) continue;
       const merged = parts.length === 1 ? parts[0] : this.codec.merge(parts);
       for (const id of this.codec.clientIds(merged)) ids.add(id);
-      await this.store.replaceDoc(page.id, { updateId: uuidv7(), data: merged });
+      const upTo = Math.max(doc.snapshotCovers, ...doc.updates.map((u) => u.localSeq));
+      await this.store.replaceDoc(page.id, { updateId: uuidv7(), data: merged }, upTo);
     }
     const refused = ids.size ? await this.registerAll(workspaceId, [...ids]) : new Set<number>();
     if (refused.size) throw new Error('A Yjs client id of this workspace is taken on the server');
-    const ops = uploadOps(workspace, mirror.sections, mirror.pages, mirror.favourites, uuidv7);
-    await this.store.beginUpload(workspaceId, account.id, ops);
+    const ops = uploadOps(
+      workspace,
+      snapshot.sections,
+      snapshot.pages,
+      snapshot.favourites,
+      uuidv7,
+    );
+    await this.store.beginUpload(workspaceId, account.id, ops, replaced);
     this.emit({ kind: 'mirror', workspaceId });
     this.kick(0);
   }
@@ -683,6 +703,9 @@ export class SyncEngine {
     return refused;
   }
 }
+
+/** Enough to read a workspace's whole outbox. */
+const OUTBOX_ALL = 1_000_000;
 
 function entityPage(entity: EntityRecord | null | undefined): Id | undefined {
   if (!entity) return undefined;

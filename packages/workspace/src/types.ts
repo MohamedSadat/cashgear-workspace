@@ -347,9 +347,11 @@ export interface LocalStore {
   syncCursor(workspaceId: Id): Promise<number | null>;
   /**
    * A local workspace becomes a synced one: its outbox is replaced by `ops` (its records as
-   * creates), `localOnly` goes off and `accountId` is set, in one transaction.
+   * creates), `localOnly` goes off and `accountId` is set, in one transaction. `replaced` names
+   * the operations `ops` stands for (all the workspace's when absent): any others, written while
+   * the upload was being prepared, stay, after `ops`.
    */
-  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void>;
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[], replaced?: Id[]): Promise<void>;
   /** Updates not yet on the server, of synced workspaces' pages, at most `limit`, oldest first. */
   unsentDocUpdates(limit: number): Promise<UnsentDoc[]>;
   ackDocUpdates(pageId: Id, acks: DocAck[]): Promise<void>;
@@ -357,8 +359,13 @@ export interface LocalStore {
   applyRemoteDocUpdates(pageId: Id, pull: RemoteDocPull): Promise<StoredUpdate[]>;
   docCursor(pageId: Id): Promise<DocCursor | null>;
   docCursors(workspaceId: Id): Promise<Record<Id, DocCursor>>;
-  /** The page's whole log becomes one unsent update, and its cursor goes: an upload, an epoch change. */
-  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void>;
+  /**
+   * The page's log becomes one unsent update, and its cursor goes: an upload, an epoch change.
+   * With `upTo`, only the snapshot and the updates up to that local sequence give way (what
+   * `update` was made from); later ones, written meanwhile, stay. A compaction since that covers
+   * more than `upTo` makes it throw, and nothing changes.
+   */
+  replaceDoc(pageId: Id, update: LocalUpdate, upTo?: number): Promise<void>;
   /** Assets of synced workspaces the server does not hold yet. */
   pendingAssets(limit: number): Promise<AssetRecord[]>;
   markAssetUploaded(assetId: Id): Promise<void>;
