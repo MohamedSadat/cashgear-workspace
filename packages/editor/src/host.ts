@@ -21,6 +21,9 @@ export interface EditorStrings {
   dragHandle: string;
   commandMenu: string;
   noCommands: string;
+  /** The table of contents' accessible name, and what it says on a page with no headings. */
+  tocLabel: string;
+  tocEmpty: string;
   [key: string]: string;
 }
 

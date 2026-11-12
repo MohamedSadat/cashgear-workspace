@@ -16,6 +16,7 @@ import {
 } from '@tiptap/y-tiptap';
 import type { Schema } from '@tiptap/pm/model';
 import type * as Y from 'yjs';
+import { moveIntentPlugin } from './moves';
 
 /** True for a transaction the binding made from a change that came from Yjs. */
 export function isRemoteChange(tr: Transaction): boolean {
@@ -29,7 +30,10 @@ export interface BindingOptions {
   onInvalidContent?: (error: Error) => void;
 }
 
-/** The sync plugin, undo through Yjs (only this client's changes), and the undo keys. */
+/**
+ * The sync plugin, undo through Yjs (only this client's changes), the undo keys, and the move
+ * intent (moves.ts), written in the same Yjs transaction as the move it records.
+ */
 export function yjsBinding({ fragment, onInvalidContent }: BindingOptions): AnyExtension {
   return Extension.create({
     name: 'cgwYjs',
@@ -37,6 +41,7 @@ export function yjsBinding({ fragment, onInvalidContent }: BindingOptions): AnyE
     addProseMirrorPlugins: () => [
       ySyncPlugin(fragment, { onInvalidContent: onInvalidContent ?? (() => {}) }),
       yUndoPlugin(),
+      moveIntentPlugin(fragment, isRemoteChange),
     ],
     // Always handled: the browser's own undo would edit the DOM behind ProseMirror's back.
     addKeyboardShortcuts: () => ({

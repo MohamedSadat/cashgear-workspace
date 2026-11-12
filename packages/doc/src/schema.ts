@@ -1,12 +1,15 @@
 // The block schema (DATA_MODEL.md, "Page content"), fixed by spike S1:
 //   doc: block*      block: (body | block)*      one textBody node whose `kind` sets the text kind
 // Rules that hold forever: `*` only; every attribute optional with a default; no node or attribute
-// is ever removed or renamed. Schema version 1.
+// is ever removed or renamed. Schema version 2 (version 1 plus `tableOfContents`).
 import { Extension, Mark, Node, getSchema, mergeAttributes, type AnyExtension } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 
-/** Raised for every change an older client could not draw (DATA_MODEL.md). */
-export const SCHEMA_VERSION = 1;
+/**
+ * Raised for every change an older client could not draw (DATA_MODEL.md). 1: Phase 1's blocks.
+ * 2: `tableOfContents`. Each rise has a migration (migrations.ts) and a fixture (fixtures/).
+ */
+export const SCHEMA_VERSION = 2;
 
 export const TEXT_KINDS = [
   'paragraph',
@@ -255,6 +258,8 @@ const Image = atomBody('image', {
 const FileBody = atomBody('file', { assetId: { default: null } });
 const Bookmark = atomBody('bookmark', { url: { default: null } });
 const ChildPage = atomBody('childPage', { pageId: { default: null } });
+/** Version 2: the page's headings, each a link to its block; drawn, never stored. */
+const TableOfContents = atomBody('tableOfContents', {});
 
 // Tables (DATA_MODEL.md): cells hold inline content. Header row and column are table attributes,
 // not cell types. prosemirror-tables finds the three node types by their `tableRole`.
@@ -495,6 +500,7 @@ export function schemaExtensions(): AnyExtension[] {
     FileBody,
     Bookmark,
     ChildPage,
+    TableOfContents,
     HardBreak,
     PageMention,
     Link,
@@ -509,7 +515,14 @@ export function schemaExtensions(): AnyExtension[] {
 }
 
 /** Body node types that are atoms: an id and settings, no text. */
-export const ATOM_BODIES = ['divider', 'image', 'file', 'bookmark', 'childPage'] as const;
+export const ATOM_BODIES = [
+  'divider',
+  'image',
+  'file',
+  'bookmark',
+  'childPage',
+  'tableOfContents',
+] as const;
 
 let cached: Schema | null = null;
 

@@ -22,6 +22,7 @@ import { SlashCommands, type SlashKeys } from './slash';
 import { bookmarkView, childPageView, codeBlockView, fileView, imageView } from './nodeviews/atoms';
 import { textBodyView } from './nodeviews/textBody';
 import { Tables } from './tables';
+import { TableOfContents, tableOfContentsView } from './toc';
 
 export interface BlockEditorOptions {
   element: HTMLElement;
@@ -72,6 +73,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     file: fileView,
     bookmark: bookmarkView,
     childPage: childPageView,
+    tableOfContents: tableOfContentsView,
     pageMention: pageMentionView,
   };
   const schema = schemaExtensions().map((extension) => {
@@ -87,6 +89,8 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
         isRemote: isRemoteChange,
         stats: () => stats,
         schedule: options.schedule ?? ((task) => queueMicrotask(task)),
+        // The repair is written to Yjs in place when the editor is bound (ids.ts).
+        fragment: () => (bound ? options.fragment! : null),
       }),
       ...(bound
         ? [
@@ -107,6 +111,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       Mentions.configure({ keys: () => ui.mentionKeys }),
       BlockSelection,
       Tables,
+      TableOfContents,
       Clipboard.configure({ host: getHost }),
       BlockHandle.configure({ host: getHost, ui: () => ui }),
       ...(options.extensions?.(getHost) ?? []),

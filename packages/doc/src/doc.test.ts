@@ -63,6 +63,7 @@ describe('schema', () => {
       'file',
       'bookmark',
       'childPage',
+      'tableOfContents',
       'text',
       'hardBreak',
       'pageMention',
@@ -79,7 +80,7 @@ describe('schema', () => {
       'highlight',
     ])
       expect(marks.has(name), name).toBe(true);
-    expect(SCHEMA_VERSION).toBe(1);
+    expect(SCHEMA_VERSION).toBe(2);
   });
 
   it('allows only safe link schemes', () => {

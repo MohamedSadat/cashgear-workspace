@@ -1043,3 +1043,40 @@ h3.cgw-body {
   border-radius: 4px;
   order: 10;
 }
+
+/* The table of contents (schema version 2): the page's headings as links, indented by level. */
+.cgw-tableOfContents {
+  margin-block: 4px;
+  padding: 6px 0;
+}
+.cgw-toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cgw-toc-item[data-level='2'] {
+  padding-inline-start: 1.25em;
+}
+.cgw-toc-item[data-level='3'] {
+  padding-inline-start: 2.5em;
+}
+.cgw-toc-link {
+  display: block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--cg-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--cg-border);
+  text-underline-offset: 3px;
+}
+.cgw-toc-link:hover,
+.cgw-toc-link:focus-visible {
+  background: color-mix(in srgb, var(--cg-text) 6%, transparent);
+  color: var(--cg-text);
+}
+.cgw-toc-empty {
+  margin: 0;
+  padding: 2px 6px;
+  color: var(--cg-text-secondary);
+  font-style: italic;
+}

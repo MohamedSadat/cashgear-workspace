@@ -26,7 +26,8 @@ export type BlockActionName =
   | 'file'
   | 'bookmark'
   | 'childPage'
-  | 'pageLink';
+  | 'pageLink'
+  | 'tableOfContents';
 
 export interface BlockAction {
   name: BlockActionName;
@@ -204,6 +205,13 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
       );
       editor.commands.focus();
     },
+  },
+  {
+    // Schema version 2: the page's headings, as links (toc.ts).
+    name: 'tableOfContents',
+    glyph: '☰',
+    turnInto: false,
+    apply: (editor) => insertBody(editor, editor.schema.nodes.tableOfContents.create(), 'after'),
   },
 ];
 

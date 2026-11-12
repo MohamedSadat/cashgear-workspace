@@ -6,16 +6,39 @@ import * as Y from 'yjs';
 import { uuidv7, type Id, type LocalStore } from '@cgw/workspace';
 import { writeJSON, type DocJSON } from './binding';
 import { newBlockId } from './ids';
+import { migrate, type MigrationResult } from './migrations';
+import { watchMoves, type MoveConflict } from './moves';
+import { CONTENT, LOAD, MIGRATE, MOVES, REMOTE, META, documentVersion } from './names';
 import { SCHEMA_VERSION, documentSchema } from './schema';
 
-/** The shared types inside every page's document (DATA_MODEL.md, "The Yjs document"). */
-export const CONTENT = 'content';
-export const META = 'meta';
+export { CONTENT, LOAD, META, MIGRATE, MOVES, REMOTE, documentVersion } from './names';
 
-/** Origins this layer gives Yjs transactions it makes itself, so autosave can tell them apart. */
-export const LOAD = Symbol('cgw-load');
-/** Updates pulled from the server: already in the store, never saved or pushed again. */
-export const REMOTE = Symbol('cgw-remote');
+/**
+ * What a page's document tells its owner (the shell), as it happens.
+ *
+ * - `notice` `doc.moveConflict`: another device moved a block in a way that lost this device's
+ *   edit in it, or moved a block this device moved too (moves.ts). The page's history has the
+ *   content as it was.
+ * - `stillPending`: after the retry (S1), Yjs still holds updates it cannot integrate: something
+ *   is missing on this device. The owner asks the sync engine to check (`engine.suspect`).
+ * - `quarantined`: updates in the local log did not decode; they were moved to the store's
+ *   corrupt area and the rest of the page loaded.
+ * - `newerVersion`: a pulled change raised the document's schema version above this build's;
+ *   the page is read-only from now on (D7).
+ * - `migrated`: the page was brought up to this build's schema version, as a local edit.
+ */
+export type DocEvent =
+  | {
+      kind: 'notice';
+      code: 'doc.moveConflict';
+      pageId: Id;
+      blockId: string;
+      reason: MoveConflict['reason'];
+    }
+  | { kind: 'stillPending'; pageId: Id }
+  | { kind: 'quarantined'; pageId: Id; count: number }
+  | { kind: 'newerVersion'; pageId: Id; version: number }
+  | { kind: 'migrated'; pageId: Id; from: number; to: number };
 
 export type SaveState = 'saved' | 'saving' | 'unsaved' | 'error' | 'readOnly';
 
@@ -40,6 +63,13 @@ export interface DocumentOptions {
    * synced workspace). Absent, Yjs picks one at random, as in a local-only workspace.
    */
   clientId?: number;
+  /**
+   * Whether this account may edit the page (default true). Without it nothing is written on
+   * open: no meta stamp, no schema migration.
+   */
+  canEdit?: boolean;
+  /** Told of events from the moment the page opens (`onEvent` subscribes later). */
+  onEvent?: (event: DocEvent) => void;
   /** Timers, for tests. */
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -52,6 +82,8 @@ export interface OpenReport {
   healedPending: boolean;
   /** Still pending after the retry: something this device does not have. */
   stillPending: boolean;
+  /** The schema migration this open ran, if any. */
+  migrated?: MigrationResult | null;
   /** Updates replayed from the log. */
   replayed: number;
   ms: number;
@@ -80,13 +112,9 @@ export function retryPending(
   const store = yStore(doc);
   const before = !!store.pendingStructs || !!store.pendingDs;
   if (store.pendingStructs) Y.applyUpdateV2(doc, store.pendingStructs.update, origin);
-  if (store.pendingDs) Y.applyUpdate(doc, store.pendingDs, origin);
+  // Yjs keeps its pending delete set in the V2 encoding too.
+  if (store.pendingDs) Y.applyUpdateV2(doc, store.pendingDs, origin);
   return { before, after: !!store.pendingStructs || !!store.pendingDs };
-}
-
-export function documentVersion(doc: Y.Doc): number {
-  const value = doc.getMap(META).get('schemaVersion');
-  return typeof value === 'number' ? value : 1;
 }
 
 /** A new page's document: the meta map stamped, and the given content if any. */
@@ -102,8 +130,7 @@ export function stampMeta(doc: Y.Doc, pageId: Id): void {
 export class PageDocument {
   readonly doc: Y.Doc;
   readonly fragment: Y.XmlFragment;
-  /** True when the document is newer than this build: it is shown, never written (D7, S2). */
-  readonly readOnly: boolean;
+  private newer: boolean;
   private state: SaveState;
   private readonly pending: Uint8Array[] = [];
   private maxTimer: unknown = null;
@@ -117,10 +144,13 @@ export class PageDocument {
   private closed = false;
   private readonly listeners = new Set<(state: SaveState) => void>();
   private readonly savedListeners = new Set<() => void>();
+  private readonly eventListeners = new Set<(event: DocEvent) => void>();
+  /** Block ids this session recorded moves of (for `movedTwice`, moves.ts). */
+  private readonly ownMoves = new Set<string>();
   private readonly options: Required<
-    Omit<DocumentOptions, 'setTimer' | 'clearTimer' | 'clientId'>
+    Omit<DocumentOptions, 'setTimer' | 'clearTimer' | 'clientId' | 'onEvent'>
   > &
-    Pick<DocumentOptions, 'setTimer' | 'clearTimer' | 'clientId'>;
+    Pick<DocumentOptions, 'setTimer' | 'clearTimer' | 'clientId' | 'onEvent'>;
 
   private constructor(
     readonly pageId: Id,
@@ -131,14 +161,40 @@ export class PageDocument {
     readonly report: OpenReport,
     options: DocumentOptions,
   ) {
-    this.options = { ...defaults, clientId: 0, ...options };
+    this.options = { ...defaults, clientId: 0, canEdit: true, ...options };
     this.doc = doc;
     this.fragment = doc.getXmlFragment(CONTENT);
-    this.readOnly = documentVersion(doc) > SCHEMA_VERSION;
-    this.state = this.readOnly ? 'readOnly' : 'saved';
+    this.newer = documentVersion(doc) > SCHEMA_VERSION;
+    this.state = this.newer ? 'readOnly' : 'saved';
     this.logLength = logLength;
     this.lastSeq = lastSeq;
-    if (!this.readOnly) doc.on('update', this.onUpdate);
+    if (options.onEvent) this.eventListeners.add(options.onEvent);
+    if (!this.newer) doc.on('update', this.onUpdate);
+    doc.getMap(MOVES).observe(this.onMoves);
+  }
+
+  /** True when the document is newer than this build: it is shown, never written (D7, S2). */
+  get readOnly(): boolean {
+    return this.newer;
+  }
+
+  /**
+   * Opening with edit rights: the schema migration, then the meta stamp, each a local edit that
+   * is saved and pushed. Nothing for a page newer than this build, or for someone who may only
+   * read it, or for a page this device holds nothing of: that comes from the server, meta and
+   * all, with its pull (a new page's first update carries its meta already).
+   */
+  private prepare(holdsContent: boolean): MigrationResult | null {
+    if (this.newer || !this.options.canEdit || !holdsContent) return null;
+    // An empty document never stamped (a detached page) is simply this build's version.
+    if (!this.doc.getMap(META).has('schemaVersion') && this.fragment.length === 0) {
+      stampMeta(this.doc, this.pageId);
+      return null;
+    }
+    const migrated = migrate(this.doc, MIGRATE);
+    stampMeta(this.doc, this.pageId);
+    if (migrated) this.emit({ kind: 'migrated', pageId: this.pageId, ...migrated });
+    return migrated;
   }
 
   /** Replays the page's log into a new Y.Doc. An update that will not apply is set aside. */
@@ -163,6 +219,10 @@ export class PageDocument {
       }
     }, LOAD);
     const pending = retryPending(doc);
+    // Yjs takes a fresh client id when an update it is given writes as its own ("another client
+    // seems to be using it"). Here that is this device's own log, written as the session's id,
+    // which no other session holds (the engine's pool): it stays the id this session writes as.
+    if (options.clientId) doc.clientID = options.clientId;
     if (bad.length) await store.quarantineUpdates(pageId, bad, 'The update does not decode');
     const lastSeq = stored.updates.reduce(
       (max, u) => Math.max(max, u.localSeq),
@@ -184,15 +244,14 @@ export class PageDocument {
       report,
       options,
     );
-    // A page this device holds nothing of comes from the server, meta and all, with its pull:
-    // stamping it here would be a write of its own (refused for someone who may only read it).
-    // A new page's first update carries its meta already.
-    if (!page.readOnly && (stored.snapshot || stored.updates.length)) stampMeta(doc, pageId);
+    report.migrated = page.prepare(!!stored.snapshot || stored.updates.length > 0);
+    if (bad.length) page.emit({ kind: 'quarantined', pageId, count: bad.length });
+    if (pending.after) page.emit({ kind: 'stillPending', pageId });
     return page;
   }
 
   /** A page that is not in any store: previews, tests, the scratch page. */
-  static detached(pageId: Id, doc = new Y.Doc()): PageDocument {
+  static detached(pageId: Id, doc = new Y.Doc(), options: DocumentOptions = {}): PageDocument {
     const none: DocStore = {
       loadDoc: async () => ({ snapshot: null, snapshotCovers: 0, updates: [] }),
       appendDocUpdates: async (_id, updates) => updates.map((_, i) => i + 1),
@@ -207,9 +266,9 @@ export class PageDocument {
       0,
       0,
       { quarantined: 0, healedPending: false, stillPending: false, replayed: 0, ms: 0 },
-      {},
+      options,
     );
-    if (!page.readOnly) stampMeta(doc, pageId);
+    page.report.migrated = page.prepare(true);
     return page;
   }
 
@@ -231,6 +290,29 @@ export class PageDocument {
       this.savedListeners.delete(listener);
     };
   }
+
+  /** Events as they happen (see DocEvent). */
+  onEvent(listener: (event: DocEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => {
+      this.eventListeners.delete(listener);
+    };
+  }
+
+  private emit(event: DocEvent) {
+    for (const listener of this.eventListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error('A document event listener failed:', error);
+      }
+    }
+  }
+
+  private readonly onMoves = (event: Y.YMapEvent<unknown>, transaction: Y.Transaction) => {
+    if (!transaction.local || transaction.origin === LOAD || transaction.origin === REMOTE) return;
+    for (const key of event.keysChanged) this.ownMoves.add(key);
+  };
 
   private setState(state: SaveState) {
     if (state === this.state) return;
@@ -323,16 +405,39 @@ export class PageDocument {
    */
   applyRemote(updates: Uint8Array[]): void {
     if (!updates.length || this.closed) return;
-    this.doc.transact(() => {
-      for (const update of updates) {
-        try {
-          Y.applyUpdate(this.doc, update, REMOTE);
-        } catch (error) {
-          console.warn('A pulled update did not apply:', error);
+    const check = watchMoves(this.doc, (origin) => origin === REMOTE, this.ownMoves);
+    let pending: { after: boolean };
+    try {
+      this.doc.transact(() => {
+        for (const update of updates) {
+          try {
+            Y.applyUpdate(this.doc, update, REMOTE);
+          } catch (error) {
+            console.warn('A pulled update did not apply:', error);
+          }
         }
-      }
-    }, REMOTE);
-    retryPending(this.doc, REMOTE);
+      }, REMOTE);
+      pending = retryPending(this.doc, REMOTE);
+    } finally {
+      for (const conflict of check.finish(updates))
+        this.emit({
+          kind: 'notice',
+          code: 'doc.moveConflict',
+          pageId: this.pageId,
+          blockId: conflict.blockId,
+          reason: conflict.reason,
+        });
+    }
+    if (pending.after) this.emit({ kind: 'stillPending', pageId: this.pageId });
+    const version = documentVersion(this.doc);
+    if (!this.newer && version > SCHEMA_VERSION) {
+      // Another device moved the page to a schema this build does not know. What was typed here
+      // is saved; nothing more is written (D7).
+      this.newer = true;
+      this.doc.off('update', this.onUpdate);
+      void this.flush().then(() => this.setState('readOnly'));
+      this.emit({ kind: 'newerVersion', pageId: this.pageId, version });
+    }
   }
 
   /** Keeps a history snapshot now (before a restore, or when asked). */
@@ -350,8 +455,10 @@ export class PageDocument {
     await this.flush();
     this.closed = true;
     this.doc.off('update', this.onUpdate);
+    this.doc.getMap(MOVES).unobserve(this.onMoves);
     this.listeners.clear();
     this.savedListeners.clear();
+    this.eventListeners.clear();
   }
 }
 

@@ -3,6 +3,7 @@
 // (D4); nothing here runs in response to a remote change.
 import type { DocJSON } from './binding';
 import { newBlockId } from './ids';
+import { readOnlyView } from './readonly';
 import type { TextKind } from './schema';
 
 type Mark = 'bold' | 'italic' | 'underline' | 'strike' | 'code';
@@ -138,27 +139,13 @@ export function references(doc: DocJSON): { pages: Set<string>; assets: Set<stri
 
 /**
  * The document as this schema can draw it: a node type it does not know becomes a placeholder
- * paragraph saying so (used only for a read-only view; the stored document is never rewritten).
+ * saying so (used only for a read-only view; the stored document is never rewritten). The same
+ * as `readOnlyView` (readonly.ts), which also says what it replaced.
  */
 export function readableJSON(
   doc: DocJSON,
   known: { nodes: ReadonlySet<string>; marks: ReadonlySet<string> },
   placeholder: string,
 ): DocJSON {
-  const visit = (node: DocJSON, parent: string): DocJSON => {
-    if (!known.nodes.has(node.type)) {
-      const note: DocJSON = {
-        type: 'textBody',
-        attrs: { kind: 'callout', icon: '⚠️' },
-        content: [text(placeholder)],
-      };
-      return parent === 'block' ? note : { type: 'block', attrs: { id: null }, content: [note] };
-    }
-    return {
-      ...node,
-      marks: node.marks?.filter((mark) => known.marks.has(mark.type)),
-      content: node.content?.map((child) => visit(child, node.type)),
-    };
-  };
-  return visit(doc, '');
+  return readOnlyView(doc, { block: placeholder }, { known }).json;
 }

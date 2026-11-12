@@ -6,11 +6,17 @@
 //   base-62 characters of SHA-256 of `id:k`, or of the next k whose result is not already an id
 //   in the page. Every client computes the same. The repair is its own transaction, dispatched
 //   after the remote change; one appended to it would never reach Yjs.
+// - In a bound editor the repair is written to the Yjs document itself, the attribute set in
+//   place (Phase 3). Through ProseMirror, the id-aware binding (Q18) writes a block whose id
+//   changed as a new element: two devices repairing the same duplicate at once then each made a
+//   new copy, which was a duplicate again, one more copy per round. Set in place, the two
+//   repairs write the same value to the same element and converge on two copies.
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { AddMarkStep, RemoveMarkStep, ReplaceStep } from '@tiptap/pm/transform';
 import { digest } from 'lib0/hash/sha256';
+import * as Y from 'yjs';
 
 /**
  * Whether a transaction only typed, deleted or formatted text inside text blocks. Such a change
@@ -98,6 +104,55 @@ export interface BlockIdOptions {
    * on its own, as a local transaction the binding writes to Yjs.
    */
   schedule: (task: () => void) => void;
+  /**
+   * The page's Yjs content, when the editor is bound to one: the repair is then written there,
+   * in place (see the top of this file). Behind a function, as `stats` is.
+   */
+  fragment?: () => Y.XmlFragment | null;
+}
+
+/** The origin of the duplicate repair written to Yjs: a local edit, saved and pushed, not undone. */
+export const REPAIR = Symbol('cgw-id-repair');
+
+/** The duplicate repair on the Yjs tree: the same rule, the same document order, as duplicateRepairs. */
+export function yjsDuplicateRepairs(
+  fragment: Y.XmlFragment,
+): { element: Y.XmlElement; id: string }[] {
+  const elements: Y.XmlElement[] = [];
+  const walk = (parent: Y.XmlFragment | Y.XmlElement) => {
+    for (const child of parent.toArray()) {
+      if (!(child instanceof Y.XmlElement) || child.nodeName !== 'block') continue;
+      elements.push(child);
+      walk(child);
+    }
+  };
+  walk(fragment);
+  const idOf = (element: Y.XmlElement) => {
+    const id = element.getAttribute('id');
+    return typeof id === 'string' ? id : null;
+  };
+  const taken = new Set<string>();
+  for (const element of elements) {
+    const id = idOf(element);
+    if (id) taken.add(id);
+  }
+  const seen = new Map<string, number>();
+  const fixes: { element: Y.XmlElement; id: string }[] = [];
+  for (const element of elements) {
+    const id = idOf(element);
+    if (id == null) continue;
+    let k = seen.get(id) ?? 0;
+    if (k === 0) {
+      seen.set(id, 1);
+      continue;
+    }
+    let candidate = repairId(id, k);
+    while (taken.has(candidate)) candidate = repairId(id, ++k);
+    seen.set(id, k + 1);
+    taken.add(candidate);
+    fixes.push({ element, id: candidate });
+  }
+  return fixes;
 }
 
 export const blockIdKey = new PluginKey<number>('cgwBlockIds');
@@ -141,7 +196,7 @@ export function duplicateRepairs(doc: PMNode): { pos: number; id: string }[] {
   return fixes;
 }
 
-export function blockIdPlugin({ isRemote, stats: counters, schedule }: BlockIdOptions) {
+export function blockIdPlugin({ isRemote, stats: counters, schedule, fragment }: BlockIdOptions) {
   const stats = counters();
   return new Plugin<number>({
     key: blockIdKey,
@@ -205,6 +260,17 @@ export function blockIdPlugin({ isRemote, stats: counters, schedule }: BlockIdOp
               return true;
             });
             stats.remoteNulls = nulls;
+            const content = fragment?.() ?? null;
+            if (content?.doc) {
+              const inYjs = yjsDuplicateRepairs(content);
+              if (!inYjs.length) return;
+              stats.repaired += inYjs.length;
+              // The binding shows it in the editor as it shows any change made in Yjs.
+              content.doc.transact(() => {
+                for (const { element, id } of inYjs) element.setAttribute('id', id);
+              }, REPAIR);
+              return;
+            }
             const fixes = duplicateRepairs(view.state.doc);
             if (!fixes.length) return;
             const tr = view.state.tr;
@@ -224,6 +290,7 @@ export const BlockIds = Extension.create<BlockIdOptions>({
     isRemote: () => false,
     stats: () => newStats(),
     schedule: (task) => queueMicrotask(task),
+    fragment: () => null,
   }),
   addProseMirrorPlugins() {
     return [blockIdPlugin(this.options)];

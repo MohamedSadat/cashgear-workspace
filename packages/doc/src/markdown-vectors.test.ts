@@ -374,6 +374,17 @@ function cases(): Omit<Vector, 'markdown'>[] {
         { type: 'block', attrs: { id: null } },
       ),
     },
+    {
+      // Schema version 2: a table of contents is drawn from the page's headings, never written.
+      name: 'a table of contents writes nothing',
+      doc: docOf(
+        block({ type: 'tableOfContents' }),
+        heading(1, 'Title'),
+        paragraph('After'),
+        bullet(['Item'], [block({ type: 'tableOfContents', attrs: {} })]),
+        block({ type: 'tableOfContents' }, [paragraph('Child of a table of contents')]),
+      ),
+    },
     { name: 'an empty document', doc: { type: 'doc', content: [] } },
     { name: 'a document with no content', doc: { type: 'doc' } },
   ];

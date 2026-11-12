@@ -3167,6 +3167,130 @@
     "markdown": "- \n\n  \n\nfirst body\n\n> second body\n\ntwo\n\n---\n\nunknown kind\n\nno attrs\n"
   },
   {
+    "name": "a table of contents writes nothing",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "tableOfContents"
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "heading",
+                "level": 1
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Title"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item"
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "tableOfContents",
+                  "attrs": {}
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "tableOfContents"
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "paragraph"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Child of a table of contents"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "# Title\n\nAfter\n\n- Item\n\n  Child of a table of contents\n"
+  },
+  {
     "name": "an empty document",
     "doc": {
       "type": "doc",

@@ -13,5 +13,21 @@
     "tableCell",
     "tableRow",
     "textBody"
+  ],
+  "2": [
+    "block",
+    "bookmark",
+    "childPage",
+    "codeBlock",
+    "divider",
+    "file",
+    "hardBreak",
+    "image",
+    "pageMention",
+    "table",
+    "tableCell",
+    "tableOfContents",
+    "tableRow",
+    "textBody"
   ]
 }

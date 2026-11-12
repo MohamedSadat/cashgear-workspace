@@ -1,0 +1,115 @@
+{
+  "about": "State-hash vectors (Phase 3 contracts, section 2), written by scripts/state-hash-vectors.mjs with plain Yjs; read by packages/doc (stateHash) and crates/cgw-ydoc (state_hash). Do not edit by hand.",
+  "yjs": "13.6.33",
+  "vectors": [
+    {
+      "name": "empty",
+      "why": "A document with nothing in it: no clients, no deletes.",
+      "update": "AAA=",
+      "text": "v1;sv=;ds=",
+      "hash": "340499d3ba7e2b54e9a2f12f4707b92573f71a5599554b39b1a999acd6b6ab52"
+    },
+    {
+      "name": "one client",
+      "why": "One client typed five characters: clock 5, nothing deleted.",
+      "update": "AQEBAAQBAXQFaGVsbG8A",
+      "text": "v1;sv=1:5;ds=",
+      "hash": "9c447ba16f9c36f142738681953010401fd53975ba4dc47d2c92f006cd886c51"
+    },
+    {
+      "name": "several clients",
+      "why": "Three clients, ids not in order, one the largest 32-bit id; sorted by client.",
+      "update": "AwH/////DwAEAQF0BmdhbW1hIAKsAgAEAQF0BmFscGhhIESsAgACPiABBwCErAIFBWJldGEgAA==",
+      "text": "v1;sv=7:5,300:8,4294967295:6;ds=",
+      "hash": "3999cf338e4453114c0f15e076b635b377b1c7627d66aa6d5359ae6d3e5a68da"
+    },
+    {
+      "name": "deletions, neighbouring and apart",
+      "why": "Deletes made one at a time: neighbours merge into one range, others stay apart.",
+      "update": "AQcFAAQBAXQBYYEFAAKEBQIDZGVmgQUFAoQFBwNpamuBBQoChAUMA25vcAEFAwECBgILAg==",
+      "text": "v1;sv=5:16;ds=5:1-3,5:6-8,5:11-13",
+      "hash": "7cc4cac287dfcccdb8041a2be4711025b4c2ba26007971f7f022cdcf386a1b2b"
+    },
+    {
+      "name": "deletions across clients",
+      "why": "Each client deletes the other's text.",
+      "update": "AgMWAIQLAwFigRYAAoQWAgFiAgsAAQEBdAGECwADYWFhAhYBAQILAQAB",
+      "text": "v1;sv=11:4,22:4;ds=11:0-1,22:1-3",
+      "hash": "d297b7900c064924d800edb1de80b831b23c481e4f031bf0ffd80a23129917f5"
+    },
+    {
+      "name": "a gc'd document",
+      "why": "Garbage collection on: deleted content is collected, its ranges stay deleted.",
+      "update": "AQQJAAEBAXQ4hAk3/gFsaW5lIDgKbGluZSA5CmxpbmUgMTAKbGluZSAxMQpsaW5lIDEyCmxpbmUgMTMKbGluZSAxNApsaW5lIDE1CmxpbmUgMTYKbGluZSAxNwpsaW5lIDE4CmxpbmUgMTkKbGluZSAyMApsaW5lIDIxCmxpbmUgMjIKbGluZSAyMwpsaW5lIDI0CmxpbmUgMjUKbGluZSAyNgpsaW5lIDI3CmxpbmUgMjgKbGluZSAyOQpsaW5lIDMwCmxpbmUgMzEKbGluZSAzMgpsaW5lIDMzCmxpbmUgMzQKbGluZSAzNQpsaW5lIDM2CmxpbmUgMzcKbGluZSAzOApsaW5lIDM5CiEBAW0BawGoCbYCAX0CAQkCADi2AgE=",
+      "text": "v1;sv=9:312;ds=9:0-56,9:310-311",
+      "hash": "e8d8b6aad1210bae227eede3f03afea757ed20963d3e86ea5fc8838d570c7b77"
+    },
+    {
+      "name": "the same document with deletions kept",
+      "why": "Garbage collection off: the same history, so the same text and hash as the one before.",
+      "update": "AQQJAAQBAXQ4bGluZSAwCmxpbmUgMQpsaW5lIDIKbGluZSAzCmxpbmUgNApsaW5lIDUKbGluZSA2CmxpbmUgNwqECTf+AWxpbmUgOApsaW5lIDkKbGluZSAxMApsaW5lIDExCmxpbmUgMTIKbGluZSAxMwpsaW5lIDE0CmxpbmUgMTUKbGluZSAxNgpsaW5lIDE3CmxpbmUgMTgKbGluZSAxOQpsaW5lIDIwCmxpbmUgMjEKbGluZSAyMgpsaW5lIDIzCmxpbmUgMjQKbGluZSAyNQpsaW5lIDI2CmxpbmUgMjcKbGluZSAyOApsaW5lIDI5CmxpbmUgMzAKbGluZSAzMQpsaW5lIDMyCmxpbmUgMzMKbGluZSAzNApsaW5lIDM1CmxpbmUgMzYKbGluZSAzNwpsaW5lIDM4CmxpbmUgMzkKKAEBbQFrAX0BqAm2AgF9AgEJAgA4tgIB",
+      "text": "v1;sv=9:312;ds=9:0-56,9:310-311",
+      "hash": "e8d8b6aad1210bae227eede3f03afea757ed20963d3e86ea5fc8838d570c7b77"
+    },
+    {
+      "name": "a page",
+      "why": "XML fragment \"content\" with blocks, text bodies, marks and Arabic, and the meta map; a second client types, unformats, deletes text and a block.",
+      "update": "AgHqBwDE6Qch6QcRAiogF+kHACgBBG1ldGENc2NoZW1hVmVyc2lvbgF9ASgBBG1ldGEFZXBvY2gBfQAoAQRtZXRhBnBhZ2VJZAF3JDAxOTNmMGMyLTdhMWUtNzAwMC04MDAwLTAwMDAwMDAwMDAwMQcBB2NvbnRlbnQDBWJsb2NrBwDpBwMDCHRleHRCb2R5BwDpBwQGBADpBwUFUGxhbnMoAOkHAwJpZAF3DEFhMEJiMUNjMkRkMygA6QcDBGtpbmQBdwdoZWFkaW5nKADpBwMFbGV2ZWwBfQGH6QcDAwVibG9jawcA6QcOAwh0ZXh0Qm9keQcA6QcPBgQA6QcQBEJvbGSE6QcUASCB6QcVBITpBxkHcGxhaW4sIEHpBxEBwekHFOkHFQGE6QcgCtmF2LHYrdio2KcoAOkHDgJpZAF3DEVlNEZmNUdnNkhoNygA6QcOBGtpbmQBdwlwYXJhZ3JhcGiB6QcOAQHpBwMWBCECKgE=",
+      "text": "v1;sv=1001:43,1002:2;ds=1001:22-26,1001:33-35,1001:42-43",
+      "hash": "1ccee15c7713c5116f753237db41b0416cbcfec8119cd4276d2a17b598deda2c"
+    },
+    {
+      "name": "a merged update",
+      "why": "Each keystroke's update from two clients, merged with Y.mergeUpdates; parts are the updates in order.",
+      "update": "AgEqAIQpAgQgdHdvAikABAEBdANvbmVEKQAFemVybyABKQEAAw==",
+      "parts": [
+        "AQEpAAQBAXQDb25lAA==",
+        "AQEpAAQBAXQDb25lAA==",
+        "AQEqAIQpAgQgdHdvAA==",
+        "AQEqAIQpAgQgdHdvAA==",
+        "AQEpA0QpAAV6ZXJvIAA=",
+        "AAEpAQAD",
+        "AQEpA0QpAAV6ZXJvIAEpAQAD"
+      ],
+      "text": "v1;sv=41:8,42:4;ds=41:0-3",
+      "hash": "cd4cb11eb1525d8a00cbce2cb0042c985208561f701c4cfdeec09657ef268a4a"
+    },
+    {
+      "name": "an update with only deletions",
+      "why": "A base state, then an update with no structs and a delete set; the merged update, parts the two.",
+      "update": "AQE9AAQBAXQUa2VlcCB0aGlzLCBkcm9wIHRoYXQBPQIABQsJ",
+      "parts": ["AQE9AAQBAXQUa2VlcCB0aGlzLCBkcm9wIHRoYXQA", "AAE9AgAFCwk="],
+      "text": "v1;sv=61:20;ds=61:0-5,61:11-20",
+      "hash": "58ab24a0464cb9e6ea6f404765bbf5c2843ab0cf383020e70ec1796668aae391"
+    },
+    {
+      "name": "deletions alone",
+      "why": "The deletions-only update by itself: what it deletes is not in the document, so nothing counts.",
+      "update": "AAE9AgAFCwk=",
+      "text": "v1;sv=;ds=",
+      "hash": "340499d3ba7e2b54e9a2f12f4707b92573f71a5599554b39b1a999acd6b6ab52"
+    },
+    {
+      "name": "arrays and maps",
+      "why": "An array with a run deleted, a map key set five times (four values deleted), a key removed.",
+      "update": "AQZNAAgBBGxpc3QCfQF9AoFNAQOITQQDfQZ9B30IIQEIc2V0dGluZ3MFdGhlbWUEqE0LAXcHdGhlbWUgNCEBCHNldHRpbmdzBW90aGVyAQFNAwIDCAQNAQ==",
+      "text": "v1;sv=77:14;ds=77:2-5,77:8-12,77:13-14",
+      "hash": "af0f31135a568e61bccdef4370e3e09d478eb89a5deeaa0f22c3208f5d064837"
+    },
+    {
+      "name": "large clocks",
+      "why": "One client past clock 65,535, one long deleted range, a client id of 2^31.",
+      "update": "AQOAgICACAAEAQF0ZHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHiBgICAgAhjiJsEhICAgIAI65sEhAd4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHgBgICAgAgBZIibBA==",
+      "text": "v1;sv=2147483648:70000;ds=2147483648:100-69100",
+      "hash": "c261e28be00a436e4195feb40789cde04db22236d0be7da267160ad348bc4934"
+    },
+    {
+      "name": "a gap",
+      "why": "Updates 2 to 4 of one client without the first, merged (Yjs writes a skip): nothing is integrated.",
+      "update": "AQJYBoRYBQdzZWNvbmQgxFgBWAIGdGhpcmQgAVgBAAI=",
+      "parts": ["AQFYBoRYBQdzZWNvbmQgAA==", "AAFYAQAC", "AQFYDcRYAVgCBnRoaXJkIAA="],
+      "text": "v1;sv=;ds=",
+      "hash": "340499d3ba7e2b54e9a2f12f4707b92573f71a5599554b39b1a999acd6b6ab52"
+    }
+  ]
+}

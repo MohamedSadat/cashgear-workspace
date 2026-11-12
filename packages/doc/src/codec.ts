@@ -3,8 +3,12 @@
 import * as Y from 'yjs';
 import type { DocCodec } from '@cgw/workspace';
 import { SCHEMA_VERSION } from './schema';
+import { stateHash } from './stateHash';
 
-export const docCodec: DocCodec = {
+/** `DocCodec` with the Phase 3 addition (contracts, section 3), whether or not the type has it yet. */
+export type DocCodecV3 = DocCodec & { stateHash(parts: Uint8Array[]): Promise<string> };
+
+export const docCodec: DocCodecV3 = {
   schemaVersion: SCHEMA_VERSION,
   merge: (updates) => (updates.length === 1 ? updates[0] : Y.mergeUpdates(updates)),
   /** The ids an update writes structs as (not those whose content it only deletes). */
@@ -12,4 +16,6 @@ export const docCodec: DocCodec = {
     const { from, to } = Y.parseUpdateMeta(update);
     return [...to.keys()].filter((client) => (to.get(client) ?? 0) > (from.get(client) ?? 0));
   },
+  /** The canonical state hash (contracts, section 2) of the document these parts make. */
+  stateHash: (parts) => stateHash(parts),
 };
