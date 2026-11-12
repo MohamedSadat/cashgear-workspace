@@ -12,7 +12,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 0: Scaffold and spikes | Done, 2026-11-11 (S6 misses one budget by 1 to 3 ms; Q18 to Q20 raised) | `phase-0` |
 | Phase 1: Core block editor (MVP) | Done, 2026-11-11 (0.1.0; the screen-reader pass is by the accessibility tree) | `phase-1`, `v0.1.0` |
 | Phase 2: Cloud document platform | Done, 2026-11-12 (0.2.0; deployment is yours: the package is rehearsed) | `phase-2`, `v0.2.0` |
-| Phase 3: Offline | Not started | |
+| Phase 3: Offline | Done, 2026-11-12 (0.3.0; the Mac's sign-in and sync against the deployed API are yours) | `phase-3`, `v0.3.0` |
 | Phase 4: Workspace databases | Not started | |
 | Phase 5: Cash Gear ecosystem | Not started | |
 | Phase 6: Collaboration | Not started | |
@@ -304,28 +304,71 @@ Stand-ins waiting on Track U
 
 ## Phase 3: Offline
 
+Done 2026-11-12. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43230351447
+(commit `3a1e9f3`, all jobs green); the Mac's:
+https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43230347697 (the same commit), and
+run 43198666321 (commit `7df33d5`) for the figures quoted below. Local results are from `bench/results/` on the reference machine (Windows 10 19045,
+24 threads, Chrome 157, Edge, WebView2, SQL Server LocalDB, Azurite), the e2e server stack
+(`scripts/server-stack.mjs --e2e`) on LocalDB. Answers and defaults are in `DECISIONS.md`
+(2026-11-12: Phase 3); what changed for users is in `CHANGELOG.md` (0.3.0).
+
 Milestones
 
-- [ ] M3.1 Offline availability
-- [ ] M3.2 Robust sync loop
-- [ ] M3.3 Conflicts
-- [ ] M3.4 Versions and migrations
-- [ ] M3.5 Crash and recovery
-- [ ] M3.6 macOS
+- [x] M3.1 Offline availability. Commits `8759f6a` (store schema 3: pins), `aea77b0` (pins in the engine), `438a624` (the app: offline start, the service worker, Settings → Offline, the marks), `404c610` (the marks read again when the network goes)
+- [x] M3.2 Robust sync loop. Commits `aea77b0` (backoff, `Retry-After`, sleep, batches, the feed past its retention, resync), `ef09131` (the server: read-committed snapshot, the sequence lock, retention jobs, the worker's lag)
+- [x] M3.3 Conflicts. Commits `aea77b0` (every row, set-aside and recover), `d327665` (the move intent and its notice), `438a624` (notices and recovered pages), `a6e70c7` (pages the account may only view open read-only)
+- [x] M3.4 Versions and migrations. Commits `8759f6a` (store 3 on all three stores, fixtures from the released code), `d327665` (document schema 2: `tableOfContents`, migrations on open, read-only for an older build)
+- [x] M3.5 Crash and recovery. Commits `d327665` (the state hash), `aea77b0` (repair, quarantine), `ef09131` (`StateHashJob`), `a86dc88` (kill tests during sync, compaction and migration)
+- [x] M3.6 macOS. Commits `1231ce5`, `7df33d5`; signing in against the deployed API is yours (below)
+
+Notes
+
+- The worker's lag (Phase 2's note) is gone: with 200 people typing, the time from an update's push to others' pulls serving it is 2.2 s at p95 (it was 26 to 60 s), now gated at 5 s in `bench/phase2.mjs` (`loadVisibleP95`). Validation runs on its own loop, and the database reads with read-committed snapshot, so a membership check no longer waits on a page's validation.
+- The convergence simulator found two tree bugs before any test did: a scoped resync dropped a page moved out from under its root on the server (its document and unsent edits set aside though the page still existed); and a trash applied to the subtree as this device saw it, not as the server did, left a page wrong for ever. Both are fixed and scripted (`conflicts.test.ts`, "a trash that races a move out of the subtree").
+- The repair path found that the server judged a repair's update as forged when it carried other clients' blocks. The worker now judges an update by what it adds to the server's state (its diff against the state vector), which also lets a device send back what the server lost.
+- The proof stream found four bugs, fixed in `2af879b` and `404c610`, each with a test that failed before: the sidebar marked pages opened or made this session "Not available offline" when the network went; a status report that finished after a later one showed "Signed out" for about 200 ms at start; the offline and error status, and danger buttons, failed contrast in the dark theme (undefined colour tokens); the selected row of a page not on this device failed contrast. CI's first run of the specs found a fifth (`3a1e9f3`): opening the trash straight after "Move to trash" landed on "No page is open", because the app went home once the trash was written, whatever was open by then.
+- Chrome loses IndexedDB writes it reported committed when only its browser process is ended at once: a page that writes nothing but a counter lost a session's completed transactions in 5 of 70 trials, 1 of 40 with strict durability, 0 of 40 when the whole process tree is ended. The app cannot prevent it, so the web kill tests end the tree, as Phase 1's did; the desktop's SQLite store is killed at once and loses nothing.
+- The first long desktop runs came back signed out after 44 of 1,049 kills (nothing typed was lost: the changes waited for a sign-in). Those runs shared one keychain entry with other desktop tests running beside them, which rolled its refresh token from under them. With an entry of each run's own and nothing else running, 220 runs had none (`kill-sync-desktop-100b.json`, `kill-sync-desktop-isolated.json`). One real window remains, accepted: a kill after the server rolls the refresh token and before the keychain holds the new one (or between the entry's two parts) leaves a spent token; started again within 30 s (OpenIddict's reuse leeway) the app signs in as before, later it asks for a sign-in, and its changes wait for it. The window is one token request's round trip, at start and every 15 minutes.
+- The v0.2.0 draft release's Windows app talks to `http://127.0.0.1:5280`: `release.yml` did not pass the API's address to the web build (fixed in `1231ce5`). The draft must not be published; 0.3.0's is right.
+- An old build meets a migrated page: v0.2.0 opens a version-2 page it has held read-only, sends nothing, and the server's bytes do not change. A version-2 page it never held opens editable until it is reopened; typing there is refused (426) and the server keeps its bytes, so nothing reaches anyone (`old-build.spec.ts` records it). It cannot be fixed in a released build.
+- Left for later: a workspace made in the first moment after the app loads, before the first account check answers, stays "On this device only" (seen once in the suite).
 
 Exit criteria
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| Start, open, edit and create offline; sync on reconnect with no action | | |
-| Every conflict row scripted, with its notice | | |
-| Old build against a migrated document: read-only, nothing pushed | | |
-| 1,000 kills during sync lose nothing reported saved | | |
-| Three-client convergence simulator in CI | | |
-| Access granted and revoked while offline | | |
-| Store and document migrations from every earlier version | | |
-| macOS app installs, signs in, edits offline, syncs | | |
-| Benchmarks within budget | | |
+| Start, open, edit and create offline; sync on reconnect with no action | Pass | `offline.spec.ts` "offline: the app starts, pinned pages open, edits and a new page are saved, and all syncs on its own" in Chrome, Edge and the built desktop app (in Edge: synced 351 ms after the network returned, the other device had everything at 451 ms); "pages made on this device are not marked "not available offline" when the network goes" (Chrome, Edge and the desktop app); `offline.test.ts` "starts offline with the cached account, says what waits, then syncs with no action" |
+| Every conflict row scripted, with its notice | Pass | Metadata and across the models: `packages/workspace/src/sync/conflicts.test.ts` (20 rows, each ending in the stated result and its notice code); inside a page: `packages/editor/src/conflicts.test.ts` "inside a page: every row of the conflict table" (11 rows), "the move notice, measured"; end to end: `offline.spec.ts` "a page edited offline and deleted for good elsewhere comes back as a recovered page" |
+| Old build against a migrated document: read-only, nothing pushed, the server's bytes unchanged | Pass | `old-build.spec.ts` "the v0.2.0 build shows a migrated page read-only, sends nothing, and the server keeps its bytes" (Chrome and Edge; v0.2.0's web build from the tag, which is what the v0.2.0 desktop app embeds): the banner, typing changes nothing, no `/doc/updates` or `/doc/repair` request, the state hash and update bytes equal before and after; `migrations.test.ts` "a build that knows only version 1 meets a version-2 page (S2)" |
+| 1,000 kills during sync lose nothing reported saved | Pass | `node scripts/kill-test.mjs --sync`, signed in to a synced workspace, the API cut through CDP in some runs and lost while typing in others; every 25 runs and at the end the server's text of the page must equal the device's. Web (Chrome, IndexedDB): 1,000 runs in 60 min, 0 lost, 0 doubled, 162 kills during a request (85 during a push), 171 runs offline and 77 cut while typing, 40 server checks equal, final text 29,026 characters on both sides, durable p50 166 ms, p95 205 ms (`kill-sync-web-1000.json`). Desktop (SQLite): 928 + 100 + 120 runs, 0 lost, 215 kills during a request and 36 server checks equal in the first alone (`kill-sync-desktop-1000.json`, `kill-sync-desktop-100b.json`, `kill-sync-desktop-isolated.json`). Compaction: killed during it 28 times on the web (26 found committed after the reopen, 1 rolled back) and 15 on the desktop (all committed), 0 lost (`kill-compaction-web.json`, `kill-sync-web-1000.json`, `kill-compaction-desktop.json`). Store migration: 200 kills over the v1 and v2 fixtures (39 before the copy, 94 during it, 37 after it before the commit, 30 after); after each kill the store gave the release's exact answers (6,811 reads, 0 differences; in 13 runs the copy was seen too late to check read by read), the `workspace.v{n}.db` copy matched the old file byte for byte, and the app opened the folder all 200 times (`kill-migration-200.json`). CI runs 25 of each and 10 migration kills (in the evidence run: 0 failures, the server's text equal to the device's on both targets, 375 reads checked after the migration kills) |
+| Three-client convergence simulator in CI | Pass | `packages/doc/src/sync-sim/convergence.test.ts`: three clients, random partitions, loss, duplication and reordering, on documents and the tree together; 4 seeds of 40 rounds in every `pnpm test` and CI run; locally 60 seeds of 200 rounds (about 590 updates, 260 operations and 350 faults a seed) and 8 seeds of 800, all converged |
+| Access granted and revoked while offline | Pass | `conflicts.test.ts` "access granted and revoked while a device is offline" (granted; revoked; granted then revoked and revoked then granted), "edit access removed while offline", "read access removed too"; `AccessReviewTests` "The_worker_refuses_an_update_whose_pusher_may_no_longer_edit_the_page"; `viewonly.spec.ts` "a page shared to view opens read-only and switches when edit is given" |
+| Store and document migrations from every earlier version | Pass | SQLite: `migrates_every_earlier_store_with_all_it_held` over stores written by the v0.1.0 and v0.2.0 builds (`crates/cgw-store/tests/fixtures`), `a_migration_that_fails_leaves_the_store_as_it_was`, `refuses_a_store_from_a_newer_version`; IndexedDB: "opens a version-1 store at version 3 with all it held", "opens a version-2 store at version 3 with all it held, sync state included", "refuses a store a newer version wrote, and leaves it as it was"; documents: `migrations.test.ts` (the version-1 fixture holding every block kind, "runs when a page opens with edit rights, is saved like an edit, and loses nothing", "two devices migrating at once converge on version 2 with the content untouched", "does not run for someone who may only read the page") |
+| macOS app installs, signs in, edits offline, syncs | Installs and edits offline: pass on the runner. Signs in and syncs: yours, once the API is deployed | Run 43198666321 (`macos.yml`, `scripts/macos-acceptance.mjs` through the test-only bridge, `bench/results/macos-acceptance.json`): installed from the DMG (codesign passes); started with no server reachable, a workspace and a page made and typed into, kept across a restart and across ⌘Q straight after typing, a second page made offline; a `cashgear-workspace://` link opened this copy, cold and running; the native sign-in (PKCE, the loopback listener) against a stand-in token endpoint kept the refresh token in the login keychain in two parts, refreshed with exactly it after a restart, and removed it on sign-out; the update from 0.2.0 to 0.2.1 through a local feed took 2.8 s, restarted and kept every page. The release-shaped universal build passed its checks (both architectures, the bridge absent). Signing in on the real API's page and syncing is in the same run, skipped until `CGW_MACOS_API_BASE`, `CGW_MACOS_TEST_EMAIL` and `CGW_MACOS_TEST_PASSWORD` name the deployed API. Signed and notarised once the `APPLE_*` secrets exist |
+| Benchmarks within budget | Pass | Below |
+
+Benchmarks (`bench/phase3.mjs`, gated in CI against the budgets and the last run on `main`)
+
+| Budget | Limit | CI (run 43230351447) | Local |
+| --- | --- | --- | --- |
+| Reconnect with 1,000 waiting updates across 50 pages | 30 s | 2.3 s | 3.4 s |
+| Cold start offline (desktop, median of 5) | the online budget, 1,500 ms | 877 ms (online 910 ms) | 1,271 ms (online 1,277 ms) |
+| Pin a 500-page subtree | 2 min | 8.8 s | 11.4 s |
+| Typing while it pins: keystroke to next frame, p95 | 33 ms | 17.1 ms | 20.4 ms |
+| Local store for 1,000 cached pages | tracked | 3.6 MB of IndexedDB, 1.3 MB of it documents | 3.6 MB of IndexedDB, 1.2 MB of it documents |
+
+The workspace is made through the API as a client makes one (1,000 pages in two subtrees, and a
+page of 200 blocks), validated by the worker before anything is timed; then a fresh Chrome profile
+signs in. The 1,000 updates are made in the real app while offline (20 saved edits on each of 50
+pages, each save one update, as autosave makes them); the time is from the network's return to
+"Synced", after which the server's text of each page must hold its last word. Pinning is the first
+subtree pinned from its page menu while a key is typed into the open 200-block page every 35 ms,
+until all 500 pages are on the device. Cold start offline is the built desktop app, signed in with
+a synced workspace, started five times with no server answering (its window's and its native
+side's requests through a proxy that is not there): process start to the first editable page,
+measured the same way as Phase 1's cold start online beside it. CI's figures are from GitHub's 4-thread Windows runner. This run was the first
+with Phase 3's figures, so it had no earlier run on `main` to compare with: the regression half of
+the gate starts with the next one.
 
 ## Phase 4: Workspace databases
 
