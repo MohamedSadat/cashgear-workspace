@@ -4,8 +4,10 @@
 //! only (ARCHITECTURE.md, Security): the local store takes one of a fixed set of requests in a
 //! binary frame, never SQL; saving a file opens the native dialog here, so no command takes a path
 //! from the page. A deep link (`cashgear-workspace://p/{pageId}`) can only choose one of the app's
-//! routes (crates/cgw-native).
+//! routes (crates/cgw-native). Signing in to the Workspace API happens here too (auth.rs): the
+//! refresh token stays on this side, in the OS keychain, and the page only gets access tokens.
 
+mod auth;
 mod updates;
 
 use std::path::PathBuf;
@@ -147,6 +149,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(DeepLinks::default())
+        .manage(auth::Auth::from_env())
         .setup(|app| {
             let dir = data_dir(app.handle())?;
             let store = Store::open(&dir).map_err(|error| error.to_string())?;
@@ -167,7 +170,10 @@ fn main() {
             take_deep_link,
             app_info,
             updates::update_check,
-            updates::update_install
+            updates::update_install,
+            auth::auth_sign_in,
+            auth::auth_token,
+            auth::auth_sign_out
         ])
         .run(tauri::generate_context!())
         .expect("the desktop app failed to start");

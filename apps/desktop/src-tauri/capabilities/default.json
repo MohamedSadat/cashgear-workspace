@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core events, setting its theme, closing after the last save, and opening links in the system browser. App commands (the store, saving a file) need no permission.",
+  "description": "The main window: core events, setting its theme, closing after the last save, and opening links in the system browser. App commands (the store, saving a file, updates, deep links, signing in) need no permission.",
   "windows": ["main"],
   "permissions": [
     "core:default",

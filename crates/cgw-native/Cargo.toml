@@ -1,10 +1,32 @@
 [package]
 name = "cgw-native"
-description = "Desktop helpers with no Tauri in them: deep links read into app routes, and file names made safe"
+description = "Desktop helpers with no Tauri in them: deep links read into app routes, file names made safe, and the sign-in to the Workspace API (PKCE, the loopback callback, the keychain)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
 
+# Every crate below is already in the app's tree (Tauri, its updater), except the keychain's.
 [dependencies]
+base64 = "0.23"
+getrandom = "0.3"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+# The client Tauri and its updater already build, on the OS certificate store (SChannel on
+# Windows): rustls' defaults bring root certificates whose CDLA-Permissive-2.0 the licence gate
+# refuses (apps/desktop/src-tauri/Cargo.toml).
+reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
+tokio = { version = "1", features = ["net", "io-util", "time", "sync", "rt"] }
+# The keyring ecosystem's library for applications; each OS's store is a crate of its own.
+keyring-core = "1"
+
+[target.'cfg(windows)'.dependencies]
+# Windows Credential Manager.
+windows-native-keyring-store = { version = "1", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Keychain Services.
+apple-native-keyring-store = { version = "1", features = ["keychain"] }

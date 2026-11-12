@@ -1,5 +1,9 @@
 //! Desktop helpers that need no Tauri, so they are tested on their own: reading a deep link into
-//! one of the app's routes, and making a file name from what the page suggests.
+//! one of the app's routes, making a file name from what the page suggests, and the sign-in to the
+//! Workspace API ([`auth`]) with its refresh token in the OS keychain ([`keychain`]).
+
+pub mod auth;
+pub mod keychain;
 
 /// The app's own scheme (`plugins.deep-link` in tauri.conf.json). Test installs register another.
 pub const SCHEME: &str = "cashgear-workspace";

@@ -12,8 +12,48 @@ const bytes = (answer: ArrayBuffer | Uint8Array | number[]) =>
       ? new Uint8Array(answer)
       : new Uint8Array(answer);
 
+/**
+ * The API's origin, from the build (`VITE_CGW_API`). The native side signs in only to the bases
+ * it was built to allow (`CGW_API_BASES`, apps/desktop/src-tauri/src/auth.rs), and the window's CSP
+ * lists the same ones.
+ */
+export const apiBase =
+  (import.meta.env.VITE_CGW_API as string | undefined) ?? 'http://127.0.0.1:5280';
+
+/**
+ * A sign-in command's failure (`{ code, message }`, crates/cgw-native/src/auth.rs). An unreachable
+ * server becomes a TypeError, as fetch reports one, so the API client counts it as offline rather
+ * than as signed out.
+ */
+const authFailure = (error: unknown): Error => {
+  const failure = (typeof error === 'object' && error !== null ? error : {}) as {
+    code?: unknown;
+    message?: unknown;
+  };
+  const message = typeof failure.message === 'string' ? failure.message : String(error);
+  return failure.code === 'network' ? new TypeError(message) : new Error(message);
+};
+
+const authCommand = async <T>(command: string, args: Record<string, unknown>): Promise<T> => {
+  try {
+    return await invoke<T>(command, { apiBase, ...args });
+  } catch (error) {
+    throw authFailure(error);
+  }
+};
+
 export const desktopPlatform: WorkspacePlatform = {
   kind: 'desktop',
+  apiBase,
+  // PKCE in the system browser, back to a loopback listener on the native side, which keeps the
+  // refresh token in the OS keychain (D16). Only short-lived access tokens reach this page, and
+  // only in memory; the device's name is the computer's.
+  auth: {
+    kind: 'bearer',
+    signIn: (language) => authCommand<boolean>('auth_sign_in', { language, deviceName: null }),
+    token: () => authCommand<string | null>('auth_token', {}),
+    signOut: () => authCommand<void>('auth_sign_out', {}),
+  },
   setWindowTheme: (theme) => getCurrentWindow().setTheme(theme),
   // External links open in the system browser, never inside the app's window.
   openExternal: (url) => openUrl(url),
