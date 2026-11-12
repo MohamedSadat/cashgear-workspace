@@ -46,13 +46,13 @@ interface LocalStore {
   settleOps(results: OpResult[]): Promise<void>;          // answers' entities enter the mirror
   applyRemote(batch: RemoteBatch): Promise<void>;         // feed or tree: upserts, deletes, cursor
   syncCursor(workspaceId: Id): Promise<number | null>;
-  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[]): Promise<void>;
+  beginUpload(workspaceId: Id, accountId: Id, ops: Operation[], replaced?: Id[]): Promise<void>;
   unsentDocUpdates(limit: number): Promise<UnsentDoc[]>;
   ackDocUpdates(pageId: Id, acks: DocAck[]): Promise<void>;
   applyRemoteDocUpdates(pageId: Id, pull: RemoteDocPull): Promise<StoredUpdate[]>;
   docCursor(pageId: Id): Promise<DocCursor | null>;
   docCursors(workspaceId: Id): Promise<Record<Id, DocCursor>>;
-  replaceDoc(pageId: Id, update: LocalUpdate): Promise<void>;
+  replaceDoc(pageId: Id, update: LocalUpdate, upTo?: number): Promise<void>;
   pendingAssets(limit: number): Promise<AssetRecord[]>;
   markAssetUploaded(assetId: Id): Promise<void>;
 
@@ -271,7 +271,8 @@ pass.
 
 1. On start, on regaining the network, on a timer while online, and after any local change:
 2. Push the outbox, oldest first.
-3. Push unsent document updates, page by page.
+3. Push unsent document updates, page by page; a page whose `page.create` still waits in the
+   outbox (made since step 2) waits for the next pass, since the server does not hold it yet.
 4. Pull the change feed until `more` is false.
 5. Pull documents for held pages whose head sequence moved.
 6. Upload queued assets (each with its own retry state).
@@ -290,7 +291,18 @@ are kept aside.
 each page's log (snapshot and updates) is merged into one update, its client ids registered; the
 outbox is replaced by the workspace's records as creates, parents first, then trash roots
 (deepest first) and favourites; the loop then sends the rest, assets included. An interrupted
-upload resumes from the outbox.
+upload resumes from the outbox. Nothing written while the upload is prepared is lost: only the
+operations it read before it read the workspace give way to its creates (later ones follow them),
+and only the updates it merged give way to the merged one (later ones stay after it; a local
+compaction in between makes it stop and start again).
+
+**Access changes from moves** (Phase 2): the server writes an `access` change when a page with
+pages under it moves, when a move or a fallback (a restore or create whose parent has gone) makes
+a page `Restricted` to keep its access, and when pages cross between a shared and a private
+section. The client resyncs that subtree, as for a change to an access list, so it never keeps
+pages it lost or misses pages it gained. The client's own planner does not know these rules: the
+server refuses what they forbid (`access.denied`), and the refused operation's subtree is fetched
+again.
 
 ### What the user sees
 

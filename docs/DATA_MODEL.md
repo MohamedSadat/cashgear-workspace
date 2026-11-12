@@ -261,10 +261,27 @@ How access is decided, on the server, for every request:
 As built in Phase 2 (`Cgw.Core/Access.cs`, `Cgw.Core/Sharing`): a page in a private section takes
 no access list and no link. Changing a page's list raises its `Version` (`GET` sends it as an
 `ETag`, `PUT` takes `If-Match`) and writes an `access` change to the feed, `revoke` when anyone
-could lose access, else `grant`, so clients refetch the subtree. A share link reads its page and
-the pages under it, except restricted pages and everything under them, and trashed pages; the
-token is 32 random bytes, stored as its SHA-256, sent in the `X-Share-Token` header, and an
-unknown, revoked or expired link gets the same 404 as a missing page.
+could lose access, else `grant`, so clients refetch the subtree. The list's entries are shown
+only to someone with `full` on the page; others see whether it is restricted and their own level.
+
+A page never falls back to a looser access than it had. Moving a page so that a different ancestor
+decides its access needs `full` on it, and the page keeps its access: it becomes `Restricted`, with
+rows copied from the chain that decided it. A restore or a create whose parent has gone, and so
+lands at the top of the section, keeps the old chain's access the same way. Moving between a
+shared and a private section needs `full` on every page moved; so does deleting a subtree for
+good. Each of these writes an `access` change, as does any move of a page with pages under it.
+
+A share link reads its page and the pages under it, except restricted pages, pages hidden from the
+workspace (a `workspace` row of `none`) and everything under either, and trashed pages; it reads
+each as the worker's derived JSON, never the Yjs updates (which still carry text deleted moments
+before). The token is 32 random bytes, stored as its SHA-256, sent in the `X-Share-Token` header,
+and an unknown, revoked or expired link gets the same 404 as a missing page.
+
+A guest sees only themselves and the people named on pages they can see (no addresses but their
+own), only sections that hold a page they can see, and no other member's changes in the feed. A
+removed member's rows and waiting invitations go with them; a used invitation works again only
+while its person is still a member. The worker refuses a pushed update whose author can no longer
+edit the page when it decides, so a revoke cannot be outrun by a push.
 
 Granularity stops at the page (D8). Field names in `PagePermissions` leave room for groups as a
 `PrincipalType` later.

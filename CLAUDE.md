@@ -107,7 +107,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm bench:phase1 [-- --desktop]` | Phase 1's budgets, gated against the budgets and `bench/previous/phase1.json` |
 | `node scripts/updater-key.mjs` | Made the updater's key once: private half straight into the repo's secrets, public half into `tauri.conf.json`. Refuses to replace it |
 | `pnpm dev:web` / `pnpm dev:desktop` | Vite dev server on port 5273; Tauri dev window on it |
-| `pnpm dev:server` | The server stack (`scripts/server-stack.mjs`): Azurite, the API on `http://127.0.0.1:5280` and the worker, database `cgw_dev` on LocalDB, mail in `.cgw-dev/mail`. `--e2e` (Playwright starts it) uses a fresh `cgw_e2e` and `test-results/mail` |
+| `pnpm dev:server` | The server stack (`scripts/server-stack.mjs`): Azurite, the API on `http://127.0.0.1:5280` and the worker, database `cgw_dev` on LocalDB, mail in `.cgw-dev/mail`. `--e2e` (Playwright starts it, or reuses one already running) uses a fresh `cgw_e2e`, data and mail in `.cgw-dev/e2e` |
 | `node scripts/server-publish.mjs` | The deploy package: `target/deploy/cgw-server-<version>.zip` |
 | `node scripts/deploy-rehearsal.mjs` | The package installed on a scratch database, smoke-tested, then backed up, restored elsewhere and compared (`bench/results/deploy-rehearsal.json`) |
 | `pnpm bench:s3` | S3: Yjs writes a corpus, `cgw-ydoc` processes it from .NET, Yjs checks it (`S3_DOCS`, `S3_BIG_BYTES`) |
@@ -229,7 +229,8 @@ Added as they are found, grouped by phase.
 - EF Core cannot order by a member of a record it projected to; order before the projection.
 - `SqlQueryRaw` rows read `binary(16)` ids as `byte[]` (`GuidBytes.FromBytes`).
 - The server stack runs the API and worker from a copy of their build output
-  (`.cgw-dev/run`, `test-results/server/run`), so a build while it runs is not blocked.
+  (`.cgw-dev/run`, `.cgw-dev/e2e/run`), so a build while it runs is not blocked. Its data is never
+  under `test-results/`: Playwright empties that folder when a run starts.
 - ASP.NET Core antiforgery with `SecurePolicy=Always` refuses plain http: the dev stack sets
   `Api__AllowHttp` (refused in Production). In-process tests run on https and never see it.
 - The antiforgery header wins over the form field: a "no token" test removes the client's

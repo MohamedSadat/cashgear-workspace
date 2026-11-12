@@ -491,7 +491,7 @@ in `SYNC_DESIGN.md`.
 | Area | Routes |
 | --- | --- |
 | Account | `POST /account/register`, `/account/confirm`, `/account/password/forgot`, `/account/password/reset`; `GET /account/me`; `GET`, `DELETE /account/devices/{id}`; OpenIddict's `/connect/authorize`, `/connect/token`, `/connect/logout` |
-| Workspaces | `GET`, `POST /workspaces`; `GET`, `PATCH`, `DELETE /workspaces/{id}`; `GET`, `PATCH`, `DELETE /workspaces/{id}/members`; `POST /workspaces/{id}/invites`, `POST /invites/{token}/accept` (as built: people join only by invitation, so no answer says whether an address has an account) |
+| Workspaces | `GET`, `POST /workspaces`; `GET`, `PATCH`, `DELETE /workspaces/{id}`; `GET`, `PATCH`, `DELETE /workspaces/{id}/members`; `POST /workspaces/{id}/invites`, `POST /invites/accept` (as built: the token in the body, never in a path a server logs; people join only by invitation, so no answer says whether an address has an account) |
 | Metadata sync | `POST /workspaces/{id}/ops`; `GET /workspaces/{id}/changes?after=&limit=`; `GET /workspaces/{id}/tree?root=` (scoped resync) |
 | Documents | `GET /pages/{id}/doc?after=`; `POST /pages/{id}/doc/updates`; `GET /pages/{id}/doc/json` (read-only view for old clients) |
 | Assets | `POST /workspaces/{id}/assets` → upload ticket; `POST /assets/{id}/complete`; `GET /assets/{id}/url` |
