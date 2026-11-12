@@ -92,6 +92,7 @@ export function RowMenu({
   y,
   onRename,
   onAddInside,
+  onAddDatabase,
   onClose,
   onError,
 }: {
@@ -101,6 +102,8 @@ export function RowMenu({
   y: number;
   onRename: () => void;
   onAddInside: () => void;
+  /** "Add a database inside", empty or from a CSV (a database holds only its rows: not on one). */
+  onAddDatabase?: (from: 'new' | 'csv') => void;
   onClose: () => void;
   onError: (error: unknown) => void;
 }) {
@@ -111,6 +114,7 @@ export function RowMenu({
   const favourite = session.mirror.isFavourite(session.workspaceId, pageId);
   // A page the account may only view: nothing here changes it (the server checks again).
   const editable = canEditPage(page);
+  const database = page.kind === 'database';
   const favouriteItem = {
     label: t(favourite ? 'workspace.unfavourite' : 'workspace.favourite'),
     onSelect: () => void session.setFavourite(pageId, !favourite).catch(onError),
@@ -125,13 +129,35 @@ export function RowMenu({
         editable
           ? [
               { label: t('workspace.rename'), onSelect: onRename },
-              { label: t('workspace.addSubpage'), onSelect: onAddInside },
+              ...(database
+                ? []
+                : [
+                    { label: t('workspace.addSubpage'), onSelect: onAddInside },
+                    ...(onAddDatabase
+                      ? [
+                          { label: t('databases.addInside'), onSelect: () => onAddDatabase('new') },
+                          {
+                            label: t('databases.importCsvInside'),
+                            onSelect: () => onAddDatabase('csv'),
+                          },
+                        ]
+                      : []),
+                  ]),
               favouriteItem,
-              {
-                label: t(page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate'),
-                onSelect: () =>
-                  void session.updatePage(pageId, { isTemplate: !page.isTemplate }).catch(onError),
-              },
+              // A database is not copied as a template (its rows are not pages to copy).
+              ...(database
+                ? []
+                : [
+                    {
+                      label: t(
+                        page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate',
+                      ),
+                      onSelect: () =>
+                        void session
+                          .updatePage(pageId, { isTemplate: !page.isTemplate })
+                          .catch(onError),
+                    },
+                  ]),
               ...offlineMenuItems(cloud, session, pageId, t),
               {
                 label: t('workspace.moveToTrash'),

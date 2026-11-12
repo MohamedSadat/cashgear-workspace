@@ -68,7 +68,7 @@ public sealed class OperationsTests(ServerFixture server)
         using var manifest = JsonDocument.Parse(Read("cgw-export.json"));
         var root = manifest.RootElement;
         Assert.Equal("cash-gear-workspace-export", root.GetProperty("format").GetString());
-        Assert.Equal(1, root.GetProperty("version").GetInt32());
+        Assert.Equal(2, root.GetProperty("version").GetInt32());
         Assert.Equal(ws.Id, root.GetProperty("workspace").GetProperty("id").GetGuid());
         Assert.Equal(["Shared", "Private"], root.GetProperty("sections").EnumerateArray().Select(s => s.GetProperty("name").GetString()));
         var pages = root.GetProperty("pages").EnumerateArray().ToDictionary(p => p.GetProperty("id").GetGuid());

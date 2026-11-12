@@ -1080,3 +1080,65 @@ h3.cgw-body {
   color: var(--cg-text-secondary);
   font-style: italic;
 }
+
+/* A database view (schema version 3): a frame the host draws the database into. While it is far
+   from the viewport it is unmounted and keeps its height; before it was ever drawn it reserves
+   some room, so mounting it does not move the page much. */
+.cgw-databaseView {
+  margin-block: 6px;
+}
+.cgw-database-frame {
+  inline-size: 100%;
+}
+.cgw-database-frame:empty {
+  min-block-size: 120px;
+  border-radius: 6px;
+  background: var(--cg-surface-subtle);
+}
+.cgw-database-placeholder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--cg-border);
+  border-radius: 6px;
+  color: var(--cg-text-secondary);
+  font-style: italic;
+}
+.cgw-database-choose {
+  padding: 2px 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 5px;
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font: inherit;
+  font-style: normal;
+  cursor: pointer;
+}
+.cgw-database-choose:hover,
+.cgw-database-choose:focus-visible {
+  border-color: var(--cg-accent);
+}
+
+/* A date in a line (schema version 3), drawn in the interface language. */
+.cgw-date-mention {
+  border-radius: 4px;
+  padding-inline: 2px;
+  color: var(--cg-text-secondary);
+  white-space: nowrap;
+  cursor: default;
+}
+.cgw-date-mention::before {
+  content: '@';
+  opacity: 0.7;
+}
+.cgw-date-mention[aria-haspopup] {
+  cursor: pointer;
+}
+.cgw-date-mention[aria-haspopup]:hover {
+  background: color-mix(in srgb, var(--cg-text) 6%, transparent);
+}
+.cgw-date-mention[data-invalid='true'] {
+  text-decoration: line-through;
+}

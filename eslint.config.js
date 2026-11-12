@@ -119,4 +119,42 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The database views are given a DatabaseHost (ARCHITECTURE.md, Dependency rules): they read
+    // records and rows through it and change them only by operations it applies.
+    files: ['packages/database/src/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.ts', '**/*.test.tsx', '**/testing/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@cgw/shell', '@cgw/shell/*', '@cgw/web', '@cgw/editor', '@cgw/editor/*'],
+              message: 'The database views do not depend on the shell or the editor.',
+            },
+            stores,
+            {
+              group: ['@cgw/api', '@cgw/api/*'],
+              message: 'The database views reach the server only through their DatabaseHost.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...[
+          'localStorage',
+          'sessionStorage',
+          'indexedDB',
+          'fetch',
+          'XMLHttpRequest',
+          'WebSocket',
+        ].map((name) => ({
+          name,
+          message: 'The database views never save, load or call the network.',
+        })),
+      ],
+    },
+  },
 );

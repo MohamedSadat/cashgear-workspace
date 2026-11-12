@@ -143,7 +143,7 @@ public static class Users
 
 /// <summary>
 /// The ASP.NET Core rate limiter (ARCHITECTURE.md, Rate limiting): per IP on anonymous routes,
-/// per user on the rest, tighter on sign-in, ticket redemption, push and search. The desktop's
+/// per user on the rest, tighter on sign-in, ticket redemption, push, search and database import. The desktop's
 /// token requests (<c>/connect/token</c>, and <c>/connect/revoke</c>, which OpenIddict answers
 /// before routing, through the global limiter) have a bucket of their own, so an office behind one
 /// address refreshing its tokens does not use up the sign-in forms'. Limits per minute are in
@@ -158,6 +158,7 @@ public static class RateLimits
     public const string Push = "push";
     public const string Search = "search";
     public const string Preview = "preview";
+    public const string Import = "import";
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -195,6 +196,7 @@ public static class RateLimits
             options.AddPolicy(Push, c => Window("push:" + Who(c), Limit(Push, 600)));
             options.AddPolicy(Search, c => Window("search:" + Who(c), Limit(Search, 240)));
             options.AddPolicy(Preview, c => Window("preview:" + Who(c), Limit(Preview, 60)));
+            options.AddPolicy(Import, c => Window("import:" + Who(c), Limit(Import, 20)));
         });
     }
 }

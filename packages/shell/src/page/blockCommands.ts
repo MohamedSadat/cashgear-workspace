@@ -18,7 +18,12 @@ export function registerBlockCommands(services: ShellServices, t: TFunction): ()
         en.blocks[action.name],
         ar.blocks[action.name],
       ],
-      when: () => !!services.editor.current?.editor.isEditable,
+      // Offered where the editor can do it: "Database" needs a page that may hold one, "Linked
+      // view" a host that can choose one (`BlockAction.available`).
+      when: () => {
+        const editor = services.editor.current;
+        return !!editor?.editor.isEditable && (action.available?.(editor.host()) ?? true);
+      },
       run: () => {
         const editor = services.editor.current;
         if (editor) return action.apply(editor.editor, editor.host());

@@ -19,7 +19,7 @@ import { UpdateButton, UpdateCheck, useUpdates } from './frame/Updates';
 import { applyLanguage, createI18n, type Language } from './i18n';
 import { hasCloud, type WorkspacePlatform } from './platform';
 import { navigate, parseRoute, routeHash, useHash } from './route';
-import { WorkspaceSession } from './session';
+import { WorkspaceSession, isRowRecord, type AnyPage } from './session';
 import { Sidebar, useMirror } from './sidebar/Sidebar';
 import { Breadcrumbs } from './page/PageHeader';
 import { PageMenu, openHistory, pageEvents } from './page/PageMenu';
@@ -31,7 +31,7 @@ import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
 // The palette loads with the frame: keys typed straight after Ctrl+K must reach its field.
 import { Palette } from './search/Palette';
 import { ThemeController } from './theme';
-import { normaliseText } from '@cgw/workspace';
+import { normaliseText, type Id, type RowRecord } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
 import { Cloud, type CloudNotice } from './cloud/cloud';
 import {
@@ -41,6 +41,10 @@ import {
   SyncStatusLabel,
   UploadBanner,
 } from './cloud/CloudUi';
+import { DatabaseHostContext } from './database/context';
+import { DatabaseDialogs, requestCsvImport, requestNewDatabase } from './database/dialogs';
+import { ShellDatabaseHost } from './database/host';
+import { assetsOf } from './page/editorHost';
 
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
 // (ARCHITECTURE.md, Performance: Startup).
@@ -51,6 +55,10 @@ const ShareDialog = lazy(() =>
 );
 const SharedView = lazy(() =>
   import('./cloud/SharedView').then((m) => ({ default: m.SharedView })),
+);
+// A database's own page: the database views' chunk, loaded when one opens.
+const DatabasePage = lazy(() =>
+  import('./database/DatabasePage').then((m) => ({ default: m.DatabasePage })),
 );
 
 export interface WorkspaceAppProps {
@@ -157,6 +165,32 @@ function Starting({ failed, platform }: { failed: unknown; platform: WorkspacePl
   );
 }
 
+/**
+ * The row a route names (rows are not in the mirror's pages): from the mirror, else looked for in
+ * the store (its database's rows are read then). Undefined while it is looked for, null if this
+ * device does not have it.
+ */
+function useRowRoute(session: WorkspaceSession, rowId: Id | null): RowRecord | null | undefined {
+  useMirror(session);
+  const [missing, setMissing] = useState<Id | null>(null);
+  const known = rowId ? session.mirror.rowRecords.get(rowId) : undefined;
+  const found = !!known;
+  useEffect(() => {
+    if (!rowId || found) return;
+    let live = true;
+    void session.findRow(rowId).then(
+      (row) => live && !row && setMissing(rowId),
+      () => live && setMissing(rowId),
+    );
+    return () => {
+      live = false;
+    };
+  }, [session, rowId, found]);
+  if (!rowId) return null;
+  if (known) return known;
+  return missing === rowId ? null : undefined;
+}
+
 function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud | null }) {
   const { t, i18n } = useTranslation();
   const services = useShell();
@@ -165,6 +199,25 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
   const [openDoc, setOpenDoc] = useState<PageDocument | null>(null);
   useMirror(session);
   useEffect(() => session.onSwitch(() => rerender((n) => n + 1)), [session]);
+
+  // The database views' host over this session: one for the session, told when the server's
+  // connection comes; the refusals it meets are shown as notices.
+  const reportError = useRef<(error: unknown) => void>(() => undefined);
+  const databases = useMemo(
+    () =>
+      new ShellDatabaseHost({
+        session,
+        assets: assetsOf(session, (name, bytes, type) =>
+          services.platform.saveFile(name, bytes, type),
+        ),
+        openExternal: (url) => void services.platform.openExternal(url),
+        saveFile: (name, bytes, type) => services.platform.saveFile(name, bytes, type),
+        onError: (error) => reportError.current(error),
+      }),
+    [session, services],
+  );
+  useEffect(() => () => databases.dispose(), [databases]);
+  useEffect(() => databases.connect(cloud ? cloud.databaseSync() : null), [databases, cloud]);
 
   // Starting with no page asked for (the desktop window, a bare address), the last page visited
   // opens, as it was left.
@@ -216,7 +269,14 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     [services, t, setLanguage],
   );
 
-  const page = route.kind === 'page' ? session.mirror.pages.get(route.pageId) : undefined;
+  const routed = route.kind === 'page' ? route.pageId : null;
+  const page = routed ? session.mirror.pages.get(routed) : undefined;
+  // A row opens as a page with its properties above its body (contract section 7).
+  const row = useRowRoute(session, page ? null : routed);
+  const shown: AnyPage | undefined = page ?? row ?? undefined;
+  const holder = isRowRecord(shown) ? session.mirror.pages.get(shown.databaseId) : undefined;
+  const trashed = !!shown?.trashedAt || !!holder?.trashedAt;
+  const onScreen = shown && !trashed ? shown : undefined;
 
   const visiting = page && !page.trashedAt ? page.id : null;
   useEffect(() => {
@@ -321,6 +381,50 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     },
     [t],
   );
+  reportError.current = onError;
+
+  // "New database" in the palette: in the page on screen, else at the end of the first section.
+  const here =
+    onScreen && onScreen.kind === 'page' && session.canEdit(onScreen.id) ? onScreen : null;
+  useEffect(() => {
+    const placeHere = () => {
+      const workspaceId = session.workspaceId;
+      const sectionId =
+        here?.sectionId ?? (workspaceId && session.mirror.sectionsOf(workspaceId)[0]?.id);
+      if (!workspaceId || !sectionId) return null;
+      const parentPageId = here?.id ?? null;
+      return {
+        workspaceId,
+        sectionId,
+        parentPageId,
+        orderKey: session.keyFor(sectionId, parentPageId),
+      };
+    };
+    const opened = (made: { databaseId: string } | null) =>
+      made && navigate({ kind: 'page', pageId: made.databaseId });
+    return services.commands.register(
+      {
+        id: 'app.newDatabase',
+        group: 'navigation',
+        label: () => t('databases.newDatabase'),
+        keywords: () => [t('keywords.newDatabase')],
+        run: () => {
+          const place = placeHere();
+          if (place) void requestNewDatabase(place).then(opened);
+        },
+      },
+      {
+        id: 'app.importCsv',
+        group: 'navigation',
+        label: () => t('databases.importCsv'),
+        keywords: () => [t('keywords.importCsv')],
+        run: () => {
+          const place = placeHere();
+          if (place) void requestCsvImport(place).then(opened);
+        },
+      },
+    );
+  }, [services, session, t, here]);
 
   // Pages in the trash longer than the retention go for good when the workspace opens.
   useEffect(() => {
@@ -402,81 +506,94 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     );
 
   return (
-    <Frame
-      sidebar={
-        <div className="cgw-sidebar-inner">
-          <Sidebar
-            session={session}
-            activePageId={page?.id ?? null}
-            onSearch={() => setPaletteOpen(true)}
-            onError={onError}
-          />
-          {cloud && <UploadBanner cloud={cloud} session={session} />}
-          <div className="cgw-sidebar-footer">
-            {cloud && <AccountButton cloud={cloud} />}
-            <CgButton
-              appearance="ghost"
-              icon="settings"
-              fullWidth
-              onClick={() => navigate({ kind: 'settings' })}
-            >
-              {t('frame.settings')}
-            </CgButton>
-          </div>
-        </div>
-      }
-      topBar={
-        <>
-          {page && !page.trashedAt && <Breadcrumbs session={session} page={page} />}
-          <SaveStatus doc={route.kind === 'page' ? openDoc : null} />
-          {cloud && <SyncStatusLabel cloud={cloud} session={session} />}
-          {page && !page.trashedAt && (
-            <PageMenu
+    <DatabaseHostContext.Provider value={databases}>
+      <Frame
+        sidebar={
+          <div className="cgw-sidebar-inner">
+            <Sidebar
               session={session}
-              page={page}
+              activePageId={isRowRecord(shown) ? shown.databaseId : (page?.id ?? null)}
+              onSearch={() => setPaletteOpen(true)}
               onError={onError}
-              canShare={!!account && session.current?.localOnly === false}
             />
-          )}
-          <UpdateButton updates={updates} />
-        </>
-      }
-    >
-      {notice && <Notice text={notice.text} action={notice.action} onClose={closeNotice} />}
-      {sharing && cloud && session.mirror.pages.get(sharing) && (
-        <Suspense fallback={null}>
-          <ShareDialog
-            cloud={cloud}
-            page={session.mirror.pages.get(sharing)!}
-            onClose={() => setSharing(null)}
-          />
-        </Suspense>
-      )}
-      {paletteOpen && <Palette session={session} onClose={() => setPaletteOpen(false)} />}
-      {route.kind === 'invite' && cloud ? (
-        <InviteView cloud={cloud} session={session} token={route.token} />
-      ) : route.kind === 'settings' ? (
-        <Settings onLanguage={setLanguage} session={session} updates={updates} />
-      ) : route.kind === 'trash' ? (
-        <TrashView session={session} onError={onError} />
-      ) : route.kind === 'recovered' && cloud ? (
-        <RecoveredView cloud={cloud} session={session} />
-      ) : page && !page.trashedAt ? (
-        <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
-          <PageView session={session} page={page} onEditor={(_, doc) => setOpenDoc(doc)} />
-        </Suspense>
-      ) : route.kind === 'page' ? (
-        <div className="cgw-empty">
-          <h1>{page?.trashedAt ? t('trash.pageInTrash') : t('frame.notFound')}</h1>
-          {page?.trashedAt && <a href="#/trash">{t('trash.open')}</a>}
-        </div>
-      ) : (
-        <div className="cgw-empty">
-          <h1>{t('frame.emptyTitle')}</h1>
-          <p>{t('frame.emptyBody')}</p>
-        </div>
-      )}
-    </Frame>
+            {cloud && <UploadBanner cloud={cloud} session={session} />}
+            <div className="cgw-sidebar-footer">
+              {cloud && <AccountButton cloud={cloud} />}
+              <CgButton
+                appearance="ghost"
+                icon="settings"
+                fullWidth
+                onClick={() => navigate({ kind: 'settings' })}
+              >
+                {t('frame.settings')}
+              </CgButton>
+            </div>
+          </div>
+        }
+        topBar={
+          <>
+            {onScreen && <Breadcrumbs session={session} page={onScreen} />}
+            <SaveStatus
+              doc={route.kind === 'page' && onScreen?.kind !== 'database' ? openDoc : null}
+            />
+            {cloud && <SyncStatusLabel cloud={cloud} session={session} />}
+            {onScreen && (
+              <PageMenu
+                session={session}
+                page={onScreen}
+                onError={onError}
+                canShare={!!account && session.current?.localOnly === false}
+              />
+            )}
+            <UpdateButton updates={updates} />
+          </>
+        }
+      >
+        {notice && <Notice text={notice.text} action={notice.action} onClose={closeNotice} />}
+        {sharing && cloud && session.mirror.pages.get(sharing) && (
+          <Suspense fallback={null}>
+            <ShareDialog
+              cloud={cloud}
+              page={session.mirror.pages.get(sharing)!}
+              onClose={() => setSharing(null)}
+            />
+          </Suspense>
+        )}
+        {paletteOpen && (
+          <Palette session={session} databases={databases} onClose={() => setPaletteOpen(false)} />
+        )}
+        <DatabaseDialogs session={session} host={databases} />
+        {route.kind === 'invite' && cloud ? (
+          <InviteView cloud={cloud} session={session} token={route.token} />
+        ) : route.kind === 'settings' ? (
+          <Settings onLanguage={setLanguage} session={session} updates={updates} />
+        ) : route.kind === 'trash' ? (
+          <TrashView session={session} onError={onError} />
+        ) : route.kind === 'recovered' && cloud ? (
+          <RecoveredView cloud={cloud} session={session} />
+        ) : onScreen ? (
+          <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+            {onScreen.kind === 'database' ? (
+              <DatabasePage key={onScreen.id} session={session} page={onScreen} />
+            ) : (
+              <PageView session={session} page={onScreen} onEditor={(_, doc) => setOpenDoc(doc)} />
+            )}
+          </Suspense>
+        ) : route.kind === 'page' && !page && row === undefined ? (
+          <div className="cgw-page-loading">{t('app.loading')}</div>
+        ) : route.kind === 'page' ? (
+          <div className="cgw-empty">
+            <h1>{trashed ? t('trash.pageInTrash') : t('frame.notFound')}</h1>
+            {trashed && <a href="#/trash">{t('trash.open')}</a>}
+          </div>
+        ) : (
+          <div className="cgw-empty">
+            <h1>{t('frame.emptyTitle')}</h1>
+            <p>{t('frame.emptyBody')}</p>
+          </div>
+        )}
+      </Frame>
+    </DatabaseHostContext.Provider>
   );
 }
 

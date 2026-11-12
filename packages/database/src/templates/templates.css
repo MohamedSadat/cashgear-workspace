@@ -1,0 +1,87 @@
+/* The new-database dialog: one choice per line, the selected one marked. */
+
+.cgw-tpl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-tpl-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-block: 8px;
+  padding-inline: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--cg-radius-md, 6px);
+  color: var(--cg-text);
+  cursor: pointer;
+}
+
+.cgw-tpl-choice:hover {
+  background: var(--cg-hover, var(--cgw-db-row-hover));
+}
+
+.cgw-tpl-choice[data-checked] {
+  border-color: var(--cgw-db-active);
+  background: var(--cgw-db-active-bg);
+}
+
+.cgw-tpl-choice input {
+  margin-block-start: 4px;
+  accent-color: var(--cg-accent);
+}
+
+.cgw-tpl-icon {
+  flex: none;
+  inline-size: 24px;
+  font-size: 20px;
+  line-height: 24px;
+  text-align: center;
+}
+
+.cgw-tpl-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.cgw-tpl-name {
+  font-weight: 600;
+}
+
+.cgw-tpl-description {
+  color: var(--cg-text-secondary);
+  font-size: 13px;
+}
+
+.cgw-tpl-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-block-start: 2px;
+}
+
+.cgw-tpl-view {
+  padding-inline: 6px;
+  border-radius: var(--cg-radius-sm, 3px);
+  background: var(--cgw-db-default-bg);
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cgw-tpl-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  inline-size: 100%;
+}
+
+.cgw-tpl-error {
+  flex: 1;
+  color: var(--cg-danger-text);
+  font-size: 13px;
+}

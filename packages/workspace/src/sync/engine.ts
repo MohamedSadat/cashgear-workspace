@@ -9,23 +9,32 @@
 //      pages it does not hold yet;
 //   5. compare a few pages' state hashes with the server's, and repair those that differ;
 //   6. upload assets the server lacks.
+// Phase 4 (databases): after the feed, the rows of databases this device holds in full and has
+// not fetched yet come by their own route (at most 4 requests of 1,000 rows a pass, the next pass
+// soon while some remain); the feed keeps held rows fresh after that; pins hold the databases in
+// them; rows' documents are pulled and pushed as pages' are.
 // Failures back off exponentially with jitter, capped at 5 minutes and never shorter than the
 // server's `Retry-After`; a timer that fires far later than it was set for (the machine slept)
 // runs a pass at once with the backoff reset. A 401 pauses the loop until the user signs in
 // again. Nothing waiting is ever discarded: what the server will not take is set aside (the
 // store's quarantine, which the shell makes recovered pages of) or kept in the corrupt area, and
 // the user is told.
+import { LOCAL_ROW_LIMIT, type DatabaseRecord } from '../db/types';
 import { uuidv7, type Id } from '../ids';
 import { uploadOps } from '../remote';
 import {
   STORE_SCHEMA_VERSION,
   type AssetRecord,
+  type DbHold,
   type EntityRecord,
+  type EntityType,
   type LocalStore,
+  type OperationType,
   type OpResult,
   type PageRecord,
   type PinRecord,
   type RemoteBatch,
+  type RowRecord,
   type StoredDoc,
   type StoredUpdate,
   type WorkspaceRecord,
@@ -37,7 +46,10 @@ import {
   type DocCodec,
   type DocPull,
   type DocStateHash,
+  type QueryAnswer,
+  type QueryRequest,
   type ServerChange,
+  type ServerTree,
   type SyncApi,
 } from './api';
 
@@ -64,7 +76,21 @@ export type SyncEvent =
   /** Pending quarantine entries exist: make recovered pages of them. */
   | { kind: 'recover'; workspaceId: Id }
   /** Pins or the pages held here changed: redraw what is available offline. */
-  | { kind: 'offline'; workspaceId: Id };
+  | { kind: 'offline'; workspaceId: Id }
+  /** Rows of a database changed here, or its hold did (a fetch moved on): read them again. */
+  | { kind: 'rows'; workspaceId: Id; databaseId: Id };
+
+/** How much of a database this device keeps (`holdProgress`). */
+export interface HoldProgress {
+  /** The hold, or null when the device keeps none of the database's rows. */
+  hold: DbHold | null;
+  /** Rows of the database this device holds, trashed rows and templates left out. */
+  held: number;
+  /** Rows the server has, as it last said (`rowCount`); the device's own count while local. */
+  total: number;
+  /** Every row is here and the feed keeps them fresh: the database is queried on this device. */
+  local: boolean;
+}
 
 export interface SyncOptions {
   /** How often a pass runs while nothing else triggers one. */
@@ -77,6 +103,9 @@ export interface SyncOptions {
   now?: () => number;
   /** Pinned pages fetched per pass (default 24). */
   pinBatch?: number;
+  /** Rows a request of a database's rows asks for (default 1,000), and requests a pass (4). */
+  rowsPage?: number;
+  rowsRequests?: number;
 }
 
 /** How much of a workspace is kept on this device for offline use. */
@@ -122,8 +151,33 @@ const CHECK_TRIES = 20;
 /** Waiting updates counted for the status (a long outbox shows at least this many). */
 const WAITING_CAP = 5000;
 
+/** Rows a request of a database's rows asks for, and such requests a pass makes. */
+const ROWS_PAGE = 1000;
+const ROWS_REQUESTS = 4;
+
 /** Operations that change a page's whole subtree. */
 const SUBTREE_OPS = new Set(['page.move', 'page.trash', 'page.restore', 'page.delete']);
+
+const PAGE_OPS: OperationType[] = [
+  'page.create',
+  'page.update',
+  'page.move',
+  'page.trash',
+  'page.restore',
+  'page.delete',
+];
+/** The operations whose answers carry each kind of record the feed and the tree bring. */
+const CARRIES: Record<LaterType, ReadonlySet<OperationType>> = {
+  page: new Set(PAGE_OPS),
+  row: new Set([...PAGE_OPS, 'row.update']),
+  database: new Set(['db.update']),
+};
+
+type LaterType = 'page' | 'row' | 'database';
+type Later =
+  | { type: 'page'; record: PageRecord }
+  | { type: 'row'; record: RowRecord }
+  | { type: 'database'; record: DatabaseRecord };
 
 const poolKey = (workspaceId: Id) => `sync:yjsPool:${workspaceId}`;
 const registeredKey = (workspaceId: Id) => `sync:yjsRegistered:${workspaceId}`;
@@ -210,6 +264,15 @@ export class SyncEngine {
   private readonly reconcile = new Set<Id>();
   private mine = new Set<Id>();
   private passes = 0;
+  /** Requests for databases' rows this pass has made. */
+  private rowRequests = 0;
+  /**
+   * Records the feed or the tree brought while only operations whose answers carry something else
+   * waited on them (a visit, a favourite, a page operation on a database's page): the store keeps
+   * the local record while anything waits, and no answer brings this one back, so it is taken
+   * once nothing waits, unless something newer came meanwhile. Keyed by type and id.
+   */
+  private readonly later = new Map<string, Later>();
 
   constructor(
     private readonly store: LocalStore,
@@ -491,6 +554,7 @@ export class SyncEngine {
     }
     let held = await this.syncedWorkspaces(account);
     this.mine = new Set(held.map((w) => w.id));
+    this.rowRequests = 0;
     await this.report(this.status_.state === 'offline' ? 'offline' : 'syncing');
     if (!this.seen) this.seen = new Set((await this.store.quarantine(null)).map((e) => e.id));
     try {
@@ -514,6 +578,8 @@ export class SyncEngine {
           await this.reconcileTree(workspace.id, account);
           const mirror = await this.store.readMirror(workspace.id);
           const pinned = await this.pinnedPages(workspace.id, mirror.pages);
+          await this.holdPinned(workspace, mirror.pages, mirror.databases, pinned);
+          await this.fetchRows(workspace, mirror.databases);
           await this.pullDocs(workspace, mirror.pages, pinned);
           await this.fetchPinned(workspace, pinned);
           await this.runChecks(workspace);
@@ -558,16 +624,87 @@ export class SyncEngine {
   /** A workspace this device does not hold yet: its whole tree, then the feed from its cursor. */
   private async firstSync(workspaceId: Id, account: Account) {
     const tree = await this.api.tree(workspaceId, null);
-    await this.store.applyRemote({
-      workspaceId,
+    await this.applyBatch({
+      ...treeBatch(workspaceId, tree, account, null),
       cursor: tree.cursor,
-      workspaces: [{ ...tree.workspace, localOnly: false, accountId: account.id }],
-      sections: tree.sections,
-      pages: tree.pages,
-      favourites: tree.favourites,
-      visits: tree.visits,
-      replace: { root: null },
     });
+    this.emit({ kind: 'mirror', workspaceId });
+  }
+
+  /**
+   * A remote batch into the store. Records it brings while only operations whose answers carry
+   * something else wait on them are kept to be taken later (`later`); the rows events say which
+   * databases' rows it changed.
+   */
+  private async applyBatch(batch: RemoteBatch) {
+    const workspaceId = batch.workspaceId;
+    await this.noteLater(batch);
+    const touched = new Set([
+      ...(batch.rows ?? []).map((r) => r.databaseId),
+      ...(batch.holds ?? []).map((h) => h.databaseId),
+      ...(batch.databases ?? []).map((d) => d.id),
+    ]);
+    // A row delete names no database: every held one is read again.
+    const removed = !!batch.deleteRows?.length;
+    await this.store.applyRemote(batch);
+    if (!touched.size && !removed) return;
+    for (const hold of await this.store.dbHolds(workspaceId))
+      if (removed || touched.has(hold.databaseId))
+        this.emit({ kind: 'rows', workspaceId, databaseId: hold.databaseId });
+  }
+
+  /** What waits in a workspace's outbox, by entity: the types of operation on each. */
+  private async waiting(workspaceId: Id): Promise<Map<Id, Set<OperationType>>> {
+    const out = new Map<Id, Set<OperationType>>();
+    for (const op of await this.store.nextOutboxBatch(OUTBOX_ALL, workspaceId)) {
+      let types = out.get(op.entityId);
+      if (!types) out.set(op.entityId, (types = new Set()));
+      types.add(op.type);
+    }
+    return out;
+  }
+
+  /** Notes the records of a batch the store will skip and no answer will bring back (`later`). */
+  private async noteLater(batch: RemoteBatch) {
+    const records: Later[] = [
+      ...(batch.pages ?? []).map((record) => ({ type: 'page' as const, record })),
+      ...(batch.rows ?? []).map((record) => ({ type: 'row' as const, record })),
+      ...(batch.databases ?? []).map((record) => ({ type: 'database' as const, record })),
+    ];
+    if (!records.length) return;
+    const waiting = await this.waiting(batch.workspaceId);
+    for (const later of records) {
+      const key = `${later.type}:${later.record.id}`;
+      const types = waiting.get(later.record.id);
+      if (!types || [...types].some((t) => CARRIES[later.type].has(t))) this.later.delete(key);
+      else this.later.set(key, later);
+    }
+  }
+
+  /** Records kept for later whose operations have all been answered: taken now, unless stale. */
+  private async retake(workspaceId: Id) {
+    const mine = [...this.later].filter(([, l]) => l.record.workspaceId === workspaceId);
+    if (!mine.length) return;
+    const waiting = await this.waiting(workspaceId);
+    const batch: RemoteBatch = { workspaceId, pages: [], rows: [], databases: [] };
+    const databases = new Map(
+      (await this.store.readMirror(workspaceId)).databases.map((d) => [d.id, d]),
+    );
+    for (const [key, later] of mine) {
+      if (waiting.has(later.record.id)) continue;
+      this.later.delete(key);
+      if (later.type === 'database') {
+        const local = databases.get(later.record.id);
+        if (local && local.version <= later.record.version) batch.databases!.push(later.record);
+        continue;
+      }
+      const local = await this.store.getPage(later.record.id);
+      if (!local || local.version > later.record.version) continue;
+      if (later.type === 'row') batch.rows!.push(later.record);
+      else batch.pages!.push(later.record);
+    }
+    if (!batch.pages!.length && !batch.rows!.length && !batch.databases!.length) return;
+    await this.applyBatch(batch);
     this.emit({ kind: 'mirror', workspaceId });
   }
 
@@ -629,12 +766,25 @@ export class SyncEngine {
       // A refusal can remove a page here (the server has none): its unsent edits are set aside.
       if (results.some((r) => r.status === 'rejected' || r.entity === null))
         this.quarantineDirty = true;
+      const rows = new Set<Id>();
+      for (const result of results) {
+        // An answer is newer than anything kept for later.
+        if (result.entity && result.entityType && isLaterType(result.entityType))
+          this.later.delete(`${result.entityType}:${(result.entity as { id: Id }).id}`);
+        if (result.entityType === 'row' && result.entity)
+          rows.add((result.entity as RowRecord).databaseId);
+      }
+      const reach = await this.reachOfRefused(workspace.id, ops, results);
       await this.store.settleOps(results);
+      await this.takeBackReach(workspace.id, reach);
+      for (const databaseId of rows)
+        this.emit({ kind: 'rows', workspaceId: workspace.id, databaseId });
       // A refused tree operation changed a whole subtree locally: take the server's subtree back.
+      // (A row has no subtree: its answer is all there is of it.)
       const subtrees = new Set<Id>();
       for (const result of results) {
         const op = ops.find((o) => o.opId === result.opId);
-        if (!op || !SUBTREE_OPS.has(op.type)) continue;
+        if (!op || !SUBTREE_OPS.has(op.type) || result.entityType === 'row') continue;
         this.reconcile.add(workspace.id);
         if (result.status === 'rejected' && result.entity) subtrees.add(op.entityId);
       }
@@ -646,6 +796,81 @@ export class SyncEngine {
       }
       this.emit({ kind: 'mirror', workspaceId: workspace.id });
       if (ops.length < 100) return;
+    }
+  }
+
+  /**
+   * What refused operations changed here beyond their own entity, which the server's answer does
+   * not bring back: a row's values (or a row made with values) kept relations two-way on other
+   * held rows, of its database and of those its relations point into; a database's change
+   * converted its held rows (a type change) and added reverse properties to other databases.
+   * Read before the answers are taken (the local records still say which databases).
+   */
+  private async reachOfRefused(
+    workspaceId: Id,
+    ops: { opId: Id; type: OperationType; entityId: Id; payload: unknown }[],
+    results: OpResult[],
+  ): Promise<{ rows: Set<Id>; records: Set<Id> }> {
+    const reach = { rows: new Set<Id>(), records: new Set<Id>() };
+    const refused = results.filter((r) => r.status === 'rejected');
+    if (!refused.length) return reach;
+    const databases = new Map(
+      (await this.store.readMirror(workspaceId)).databases.map((d) => [d.id, d]),
+    );
+    const targets = (databaseId: Id) =>
+      (databases.get(databaseId)?.properties ?? []).flatMap((p) =>
+        p.type === 'relation' && p.relation ? [p.relation.databaseId] : [],
+      );
+    for (const result of refused) {
+      const op = ops.find((o) => o.opId === result.opId);
+      if (!op) continue;
+      let databaseId: Id | null = null;
+      if (op.type === 'row.update') {
+        const row = await this.store.getPage(op.entityId);
+        databaseId = row?.kind === 'row' ? (row as RowRecord).databaseId : null;
+      } else if (op.type === 'page.create') {
+        const page = op.payload as { kind?: string; parentPageId?: Id | null };
+        if (page.kind === 'row') databaseId = page.parentPageId ?? null;
+        else if (page.kind === 'database')
+          for (const target of targets(op.entityId))
+            if (target !== op.entityId) reach.records.add(target);
+      } else if (op.type === 'db.update') {
+        reach.rows.add(op.entityId);
+        const given = (op.payload as { properties?: { relation?: { databaseId: Id } }[] })
+          .properties;
+        for (const def of given ?? [])
+          if (def.relation && def.relation.databaseId !== op.entityId)
+            reach.records.add(def.relation.databaseId);
+      }
+      if (!databaseId) continue;
+      reach.rows.add(databaseId);
+      for (const target of targets(databaseId)) reach.rows.add(target);
+    }
+    return reach;
+  }
+
+  /**
+   * Takes back what refused operations reached (`reachOfRefused`): the rows of full holds come
+   * again (the fetch after the feed, this pass), and other databases' records from their trees.
+   */
+  private async takeBackReach(workspaceId: Id, reach: { rows: Set<Id>; records: Set<Id> }) {
+    for (const databaseId of reach.rows) {
+      const hold = await this.store.dbHold(databaseId);
+      if (!hold || hold.mode !== 'full') continue;
+      await this.store.holdDatabase({ ...hold, complete: false, after: null });
+    }
+    for (const databaseId of reach.records) {
+      if (!(await this.store.getPage(databaseId))) continue;
+      let tree;
+      try {
+        tree = await this.api.tree(workspaceId, databaseId);
+      } catch (error) {
+        if (error instanceof SyncHttpError && (error.status === 404 || error.status === 410))
+          continue;
+        throw error;
+      }
+      const databases = tree.databases.filter((d) => d.id === databaseId);
+      if (databases.length) await this.applyBatch({ workspaceId, databases });
     }
   }
 
@@ -842,6 +1067,7 @@ export class SyncEngine {
       await this.firstSync(workspace.id, account);
       return;
     }
+    await this.retake(workspace.id);
     let resynced = false;
     for (;;) {
       let page;
@@ -867,14 +1093,40 @@ export class SyncEngine {
         this.emit(event),
       );
       batch.cursor = page.cursor;
-      await this.beforeRemote(workspace.id, batch.pages ?? []);
-      if (batch.deletePages?.length || batch.deleteWorkspace) this.quarantineDirty = true;
-      await this.store.applyRemote(batch);
+      await this.beforeRemote(workspace.id, batch.pages ?? [], batch.rows ?? []);
+      if (batch.deletePages?.length || batch.deleteRows?.length || batch.deleteWorkspace)
+        this.quarantineDirty = true;
+      await this.applyBatch(batch);
       if (page.changes.length) this.emit({ kind: 'mirror', workspaceId: workspace.id });
-      for (const root of roots)
+      for (const root of roots) {
         await this.resync(workspace.id, root === workspace.id ? null : root, account);
+        // What the account may see of the databases under it changed: their rows come again.
+        await this.refetchHolds(workspace.id, root);
+      }
       cursor = page.cursor;
       if (!page.more) return;
+    }
+  }
+
+  /** Holds of databases at or under `root` (the workspace's id: every one) are fetched again. */
+  private async refetchHolds(workspaceId: Id, root: Id) {
+    const holds = await this.store.dbHolds(workspaceId);
+    if (!holds.length) return;
+    const pages = new Map((await this.store.readMirror(workspaceId)).pages.map((p) => [p.id, p]));
+    const under = (id: Id) => {
+      if (root === workspaceId) return true;
+      const seen = new Set<Id>();
+      for (let p = pages.get(id); p && !seen.has(p.id); p = pages.get(p.parentPageId ?? '')) {
+        if (p.id === root) return true;
+        seen.add(p.id);
+      }
+      return false;
+    };
+    for (const hold of holds) {
+      if (!under(hold.databaseId) || (hold.mode === 'full' && !hold.complete && !hold.after))
+        continue;
+      await this.store.holdDatabase({ ...hold, complete: false, after: null });
+      this.emit({ kind: 'rows', workspaceId, databaseId: hold.databaseId });
     }
   }
 
@@ -883,9 +1135,10 @@ export class SyncEngine {
    * this session edited that the server has in the trash is told of (its edits are there on
    * restore).
    */
-  private async beforeRemote(workspaceId: Id, pages: PageRecord[]) {
+  private async beforeRemote(workspaceId: Id, pages: PageRecord[], rows: RowRecord[] = []) {
+    if (!pages.length && !rows.length) return;
     const heads = await this.store.docCursors(workspaceId);
-    for (const p of pages) {
+    for (const p of [...pages, ...rows]) {
       const held = heads[p.id];
       if (held && ((p.docHeadSeq ?? 0) > held.headSeq || (p.docEpoch ?? 0) !== held.epoch))
         this.wanted.add(p.id);
@@ -900,16 +1153,13 @@ export class SyncEngine {
     const tree = await this.api.tree(workspaceId, null);
     await this.beforeRemote(workspaceId, tree.pages);
     this.quarantineDirty = true;
-    await this.store.applyRemote({
-      workspaceId,
+    await this.applyBatch({
+      ...treeBatch(workspaceId, tree, account, null),
       cursor: tree.cursor,
-      workspaces: [{ ...tree.workspace, localOnly: false, accountId: account.id }],
-      sections: tree.sections,
-      pages: tree.pages,
-      favourites: tree.favourites,
-      visits: tree.visits,
-      replace: { root: null },
     });
+    // Changes to rows the feed no longer holds: every held database's rows come again (a full
+    // fetch also removes held rows the server no longer has).
+    await this.refetchHolds(workspaceId, workspaceId);
     this.emit({ kind: 'mirror', workspaceId });
     return tree.cursor;
   }
@@ -928,15 +1178,7 @@ export class SyncEngine {
     }
     await this.beforeRemote(workspaceId, tree.pages);
     this.quarantineDirty = true;
-    await this.store.applyRemote({
-      workspaceId,
-      sections: tree.sections,
-      pages: tree.pages,
-      favourites: tree.favourites,
-      visits: tree.visits,
-      workspaces: [{ ...tree.workspace, localOnly: false, accountId: account.id }],
-      replace: { root },
-    });
+    await this.applyBatch(treeBatch(workspaceId, tree, account, root));
     this.emit({ kind: 'mirror', workspaceId });
   }
 
@@ -1031,7 +1273,17 @@ export class SyncEngine {
   private async pullDocs(workspace: WorkspaceRecord, pages: PageRecord[], pinned: Set<Id>) {
     const heads = await this.store.docCursors(workspace.id);
     const creating = await this.creating(workspace.id);
-    for (const page of pages) {
+    // Rows are not in the mirror's pages: a held row whose head moved (the feed, a fetch or a
+    // query said so) or that was asked for is in `wanted`, and read on its own.
+    const known = new Set(pages.map((p) => p.id));
+    const rows: PageRecord[] = [];
+    for (const id of this.wanted) {
+      if (known.has(id)) continue;
+      const row = await this.store.getPage(id);
+      if (!row) this.wanted.delete(id);
+      else if (row.kind === 'row' && row.workspaceId === workspace.id) rows.push(row);
+    }
+    for (const page of [...pages, ...rows]) {
       if (creating.has(page.id)) continue;
       const held = heads[page.id];
       const moved =
@@ -1218,6 +1470,192 @@ export class SyncEngine {
     if (failure !== null) throw failure;
   }
 
+  // 4c. Databases ----------------------------------------------------------------------------------
+
+  /**
+   * Keeps a database's rows on this device: what a view showing it asks for. A database at most
+   * `LOCAL_ROW_LIMIT` rows is held in full (every row fetched, a pass soon, then kept fresh by
+   * the feed, and queried here); a larger one partially (the rows its queries return are kept).
+   * A hold that exists is left as it is. Returns the hold.
+   */
+  async holdDatabase(databaseId: Id): Promise<DbHold> {
+    const existing = await this.store.dbHold(databaseId);
+    if (existing) return existing;
+    const page = await this.store.getPage(databaseId);
+    if (!page || page.kind !== 'database') throw new Error('No such database');
+    const mirror = await this.store.readMirror(page.workspaceId);
+    const database = mirror.databases.find((d) => d.id === databaseId);
+    // Nothing to fetch for a local workspace's database: every row is here.
+    const local = mirror.workspaces[0]?.localOnly ?? true;
+    const hold = this.newHold(page.workspaceId, databaseId, database, local);
+    await this.store.holdDatabase(hold);
+    this.emit({ kind: 'rows', workspaceId: page.workspaceId, databaseId });
+    if (!hold.complete) this.kick(0);
+    return hold;
+  }
+
+  private newHold(
+    workspaceId: Id,
+    databaseId: Id,
+    database: DatabaseRecord | undefined,
+    complete = false,
+  ): DbHold {
+    const full = !database || database.rowCount <= LOCAL_ROW_LIMIT;
+    return {
+      databaseId,
+      workspaceId,
+      mode: full ? 'full' : 'partial',
+      complete: full && complete,
+      after: null,
+      heldAt: this.iso(),
+    };
+  }
+
+  /** How much of a database this device holds, for a view's "loading rows" and its local flag. */
+  async holdProgress(databaseId: Id): Promise<HoldProgress> {
+    const hold = await this.store.dbHold(databaseId);
+    const page = await this.store.getPage(databaseId);
+    const database = page
+      ? (await this.store.readMirror(page.workspaceId)).databases.find((d) => d.id === databaseId)
+      : undefined;
+    const rows = hold ? await this.store.readRows(databaseId) : [];
+    return {
+      hold,
+      held: rows.filter((r) => !r.trashedAt && !r.isTemplate).length,
+      total: database?.rowCount ?? 0,
+      local: !!hold && hold.mode === 'full' && hold.complete,
+    };
+  }
+
+  /**
+   * The server's query of a database this device does not hold in full (a view of a large
+   * database, a relation picker's search). The rows it returns are kept when the database is
+   * held (a partial hold is this cache), so they show offline. Throws `OfflineError` offline.
+   */
+  async queryDatabase(databaseId: Id, request: QueryRequest): Promise<QueryAnswer> {
+    if (!this.account) throw new SyncHttpError(401, 'auth.required');
+    const answer = await this.api.query(databaseId, request);
+    const page = await this.store.getPage(databaseId);
+    if (page && answer.rows.length && (await this.store.dbHold(databaseId))) {
+      await this.beforeRemote(page.workspaceId, [], answer.rows);
+      await this.applyBatch({ workspaceId: page.workspaceId, rows: answer.rows });
+    }
+    return answer;
+  }
+
+  /**
+   * Pinned pages hold the databases among them, in full when small (the rows only: a row's
+   * document is fetched when it is opened, as an unpinned page's is).
+   */
+  private async holdPinned(
+    workspace: WorkspaceRecord,
+    pages: PageRecord[],
+    databases: DatabaseRecord[],
+    pinned: Set<Id>,
+  ) {
+    if (!pinned.size) return;
+    const kinds = new Map(pages.map((p) => [p.id, p.kind]));
+    const records = new Map(databases.map((d) => [d.id, d]));
+    let held: Set<Id> | null = null;
+    for (const id of pinned) {
+      if (kinds.get(id) !== 'database') continue;
+      held ??= new Set((await this.store.dbHolds(workspace.id)).map((h) => h.databaseId));
+      if (held.has(id)) continue;
+      await this.store.holdDatabase(this.newHold(workspace.id, id, records.get(id)));
+      held.add(id);
+      this.heldChanged.add(workspace.id);
+      this.emit({ kind: 'rows', workspaceId: workspace.id, databaseId: id });
+    }
+  }
+
+  /**
+   * After the feed: a hold follows its database's size (a full one whose `rowCount` passes
+   * `LOCAL_ROW_LIMIT` becomes partial; a partial one at or below it becomes full, to fetch), and
+   * full holds not complete fetch their rows by id, at most `ROWS_REQUESTS` requests a pass (the
+   * next pass comes soon while some remain). Each page of rows is written with the hold's new
+   * `after` in one batch; rows held here in the page's range the server did not return (gone
+   * while this device was not told, as after the feed's retention) go, unless something waits on
+   * them.
+   */
+  private async fetchRows(workspace: WorkspaceRecord, databases: DatabaseRecord[]) {
+    const holds = await this.store.dbHolds(workspace.id);
+    if (!holds.length) return;
+    const records = new Map(databases.map((d) => [d.id, d]));
+    let creating: Set<Id> | null = null;
+    for (const held of holds) {
+      const database = records.get(held.databaseId);
+      if (!database) continue;
+      const big = database.rowCount > LOCAL_ROW_LIMIT;
+      let hold = held;
+      if (held.mode === 'full' && big) hold = { ...held, mode: 'partial', complete: false };
+      else if (held.mode === 'partial' && !big)
+        hold = { ...held, mode: 'full', complete: false, after: null };
+      if (hold.mode === 'partial') {
+        // Its rows are those its queries returned, kept as they were.
+        if (hold !== held) await this.applyBatch({ workspaceId: workspace.id, holds: [hold] });
+        continue;
+      }
+      if (hold.complete) continue;
+      // Not on the server yet: made here, so its rows are here too.
+      creating ??= await this.creating(workspace.id);
+      if (creating.has(hold.databaseId)) continue;
+      while (!hold.complete) {
+        if (this.rowRequests >= (this.options.rowsRequests ?? ROWS_REQUESTS)) {
+          this.backlog = true;
+          if (hold !== held) await this.applyBatch({ workspaceId: workspace.id, holds: [hold] });
+          return;
+        }
+        this.rowRequests++;
+        const from = hold.after;
+        let page;
+        try {
+          page = await this.api.rows(hold.databaseId, from, this.options.rowsPage ?? ROWS_PAGE);
+        } catch (error) {
+          // Gone, or out of reach for this account: the feed's delete or revoke says what goes.
+          if (error instanceof SyncHttpError && (error.status === 404 || error.status === 410))
+            break;
+          throw error;
+        }
+        hold = { ...hold, after: page.next, complete: page.next === null };
+        const stale = await this.staleRows(workspace.id, hold.databaseId, from, page);
+        await this.beforeRemote(workspace.id, [], page.rows);
+        if (stale.length) this.quarantineDirty = true;
+        await this.applyBatch({
+          workspaceId: workspace.id,
+          rows: page.rows,
+          deleteRows: stale,
+          holds: [hold],
+        });
+      }
+    }
+  }
+
+  /**
+   * Rows held here in a fetched page's range (after `from`, up to its `next`) that the server did
+   * not return and nothing waits on: gone on the server while this device was not told. None when
+   * the page is not in the order this device compares ids in (it then removes nothing).
+   */
+  private async staleRows(
+    workspaceId: Id,
+    databaseId: Id,
+    from: Id | null,
+    page: { rows: RowRecord[]; next: Id | null },
+  ): Promise<Id[]> {
+    const ids = page.rows.map((r) => r.id);
+    const ordered = ids.every((id, i) => (i === 0 ? from === null || id > from : id > ids[i - 1]));
+    if (!ordered || (page.next !== null && ids.length && ids.at(-1)! > page.next)) return [];
+    const sent = new Set(ids);
+    const held = (await this.store.readRows(databaseId)).filter(
+      (r) =>
+        (from === null || r.id > from) &&
+        (page.next === null || r.id <= page.next) &&
+        !sent.has(r.id),
+    );
+    if (!held.length) return [];
+    const waiting = await this.waiting(workspaceId);
+    return held.filter((r) => !waiting.has(r.id)).map((r) => r.id);
+  }
+
   // 5. Repair --------------------------------------------------------------------------------------
 
   private async runChecks(workspace: WorkspaceRecord) {
@@ -1401,8 +1839,12 @@ export class SyncEngine {
       name: workspace.name,
       icon: workspace.icon,
     });
+    // Its databases go with it: their records, views and every row (Phase 4).
+    const rows: RowRecord[] = [];
+    for (const database of snapshot.databases ?? [])
+      rows.push(...(await this.store.readRows(database.id)));
     const ids = new Set<number>();
-    for (const page of snapshot.pages) {
+    for (const page of [...snapshot.pages, ...rows]) {
       const doc = await this.store.loadDoc(page.id);
       const parts = partsOf(doc);
       if (!parts.length) continue;
@@ -1419,8 +1861,23 @@ export class SyncEngine {
       snapshot.pages,
       snapshot.favourites,
       uuidv7,
+      {
+        databases: snapshot.databases ?? [],
+        views: snapshot.views ?? [],
+        rows,
+      },
     );
     await this.store.beginUpload(workspaceId, account.id, ops, replaced);
+    // Its databases stay held, whole: every row is here and the feed keeps them fresh.
+    for (const database of snapshot.databases ?? []) {
+      const hold = await this.store.dbHold(database.id);
+      if (!hold || hold.mode !== 'full' || !hold.complete)
+        await this.store.holdDatabase({
+          ...this.newHold(workspaceId, database.id, database, true),
+          mode: 'full',
+          complete: true,
+        });
+    }
     this.mine = new Set();
     this.emit({ kind: 'mirror', workspaceId });
     this.kick(0);
@@ -1437,9 +1894,38 @@ export class SyncEngine {
 /** Enough to read a workspace's whole outbox. */
 const OUTBOX_ALL = 1_000_000;
 
+const isLaterType = (type: EntityType): type is LaterType =>
+  type === 'page' || type === 'row' || type === 'database';
+
+/** The page a notice about an entity points at: the page, the row, the database's page. */
 function entityPage(entity: EntityRecord | null | undefined): Id | undefined {
   if (!entity) return undefined;
-  return 'pageId' in entity ? entity.pageId : 'sectionId' in entity ? entity.id : undefined;
+  if ('pageId' in entity) return entity.pageId;
+  if ('sectionId' in entity) return entity.id;
+  // A view points at its database; a database is its page.
+  if ('databaseId' in entity) return entity.databaseId;
+  if ('properties' in entity) return entity.id;
+  return undefined;
+}
+
+/** A tree from the server as one batch, replacing what this device holds of it. */
+function treeBatch(
+  workspaceId: Id,
+  tree: ServerTree,
+  account: Account,
+  root: Id | null,
+): RemoteBatch {
+  return {
+    workspaceId,
+    workspaces: [{ ...tree.workspace, localOnly: false, accountId: account.id }],
+    sections: tree.sections,
+    pages: tree.pages,
+    favourites: tree.favourites,
+    visits: tree.visits,
+    databases: tree.databases ?? [],
+    views: tree.views ?? [],
+    replace: { root },
+  };
 }
 
 /**
@@ -1494,6 +1980,11 @@ export function batchOf(
     deletePages: [],
     deleteFavourites: [],
     deleteVisits: [],
+    databases: [],
+    views: [],
+    rows: [],
+    deleteViews: [],
+    deleteRows: [],
   };
   for (const change of changes) {
     switch (change.entityType) {
@@ -1524,6 +2015,19 @@ export function batchOf(
         break;
       case 'access':
         roots.add(change.entityId);
+        break;
+      case 'database':
+        // A database's delete comes with its page's, which takes it with all it holds.
+        if (change.kind !== 'delete' && change.entity) batch.databases!.push(change.entity);
+        break;
+      case 'view':
+        if (change.kind === 'delete' || !change.entity) batch.deleteViews!.push(change.entityId);
+        else batch.views!.push(change.entity);
+        break;
+      case 'row':
+        // Kept only for a database this device holds (the store's rule); deletes always apply.
+        if (change.kind === 'delete' || !change.entity) batch.deleteRows!.push(change.entityId);
+        else batch.rows!.push(change.entity);
         break;
     }
   }

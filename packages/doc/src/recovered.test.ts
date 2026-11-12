@@ -7,7 +7,7 @@ import { fragmentToJSON, writeJSON, type DocJSON } from './binding';
 import { CONTENT, META, PageDocument, newDocumentUpdate } from './document';
 import { build } from './index';
 import { recoveredContent } from './recovered';
-import { documentSchema } from './schema';
+import { SCHEMA_VERSION, documentSchema } from './schema';
 import { plainText } from './text';
 
 const { docOf, paragraph, heading } = build;
@@ -59,7 +59,7 @@ describe('recovered content', () => {
     const page = new Y.Doc();
     Y.applyUpdate(page, first);
     expect(page.getMap(META).toJSON()).toEqual({
-      schemaVersion: 2,
+      schemaVersion: SCHEMA_VERSION,
       epoch: 0,
       pageId: newPageId,
     });

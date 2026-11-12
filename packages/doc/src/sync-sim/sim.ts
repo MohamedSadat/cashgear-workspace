@@ -8,6 +8,14 @@
 // and its documents (the same JSON, the same state hash) and whether every update the server
 // acknowledged to a client is still in the server's state.
 //
+// Phase 4: Alice's workspace is uploaded with a database (a view, rows, a self-relation), which
+// every client holds. Clients also edit it: rows made, values set (often the same property of the
+// same row on several clients at once, often values that need coercing), titles, relations,
+// rows trashed, restored and reordered, property types changed, properties deleted and restored,
+// options deleted and added, properties added, the view changed; rows' documents are edited as
+// pages' are, and the tree operations may move or trash the database's page. Every client must end
+// with the server's database record, views and rows (values, per-property versions, versions).
+//
 // Seeded and deterministic: every choice comes from the seed, and every delay is a number of
 // microtask turns, so the same seed interleaves the same way (the caller makes ids deterministic
 // by seeding `crypto.getRandomValues` and `Date.now`).
@@ -16,6 +24,7 @@ import {
   MemoryStore,
   OfflineError,
   OpError,
+  STORED_TYPES,
   SyncEngine,
   SyncHttpError,
   compareSiblings,
@@ -24,11 +33,23 @@ import {
   uuidv7,
   type Account,
   type Id,
+  type Operation,
   type PageRecord,
+  type PropertyDef,
+  type PropertyType,
+  type RowRecord,
   type SyncApi,
+  type Value,
 } from '@cgw/workspace';
 import { FakeServer } from '../../../workspace/src/testing/fakeServer';
-import { localWorkspace, shape } from '../../../workspace/src/testing/syncHarness';
+import {
+  PROP,
+  localWorkspace,
+  makeDatabase,
+  rowCreate,
+  rowShape,
+  shape,
+} from '../../../workspace/src/testing/syncHarness';
 import { docCodec } from '../codec';
 import { CONTENT, LOAD, REMOTE, retryPending } from '../document';
 
@@ -72,6 +93,9 @@ export interface SimReport {
   acked: number;
   edits: number;
   treeOps: number;
+  /** Database operations the clients made, and the rows the server ended with. */
+  dbOps: number;
+  rows: number;
   faults: {
     lostRequests: number;
     lostAnswers: number;
@@ -114,7 +138,11 @@ const PEOPLE: Account[] = ['Alice', 'Bob', 'Carol'].map((name, i) => ({
 }));
 
 const WORDS = ['alpha', 'beta', 'gamma', 'سلام', 'delta', 'كتاب', 'echo', 'zulu', ' ', ' ', '.'];
+const NAMES = ['alpha', 'beta', 'gamma', 'سلام', 'delta', 'كتاب', 'Open', 'Closed', '12', '7.5'];
 const ID_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+/** The types a property's type changes between (a relation keeps its type). */
+const TYPES: PropertyType[] = ['text', 'number', 'select', 'multiSelect', 'checkbox', 'date'];
+const MAX_PROPERTIES = 12;
 
 interface OpenDoc {
   doc: Y.Doc;
@@ -225,10 +253,12 @@ export class Simulation {
   readonly clients: Client[];
   workspaceId: Id = '';
   sectionId: Id = '';
+  databaseId: Id = '';
   faultsOn = false;
   readonly stats = { lostRequests: 0, lostAnswers: 0, duplicates: 0, partitioned: 0 };
   edits = 0;
   treeOps = 0;
+  dbOps = 0;
   /** The server takes one request at a time, as its transactions would. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -302,18 +332,35 @@ export class Simulation {
     return out as unknown as SyncApi;
   }
 
-  /** Alice's workspace on the server; Bob and Carol members who hold it; a pin each. */
+  /**
+   * Alice's workspace on the server, uploaded with a database under Alpha (a view, four rows, two
+   * of them related); Bob and Carol members who hold it and its database; a pin each.
+   */
   async setUp() {
     const [alice, bob, carol] = this.clients;
     alice.engine.setAccount(alice.account);
     const made = await localWorkspace(alice.store);
     this.workspaceId = made.ws.id;
     this.sectionId = made.section.id;
+    const tasks = await makeDatabase(alice.store, made.ws.id, made.section.id, made.a.id, [
+      'One',
+      'Two',
+      'Three',
+      'Four',
+    ]);
+    this.databaseId = tasks.db.id;
+    await alice.store.applyLocalOps([
+      newOp('row.update', made.ws.id, tasks.rows[0].id, {
+        values: { [PROP.link]: [tasks.rows[1].id], [PROP.notes]: 'first' },
+      }),
+    ]);
     await alice.engine.upload(made.ws.id);
     await alice.pass();
     for (const client of [bob, carol]) {
       this.server.addMember(made.ws.id, client.account.id);
       client.engine.setAccount(client.account);
+      await client.pass();
+      await client.engine.holdDatabase(this.databaseId);
       await client.pass();
     }
     for (const client of this.clients)
@@ -336,18 +383,37 @@ export class Simulation {
     const pass = r.chance(0.6) ? client.pass() : Promise.resolve();
     const actions = r.int(0, 3);
     for (let i = 0; i < actions; i++) {
-      if (r.chance(0.7)) await this.editDoc(client);
-      else await this.treeOp(client);
+      const roll = r.next();
+      if (roll < 0.45) await this.editDoc(client);
+      else if (roll < 0.65) await this.treeOp(client);
+      else await this.dbOp(client);
     }
     await pass;
   }
 
+  /** Pages with a document (a database's page has none), not in the trash. */
   private async livePages(client: Client): Promise<PageRecord[]> {
-    return (await client.store.readMirror(this.workspaceId)).pages.filter((p) => !p.trashedAt);
+    return (await client.store.readMirror(this.workspaceId)).pages.filter(
+      (p) => !p.trashedAt && p.kind !== 'database',
+    );
+  }
+
+  /** Rows whose documents may be edited: held, not trashed, and known to the server. */
+  private async editableRows(client: Client): Promise<RowRecord[]> {
+    const creating = new Set(
+      (await client.store.nextOutboxBatch(10_000, this.workspaceId))
+        .filter((op) => op.type === 'page.create')
+        .map((op) => op.entityId),
+    );
+    return (await client.store.readRows(this.databaseId)).filter(
+      (row) => !row.trashedAt && !creating.has(row.id),
+    );
   }
 
   private async editDoc(client: Client) {
-    const page = client.rng.pick(await this.livePages(client));
+    const page = client.rng.chance(0.25)
+      ? client.rng.pick(await this.editableRows(client))
+      : client.rng.pick(await this.livePages(client));
     if (!page) return;
     const open = await client.open(page.id);
     if (!open) return;
@@ -479,6 +545,171 @@ export class Simulation {
     }
   }
 
+  /** A fresh property or option id: 8 characters of base 62, from the client's own seed. */
+  private shortId(r: Random) {
+    return Array.from({ length: 8 }, () => r.pick([...ID_CHARS])).join('');
+  }
+
+  /**
+   * A value to write: often one that needs coercing (a number as text, an option by name), now
+   * and then nothing (a clear).
+   */
+  private valueFor(r: Random, def: PropertyDef): Value | null {
+    if (r.chance(0.1)) return null;
+    const ids = (def.options ?? []).map((o) => o.id);
+    switch (def.type) {
+      case 'number':
+        return r.chance(0.25) ? r.pick(NAMES)! : r.int(0, 99);
+      case 'checkbox':
+        return r.chance(0.5);
+      case 'date':
+        return { start: `2026-11-${String(r.int(1, 28)).padStart(2, '0')}` };
+      case 'select':
+      case 'status':
+        if (!ids.length || r.chance(0.2)) return r.pick(NAMES)!;
+        return r.pick(ids)!;
+      case 'multiSelect': {
+        const picked = ids.filter(() => r.chance(0.4));
+        return picked.length ? picked : r.pick(NAMES)!;
+      }
+      default:
+        return r.chance(0.2) ? String(r.int(0, 99)) : r.pick(NAMES)!;
+    }
+  }
+
+  /** A property's def as another type, its options carried to an option type. */
+  private retyped(def: PropertyDef, type: PropertyType): PropertyDef {
+    const out: PropertyDef = { id: def.id, name: def.name, type };
+    if (type === 'number') out.number = { format: 'number', decimals: null };
+    if (type === 'select' || type === 'multiSelect')
+      out.options = (def.options ?? []).map(({ id, name, colour }) => ({ id, name, colour }));
+    return out;
+  }
+
+  /** One change to the database, its rows or its view, as a person makes them in a view. */
+  private async dbOp(client: Client) {
+    const r = client.rng;
+    const ws = this.workspaceId;
+    const db = this.databaseId;
+    const mirror = await client.store.readMirror(ws);
+    const record = mirror.databases.find((d) => d.id === db);
+    const page = mirror.pages.find((p) => p.id === db);
+    if (!record || !page) return;
+    const rows = await client.store.readRows(db);
+    const live = rows.filter((row) => !row.trashedAt);
+    const stored = record.properties.filter(
+      (p) => STORED_TYPES.includes(p.type) && p.type !== 'relation',
+    );
+    const shown = stored.filter((p) => !p.trashedAt);
+    const ordered = [...live].sort(compareSiblings);
+    const roll = r.next();
+    let op: Operation;
+    if (roll < 0.14 || !live.length) {
+      const values: Record<string, Value> = {};
+      const def = r.pick(shown);
+      const value = def && this.valueFor(r, def);
+      if (def && value !== null && value !== undefined) values[def.id] = value;
+      const row = rowCreate(
+        ws,
+        page.sectionId,
+        db,
+        `${client.account.displayName} row ${this.dbOps}`,
+        values,
+        keyBetween(ordered.at(-1)?.orderKey ?? null, null),
+      );
+      op = newOp('page.create', ws, row.id, row);
+    } else if (roll < 0.48) {
+      // Values of one or two properties: three people often write the same ones at once.
+      const row = r.pick(live)!;
+      const values: Record<string, Value | null> = {};
+      for (let i = r.int(1, 2); i > 0; i--) {
+        const def = r.pick(r.chance(0.8) ? shown : stored);
+        if (def) values[def.id] = this.valueFor(r, def);
+      }
+      op = newOp('row.update', ws, row.id, { values });
+    } else if (roll < 0.54) {
+      const row = r.pick(live)!;
+      op = newOp('page.update', ws, row.id, {
+        title: `${row.title.split(' ~')[0]} ~${this.dbOps}`,
+      });
+    } else if (roll < 0.64) {
+      // A relation: the row now blocks up to three rows (or none).
+      const row = r.pick(live)!;
+      const targets = live.filter(() => r.chance(0.3)).slice(0, 3);
+      op = newOp('row.update', ws, row.id, {
+        values: { [PROP.link]: targets.length ? targets.map((t) => t.id) : null },
+      });
+    } else if (roll < 0.7) {
+      const trashed = rows.filter((row) => row.trashedAt && row.trashRootId === row.id);
+      if (trashed.length && r.chance(0.5)) op = newOp('page.restore', ws, r.pick(trashed)!.id, {});
+      else {
+        const row = r.pick(live)!;
+        op = newOp('page.trash', ws, row.id, {}, row.version);
+      }
+    } else if (roll < 0.74) {
+      const row = r.pick(live)!;
+      const at = r.int(0, ordered.length);
+      const orderKey = keyBetween(
+        ordered[at - 1]?.orderKey ?? null,
+        ordered[at]?.orderKey === ordered[at - 1]?.orderKey
+          ? null
+          : (ordered[at]?.orderKey ?? null),
+      );
+      op = newOp(
+        'page.move',
+        ws,
+        row.id,
+        { sectionId: row.sectionId, parentPageId: db, orderKey },
+        row.version,
+      );
+    } else if (roll < 0.81) {
+      const def = r.pick(shown);
+      if (!def) return;
+      const type = r.pick(TYPES.filter((t) => t !== def.type))!;
+      op = newOp('db.update', ws, db, { properties: [this.retyped(def, type)] });
+    } else if (roll < 0.86) {
+      const def = r.pick(stored);
+      if (!def) return;
+      op = newOp('db.update', ws, db, {
+        properties: [{ ...def, trashedAt: def.trashedAt ? null : new Date().toISOString() }],
+      });
+    } else if (roll < 0.92) {
+      const def = r.pick(shown.filter((p) => p.type === 'select' || p.type === 'multiSelect'));
+      if (!def) return;
+      const options = def.options ?? [];
+      const next =
+        options.length > 1 && r.chance(0.6)
+          ? options.filter((o) => o.id !== r.pick(options)!.id)
+          : [...options, { id: this.shortId(r), name: r.pick(NAMES)!, colour: 'blue' as const }];
+      op = newOp('db.update', ws, db, { properties: [{ ...def, options: next }] });
+    } else if (roll < 0.95 && record.properties.length < MAX_PROPERTIES) {
+      const type = r.pick(TYPES)!;
+      op = newOp('db.update', ws, db, {
+        properties: [this.retyped({ id: this.shortId(r), name: `P${this.dbOps}`, type }, type)],
+      });
+    } else {
+      const view = r.pick(mirror.views.filter((v) => v.databaseId === db));
+      if (!view) return;
+      const by = r.pick(stored);
+      op = newOp('view.upsert', ws, view.id, {
+        ...view,
+        name: `${client.account.displayName} view ${this.dbOps}`,
+        config: {
+          ...view.config,
+          sorts: by && r.chance(0.5) ? [{ propertyId: by.id, direction: 'asc' }] : [],
+        },
+      });
+    }
+    try {
+      await client.store.applyLocalOps([op]);
+      this.dbOps++;
+      client.engine.changed();
+    } catch (error) {
+      // The local planner refuses what the rules forbid (a trashed row, a version moved on).
+      if (!(error instanceof OpError)) throw error;
+    }
+  }
+
   /** The faults stop; everyone syncs until nothing waits and everyone holds the server's head. */
   async settle(): Promise<number> {
     this.faultsOn = false;
@@ -489,9 +720,12 @@ export class Simulation {
         await client.pass();
       }
       if (round === 3)
-        // Every client holds every page's document, so all of them can be compared.
+        // Every client holds every page's and row's document, so all of them can be compared.
         for (const client of this.clients)
-          for (const page of (await client.store.readMirror(this.workspaceId)).pages)
+          for (const page of [
+            ...(await client.store.readMirror(this.workspaceId)).pages,
+            ...(await client.store.readRows(this.databaseId)),
+          ])
             await client.engine.pullPage(page.id);
       if (round > 3 && (await this.quiet())) return round;
     }
@@ -504,10 +738,13 @@ export class Simulation {
       if ((await client.store.nextOutboxBatch(1, this.workspaceId)).length) return false;
       if ((await client.store.unsentDocUpdates(1)).length) return false;
       if ((await client.store.syncCursor(this.workspaceId)) !== space.seq) return false;
+      const hold = await client.store.dbHold(this.databaseId);
+      if (space.mirror.databases.has(this.databaseId) && !(hold?.mode === 'full' && hold.complete))
+        return false;
       const heads = await client.store.docCursors(this.workspaceId);
       for (const [pageId, doc] of this.server.docs)
         if (
-          space.mirror.pages.has(pageId) &&
+          (space.mirror.pages.has(pageId) || space.mirror.rowRecords.has(pageId)) &&
           heads[pageId]?.headSeq !== (doc.rows.at(-1)?.seq ?? 0)
         )
           return false;
@@ -516,7 +753,13 @@ export class Simulation {
   }
 
   /** Every disagreement between the clients and the server, and what converged. */
-  async check(): Promise<{ problems: string[]; digest: string; pages: number; updates: number }> {
+  async check(): Promise<{
+    problems: string[];
+    digest: string;
+    pages: number;
+    updates: number;
+    rows: number;
+  }> {
     const problems: string[] = [];
     const ws = this.workspaceId;
     const space = this.server.spaces.get(ws)!;
@@ -532,18 +775,41 @@ export class Simulation {
       return out;
     };
     const serverDocs = new Map<Id, { json: string; hash: string; parts: Uint8Array[] }>();
-    for (const pageId of space.mirror.pages.keys()) {
+    for (const pageId of [...space.mirror.pages.keys(), ...space.mirror.rowRecords.keys()]) {
       const parts = this.server.docParts(pageId);
       serverDocs.set(pageId, { json: json(parts), hash: await docCodec.stateHash(parts), parts });
     }
+    const db = this.databaseId;
+    const serverRows = rowShape(space.mirror.rowsOf(db));
+    const serverDatabase = JSON.stringify(space.mirror.databases.get(db) ?? null);
+    const views = (list: { id: Id }[]) =>
+      JSON.stringify([...list].sort((a, b) => (a.id < b.id ? -1 : 1)));
+    const serverViews = views(space.mirror.viewsOf(db));
     for (const client of this.clients) {
       const name = client.account.displayName;
-      const tree = shape((await client.store.readMirror(ws)).pages);
+      const mirror = await client.store.readMirror(ws);
+      const tree = shape(mirror.pages);
       for (const id of new Set([...Object.keys(tree), ...Object.keys(serverTree)]))
         if (JSON.stringify(tree[id]) !== JSON.stringify(serverTree[id]))
           problems.push(
             `${name}'s ${id} differs: ${JSON.stringify(tree[id])} here, ${JSON.stringify(serverTree[id])} there`,
           );
+      // The database: its record, its views and every row, values and versions included.
+      const database = JSON.stringify(mirror.databases.find((d) => d.id === db) ?? null);
+      if (database !== serverDatabase)
+        problems.push(`${name}'s database differs: ${database} here, ${serverDatabase} there`);
+      const mine = views(mirror.views.filter((v) => v.databaseId === db));
+      if (mine !== serverViews)
+        problems.push(`${name}'s views differ: ${mine} here, ${serverViews} there`);
+      const rows = rowShape(await client.store.readRows(db));
+      for (const id of new Set([...Object.keys(rows), ...Object.keys(serverRows)]))
+        if (JSON.stringify(rows[id]) !== JSON.stringify(serverRows[id]))
+          problems.push(
+            `${name}'s row ${id} differs: ${JSON.stringify(rows[id])} here, ${JSON.stringify(serverRows[id])} there`,
+          );
+      const hold = await client.store.dbHold(db);
+      if (!hold || hold.mode !== 'full' || !hold.complete)
+        problems.push(`${name} does not hold the database in full: ${JSON.stringify(hold)}`);
       for (const [pageId, server] of serverDocs) {
         const stored = await client.store.loadDoc(pageId);
         const parts = [
@@ -583,10 +849,31 @@ export class Simulation {
         .map((p) => `${depth(p)}:${p.title}:${p.trashedAt ? 't' : ''}`)
         .sort(),
       docs: [...serverDocs.values()].map((d) => d.json).sort(),
+      // Related rows by their titles: ids differ from run to run.
+      rows: Object.values(serverRows)
+        .map((r) => {
+          const values = Object.fromEntries(
+            Object.entries(r.values).map(([k, v]) => [
+              k,
+              k === PROP.link || k === PROP.back
+                ? (v as Id[]).map((id) => serverRows[id]?.title ?? '?')
+                : v,
+            ]),
+          );
+          return `${r.title}:${r.trashed ? 't' : ''}:${JSON.stringify(values)}`;
+        })
+        .sort(),
+      properties: space.mirror.databases.get(db)?.properties.map((p) => `${p.name}:${p.type}`),
     });
     let updates = 0;
     for (const doc of this.server.docs.values()) updates += doc.rows.length;
-    return { problems, digest, pages: byId.size, updates };
+    return {
+      problems,
+      digest,
+      pages: byId.size,
+      updates,
+      rows: Object.keys(serverRows).length,
+    };
   }
 }
 
@@ -608,6 +895,8 @@ export async function simulate(options: SimOptions): Promise<SimReport> {
     acked: sim.clients.reduce((n, c) => n + c.acked.length, 0),
     edits: sim.edits,
     treeOps: sim.treeOps,
+    dbOps: sim.dbOps,
+    rows: result.rows,
     faults: { ...sim.stats },
     settleRounds,
     digest: result.digest,

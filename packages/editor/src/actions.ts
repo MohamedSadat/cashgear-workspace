@@ -5,7 +5,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { newBlockId, type TextKind } from '@cgw/doc';
 import { blockAt, currentBlock, firstBody, turnInto, type BlockInfo } from './blocks';
-import type { EditorHost } from './host';
+import type { DatabaseRef, EditorHost } from './host';
 import { mentionKey } from './mention';
 
 export type BlockActionName =
@@ -27,7 +27,9 @@ export type BlockActionName =
   | 'bookmark'
   | 'childPage'
   | 'pageLink'
-  | 'tableOfContents';
+  | 'tableOfContents'
+  | 'database'
+  | 'linkedView';
 
 export interface BlockAction {
   name: BlockActionName;
@@ -35,6 +37,8 @@ export interface BlockAction {
   glyph: string;
   /** Text kinds and code can be a "turn into" target; the rest only insert. */
   turnInto: boolean;
+  /** Whether the host gives what the action needs (absent: always); the shell's `when` reads it. */
+  available?(host: EditorHost): boolean;
   apply(editor: Editor, host: EditorHost): void | Promise<void>;
 }
 
@@ -213,7 +217,42 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
     turnInto: false,
     apply: (editor) => insertBody(editor, editor.schema.nodes.tableOfContents.create(), 'after'),
   },
+  {
+    // Schema version 3: a new inline database under this page, made by the host with its first
+    // view, then shown here (nodeviews/database.ts).
+    name: 'database',
+    glyph: '▤',
+    turnInto: false,
+    available: (host) => !!host.databases?.create,
+    apply: async (editor, host) => {
+      const made = await host.databases?.create?.();
+      if (made && !editor.isDestroyed) insertDatabaseView(editor, made);
+    },
+  },
+  {
+    // Schema version 3: another view of a database that exists, picked by the host.
+    name: 'linkedView',
+    glyph: '⧉',
+    turnInto: false,
+    available: (host) => !!host.databases?.pick,
+    apply: async (editor, host) => {
+      const picked = await host.databases?.pick?.();
+      if (picked && !editor.isDestroyed) insertDatabaseView(editor, picked);
+    },
+  },
 ];
+
+/** Puts a database view in the document as a block of its own, the caret after it. */
+export function insertDatabaseView(editor: Editor, ref: DatabaseRef) {
+  insertBody(
+    editor,
+    editor.schema.nodes.databaseView.create({
+      databaseId: ref.databaseId,
+      viewId: ref.viewId ?? null,
+    }),
+    'after',
+  );
+}
 
 export const actionByName = (name: string) => BLOCK_ACTIONS.find((a) => a.name === name);
 

@@ -8,10 +8,23 @@
 // Faults: `offline` refuses every call; `lose` applies the next call of a kind, then loses its
 // answer, as a dropped connection does; `throttle` answers the next call of a kind with 429 (or
 // 503) and a `Retry-After`; `expire` answers an account's calls with 401.
+//
+// Phase 4: databases, views and rows with the server's rules (contract sections 1, 2 and 4): the
+// client's planner again (per-property merges, coercion, type changes converting every row,
+// relations kept two-way, the tree rules), plus what only the server does: each property's
+// version rises with every write of it; created and edited by; rows' counts; a trash or restore
+// of a page reaches the rows of the databases under it; a relation keeps only rows of its target
+// that exist; a reverse property needs the target database to be visible. Every change to a row
+// is a `row` change in the feed; the tree carries databases and views, never rows; rows come by
+// `rows` (by id) and `query` (by `queryRows`). Formula and rollup results are not computed here
+// (`computed` stays empty).
+import { queryRows } from '../db/query';
+import type { PropertyId, QuerySpec, Value } from '../db/types';
 import { uuidv7, type Id } from '../ids';
 import { Mirror } from '../mirror';
-import { planOps } from '../ops';
-import { compareSiblings, keyBetween } from '../order';
+import { planOps, type Plan } from '../ops';
+import { compareSiblings, keyBetween, keysBetween } from '../order';
+import { emptyPlan } from '../remote';
 import {
   OfflineError,
   SyncHttpError,
@@ -27,9 +40,18 @@ import {
   type EntityType,
   type Operation,
   type OpResult,
+  type PageKind,
   type PageRecord,
+  type RowRecord,
   type WorkspaceRecord,
 } from '../types';
+
+/** A refusal the server makes that the planner does not (an access check). */
+class Refusal extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
 
 interface Change {
   seq: number;
@@ -51,6 +73,8 @@ interface Space {
   /** Members who may only read (demoted). */
   readers: Set<Id>;
   yjs: Map<number, Id>;
+  /** The kind of every page made here, gone or not (an answer about a row deleted for good). */
+  kinds: Map<Id, PageKind>;
 }
 
 interface DocRow {
@@ -82,7 +106,9 @@ export type Kind =
   | 'assetTicket'
   | 'putBytes'
   | 'completeAsset'
-  | 'assetUrl';
+  | 'assetUrl'
+  | 'rows'
+  | 'query';
 
 export interface FakeServerOptions {
   /** What the state hash is computed with: the fake cannot read Yjs itself. */
@@ -169,11 +195,14 @@ export class FakeServer {
     return space;
   }
 
+  /** The space a page, a database's page or a row is in. */
   private spaceOfPage(pageId: Id): Space | undefined {
-    for (const space of this.spaces.values()) if (space.mirror.pages.has(pageId)) return space;
+    for (const space of this.spaces.values())
+      if (space.mirror.pages.has(pageId) || space.mirror.rowRecords.has(pageId)) return space;
     return undefined;
   }
 
+  /** A change to the feed; a page's change is a row's when the page is a row (FeedService). */
   private change(
     space: Space,
     entityType: ServerChange['entityType'],
@@ -181,11 +210,14 @@ export class FakeServer {
     kind = 'upsert',
     userId?: Id,
   ) {
-    space.changes.push({ seq: ++space.seq, entityType, entityId, kind, userId });
+    const type = entityType === 'page' && space.kinds.get(entityId) === 'row' ? 'row' : entityType;
+    space.changes.push({ seq: ++space.seq, entityType: type, entityId, kind, userId });
   }
 
+  /** Whether the account may see a page; a row is seen as its database is. */
   private visible(account: Account, pageId: Id): boolean {
-    return !this.hidden.has(pageId) && !this.hiddenFor.get(account.id)?.has(pageId);
+    const id = this.spaceOfPage(pageId)?.mirror.rowRecords.get(pageId)?.databaseId ?? pageId;
+    return !this.hidden.has(id) && !this.hiddenFor.get(account.id)?.has(id);
   }
 
   private entity(space: Space, type: EntityType | undefined, op: Operation): EntityRecord | null {
@@ -201,13 +233,55 @@ export class FakeServer {
         return m.favourites.get(`${op.workspaceId}/${op.entityId}`) ?? null;
       case 'visit':
         return m.visits.get(`${op.workspaceId}/${op.entityId}`) ?? null;
+      case 'database':
+        return m.databases.get(op.entityId) ?? null;
+      case 'view':
+        return m.views.get(op.entityId) ?? null;
+      case 'row':
+        return m.rowRecords.get(op.entityId) ?? null;
       default:
         return null;
     }
   }
 
-  /** A page as an account sees it: its document's head, epoch and schema, and its level. */
-  private pageView(space: Space, account: Account, page: PageRecord): PageRecord {
+  /** What an operation's answer is about: a row's page operations answer with the row. */
+  private entityTypeOf(space: Space, op: Operation): EntityType {
+    switch (op.type) {
+      case 'db.update':
+        return 'database';
+      case 'view.upsert':
+      case 'view.delete':
+        return 'view';
+      case 'row.update':
+        return 'row';
+      case 'page.create':
+        return op.payload.kind === 'row' ? 'row' : 'page';
+      default:
+        if (op.type.startsWith('page.') && space.kinds.get(op.entityId) === 'row') return 'row';
+        return op.type.split('.')[0] as EntityType;
+    }
+  }
+
+  /** The page whose visibility decides whether the account may see what an operation is about. */
+  private subjectOf(space: Space, op: Operation): Id | null {
+    switch (op.type) {
+      case 'db.update':
+      case 'row.update':
+        return op.entityId;
+      case 'view.upsert':
+        return op.payload.databaseId;
+      case 'view.delete':
+        return space.mirror.views.get(op.entityId)?.databaseId ?? null;
+      case 'page.create':
+        // A row is made in a database the account must see.
+        return op.payload.kind === 'row' ? op.payload.parentPageId : null;
+      default:
+        return op.type.startsWith('page.') ? op.entityId : null;
+    }
+  }
+
+  /** A page (or a row) as an account sees it: its document's head, epoch and schema, its level. */
+  private pageView<T extends PageRecord>(space: Space, account: Account, page: T): T {
     const doc = this.docs.get(page.id);
     return {
       ...structuredClone(page),
@@ -216,6 +290,84 @@ export class FakeServer {
       docSchemaVersion: doc?.schemaVersion ?? 1,
       ...(space.readers.has(account.id) ? { access: 'view' as const } : {}),
     };
+  }
+
+  /** A database the account may read, with the space it is in; 404 otherwise. */
+  private databaseGate(account: Account, databaseId: Id) {
+    const space = this.spaceOfPage(databaseId);
+    const database = space?.mirror.databases.get(databaseId);
+    if (!space || !database || !space.members.has(account.id) || !this.visible(account, databaseId))
+      throw new SyncHttpError(404, 'not.found');
+    return { space, database };
+  }
+
+  /**
+   * Rows made on the server's side, as an import would (tests' large databases): `count` rows
+   * after the database's last, each titled `Row {n}` with the values given.
+   */
+  seedRows(
+    databaseId: Id,
+    count: number,
+    values: (i: number) => Record<PropertyId, Value> = () => ({}),
+  ): RowRecord[] {
+    const space = this.spaceOfPage(databaseId)!;
+    const m = space.mirror;
+    if (!m.databases.has(databaseId)) throw new Error('No such database');
+    const page = m.pages.get(databaseId)!;
+    const last = m
+      .rowsOf(databaseId)
+      .map((r) => r.orderKey)
+      .sort()
+      .at(-1);
+    const keys = keysBetween(last ?? null, null, count);
+    const at = new Date().toISOString();
+    const rows = keys.map((orderKey, i): RowRecord => ({
+      id: uuidv7(),
+      workspaceId: page.workspaceId,
+      sectionId: page.sectionId,
+      parentPageId: databaseId,
+      orderKey,
+      kind: 'row',
+      title: `Row ${i}`,
+      icon: null,
+      coverAssetId: null,
+      isTemplate: false,
+      templateOfPageId: null,
+      version: 1,
+      createdAt: at,
+      updatedAt: at,
+      trashedAt: null,
+      trashRootId: null,
+      databaseId,
+      values: values(i),
+      versions: Object.fromEntries(Object.keys(values(i)).map((k) => [k, 1])),
+      computed: {},
+      computedVersion: null,
+      createdBy: null,
+      updatedBy: null,
+    }));
+    m.apply({ ...emptyPlan(), rows });
+    for (const row of rows) {
+      space.kinds.set(row.id, 'row');
+      this.change(space, 'row', row.id);
+    }
+    this.recount(space, [databaseId], new Set([databaseId]));
+    return rows;
+  }
+
+  /**
+   * Rows' counts made again (rows not trashed and not templates); a database whose count moved
+   * or whose rows were made or removed is a `database` change.
+   */
+  private recount(space: Space, databaseIds: Iterable<Id>, made: ReadonlySet<Id>) {
+    const m = space.mirror;
+    for (const id of new Set(databaseIds)) {
+      const database = m.databases.get(id);
+      if (!database) continue;
+      const count = m.rowsOf(id).filter((r) => !r.trashedAt && !r.isTemplate).length;
+      if (count !== database.rowCount) m.databases.set(id, { ...database, rowCount: count });
+      if (count !== database.rowCount || made.has(id)) this.change(space, 'database', id);
+    }
   }
 
   /** Adds a second person to a workspace, as an invite accepted would. */
@@ -264,27 +416,32 @@ export class FakeServer {
     space.prunedSeq = Math.max(space.prunedSeq, to);
   }
 
-  /** A permanent delete on the server (a person's, or trash retention): pages and documents go. */
+  /**
+   * A permanent delete on the server (a person's, or trash retention): pages and documents go,
+   * and a database's rows with it; a row alone, when it is one.
+   */
   purge(pageId: Id) {
     const space = this.spaceOfPage(pageId)!;
-    const ids = [pageId, ...space.mirror.descendantIds(pageId)];
-    space.mirror.apply({
-      workspaces: [],
-      sections: [],
-      pages: [],
-      favourites: [],
-      visits: [],
-      deleteSections: [],
-      deletePages: ids,
-      deleteFavourites: [],
-      deleteVisits: [],
-      outbox: [],
-    });
+    const m = space.mirror;
+    const row = m.rowRecords.get(pageId);
+    const ids = row ? [] : [pageId, ...m.descendantIds(pageId)];
+    const rows = row ? [row] : ids.flatMap((id) => m.rowsOf(id));
+    const views = ids.flatMap((id) => m.viewsOf(id).map((v) => v.id));
+    const databases = ids.filter((id) => m.databases.has(id));
+    m.apply({ ...emptyPlan(), deletePages: ids, deleteRows: rows.map((r) => r.id) });
     for (const id of ids) {
       this.gone.add(id);
       this.docs.delete(id);
       this.change(space, 'page', id, 'delete');
     }
+    for (const id of databases) this.change(space, 'database', id, 'delete');
+    for (const id of views) this.change(space, 'view', id, 'delete');
+    for (const r of rows) {
+      this.gone.add(r.id);
+      this.docs.delete(r.id);
+      this.change(space, 'row', r.id, 'delete');
+    }
+    if (row) this.recount(space, [row.databaseId], new Set([row.databaseId]));
   }
 
   /** A hard restore: a new epoch whose history is the given state (sequence numbers keep rising). */
@@ -374,11 +531,21 @@ export class FakeServer {
     };
   }
 
-  /** The server's planner, with its fallbacks for a parent that is gone and equal order keys. */
-  private async apply(space: Space, op: Operation): Promise<{ op: Operation; notice?: string }> {
+  /**
+   * The server's planner, with its fallbacks for a parent that is gone and equal order keys, and
+   * what only the server does with databases (the file's head says what).
+   */
+  private async apply(
+    space: Space,
+    account: Account,
+    op: Operation,
+  ): Promise<{ op: Operation; notice?: string }> {
     const m = space.mirror;
     let notice: string | undefined;
-    if (op.type === 'page.create' || op.type === 'page.move') {
+    const row =
+      (op.type === 'page.create' && op.payload.kind === 'row') ||
+      (op.type === 'page.move' && m.rowRecords.has(op.entityId));
+    if ((op.type === 'page.create' || op.type === 'page.move') && !row) {
       const payload = { ...op.payload } as PageRecord;
       const parent = payload.parentPageId ? m.pages.get(payload.parentPageId) : undefined;
       if (op.type === 'page.create' && payload.parentPageId && (!parent || parent.trashedAt)) {
@@ -403,20 +570,160 @@ export class FakeServer {
       }
       op = { ...op, payload } as Operation;
     }
+    op = this.keepRelated(m, op);
     const plan = await planOps([structuredClone(op)], m);
+    // A reverse property added to another database needs the account to see it (edit on both).
+    for (const database of plan.databases)
+      if (database.id !== op.entityId && !this.visible(account, database.id))
+        throw new Refusal('access.denied');
+    this.cascadeTrash(m, op, plan);
+    this.stampRows(m, account, op, plan);
+    // What the plan removes, read before it goes.
+    const removedRows = plan.deleteRows
+      .map((id) => m.rowRecords.get(id))
+      .filter((r): r is RowRecord => !!r);
+    const removedDatabases = plan.deletePages.filter((id) => m.databases.has(id));
+    const removedViews = [
+      ...plan.deleteViews,
+      ...removedDatabases.flatMap((id) => m.viewsOf(id).map((v) => v.id)),
+    ];
+    const made = new Set(plan.rows.filter((r) => !m.rowRecords.has(r.id)).map((r) => r.databaseId));
+    for (const r of removedRows) made.add(r.databaseId);
     m.apply(plan);
-    for (const p of plan.pages) this.change(space, 'page', p.id);
+    for (const p of plan.pages) {
+      space.kinds.set(p.id, p.kind);
+      this.change(space, 'page', p.id);
+    }
+    for (const r of plan.rows) {
+      space.kinds.set(r.id, 'row');
+      this.change(space, 'row', r.id);
+    }
     for (const id of plan.deletePages) {
       this.change(space, 'page', id, 'delete');
       this.gone.add(id);
       this.docs.delete(id);
     }
+    for (const id of removedDatabases) this.change(space, 'database', id, 'delete');
+    for (const r of removedRows) {
+      this.change(space, 'row', r.id, 'delete');
+      this.gone.add(r.id);
+      this.docs.delete(r.id);
+    }
+    for (const d of plan.databases) this.change(space, 'database', d.id);
+    for (const v of plan.views) this.change(space, 'view', v.id);
+    for (const id of new Set(removedViews)) this.change(space, 'view', id, 'delete');
+    this.recount(
+      space,
+      [...plan.rows.map((r) => r.databaseId), ...made],
+      new Set([...made].filter((id) => !plan.databases.some((d) => d.id === id))),
+    );
     for (const s of plan.sections) this.change(space, 'section', s.id);
     for (const id of plan.deleteSections) this.change(space, 'section', id, 'delete');
     for (const w of plan.workspaces) this.change(space, 'workspace', w.id);
     for (const f of plan.favourites) this.change(space, 'favourite', f.pageId);
     for (const f of plan.deleteFavourites) this.change(space, 'favourite', f.pageId, 'delete');
     return { op, notice };
+  }
+
+  /**
+   * A relation written to a row keeps only rows of its target database the server has (as the
+   * server reads the ids it is given); the rest are dropped before the planner sees them.
+   */
+  private keepRelated(m: Mirror, op: Operation): Operation {
+    let values: Record<PropertyId, Value | null> | undefined;
+    let databaseId: Id | null | undefined;
+    if (op.type === 'row.update') {
+      values = op.payload.values;
+      databaseId = m.rowRecords.get(op.entityId)?.databaseId;
+    } else if (op.type === 'page.create' && op.payload.kind === 'row') {
+      values = op.payload.row?.values;
+      databaseId = op.payload.parentPageId;
+    }
+    const database = databaseId ? m.databases.get(databaseId) : undefined;
+    if (!values || !database) return op;
+    let changed = false;
+    const kept = { ...values };
+    for (const [id, value] of Object.entries(values)) {
+      const def = database.properties.find((p) => p.id === id);
+      if (def?.type !== 'relation' || !Array.isArray(value)) continue;
+      const ids = value.filter(
+        (rowId) => m.rowRecords.get(rowId)?.databaseId === def.relation?.databaseId,
+      );
+      if (ids.length === value.length) continue;
+      kept[id] = ids.length ? ids : null;
+      changed = true;
+    }
+    if (!changed) return op;
+    if (op.type === 'row.update') return { ...op, payload: { values: kept } };
+    if (op.type !== 'page.create') return op;
+    const made = Object.fromEntries(
+      Object.entries(kept).filter((entry): entry is [PropertyId, Value] => entry[1] !== null),
+    );
+    return { ...op, payload: { ...op.payload, row: { values: made } } };
+  }
+
+  /**
+   * A trash reaches the rows of the databases it trashes (the subtree rule: the server's rows are
+   * pages under their database), and a restore brings back those it trashed. Rows trashed on
+   * their own keep their own root. (The client's planner does not cascade: its rows read as
+   * trashed while their database is, and the server's rows come in the feed.)
+   */
+  private cascadeTrash(m: Mirror, op: Operation, plan: Plan) {
+    if (op.type !== 'page.trash' && op.type !== 'page.restore') return;
+    for (const page of plan.pages) {
+      if (page.kind !== 'database') continue;
+      for (const r of m.rowsOf(page.id)) {
+        if (op.type === 'page.trash' && !r.trashedAt)
+          plan.rows.push({
+            ...r,
+            trashedAt: page.trashedAt,
+            trashRootId: op.entityId,
+            version: r.version + 1,
+          });
+        else if (op.type === 'page.restore' && r.trashRootId === op.entityId)
+          plan.rows.push({ ...r, trashedAt: null, trashRootId: null, version: r.version + 1 });
+      }
+    }
+  }
+
+  /**
+   * What the server writes on every row a plan writes: each property's version rises with every
+   * write of it (every property the operation names on its own row, whatever its value; on other
+   * rows, those whose value changed: a reverse relation, a conversion); who edited it last; who
+   * made it.
+   */
+  private stampRows(m: Mirror, account: Account, op: Operation, plan: Plan) {
+    const named = new Set<PropertyId>(
+      Object.keys(
+        op.type === 'row.update'
+          ? op.payload.values
+          : op.type === 'page.create'
+            ? (op.payload.row?.values ?? {})
+            : {},
+      ),
+    );
+    plan.rows = plan.rows.map((row) => {
+      const before = m.rowRecords.get(row.id);
+      const own = row.id === op.entityId;
+      const versions = { ...(before?.versions ?? {}) };
+      const keys = new Set([
+        ...Object.keys(row.values),
+        ...Object.keys(before?.values ?? {}),
+        ...(own ? named : []),
+      ]);
+      for (const key of keys)
+        if (
+          (own && named.has(key)) ||
+          JSON.stringify(row.values[key]) !== JSON.stringify(before?.values[key])
+        )
+          versions[key] = (versions[key] ?? 0) + 1;
+      return {
+        ...row,
+        versions,
+        updatedBy: account.id,
+        createdBy: before ? before.createdBy : account.id,
+      };
+    });
   }
 
   api(account: Account): SyncApi {
@@ -454,6 +761,7 @@ export class FakeServer {
           members: new Set([account.id]),
           readers: new Set(),
           yjs: new Map(),
+          kinds: new Map(),
         };
         space.mirror.load({
           workspaces: [record],
@@ -462,6 +770,8 @@ export class FakeServer {
           favourites: [],
           visits: [],
           assets: [],
+          databases: [],
+          views: [],
         });
         this.spaces.set(w.id, space);
         this.change(space, 'workspace', w.id);
@@ -477,10 +787,11 @@ export class FakeServer {
             results.push(structuredClone(seen));
             continue;
           }
-          const type = op.type.split('.')[0] as EntityType;
+          const type = this.entityTypeOf(space, op);
+          const subject = this.subjectOf(space, op);
           let result: OpResult;
-          if (op.type.startsWith('page.') && !this.visible(account, op.entityId)) {
-            // A page the caller may not see is, to them, no page at all.
+          if (subject && !this.visible(account, subject)) {
+            // A page the caller may not see is, to them, no page at all (a row: its database).
             result = {
               opId: op.opId,
               status: 'rejected',
@@ -502,7 +813,7 @@ export class FakeServer {
             };
           } else
             try {
-              const done = await this.apply(space, op);
+              const done = await this.apply(space, account, op);
               result = {
                 opId: op.opId,
                 status: 'applied',
@@ -511,7 +822,7 @@ export class FakeServer {
                 ...(done.notice ? { notice: done.notice } : {}),
               };
             } catch (error) {
-              if (!(error instanceof OpError)) throw error;
+              if (!(error instanceof OpError) && !(error instanceof Refusal)) throw error;
               result = {
                 opId: op.opId,
                 status: 'rejected',
@@ -520,7 +831,7 @@ export class FakeServer {
                 entity: structuredClone(this.entity(space, type, op)),
               };
             }
-          if (result.entityType === 'page' && result.entity)
+          if ((result.entityType === 'page' || result.entityType === 'row') && result.entity)
             result.entity = this.pageView(space, account, result.entity as PageRecord);
           space.applied.set(op.opId, structuredClone(result));
           results.push(result);
@@ -609,6 +920,62 @@ export class FakeServer {
                 kind: row.kind as 'grant' | 'revoke',
                 entity: null,
               };
+            case 'database': {
+              const database = this.visible(account, row.entityId)
+                ? m.databases.get(row.entityId)
+                : undefined;
+              return database
+                ? {
+                    seq: row.seq,
+                    entityType: 'database',
+                    entityId: row.entityId,
+                    kind: 'upsert',
+                    entity: structuredClone(database),
+                  }
+                : {
+                    seq: row.seq,
+                    entityType: 'database',
+                    entityId: row.entityId,
+                    kind: 'delete',
+                    entity: null,
+                  };
+            }
+            case 'view': {
+              const view = m.views.get(row.entityId);
+              return view && this.visible(account, view.databaseId)
+                ? {
+                    seq: row.seq,
+                    entityType: 'view',
+                    entityId: row.entityId,
+                    kind: 'upsert',
+                    entity: structuredClone(view),
+                  }
+                : {
+                    seq: row.seq,
+                    entityType: 'view',
+                    entityId: row.entityId,
+                    kind: 'delete',
+                    entity: null,
+                  };
+            }
+            case 'row': {
+              const found = m.rowRecords.get(row.entityId);
+              return found && this.visible(account, found.databaseId)
+                ? {
+                    seq: row.seq,
+                    entityType: 'row',
+                    entityId: row.entityId,
+                    kind: 'upsert',
+                    entity: this.pageView(space, account, found),
+                  }
+                : {
+                    seq: row.seq,
+                    entityType: 'row',
+                    entityId: row.entityId,
+                    kind: 'delete',
+                    entity: null,
+                  };
+            }
             default:
               return {
                 seq: row.seq,
@@ -637,6 +1004,10 @@ export class FakeServer {
             this.visible(account, p.id) &&
             (!under || under.has(p.id)),
         );
+        const databases = pages.flatMap((p) => {
+          const database = m.databases.get(p.id);
+          return database ? [structuredClone(database)] : [];
+        });
         return this.answer('tree', {
           workspace: { ...m.workspaces.get(workspaceId)! },
           sections: m.sectionsOf(workspaceId).map((s) => ({ ...s })),
@@ -646,6 +1017,53 @@ export class FakeServer {
           ),
           visits: [],
           cursor: space.seq,
+          databases,
+          views: databases.flatMap((d) => m.viewsOf(d.id).map((v) => structuredClone(v))),
+        });
+      },
+      rows: async (databaseId, after, limit) => {
+        this.gate('rows', account);
+        const { space } = this.databaseGate(account, databaseId);
+        if (limit < 1 || limit > 1000) throw new SyncHttpError(400, 'request.invalid');
+        const all = space.mirror.rowsOf(databaseId).sort((a, b) => (a.id < b.id ? -1 : 1));
+        const rest = after === null ? all : all.filter((r) => r.id > after);
+        const sent = rest.slice(0, limit);
+        return this.answer('rows', {
+          rows: sent.map((r) => this.pageView(space, account, r)),
+          next: rest.length > limit ? sent.at(-1)!.id : null,
+          total: all.length,
+        });
+      },
+      query: async (databaseId, request) => {
+        this.gate('query', account);
+        const { space, database } = this.databaseGate(account, databaseId);
+        const limit = request.limit ?? 100;
+        if (limit < 1 || limit > 500) throw new SyncHttpError(400, 'request.invalid');
+        const view = request.viewId ? space.mirror.views.get(request.viewId) : undefined;
+        if (request.viewId && view?.databaseId !== databaseId)
+          throw new SyncHttpError(404, 'not.found');
+        // Explicit parts override the view's.
+        const spec: QuerySpec = {
+          filter: request.filter !== undefined ? request.filter : (view?.config.filter ?? null),
+          sorts: request.sorts ?? view?.config.sorts ?? [],
+          group: request.group !== undefined ? request.group : (view?.config.group ?? null),
+          search: request.search,
+        };
+        const result = queryRows(
+          database,
+          space.mirror.rowsOf(databaseId),
+          spec,
+          request.context,
+          request.groupKey != null ? { groupKey: request.groupKey } : {},
+        );
+        // The cursor is opaque to clients: here, how many rows came before.
+        const offset = request.after ? Number(request.after) : 0;
+        const sent = result.rows.slice(offset, offset + limit);
+        return this.answer('query', {
+          rows: sent.map((r) => this.pageView(space, account, r)),
+          groups: result.groups,
+          total: result.rows.length,
+          next: offset + limit < result.rows.length ? String(offset + limit) : null,
         });
       },
       pushDoc: async (pageId, request) => {

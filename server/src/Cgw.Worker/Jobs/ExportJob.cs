@@ -70,9 +70,26 @@ public sealed class ExportJob(DocStates states, BlobStore blob, ILogger<ExportJo
         var locale = await db.Users.AsNoTracking().Where(u => u.Id == export.RequestedBy).Select(u => u.Locale).FirstOrDefaultAsync(ct);
         var levels = await access.AllLevelsAsync(member);
         var sections = (await db.Sections.AsNoTracking().ToListAsync(ct)).Where(s => Access.SeesSection(member, s)).ToList();
+        // A database's rows are pages under it, with its level.
         var pages = (await db.Pages.AsNoTracking().Where(p => p.DeletedAt == null).ToListAsync(ct))
-            .Where(p => levels.GetValueOrDefault(p.Id, Levels.None) != Levels.None).ToList();
+            .Where(p => Access.LevelIn(levels, p) != Levels.None).ToList();
         var assets = await db.Assets.AsNoTracking().Where(a => a.Status == AssetStatus.Ready).ToDictionaryAsync(a => a.Id, ct);
+        // The databases the requester may read (their pages are among the pages), their views and
+        // their rows' values, and people's names for the CSV files.
+        var databasePages = pages.Where(p => p.Kind == PageKinds.Database).Select(p => p.Id).ToHashSet();
+        var databases = new Dictionary<Guid, ExportBuilder.Database>();
+        if (databasePages.Count > 0)
+        {
+            var records = (await db.Databases.AsNoTracking().ToListAsync(ct)).Where(d => databasePages.Contains(d.PageId)).ToList();
+            var views = (await db.DatabaseViews.AsNoTracking().ToListAsync(ct)).Where(v => databasePages.Contains(v.DatabaseId)).ToLookup(v => v.DatabaseId);
+            foreach (var record in records)
+            {
+                var rows = await db.DatabaseRows.AsNoTracking().Where(r => r.DatabaseId == record.PageId).ToDictionaryAsync(r => r.PageId, ct);
+                databases[record.PageId] = new ExportBuilder.Database(record, views[record.PageId].ToList(), rows);
+            }
+        }
+        var people = (await db.WorkspaceMembers.AsNoTracking().Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new { u.Id, u.DisplayName }).ToListAsync(ct))
+            .ToDictionary(u => u.Id.ToString(), u => u.DisplayName, StringComparer.Ordinal);
 
         async Task<string> Content(Page page)
         {
@@ -91,7 +108,7 @@ public sealed class ExportJob(DocStates states, BlobStore blob, ILogger<ExportJo
                 await ExportBuilder.WriteAsync(file, new ExportBuilder.Input(
                     workspace, sections, pages, assets, Content,
                     async asset => await blob.GetAsync(asset.BlobKey, ct),
-                    ExportBuilder.Untitled(locale), clock.GetUtcNow()), ct);
+                    ExportBuilder.Untitled(locale), clock.GetUtcNow(), databases, people), ct);
                 await file.FlushAsync(ct);
                 file.Position = 0;
                 var key = BlobStore.ExportKey(export.WorkspaceId, export.Id);

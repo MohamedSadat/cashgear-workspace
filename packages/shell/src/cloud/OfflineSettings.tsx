@@ -2,7 +2,8 @@
 // this device holds and how many are still to fetch, and the storage this workspace uses here
 // (and, in a browser, what the browser allows the app). Read when the section opens and again on
 // the engine's `offline` events; nothing here changes while typing.
-import type { Id, OfflineProgress, StorageUsage } from '@cgw/workspace';
+import type { HoldProgress, Id, OfflineProgress, StorageUsage } from '@cgw/workspace';
+import { pageGlyph } from '../database/make';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell } from '../context';
@@ -50,6 +51,8 @@ export function OfflineSettings({
   const [progress, setProgress] = useState<OfflineProgress | null>(null);
   const [usage, setUsage] = useState<StorageUsage | null>(null);
   const [browser, setBrowser] = useState<{ usage: number; quota: number } | null>(null);
+  // A pinned database's rows held here, against the server's count (the engine holds them).
+  const [rows, setRows] = useState<Map<Id, HoldProgress>>(new Map());
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -58,12 +61,24 @@ export function OfflineSettings({
       (answer) => live && setUsage(answer),
       () => live && setUsage(null),
     );
-    if (synced)
+    if (synced) {
       void cloud.engine.offlineProgress(workspaceId).then(
         (answer) => live && setProgress(answer),
         () => live && setProgress(null),
       );
-    else setProgress(null);
+      const databases = cloud.offline
+        .pinList()
+        .map((pin) => pin.pageId)
+        .filter((id) => session.mirror.pages.get(id)?.kind === 'database');
+      void Promise.all(
+        databases.map((id) =>
+          cloud.engine.holdProgress(id).then((answer) => [id, answer] as const),
+        ),
+      ).then(
+        (answers) => live && setRows(new Map(answers)),
+        () => live && setRows(new Map()),
+      );
+    } else setProgress(null);
     if (platform.kind === 'web' && navigator.storage?.estimate)
       void navigator.storage.estimate().then(
         (estimate) =>
@@ -105,16 +120,25 @@ export function OfflineSettings({
                 {pins.map((pin) => {
                   const page = session.mirror.pages.get(pin.pageId);
                   const title = page?.title || t('page.untitled');
+                  const held = rows.get(pin.pageId);
                   return (
                     <li key={pin.pageId} className="cgw-list-row">
                       <span>
-                        <span aria-hidden="true">{page?.icon ?? '📄'} </span>
+                        <span aria-hidden="true">{pageGlyph(page)} </span>
                         <a href={routeHash({ kind: 'page', pageId: pin.pageId })} dir="auto">
                           {title}
                         </a>
                         <span className="cgw-muted">
                           {' · '}
                           {t(pin.subtree ? 'offline.pinnedSubtree' : 'offline.pinnedPage')}
+                          {held && (
+                            <>
+                              {' · '}
+                              {held.local
+                                ? t('databases.rowsHeldAll', { total: held.total })
+                                : t('databases.rowsHeld', { held: held.held, total: held.total })}
+                            </>
+                          )}
                         </span>
                       </span>
                       <button

@@ -1,5 +1,6 @@
 using Cgw.Core;
 using Cgw.Core.Assets;
+using Cgw.Core.Databases;
 using Cgw.Core.Documents;
 using Cgw.Core.Exports;
 using Cgw.Core.History;
@@ -31,6 +32,9 @@ public static class Modules
         services.AddScoped<SearchService>();
         services.AddScoped<VersionService>();
         services.AddScoped<ExportService>();
+        services.AddScoped<DatabaseOps>();
+        services.AddScoped<DatabaseService>();
+        services.AddSingleton<DatabaseRowCache>();
         return services;
     }
 
@@ -41,6 +45,7 @@ public static class Modules
         api.MapAssets();
         api.MapSharing();
         api.MapHistory();
+        api.MapDatabases();
         return api;
     }
 }

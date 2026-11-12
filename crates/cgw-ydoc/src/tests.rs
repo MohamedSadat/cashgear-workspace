@@ -157,3 +157,47 @@ fn the_c_abi_reports_errors_and_frees() {
     assert!(std::str::from_utf8(message).unwrap().contains("Yjs"));
     unsafe { cgw_buffer_free(out) };
 }
+
+/// Schema version 3 in search's plain text (the doc layer's `text.ts`): a date mention writes
+/// its date as stored, ` → ` and its end when that is valid too; a database view writes nothing.
+#[test]
+fn plain_text_writes_date_mentions_and_nothing_for_a_database_view() {
+    let doc = Doc::with_client_id(3);
+    let content = doc.get_or_insert_xml_fragment(CONTENT);
+    let update = {
+        let mut txn = doc.transact_mut();
+        let block = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        block.insert_attribute(&mut txn, "id", "cccccccccccc");
+        let body = block.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        body.push_back(&mut txn, XmlTextPrelim::new("Due "));
+        let span = body.push_back(&mut txn, XmlElementPrelim::empty("dateMention"));
+        span.insert_attribute(&mut txn, "date", "2026-11-13");
+        span.insert_attribute(&mut txn, "end", "2026-11-20T09:30:00Z");
+        body.push_back(&mut txn, XmlTextPrelim::new(" and "));
+        let day = body.push_back(&mut txn, XmlElementPrelim::empty("dateMention"));
+        day.insert_attribute(&mut txn, "date", "2026-12-01");
+        day.insert_attribute(&mut txn, "end", "next week");
+        let view = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        view.insert_attribute(&mut txn, "id", "dddddddddddd");
+        let table = view.push_back(&mut txn, XmlElementPrelim::empty("databaseView"));
+        table.insert_attribute(
+            &mut txn,
+            "databaseId",
+            "0195f4a0-0000-7000-8000-000000000001",
+        );
+        let alone = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        alone.insert_attribute(&mut txn, "id", "eeeeeeeeeeee");
+        let only = alone.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        let date = only.push_back(&mut txn, XmlElementPrelim::empty("dateMention"));
+        date.insert_attribute(&mut txn, "date", "2026-01-05");
+        let bad = alone.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        bad.push_back(&mut txn, XmlTextPrelim::new("x"));
+        let wrong = bad.push_back(&mut txn, XmlElementPrelim::empty("dateMention"));
+        wrong.insert_attribute(&mut txn, "date", "٢٠٢٦-01-05");
+        txn.encode_update_v1()
+    };
+    assert_eq!(
+        to_plain_text(&update, CONTENT).unwrap(),
+        "Due 2026-11-13 → 2026-11-20T09:30:00Z and 2026-12-01\n2026-01-05\nx\n"
+    );
+}

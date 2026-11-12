@@ -209,6 +209,70 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/databases/{databaseId}/export': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['exportDatabase'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/import': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['importDatabaseRows'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/query': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['queryDatabase'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/rows': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listDatabaseRows'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/exports/{exportId}': {
     parameters: {
       query?: never;
@@ -772,6 +836,19 @@ export interface components {
       headerName: string;
       token: string;
     };
+    DatabaseDto: {
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      id: string;
+      properties: components['schemas']['JsonElement'];
+      /** Format: int64 */
+      rowCount: number | string;
+      /** Format: int64 */
+      version: number | string;
+      /** Format: uuid */
+      workspaceId: string;
+    };
     DeviceInfo: {
       /** Format: date-time */
       createdAt: string;
@@ -811,10 +888,13 @@ export interface components {
       updateId: string;
     };
     EntityDto: {
+      database?: null | components['schemas']['DatabaseDto'];
       favourite?: null | components['schemas']['FavouriteDto'];
       member?: null | components['schemas']['MemberDto'];
       page?: null | components['schemas']['PageDto'];
+      row?: null | components['schemas']['RowDto'];
       section?: null | components['schemas']['SectionDto'];
+      view?: null | components['schemas']['ViewDto'];
       visit?: null | components['schemas']['VisitDto'];
       workspace?: null | components['schemas']['WorkspaceDto'];
     };
@@ -835,6 +915,27 @@ export interface components {
       email: string;
       locale: null | string;
       returnUrl: null | string;
+    };
+    GroupCountDto: {
+      /** Format: int64 */
+      count: number | string;
+      key: string;
+    };
+    ImportProblemDto: {
+      /** Format: int32 */
+      line: number | string;
+      message: string;
+    };
+    ImportRequestDto: {
+      columns: null | string[];
+      csv: null | string;
+      /** @default false */
+      header: boolean;
+    };
+    ImportResponseDto: {
+      /** Format: int64 */
+      created: number | string;
+      problems: components['schemas']['ImportProblemDto'][];
     };
     InviteAcceptance: {
       token: string;
@@ -1028,6 +1129,36 @@ export interface components {
       /** Format: int64 */
       headSeq: number | string;
     };
+    QueryContextDto: {
+      /** Format: uuid */
+      me?: null | string;
+      /** Format: int32 */
+      offsetMinutes?: null | number | string;
+      people?: null | {
+        [key: string]: string;
+      };
+      today?: null | string;
+    };
+    QueryRequestDto: {
+      after?: null | string;
+      context?: null | components['schemas']['QueryContextDto'];
+      filter?: unknown;
+      group?: unknown;
+      groupKey?: null | string;
+      /** Format: int32 */
+      limit?: null | number | string;
+      search?: null | string;
+      sorts?: unknown;
+      /** Format: uuid */
+      viewId?: null | string;
+    };
+    QueryResponseDto: {
+      groups: null | components['schemas']['GroupCountDto'][];
+      next: null | string;
+      rows: components['schemas']['RowDto'][];
+      /** Format: int64 */
+      total: number | string;
+    };
     RegisterRequest: {
       displayName: string;
       email: string;
@@ -1062,6 +1193,60 @@ export interface components {
     };
     RoleUpdate: {
       role: string;
+    };
+    RowDto: {
+      access: string;
+      computed: components['schemas']['JsonElement'];
+      /** Format: int64 */
+      computedVersion: null | number | string;
+      /** Format: uuid */
+      coverAssetId: null | string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      createdBy: null | string;
+      /** Format: uuid */
+      databaseId: string;
+      /** Format: int32 */
+      docEpoch: number | string;
+      /** Format: int64 */
+      docHeadSeq: number | string;
+      /** Format: int32 */
+      docSchemaVersion: number | string;
+      icon: null | string;
+      /** Format: uuid */
+      id: string;
+      isTemplate: boolean;
+      kind: string;
+      orderKey: string;
+      /** Format: uuid */
+      parentPageId: null | string;
+      restricted: boolean;
+      /** Format: uuid */
+      sectionId: string;
+      /** Format: uuid */
+      templateOfPageId: null | string;
+      title: string;
+      /** Format: date-time */
+      trashedAt: null | string;
+      /** Format: uuid */
+      trashRootId: null | string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: uuid */
+      updatedBy: null | string;
+      values: components['schemas']['JsonElement'];
+      /** Format: int64 */
+      version: number | string;
+      versions: components['schemas']['JsonElement'];
+      /** Format: uuid */
+      workspaceId: string;
+    };
+    RowsPageDto: {
+      next: null | string;
+      rows: components['schemas']['RowDto'][];
+      /** Format: int64 */
+      total: number | string;
     };
     SearchHitDto: {
       /** Format: uuid */
@@ -1136,9 +1321,11 @@ export interface components {
     TreeDto: {
       /** Format: int64 */
       cursor: number | string;
+      databases: components['schemas']['DatabaseDto'][];
       favourites: components['schemas']['FavouriteDto'][];
       pages: components['schemas']['PageDto'][];
       sections: components['schemas']['SectionDto'][];
+      views: components['schemas']['ViewDto'][];
       visits: components['schemas']['VisitDto'][];
       workspace: components['schemas']['WorkspaceDto'];
     };
@@ -1172,6 +1359,22 @@ export interface components {
     VersionInfo: {
       api: string;
       version: string;
+    };
+    ViewDto: {
+      config: components['schemas']['JsonElement'];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      databaseId: string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      orderKey: string;
+      type: string;
+      /** Format: int64 */
+      version: number | string;
+      /** Format: uuid */
+      workspaceId: string;
     };
     VisitDto: {
       /** Format: date-time */
@@ -1514,6 +1717,109 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AssetUrlDto'];
+        };
+      };
+    };
+  };
+  exportDatabase: {
+    parameters: {
+      query?: {
+        offsetMinutes?: number | string;
+        today?: string;
+        viewId?: string;
+      };
+      header?: never;
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/csv': string;
+        };
+      };
+    };
+  };
+  importDatabaseRows: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ImportRequestDto'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ImportResponseDto'];
+        };
+      };
+    };
+  };
+  queryDatabase: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['QueryRequestDto'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QueryResponseDto'];
+        };
+      };
+    };
+  };
+  listDatabaseRows: {
+    parameters: {
+      query?: {
+        after?: string;
+        limit?: number | string;
+      };
+      header?: never;
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RowsPageDto'];
         };
       };
     };

@@ -1,0 +1,344 @@
+/* The calendar view: a month grid (CSS grids, mirrored in RTL), rows in lanes over the days, the
+   rows with no date beside it at the inline end. */
+
+.cgw-cal {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.cgw-cal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-block: 6px;
+  padding-inline: 8px;
+}
+
+.cgw-cal-month {
+  margin: 0;
+  margin-inline-end: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.cgw-cal-turn:dir(rtl) span {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+
+.cgw-cal-status {
+  flex: 1;
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-cal-main {
+  display: flex;
+  flex: 1;
+  min-block-size: 0;
+}
+
+.cgw-cal-scroll {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.cgw-cal.is-embedded .cgw-cal-scroll {
+  max-block-size: min(70vh, 680px);
+}
+
+.cgw-cal-grid {
+  min-inline-size: 560px;
+  border-block-start: 1px solid var(--cg-border);
+  border-inline-start: 1px solid var(--cg-border);
+}
+
+.cgw-cal-weekdays,
+.cgw-cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.cgw-cal-weekday {
+  padding-block: 4px;
+  padding-inline: 8px;
+  border-block-end: 1px solid var(--cg-border);
+  border-inline-end: 1px solid var(--cg-border);
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+  text-align: start;
+}
+
+.cgw-cal-week {
+  position: relative;
+}
+
+.cgw-cal-day {
+  position: relative;
+  box-sizing: border-box;
+  padding-block: 4px;
+  padding-inline: 6px;
+  overflow: hidden;
+  border-block-end: 1px solid var(--cg-border);
+  border-inline-end: 1px solid var(--cg-border);
+  outline: none;
+}
+
+.cgw-cal-day[data-outside] {
+  background: var(--cg-surface-subtle, var(--cgw-db-row-hover));
+  color: var(--cg-text-secondary);
+}
+
+.cgw-cal-day:focus-visible {
+  box-shadow: inset 0 0 0 var(--cg-focus-ring-width, 2px)
+    var(--cg-focus-ring-color, var(--cg-accent));
+}
+
+.cgw-cal-day[aria-selected='true'] {
+  background: var(--cgw-db-active-bg);
+}
+
+.cgw-cal-day[data-drop] {
+  background: var(--cgw-db-active-bg);
+  box-shadow: inset 0 0 0 2px var(--cgw-db-active);
+}
+
+.cgw-cal-num {
+  display: inline-block;
+  min-inline-size: 18px;
+  padding-inline: 4px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.cgw-cal-day[data-today] .cgw-cal-num {
+  background: var(--cg-accent);
+  color: var(--cg-accent-contrast, #fff);
+  font-weight: 600;
+}
+
+.cgw-cal-add {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 2px;
+  min-inline-size: 20px;
+  block-size: 20px;
+  opacity: 0;
+}
+
+.cgw-cal-day:hover .cgw-cal-add,
+.cgw-cal-day:focus-within .cgw-cal-add {
+  opacity: 1;
+}
+
+.cgw-cal-more {
+  position: absolute;
+  z-index: 2;
+  inset-block-end: 1px;
+  inset-inline-start: 4px;
+  padding-block: 0;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: var(--cg-radius-sm, 3px);
+  background: transparent;
+  color: var(--cg-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.cgw-cal-more:hover {
+  background: var(--cg-hover, var(--cgw-db-row-hover));
+  color: var(--cg-text);
+}
+
+.cgw-cal-lanes {
+  position: absolute;
+  inset-block-start: 26px;
+  inset-inline: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  pointer-events: none;
+}
+
+.cgw-cal-item {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+  margin-block: 1px;
+  margin-inline: 3px;
+  padding-inline: 6px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--cgw-db-blue-bg);
+  color: var(--cgw-db-chip-text);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.cgw-cal-item:hover {
+  box-shadow: inset 0 0 0 1px var(--cgw-db-blue);
+}
+
+.cgw-cal-item:focus-visible {
+  box-shadow: 0 0 0 var(--cg-focus-ring-width, 2px) var(--cg-focus-ring-color, var(--cg-accent));
+}
+
+.cgw-cal-item[data-before] {
+  margin-inline-start: 0;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.cgw-cal-item[data-after] {
+  margin-inline-end: 0;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.cgw-cal-item[data-dragging],
+.cgw-cal-undated-item[data-dragging] {
+  opacity: 0.35;
+}
+
+.cgw-cal-time {
+  flex: none;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.cgw-cal-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cgw-cal-new {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.cgw-cal-new-date {
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-cal-more-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+
+.cgw-cal-more-item {
+  display: flex;
+  gap: 6px;
+  inline-size: 100%;
+  padding-block: 4px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--cg-radius-sm, 3px);
+  background: transparent;
+  color: var(--cg-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cgw-cal-more-item:hover,
+.cgw-cal-more-item:focus-visible {
+  background: var(--cg-hover, var(--cgw-db-row-hover));
+}
+
+.cgw-cal-undated {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  inline-size: 240px;
+  min-block-size: 0;
+  border-inline-start: 1px solid var(--cg-border);
+}
+
+.cgw-cal-undated-title {
+  margin: 0;
+  padding-block: 6px;
+  padding-inline: 10px;
+  border-block-end: 1px solid var(--cg-border);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cgw-cal-undated-list {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+  max-block-size: min(70vh, 720px);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.cgw-cal-undated-space {
+  pointer-events: none;
+}
+
+.cgw-cal-undated-item {
+  position: absolute;
+  inset-inline: 0;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 4px;
+  block-size: 34px;
+  padding-inline: 6px;
+  cursor: grab;
+}
+
+.cgw-cal-undated-open {
+  flex: 1;
+  min-inline-size: 0;
+  padding-block: 4px;
+  padding-inline: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--cg-radius-sm, 3px);
+  background: transparent;
+  color: var(--cg-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cgw-cal-undated-open:hover,
+.cgw-cal-undated-open:focus-visible {
+  background: var(--cg-hover, var(--cgw-db-row-hover));
+}
+
+.cgw-cal-undated-empty {
+  margin: 0;
+  padding: 10px;
+  color: var(--cg-text-secondary);
+  font-size: 13px;
+}

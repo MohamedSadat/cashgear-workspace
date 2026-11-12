@@ -1,15 +1,17 @@
 // The block schema (DATA_MODEL.md, "Page content"), fixed by spike S1:
 //   doc: block*      block: (body | block)*      one textBody node whose `kind` sets the text kind
 // Rules that hold forever: `*` only; every attribute optional with a default; no node or attribute
-// is ever removed or renamed. Schema version 2 (version 1 plus `tableOfContents`).
+// is ever removed or renamed. Schema version 3 (version 2 plus `databaseView` and `dateMention`).
 import { Extension, Mark, Node, getSchema, mergeAttributes, type AnyExtension } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
+import { dateMentionText, isDateValue } from './dates';
 
 /**
  * Raised for every change an older client could not draw (DATA_MODEL.md). 1: Phase 1's blocks.
- * 2: `tableOfContents`. Each rise has a migration (migrations.ts) and a fixture (fixtures/).
+ * 2: `tableOfContents`. 3: `databaseView` and `dateMention`. Each rise has a migration
+ * (migrations.ts) and a fixture (fixtures/).
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const TEXT_KINDS = [
   'paragraph',
@@ -260,6 +262,14 @@ const Bookmark = atomBody('bookmark', { url: { default: null } });
 const ChildPage = atomBody('childPage', { pageId: { default: null } });
 /** Version 2: the page's headings, each a link to its block; drawn, never stored. */
 const TableOfContents = atomBody('tableOfContents', {});
+/**
+ * Version 3: a view of a database, by id (D6): the database is a page of its own, never content
+ * of this one, so deleting the block never deletes it. `viewId` null is the database's first view.
+ */
+const DatabaseView = atomBody('databaseView', {
+  databaseId: { default: null },
+  viewId: { default: null },
+});
 
 // Tables (DATA_MODEL.md): cells hold inline content. Header row and column are table attributes,
 // not cell types. prosemirror-tables finds the three node types by their `tableRole`.
@@ -268,6 +278,15 @@ const TableRoles = Extension.create({
   name: 'tableRoles',
   extendNodeSchema: (extension) =>
     TABLE_ROLES[extension.name] ? { tableRole: TABLE_ROLES[extension.name] } : {},
+});
+// A date's text for ProseMirror's own text reads (`textContent`, `textBetween`): a heading holding
+// a date lists it in a table of contents, and copied text says it. Not part of the stored schema.
+const LeafText = Extension.create({
+  name: 'leafText',
+  extendNodeSchema: (extension) =>
+    extension.name === 'dateMention'
+      ? { leafText: (node: { attrs: Record<string, unknown> }) => dateMentionText(node.attrs) }
+      : {},
 });
 
 const Table = Node.create({
@@ -400,6 +419,52 @@ const PageMention = Node.create({
   renderText: () => '@page',
 });
 
+/**
+ * Version 3: a date in a line of text, as a database date value's start (dates.ts), with an
+ * optional end. Drawn in the interface language; written as stored in plain text and Markdown.
+ */
+const DateMention = Node.create({
+  name: 'dateMention',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes: () => ({
+    date: {
+      default: null,
+      parseHTML: (element: HTMLElement) => {
+        const value = element.getAttribute('data-date');
+        return isDateValue(value) ? value : null;
+      },
+      renderHTML: (attrs: Record<string, unknown>) =>
+        isDateValue(attrs.date) ? { 'data-date': attrs.date } : {},
+    },
+    end: {
+      default: null,
+      parseHTML: (element: HTMLElement) => {
+        const value = element.getAttribute('data-end');
+        return isDateValue(value) ? value : null;
+      },
+      renderHTML: (attrs: Record<string, unknown>) =>
+        isDateValue(attrs.end) ? { 'data-end': attrs.end } : {},
+    },
+  }),
+  // A span without a date is not a mention: its text is kept as text instead.
+  parseHTML: () => [
+    {
+      tag: 'span[data-date-mention]',
+      getAttrs: (node: HTMLElement) => (isDateValue(node.getAttribute('data-date')) ? null : false),
+    },
+  ],
+  // The date as text inside, so HTML pasted into another program still says it.
+  renderHTML: ({ HTMLAttributes, node }) => [
+    'span',
+    mergeAttributes({ 'data-date-mention': '', class: 'cgw-date-mention' }, HTMLAttributes),
+    dateMentionText(node.attrs),
+  ],
+  renderText: ({ node }) => dateMentionText(node.attrs),
+});
+
 const simpleMark = (name: string, tags: string[], render: string, extra = {}) =>
   Mark.create({
     name,
@@ -487,6 +552,7 @@ const tokenMark = (name: 'textColour' | 'highlight', css: string) =>
 export function schemaExtensions(): AnyExtension[] {
   return [
     TableRoles,
+    LeafText,
     Doc,
     Text,
     Block,
@@ -501,8 +567,10 @@ export function schemaExtensions(): AnyExtension[] {
     Bookmark,
     ChildPage,
     TableOfContents,
+    DatabaseView,
     HardBreak,
     PageMention,
+    DateMention,
     Link,
     Bold,
     Italic,
@@ -522,6 +590,7 @@ export const ATOM_BODIES = [
   'bookmark',
   'childPage',
   'tableOfContents',
+  'databaseView',
 ] as const;
 
 let cached: Schema | null = null;

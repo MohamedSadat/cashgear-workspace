@@ -170,6 +170,8 @@ public sealed class AccountDeletion(
             await db.PageVisits.Where(v => chunk.Contains(v.PageId)).ExecuteDeleteAsync(ct);
             await db.PageAncestors.Where(a => chunk.Contains(a.PageId)).ExecuteDeleteAsync(ct);
         }
+        // Their databases' records, views and row values go with the pages.
+        await Cgw.Core.Databases.DatabaseTree.DeleteDatabasesAsync(db, changes, pages, userId, now, ct);
         foreach (var section in sections) changes.Add("section", section.Id, "delete", section.Version + 1, userId);
         db.Sections.RemoveRange(sections);
         await db.WorkspaceMembers.Where(m => m.UserId == userId).ExecuteDeleteAsync(ct);

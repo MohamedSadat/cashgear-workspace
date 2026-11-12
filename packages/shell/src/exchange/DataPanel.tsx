@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
+import { useDatabaseHost } from '../database/context';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
 
@@ -12,10 +13,16 @@ export async function exportAndSave(
   save: (name: string, bytes: Uint8Array, type: string) => Promise<void>,
   untitled: string,
   pageIds?: string[],
+  /** People's names, for a database's CSV (the database host's people). */
+  people?: { id: string; name: string }[],
 ) {
   const { exportZip } = await import('./exchange');
   await session.flushAll();
-  const { bytes, name } = await exportZip(session, { pageIds, untitled });
+  const { bytes, name } = await exportZip(session, {
+    pageIds,
+    untitled,
+    people: people && Object.fromEntries(people.map((p) => [p.id, p.name])),
+  });
   await save(name, bytes, 'application/zip');
 }
 
@@ -24,6 +31,7 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
   const { platform } = useShell();
   const cloud = useCloud();
   const account = useAccount(cloud);
+  const databases = useDatabaseHost();
   const workspace = session.current;
   // The server decides; the button is offered to those it would answer.
   const serverExport =
@@ -58,7 +66,13 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
           onClick={() => {
             setBusy('export');
             setMessage(null);
-            exportAndSave(session, (n, b, ty) => platform.saveFile(n, b, ty), t('page.untitled'))
+            exportAndSave(
+              session,
+              (n, b, ty) => platform.saveFile(n, b, ty),
+              t('page.untitled'),
+              undefined,
+              databases?.people(),
+            )
               .then(() => setMessage(t('exchange.exported')))
               .catch((error: unknown) => {
                 console.error(error);

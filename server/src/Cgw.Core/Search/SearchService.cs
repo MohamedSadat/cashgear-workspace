@@ -82,6 +82,16 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
 
         var full = await fullText.AvailableAsync(db, ct);
         var levels = await access.AllLevelsAsync(member);
+        // Rows are not in it: a row found has its database's level, read when one is found.
+        var rowDatabases = new Dictionary<Guid, Guid?>();
+        async Task<string> LevelAsync(Guid pageId)
+        {
+            if (levels.TryGetValue(pageId, out var level)) return level;
+            if (!rowDatabases.TryGetValue(pageId, out var database))
+                rowDatabases[pageId] = database = await db.Pages.AsNoTracking().Where(p => p.Id == pageId && p.Kind == PageKinds.Row)
+                    .Select(p => p.ParentPageId).FirstOrDefaultAsync(ct);
+            return database is { } d ? levels.GetValueOrDefault(d, Levels.None) : Levels.None;
+        }
         var hits = new List<(Key Key, string Title)>();
         var take = Math.Max(size * 3, 60);
         var exhausted = false;
@@ -93,7 +103,7 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
             {
                 var key = new Key(row.TitleHits, row.UpdatedAt, GuidBytes.FromBytes(row.PageId));
                 scanned = key;
-                if (levels.GetValueOrDefault(key.PageId, Levels.None) == Levels.None) continue;
+                if (await LevelAsync(key.PageId) == Levels.None) continue;
                 hits.Add((key, row.Title));
                 if (hits.Count > size) break;
             }

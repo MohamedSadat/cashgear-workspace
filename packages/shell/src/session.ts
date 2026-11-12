@@ -1,6 +1,11 @@
 // The open workspace: the local store, the metadata mirror drawn by the sidebar, and the page
 // documents currently open. Every change to the tree is an operation, planned against the mirror,
 // made durable by the store, then shown (SYNC_DESIGN.md, Channel 2).
+//
+// Phase 4: rows. The mirror holds a database's rows once something needs them (a view, a plan
+// that reads them); they are read from the store then, and again whenever the sync engine says a
+// held database's rows changed (`rowsChanged`) or the mirror is read again. A row is a page for
+// documents, titles, search and the trash; its access is its database's.
 import type { DocEvent, DocJSON, DocumentOptions, PageDocument } from '@cgw/doc';
 import {
   Mirror,
@@ -15,6 +20,8 @@ import {
   type LocalStore,
   type Operation,
   type PageRecord,
+  type PropertyDef,
+  type RowRecord,
   type SearchHit,
   type SectionRecord,
   type WorkspaceRecord,
@@ -84,6 +91,12 @@ export const canEditPage = (page: PageRecord | undefined) =>
   !page?.access || page.access === 'full' || page.access === 'edit';
 const mayEdit = canEditPage;
 
+/** A page, a database's page or a row, as the session finds it by id. */
+export type AnyPage = PageRecord | RowRecord;
+
+export const isRowRecord = (page: AnyPage | undefined | null): page is RowRecord =>
+  page?.kind === 'row';
+
 /** Nothing of the page's document is on this device: no snapshot, no update. */
 const holdsNothing = (doc: PageDocument) => doc.doc.store.clients.size === 0;
 
@@ -101,6 +114,11 @@ export class WorkspaceSession {
   private workspace: Id | null;
   private readonly listeners = new Set<() => void>();
   private readonly resetListeners = new Set<(pageId: Id) => void>();
+  /** Databases whose rows are in the mirror: read again with it (`reloadMirror`, `rowsChanged`). */
+  private readonly rowDatabases = new Set<Id>();
+  private readonly rowListeners = new Set<(databaseId: Id) => void>();
+  private readonly pendingRows = new Set<Id>();
+  private rowsTask: Promise<void> | null = null;
   private cloud: CloudHooks | null = null;
   /** Bytes of an asset this device does not hold, from the server (cloud/cloud.ts). */
   remoteAssets: ((assetId: Id) => Promise<Uint8Array | null>) | null = null;
@@ -147,14 +165,30 @@ export class WorkspaceSession {
     this.cloud = hooks;
   }
 
-  /** The mirror read again from the store, after the sync engine wrote what the server said. */
-  async reloadMirror(): Promise<void> {
-    this.mirror.reset(await this.store.readMirror(null));
+  /**
+   * The mirror read again from the store, after the sync engine wrote what the server said. The
+   * rows it held are read with it and put back at once, so a plan or a view never sees them gone.
+   * In turn with the changes made here, so nothing read before a change is shown after it.
+   */
+  reloadMirror(): Promise<void> {
+    return this.serial(() => this.reloadMirrorNow());
+  }
+
+  private async reloadMirrorNow(): Promise<void> {
+    const snapshot = await this.store.readMirror(null);
+    const kept = [...this.rowDatabases].filter((id) => snapshot.databases.some((d) => d.id === id));
+    const rows = await Promise.all(kept.map((id) => this.store.readRows(id)));
+    this.mirror.reset(snapshot);
+    this.rowDatabases.clear();
+    kept.forEach((id, i) => {
+      this.mirror.loadRows(id, rows[i]);
+      this.rowDatabases.add(id);
+    });
     // Access changed on the server (a resync): a page opened to edit, or to read, opens again the
     // other way, so the editor follows and a reader's open never writes.
     for (const [pageId, editable] of this.editable) {
-      const page = this.mirror.pages.get(pageId);
-      if (page && this.docs.has(pageId) && mayEdit(page) !== editable) this.resetDoc(pageId);
+      const page = this.record(pageId);
+      if (page && this.docs.has(pageId) && this.canEdit(pageId) !== editable) this.resetDoc(pageId);
     }
     // A workspace this device lost goes from view; the first one the account brings opens.
     if (!this.workspace || !this.mirror.workspaces.has(this.workspace)) {
@@ -185,7 +219,7 @@ export class WorkspaceSession {
   }
 
   private clientIdFor(pageId: Id): Promise<number | undefined> {
-    const workspaceId = this.mirror.pages.get(pageId)?.workspaceId ?? this.workspace;
+    const workspaceId = this.record(pageId)?.workspaceId ?? this.workspace;
     return workspaceId && this.cloud
       ? this.cloud.clientIdFor(workspaceId)
       : Promise.resolve(undefined);
@@ -224,7 +258,9 @@ export class WorkspaceSession {
 
   /** Plans against the mirror, writes through the store, then shows. One at a time. */
   apply(ops: Operation[]): Promise<void> {
-    const run = async () => {
+    return this.serial(async () => {
+      // The rows a plan reads (the database's, and those its relations point into) are here first.
+      await this.prepareRows(ops);
       const plan = await planOps(ops, this.mirror);
       try {
         await this.store.applyLocalOps(ops);
@@ -234,11 +270,132 @@ export class WorkspaceSession {
         throw error;
       }
       this.mirror.apply(plan);
+      // A database made here holds every row it has: its (new) rows are all in the mirror.
+      for (const op of ops)
+        if (op.type === 'page.create' && op.payload.kind === 'database') {
+          if (!this.mirror.rowsLoaded(op.entityId))
+            this.mirror.loadRows(op.entityId, this.mirror.rowsOf(op.entityId));
+          this.rowDatabases.add(op.entityId);
+        }
       this.cloud?.changed();
-    };
+    });
+  }
+
+  /** Runs after everything asked for before it (changes, mirror and row reads), one at a time. */
+  private serial<T>(run: () => Promise<T>): Promise<T> {
     const next = this.queue.then(run, run);
     this.queue = next.catch(() => undefined);
     return next;
+  }
+
+  // Rows ----------------------------------------------------------------------------------------
+
+  /** A page, a database's page or a row (if its database's rows are in the mirror). */
+  record(pageId: Id): AnyPage | undefined {
+    return this.mirror.pages.get(pageId) ?? this.mirror.rowRecords.get(pageId);
+  }
+
+  /**
+   * Whether the account may change a page; a row is changed as its database may be (contract
+   * section 1: a row's level is its database's). The server is still the check.
+   */
+  canEdit(pageId: Id): boolean {
+    const page = this.record(pageId);
+    if (!isRowRecord(page)) return mayEdit(page);
+    return mayEdit(page) && mayEdit(this.mirror.pages.get(page.databaseId));
+  }
+
+  /** A database's rows held on this device, read into the mirror if they are not there yet. */
+  loadRows(databaseId: Id): Promise<RowRecord[]> {
+    if (this.mirror.rowsLoaded(databaseId) && this.rowDatabases.has(databaseId))
+      return Promise.resolve(this.mirror.rowsOf(databaseId));
+    return this.serial(() => this.loadRowsNow(databaseId));
+  }
+
+  private async loadRowsNow(databaseId: Id): Promise<RowRecord[]> {
+    if (!this.mirror.rowsLoaded(databaseId))
+      this.mirror.loadRows(databaseId, await this.store.readRows(databaseId));
+    this.rowDatabases.add(databaseId);
+    return this.mirror.rowsOf(databaseId);
+  }
+
+  /** A row by id: from the mirror, else from the store (its database's rows are read then). */
+  async findRow(rowId: Id): Promise<RowRecord | null> {
+    const known = this.mirror.rowRecords.get(rowId);
+    if (known) return known;
+    const stored = await this.store.getPage(rowId);
+    if (!isRowRecord(stored)) return null;
+    await this.loadRows(stored.databaseId);
+    return this.mirror.rowRecords.get(rowId) ?? stored;
+  }
+
+  /**
+   * The sync engine wrote rows of a held database (or its hold changed): the mirror reads them
+   * again. Several at once are read once; listeners hear of each database after.
+   */
+  rowsChanged(databaseId: Id) {
+    this.pendingRows.add(databaseId);
+    this.rowsTask ??= this.serial(async () => {
+      this.rowsTask = null;
+      const ids = [...this.pendingRows];
+      this.pendingRows.clear();
+      for (const id of ids)
+        if (this.rowDatabases.has(id)) this.mirror.loadRows(id, await this.store.readRows(id));
+      for (const id of ids) for (const listener of this.rowListeners) listener(id);
+    });
+  }
+
+  /** Told after a held database's rows (or its hold) changed and the mirror has them. */
+  onRows(listener: (databaseId: Id) => void): () => void {
+    this.rowListeners.add(listener);
+    return () => void this.rowListeners.delete(listener);
+  }
+
+  /** Every database whose rows a plan of these operations reads, read into the mirror. */
+  private async prepareRows(ops: Operation[]) {
+    const ids = new Set<Id>();
+    const targets = (properties: readonly PropertyDef[]) => {
+      for (const def of properties)
+        if (def.type === 'relation' && def.relation) ids.add(def.relation.databaseId);
+    };
+    for (const op of ops) {
+      switch (op.type) {
+        case 'workspace.create':
+        case 'workspace.update':
+        case 'section.create':
+        case 'section.update':
+        case 'section.delete':
+        case 'favourite.set':
+        case 'visit.record':
+        case 'view.upsert':
+        case 'view.delete':
+          break;
+        case 'db.update':
+          ids.add(op.entityId);
+          targets(op.payload.properties ?? []);
+          break;
+        case 'page.create':
+          if (op.payload.kind === 'row' && op.payload.parentPageId)
+            ids.add(op.payload.parentPageId);
+          if (op.payload.kind === 'database') targets(op.payload.database?.properties ?? []);
+          break;
+        default: {
+          // A page operation or a row's values: on a row, its database; on a database's page
+          // (a move, a trash, a delete), its rows.
+          const page = this.mirror.pages.get(op.entityId);
+          if (page) {
+            if (page.kind === 'database') ids.add(page.id);
+            break;
+          }
+          const row =
+            this.mirror.rowRecords.get(op.entityId) ?? (await this.store.getPage(op.entityId));
+          if (isRowRecord(row)) ids.add(row.databaseId);
+        }
+      }
+    }
+    for (const id of [...ids]) targets(this.mirror.databases.get(id)?.properties ?? []);
+    for (const id of ids)
+      if (this.mirror.databases.has(id) && !this.mirror.rowsLoaded(id)) await this.loadRowsNow(id);
   }
 
   private ws(): Id {
@@ -401,10 +558,10 @@ export class WorkspaceSession {
   }
 
   async trashPage(pageId: Id) {
-    const page = this.mirror.pages.get(pageId);
+    const page = this.record(pageId) ?? (await this.findRow(pageId)) ?? undefined;
     if (!page) return;
     await this.apply([newOp('page.trash', this.ws(), pageId, {}, page.version)]);
-    for (const id of [pageId, ...this.mirror.descendantIds(pageId)]) this.forget(id);
+    for (const id of this.underneath(pageId)) this.forget(id);
   }
 
   restorePage(pageId: Id) {
@@ -412,9 +569,20 @@ export class WorkspaceSession {
   }
 
   async deletePage(pageId: Id) {
-    const ids = [pageId, ...this.mirror.descendantIds(pageId)];
+    const ids = this.underneath(pageId);
     await this.apply([newOp('page.delete', this.ws(), pageId, {})]);
     for (const id of ids) this.forget(id);
+  }
+
+  /** A page and the pages under it, and the open rows of the databases among them. */
+  private underneath(pageId: Id): Id[] {
+    const ids = [pageId, ...this.mirror.descendantIds(pageId)];
+    const databases = new Set(ids);
+    for (const id of this.docs.keys()) {
+      const row = this.mirror.rowRecords.get(id);
+      if (row && databases.has(row.databaseId)) ids.push(id);
+    }
+    return ids;
   }
 
   setFavourite(pageId: Id, favourite: boolean) {
@@ -437,7 +605,7 @@ export class WorkspaceSession {
 
   private readonly folded = new Map<Id, { title: string; folded: string }>();
 
-  private foldedTitle(page: PageRecord): string {
+  private foldedTitle(page: AnyPage): string {
     const cached = this.folded.get(page.id);
     if (cached?.title === page.title) return cached.folded;
     const folded = normaliseText(page.title);
@@ -454,12 +622,20 @@ export class WorkspaceSession {
     const terms = searchTerms(normalisedQuery);
     if (!terms.length) return [];
     const hits = new Map<Id, SearchHit>();
-    for (const page of this.mirror.pages.values()) {
-      if (page.workspaceId !== workspaceId || page.trashedAt) continue;
+    const titled = (page: AnyPage) => {
       const words = this.foldedTitle(page).split(' ');
       if (terms.every((term) => words.some((word) => word.startsWith(term))))
         hits.set(page.id, { pageId: page.id, title: page.title, snippet: '', score: 3 });
+    };
+    for (const page of this.mirror.pages.values()) {
       if (hits.size >= limit) break;
+      if (page.workspaceId === workspaceId && !page.trashedAt) titled(page);
+    }
+    // Rows whose database's rows are in the mirror (the rest are found in the store's index).
+    for (const row of this.mirror.rowRecords.values()) {
+      if (hits.size >= limit) break;
+      if (row.workspaceId !== workspaceId || row.trashedAt || row.isTemplate) continue;
+      if (!this.mirror.pages.get(row.databaseId)?.trashedAt) titled(row);
     }
     for (const hit of await this.store.search(workspaceId, normalisedQuery, limit)) {
       const existing = hits.get(hit.pageId);
@@ -486,7 +662,7 @@ export class WorkspaceSession {
   }
 
   async indexPage(pageId: Id, json?: DocJSON): Promise<void> {
-    const page = this.mirror.pages.get(pageId);
+    const page = this.record(pageId);
     if (!page) return;
     const { plainText, PageDocument, fragmentToJSON } = await import('@cgw/doc');
     let content = json;
@@ -598,6 +774,31 @@ export class WorkspaceSession {
     await this.writeFirstDocument(record.id, record.workspaceId, content);
   }
 
+  /**
+   * A row made from a row template (`templateOfPageId`) starts with the template's body, as a page
+   * made from a template does (`newFromTemplate`): new block ids, links into the template's own
+   * copy kept. Nothing is written when the template has no body (the row's is made on its first
+   * open) or the row has one already.
+   */
+  async copyBody(templateId: Id, rowId: Id): Promise<void> {
+    const template = this.record(templateId) ?? (await this.findRow(templateId)) ?? undefined;
+    if (!template) return;
+    if ((await this.store.loadDoc(rowId)).updates.length) return;
+    const held = await this.store.loadDoc(templateId);
+    // A body only the server has is pulled first (offline, the row starts empty).
+    if (!held.snapshot && !held.updates.length && (template.docHeadSeq ?? 0) > 0)
+      await this.cloud?.pullPage(templateId).catch(() => undefined);
+    const content = await this.pageContent(templateId);
+    if (!content.content?.length) return;
+    const { withNewIds } = await import('@cgw/doc');
+    const row = this.record(rowId);
+    await this.writeFirstDocument(
+      rowId,
+      row?.workspaceId ?? template.workspaceId,
+      withNewIds(content),
+    );
+  }
+
   /** A page's first document update: the given content, or one empty paragraph. */
   async writeFirstDocument(pageId: Id, workspaceId: Id, content: DocJSON | undefined) {
     const { newDocumentUpdate } = await import('@cgw/doc');
@@ -617,18 +818,32 @@ export class WorkspaceSession {
     if (!doc) {
       // The document layer (Yjs) loads with the editor, not with the frame.
       doc = Promise.all([import('@cgw/doc'), this.clientIdFor(pageId)]).then(
-        async ([{ PageDocument, SCHEMA_VERSION }, clientId]) => {
-          const record = this.mirror.pages.get(pageId);
+        async ([{ PageDocument, SCHEMA_VERSION, newDocumentUpdate }, clientId]) => {
+          const record = this.record(pageId);
           const options: DocumentOptions = {
             ...this.docOptions,
             clientId,
             // A reader's open writes nothing: no migration, no meta stamp (they would be refused).
-            canEdit: mayEdit(record),
+            canEdit: this.canEdit(pageId),
             onEvent: (event) => this.cloud?.docEvent?.(event),
           };
           this.editable.set(pageId, options.canEdit!);
           let opened = await PageDocument.open(pageId, this.store, options);
-          if (holdsNothing(opened)) {
+          // A row the server holds no body of (never opened anywhere) has nothing to fetch.
+          const bodyless = isRowRecord(record) && !((record.docHeadSeq ?? 0) > 0);
+          if (holdsNothing(opened) && isRowRecord(record) && (bodyless || !this.cloud)) {
+            // A row's body is made on its first open (contract section 1), as a page's is when
+            // it is made: one empty paragraph, by the client that opens it first. A reader is
+            // shown it empty and writes nothing.
+            if (options.canEdit) {
+              await opened.close();
+              await this.store.appendDocUpdates(pageId, [
+                { updateId: uuidv7(), data: newDocumentUpdate(pageId, undefined, clientId) },
+              ]);
+              opened = await PageDocument.open(pageId, this.store, options);
+              this.cloud?.changed();
+            }
+          } else if (holdsNothing(opened)) {
             // Nothing of it on this device (a page made elsewhere, never opened here): the
             // server's copy first, so the page opens with its content, or says why it cannot.
             try {

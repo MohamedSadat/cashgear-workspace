@@ -5,8 +5,10 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useShell } from '../context';
 import { Dialog } from '../Dialog';
+import type { ShellDatabaseHost } from '../database/host';
+import { pageGlyph } from '../database/make';
 import { navigate } from '../route';
-import type { WorkspaceSession } from '../session';
+import { isRowRecord, type WorkspaceSession } from '../session';
 import { formatShortcut } from '../shortcuts';
 
 interface Item {
@@ -19,7 +21,16 @@ interface Item {
   run: () => void;
 }
 
-export function Palette({ session, onClose }: { session: WorkspaceSession; onClose: () => void }) {
+export function Palette({
+  session,
+  databases,
+  onClose,
+}: {
+  session: WorkspaceSession;
+  /** Finds a row a search hit names that this device does not hold yet (it is pulled). */
+  databases?: ShellDatabaseHost | null;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const services = useShell();
   const [query, setQuery] = useState('');
@@ -48,12 +59,13 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
       if (!live) return;
       setResult({ query: q, hits: found });
       performance.measure('cgw-search', { start: started, end: performance.now() });
-      // Then the account's: pages this device holds no text for, local hits first (M2.7).
+      // Then the account's: pages this device holds no text for, local hits first (M2.7). A hit
+      // the mirror has no page for is a row (rows are not in the tree); it is found when opened.
       void session.remoteSearch?.(q, 20).then((remote) => {
         if (!live || !remote.length) return;
         const seen = new Set(found.map((hit) => hit.pageId));
         const more = remote.filter(
-          (hit) => !seen.has(hit.pageId) && session.mirror.pages.has(hit.pageId),
+          (hit) => !seen.has(hit.pageId) && !session.mirror.pages.get(hit.pageId)?.trashedAt,
         );
         if (more.length) setResult({ query: q, hits: [...found, ...more].slice(0, 30) });
       });
@@ -69,14 +81,29 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
       run();
     };
     const pages: Item[] = hits.map((hit) => {
-      const page = session.mirror.pages.get(hit.pageId);
+      const page = session.record(hit.pageId);
+      const row = isRowRecord(page) ? page : null;
+      const database = row ? session.mirror.pages.get(row.databaseId) : undefined;
+      const open = () => {
+        if (session.mirror.pages.has(hit.pageId) || row || !databases)
+          return navigate({ kind: 'page', pageId: hit.pageId });
+        // A row this device does not hold: its database is found and the row pulled first.
+        void databases
+          .locateRow(hit.pageId, hit.title)
+          .catch(() => false)
+          .then(() => navigate({ kind: 'page', pageId: hit.pageId }));
+      };
       return {
         id: `page:${hit.pageId}`,
         kind: 'page',
         label: page?.title || hit.title || t('page.untitled'),
-        detail: hit.snippet,
-        icon: page?.icon ?? '📄',
-        run: close(() => navigate({ kind: 'page', pageId: hit.pageId })),
+        detail:
+          hit.snippet ||
+          (database
+            ? t('databases.rowIn', { database: database.title || t('database.untitledDatabase') })
+            : undefined),
+        icon: pageGlyph(page),
+        run: close(open),
       };
     });
     if (!query.trim())
@@ -85,7 +112,7 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
           id: `page:${page.id}`,
           kind: 'page',
           label: page.title || t('page.untitled'),
-          icon: page.icon ?? '📄',
+          icon: pageGlyph(page),
           run: close(() => navigate({ kind: 'page', pageId: page.id })),
         });
     const context = { services, toggleSidebar: () => {} };
@@ -102,7 +129,7 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
         run: close(() => void services.commands.run(command.id, context)),
       }));
     return [...pages, ...commands];
-  }, [hits, query, session, services, t, onClose, workspaceId]);
+  }, [hits, query, session, services, t, onClose, workspaceId, databases]);
 
   useEffect(() => setActive(0), [query]);
   useEffect(() => {

@@ -1,0 +1,3208 @@
+[
+  {
+    "kind": "evaluate",
+    "name": "every operator, function and error",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pWhen001",
+          "name": "When",
+          "type": "date",
+          "date": {
+            "includeTime": true
+          }
+        },
+        {
+          "id": "pDateE01",
+          "name": "No date",
+          "type": "date"
+        },
+        {
+          "id": "pEmpty01",
+          "name": "No number",
+          "type": "number"
+        },
+        {
+          "id": "pTxtE001",
+          "name": "No text",
+          "type": "text"
+        },
+        {
+          "id": "pChk0001",
+          "name": "Done?",
+          "type": "checkbox"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pMul0001",
+          "name": "Tags",
+          "type": "multiSelect",
+          "options": [
+            {
+              "id": "tagRed01",
+              "name": "Red",
+              "colour": "red"
+            },
+            {
+              "id": "tagBlue1",
+              "name": "Blue",
+              "colour": "blue"
+            },
+            {
+              "id": "tagAr001",
+              "name": "أحمر",
+              "colour": "red"
+            }
+          ]
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pCrb0001",
+          "name": "Created by",
+          "type": "createdBy"
+        },
+        {
+          "id": "pRol0001",
+          "name": "Total",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "pQuot001",
+          "name": "Say \"hi\"",
+          "type": "text"
+        },
+        {
+          "id": "pArab001",
+          "name": "المبلغ",
+          "type": "number"
+        },
+        {
+          "id": "pDup0001",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pDup0002",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pOld0001",
+          "name": "Old",
+          "type": "number",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        },
+        {
+          "id": "fA000001",
+          "name": "fA000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"pNum0001\") * 2"
+          }
+        },
+        {
+          "id": "fB000001",
+          "name": "fB000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fA000001\") + 1"
+          }
+        },
+        {
+          "id": "fC000001",
+          "name": "fC000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fD000001\") + 1"
+          }
+        },
+        {
+          "id": "fD000001",
+          "name": "fD000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\") + 1"
+          }
+        },
+        {
+          "id": "fSelf001",
+          "name": "fSelf001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fSelf001\")"
+          }
+        },
+        {
+          "id": "fBroken1",
+          "name": "fBroken1",
+          "type": "formula",
+          "formula": {
+            "expression": "1 +"
+          }
+        },
+        {
+          "id": "fDiv0001",
+          "name": "fDiv0001",
+          "type": "formula",
+          "formula": {
+            "expression": "1 / 0"
+          }
+        },
+        {
+          "id": "fUseDiv1",
+          "name": "fUseDiv1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fDiv0001\") + 1"
+          }
+        },
+        {
+          "id": "fUseCyc1",
+          "name": "fUseCyc1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\")"
+          }
+        },
+        {
+          "id": "fEmpty01",
+          "name": "fEmpty01",
+          "type": "formula",
+          "formula": {
+            "expression": ""
+          }
+        },
+        {
+          "id": "fGone001",
+          "name": "fGone001",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "row": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "databaseId": "01900000-0000-7000-8000-000000000001",
+      "title": "Quarterly report",
+      "orderKey": "a1",
+      "isTemplate": false,
+      "trashedAt": null,
+      "createdAt": "2026-01-01T09:00:00.000Z",
+      "updatedAt": "2026-01-02T10:30:00.000Z",
+      "createdBy": "01900000-0000-7000-8000-0000000000a1",
+      "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+      "values": {
+        "pText001": "Hello, World",
+        "pNum0001": 4.5,
+        "pDate001": {
+          "start": "2026-01-31"
+        },
+        "pWhen001": {
+          "start": "2026-03-15T13:45:30Z",
+          "end": "2026-03-16T08:00:00Z"
+        },
+        "pChk0001": true,
+        "pSel0001": "optDone1",
+        "pMul0001": ["tagRed01", "tagBlue1"],
+        "pPer0001": ["01900000-0000-7000-8000-0000000000a1"],
+        "pFil0001": ["asset-1", "asset-2"],
+        "pRel0001": ["01900000-0000-7000-8000-000000000009"],
+        "pArab001": 3
+      },
+      "computed": {
+        "pRol0001": 7
+      }
+    },
+    "cases": [
+      {
+        "expression": "1 + 2",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "1.5e3",
+        "expected": {
+          "value": 1500,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "2 ^ 3 ^ 2",
+        "expected": {
+          "value": 512,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "-2 ^ 2",
+        "expected": {
+          "value": -4,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "(-2) ^ 2",
+        "expected": {
+          "value": 4,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "2 ^ -1",
+        "expected": {
+          "value": 0.5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "7 % 3",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "-7 % 3",
+        "expected": {
+          "value": -1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "7 % -3",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "10 / 4",
+        "expected": {
+          "value": 2.5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "0.1 + 0.2",
+        "expected": {
+          "value": 0.30000000000000004,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "2 * 3 + 4",
+        "expected": {
+          "value": 10,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "2 * (3 + 4)",
+        "expected": {
+          "value": 14,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "10 - 2 - 3",
+        "expected": {
+          "value": 5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "1 / 0",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "0 / 0",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "5 % 0",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "1e308 * 10",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "1e400",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "\"a\" + \"b\"",
+        "expected": {
+          "value": "ab",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "\"n=\" + 1.5",
+        "expected": {
+          "value": "n=1.5",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "1 + \"x\"",
+        "expected": {
+          "value": "1x",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "\"x\" + true",
+        "expected": {
+          "value": "xtrue",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "\"d: \" + prop(\"pDate001\")",
+        "expected": {
+          "value": "d: 2026-01-31",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "\"tags: \" + prop(\"pMul0001\")",
+        "expected": {
+          "value": "tags: Red, Blue",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "\"\" + prop(\"pEmpty01\")",
+        "expected": {
+          "value": null,
+          "type": "text"
+        }
+      },
+      {
+        "expression": "prop(\"pEmpty01\") + 1",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "true and false",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "true && true",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "false or true",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "false || false",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "not true",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "!false",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "not false and false",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "not 1 > 2",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "1 < 2",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "2 <= 2",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "\"a\" < \"b\"",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "\"B\" < \"a\"",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "1 == 1",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "1 != 1",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "\"a\" == \"A\"",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "1 < 2 == true",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "prop(\"pDate001\") < prop(\"pWhen001\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "prop(\"pEmpty01\") == prop(\"pEmpty01\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "prop(\"pEmpty01\") < 1",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "prop(\"pEmpty01\") != 1",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "false and 1 / 0 > 1",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "true or 1 / 0 > 1",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "true and 1 / 0 > 1",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "1 == \"1\"",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "true < false",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"pMul0001\") == prop(\"pMul0001\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "1 + true",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "-\"a\"",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "not 1",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "1 and true",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"pDate001\") + 1",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "1 +",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "(1 + 2",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "1 2",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "\"open",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "\"bad \\n escape\"",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "\"a \\\"quoted\\\" \\\\ b\"",
+        "expected": {
+          "value": "a \"quoted\" \\ b",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "1 = 1",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "foo",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(pNum0001)",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"a\", \"b\")",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "1.5.2",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "@",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "abs(1,)",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "True",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "1.",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "",
+        "expected": {
+          "value": null,
+          "type": "empty"
+        }
+      },
+      {
+        "expression": "   ",
+        "expected": {
+          "value": null,
+          "type": "empty"
+        }
+      },
+      {
+        "expression": " \n\t1 +\n 2 ",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "nope(1)",
+        "expected": {
+          "value": {
+            "error": "formula.unknownFunction"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "IF(true, 1, 2)",
+        "expected": {
+          "value": {
+            "error": "formula.unknownFunction"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"nothere1\")",
+        "expected": {
+          "value": {
+            "error": "formula.unknownProperty"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"pOld0001\")",
+        "expected": {
+          "value": {
+            "error": "formula.unknownProperty"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"fGone001\")",
+        "expected": {
+          "value": {
+            "error": "formula.unknownProperty"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "nope(prop(\"nothere1\"))",
+        "expected": {
+          "value": {
+            "error": "formula.unknownFunction"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"nothere1\") + nope()",
+        "expected": {
+          "value": {
+            "error": "formula.unknownProperty"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "if(true, 1)",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "ifs(true, 1)",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "abs()",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "round(1, 2, 3)",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "min()",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "join(\",\")",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "slice(\"a\")",
+        "expected": {
+          "value": {
+            "error": "formula.arity"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "if(1, 2, 3)",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "if(true, 1, \"a\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "ifs(true, 1, false, \"x\", 3)",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "length(5)",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "upper(1)",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, \"fortnights\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pDate001\"), \"YYYY\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "toNumber(prop(\"pMul0001\"))",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "contains(1, \"a\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "sqrt(\"4\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "min(1, \"2\")",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"title\")",
+        "expected": {
+          "value": "Quarterly report",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "prop(\"pText001\")",
+        "expected": {
+          "value": "Hello, World",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "prop(\"pTxtE001\")",
+        "expected": {
+          "value": null,
+          "type": "text"
+        }
+      },
+      {
+        "expression": "prop(\"pNum0001\")",
+        "expected": {
+          "value": 4.5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"pChk0001\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "prop(\"pSel0001\")",
+        "expected": {
+          "value": "Done",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "prop(\"pMul0001\")",
+        "expected": {
+          "value": ["Red", "Blue"],
+          "type": "list"
+        }
+      },
+      {
+        "expression": "prop(\"pPer0001\")",
+        "expected": {
+          "value": ["01900000-0000-7000-8000-0000000000a1"],
+          "type": "list"
+        }
+      },
+      {
+        "expression": "prop(\"pFil0001\")",
+        "expected": {
+          "value": ["asset-1", "asset-2"],
+          "type": "list"
+        }
+      },
+      {
+        "expression": "prop(\"pRel0001\")",
+        "expected": {
+          "value": ["01900000-0000-7000-8000-000000000009"],
+          "type": "list"
+        }
+      },
+      {
+        "expression": "prop(\"pDate001\")",
+        "expected": {
+          "value": {
+            "start": "2026-01-31"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "prop(\"pWhen001\")",
+        "expected": {
+          "value": {
+            "start": "2026-03-15T13:45:30Z",
+            "end": "2026-03-16T08:00:00Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "prop(\"pCrt0001\")",
+        "expected": {
+          "value": {
+            "start": "2026-01-01T09:00:00Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "prop(\"pCrb0001\")",
+        "expected": {
+          "value": ["01900000-0000-7000-8000-0000000000a1"],
+          "type": "list"
+        }
+      },
+      {
+        "expression": "prop(\"pRol0001\")",
+        "expected": {
+          "value": 7,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"fA000001\")",
+        "expected": {
+          "value": 9,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"fB000001\")",
+        "expected": {
+          "value": 10,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"fC000001\")",
+        "expected": {
+          "value": {
+            "error": "formula.cycle"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"fSelf001\")",
+        "expected": {
+          "value": {
+            "error": "formula.cycle"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"fUseCyc1\")",
+        "expected": {
+          "value": {
+            "error": "formula.cycle"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"fBroken1\")",
+        "expected": {
+          "value": {
+            "error": "formula.syntax"
+          },
+          "type": null
+        }
+      },
+      {
+        "expression": "prop(\"fDiv0001\")",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"fUseDiv1\")",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"fEmpty01\")",
+        "expected": {
+          "value": null,
+          "type": "empty"
+        }
+      },
+      {
+        "expression": "prop(\"fEmpty01\") + 1",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"fEmpty01\") + \"x\"",
+        "expected": {
+          "value": "x",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "if(true, prop(\"fEmpty01\"), 2)",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"pArab001\") + 1",
+        "expected": {
+          "value": 4,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "if(prop(\"pChk0001\"), \"yes\", \"no\")",
+        "expected": {
+          "value": "yes",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "if(prop(\"pEmpty01\") > 1, 1, 2)",
+        "expected": {
+          "value": 2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "if(false, 1 / 0, 3)",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "if(true, 3, 1 / 0)",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "ifs(prop(\"pNum0001\") > 5, \"big\", prop(\"pNum0001\") > 4, \"medium\", \"small\")",
+        "expected": {
+          "value": "medium",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "ifs(false, 1, false, 2, 3)",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "empty(prop(\"pEmpty01\"))",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "empty(\"\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "empty(\"a\")",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "empty(prop(\"pMul0001\"))",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "empty(0)",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "empty(false)",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "length(\"héllo\")",
+        "expected": {
+          "value": 5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "length(\"😀\")",
+        "expected": {
+          "value": 2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "length(\"مرحبا\")",
+        "expected": {
+          "value": 5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "length(prop(\"pMul0001\"))",
+        "expected": {
+          "value": 2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "length(prop(\"pTxtE001\"))",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "concat(\"a\", 1, true, prop(\"pDate001\"), prop(\"pEmpty01\"))",
+        "expected": {
+          "value": "a1true2026-01-31",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "join(\", \", \"a\", prop(\"pEmpty01\"), prop(\"pMul0001\"), 2)",
+        "expected": {
+          "value": "a, Red, Blue, 2",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "join(\"-\", \"\", \"b\")",
+        "expected": {
+          "value": "b",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "lower(\"ÀBC\")",
+        "expected": {
+          "value": "àbc",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "upper(\"abc é\")",
+        "expected": {
+          "value": "ABC É",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "lower(\"مرحبا ABC\")",
+        "expected": {
+          "value": "مرحبا abc",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "trim(\"  a b  \")",
+        "expected": {
+          "value": "a b",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "contains(\"Hello\", \"ell\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "contains(\"Hello\", \"ELL\")",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "contains(\"abc\", \"\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "contains(prop(\"pMul0001\"), \"Red\")",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "contains(prop(\"pMul0001\"), \"Re\")",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "replace(\"a-b-c\", \"-\", \"+\")",
+        "expected": {
+          "value": "a+b-c",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "replaceAll(\"a-b-c\", \"-\", \"+\")",
+        "expected": {
+          "value": "a+b+c",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "replace(\"abc\", \"\", \"x\")",
+        "expected": {
+          "value": "abc",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "replaceAll(\"aaa\", \"a\", \"aa\")",
+        "expected": {
+          "value": "aaaaaa",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "replace(\"abc\", \"z\", \"x\")",
+        "expected": {
+          "value": "abc",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "slice(\"abcdef\", 1, 3)",
+        "expected": {
+          "value": "bc",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "slice(\"abcdef\", -2)",
+        "expected": {
+          "value": "ef",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "slice(\"abcdef\", 2.9)",
+        "expected": {
+          "value": "cdef",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "slice(\"abcdef\", 4, 2)",
+        "expected": {
+          "value": null,
+          "type": "text"
+        }
+      },
+      {
+        "expression": "slice(\"abcdef\", -100, 2)",
+        "expected": {
+          "value": "ab",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "slice(\"abc\", 1, 100)",
+        "expected": {
+          "value": "bc",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(1.5)",
+        "expected": {
+          "value": "1.5",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(true)",
+        "expected": {
+          "value": "true",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(prop(\"pWhen001\"))",
+        "expected": {
+          "value": "2026-03-15T13:45:30Z → 2026-03-16T08:00:00Z",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(prop(\"pMul0001\"))",
+        "expected": {
+          "value": "Red, Blue",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(prop(\"pEmpty01\"))",
+        "expected": {
+          "value": null,
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(1e21)",
+        "expected": {
+          "value": "1e+21",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "format(0.1 * 3)",
+        "expected": {
+          "value": "0.30000000000000004",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "toNumber(\"1,234.5\")",
+        "expected": {
+          "value": 1234.5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "toNumber(\"abc\")",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "toNumber(\"١٢\")",
+        "expected": {
+          "value": 12,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "toNumber(true)",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "toNumber(false)",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "toNumber(prop(\"pDate001\"))",
+        "expected": {
+          "value": 1769817600000,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "abs(-3)",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "floor(-1.5)",
+        "expected": {
+          "value": -2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "ceil(1.2)",
+        "expected": {
+          "value": 2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "sqrt(16)",
+        "expected": {
+          "value": 4,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "sqrt(-1)",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "sign(-7)",
+        "expected": {
+          "value": -1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "sign(0)",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "sign(-0)",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(2.5)",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(-2.5)",
+        "expected": {
+          "value": -3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(1.2345, 2)",
+        "expected": {
+          "value": 1.23,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(1234.5, -2)",
+        "expected": {
+          "value": 1200,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(1.005, 2)",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(2.675, 2)",
+        "expected": {
+          "value": 2.68,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(-0.4)",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(prop(\"pNum0001\"))",
+        "expected": {
+          "value": 5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "round(5, 16)",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "min(3, 1, 2)",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "max(3, prop(\"pEmpty01\"), 7)",
+        "expected": {
+          "value": 7,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "min(prop(\"pEmpty01\"))",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "pow(2, 10)",
+        "expected": {
+          "value": 1024,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "pow(4, 0.5)",
+        "expected": {
+          "value": 2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "pow(0, -1)",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "pow(-8, 1 / 3)",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "mod(7, 3)",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "mod(-7, 3)",
+        "expected": {
+          "value": 2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "mod(7, -3)",
+        "expected": {
+          "value": -2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "mod(5.5, 2)",
+        "expected": {
+          "value": 1.5,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "mod(-6, 3)",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "mod(1, 0)",
+        "expected": {
+          "value": {
+            "error": "formula.divideByZero"
+          },
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, \"months\")",
+        "expected": {
+          "value": {
+            "start": "2026-02-28"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, \"years\")",
+        "expected": {
+          "value": {
+            "start": "2027-01-31"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, \"quarters\")",
+        "expected": {
+          "value": {
+            "start": "2026-04-30"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 2, \"weeks\")",
+        "expected": {
+          "value": {
+            "start": "2026-02-14"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), -31, \"days\")",
+        "expected": {
+          "value": {
+            "start": "2025-12-31"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1.9, \"days\")",
+        "expected": {
+          "value": {
+            "start": "2026-02-01"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 90, \"minutes\")",
+        "expected": {
+          "value": {
+            "start": "2026-01-31T01:30:00Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pWhen001\"), 3, \"hours\")",
+        "expected": {
+          "value": {
+            "start": "2026-03-15T16:45:30Z",
+            "end": "2026-03-16T11:00:00Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateSubtract(prop(\"pWhen001\"), 1, \"months\")",
+        "expected": {
+          "value": {
+            "start": "2026-02-15T13:45:30Z",
+            "end": "2026-02-16T08:00:00Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 10000, \"years\")",
+        "expected": {
+          "value": {
+            "error": "formula.range"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDateE01\"), 1, \"days\")",
+        "expected": {
+          "value": null,
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, prop(\"pText001\"))",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"days\")",
+        "expected": {
+          "value": 43,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"weeks\")",
+        "expected": {
+          "value": 6,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"hours\")",
+        "expected": {
+          "value": 1045,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"minutes\")",
+        "expected": {
+          "value": 62745,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"months\")",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pDate001\"), prop(\"pWhen001\"), \"months\")",
+        "expected": {
+          "value": -1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"quarters\")",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pDate001\"), \"years\")",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(dateAdd(prop(\"pDate001\"), 1, \"months\"), prop(\"pDate001\"), \"months\")",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pDate001\"), dateAdd(prop(\"pDate001\"), 2, \"years\"), \"years\")",
+        "expected": {
+          "value": -2,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pDate001\"), dateAdd(prop(\"pDate001\"), 1, \"minutes\"), \"days\")",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateBetween(prop(\"pWhen001\"), prop(\"pCrt0001\"), \"days\")",
+        "expected": {
+          "value": 73,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pWhen001\"), \"YYYY-MM-DD HH:mm\")",
+        "expected": {
+          "value": "2026-03-15 13:45",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pWhen001\"), \"YYYY-MM-DD\")",
+        "expected": {
+          "value": "2026-03-15",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pDate001\"), \"DD/MM/YYYY\")",
+        "expected": {
+          "value": "31/01/2026",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pDate001\"), \"MM/DD/YYYY\")",
+        "expected": {
+          "value": "01/31/2026",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pDate001\"), \"YYYY-MM-DD HH:mm\")",
+        "expected": {
+          "value": "2026-01-31 00:00",
+          "type": "text"
+        }
+      },
+      {
+        "expression": "formatDate(prop(\"pDate001\"), prop(\"pText001\"))",
+        "expected": {
+          "value": {
+            "error": "formula.type"
+          },
+          "type": "text"
+        }
+      },
+      {
+        "expression": "year(prop(\"pWhen001\"))",
+        "expected": {
+          "value": 2026,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "month(prop(\"pWhen001\"))",
+        "expected": {
+          "value": 3,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "day(prop(\"pWhen001\"))",
+        "expected": {
+          "value": 15,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "hour(prop(\"pWhen001\"))",
+        "expected": {
+          "value": 13,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "minute(prop(\"pWhen001\"))",
+        "expected": {
+          "value": 45,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "weekday(prop(\"pWhen001\"))",
+        "expected": {
+          "value": 7,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "weekday(prop(\"pDate001\"))",
+        "expected": {
+          "value": 6,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "hour(prop(\"pDate001\"))",
+        "expected": {
+          "value": 0,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "year(prop(\"pDateE01\"))",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateStart(prop(\"pWhen001\"))",
+        "expected": {
+          "value": {
+            "start": "2026-03-15T13:45:30Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateEnd(prop(\"pWhen001\"))",
+        "expected": {
+          "value": {
+            "start": "2026-03-16T08:00:00Z"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateEnd(prop(\"pDate001\"))",
+        "expected": {
+          "value": {
+            "start": "2026-01-31"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateStart(prop(\"pWhen001\")) == dateStart(prop(\"pWhen001\"))",
+        "expected": {
+          "value": true,
+          "type": "boolean"
+        }
+      },
+      {
+        "expression": "prop(\"pWhen001\") == dateStart(prop(\"pWhen001\"))",
+        "expected": {
+          "value": false,
+          "type": "boolean"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "evaluate",
+    "name": "a leap day",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pWhen001",
+          "name": "When",
+          "type": "date",
+          "date": {
+            "includeTime": true
+          }
+        },
+        {
+          "id": "pDateE01",
+          "name": "No date",
+          "type": "date"
+        },
+        {
+          "id": "pEmpty01",
+          "name": "No number",
+          "type": "number"
+        },
+        {
+          "id": "pTxtE001",
+          "name": "No text",
+          "type": "text"
+        },
+        {
+          "id": "pChk0001",
+          "name": "Done?",
+          "type": "checkbox"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pMul0001",
+          "name": "Tags",
+          "type": "multiSelect",
+          "options": [
+            {
+              "id": "tagRed01",
+              "name": "Red",
+              "colour": "red"
+            },
+            {
+              "id": "tagBlue1",
+              "name": "Blue",
+              "colour": "blue"
+            },
+            {
+              "id": "tagAr001",
+              "name": "أحمر",
+              "colour": "red"
+            }
+          ]
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pCrb0001",
+          "name": "Created by",
+          "type": "createdBy"
+        },
+        {
+          "id": "pRol0001",
+          "name": "Total",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "pQuot001",
+          "name": "Say \"hi\"",
+          "type": "text"
+        },
+        {
+          "id": "pArab001",
+          "name": "المبلغ",
+          "type": "number"
+        },
+        {
+          "id": "pDup0001",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pDup0002",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pOld0001",
+          "name": "Old",
+          "type": "number",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        },
+        {
+          "id": "fA000001",
+          "name": "fA000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"pNum0001\") * 2"
+          }
+        },
+        {
+          "id": "fB000001",
+          "name": "fB000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fA000001\") + 1"
+          }
+        },
+        {
+          "id": "fC000001",
+          "name": "fC000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fD000001\") + 1"
+          }
+        },
+        {
+          "id": "fD000001",
+          "name": "fD000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\") + 1"
+          }
+        },
+        {
+          "id": "fSelf001",
+          "name": "fSelf001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fSelf001\")"
+          }
+        },
+        {
+          "id": "fBroken1",
+          "name": "fBroken1",
+          "type": "formula",
+          "formula": {
+            "expression": "1 +"
+          }
+        },
+        {
+          "id": "fDiv0001",
+          "name": "fDiv0001",
+          "type": "formula",
+          "formula": {
+            "expression": "1 / 0"
+          }
+        },
+        {
+          "id": "fUseDiv1",
+          "name": "fUseDiv1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fDiv0001\") + 1"
+          }
+        },
+        {
+          "id": "fUseCyc1",
+          "name": "fUseCyc1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\")"
+          }
+        },
+        {
+          "id": "fEmpty01",
+          "name": "fEmpty01",
+          "type": "formula",
+          "formula": {
+            "expression": ""
+          }
+        },
+        {
+          "id": "fGone001",
+          "name": "fGone001",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "row": {
+      "id": "01900000-0000-7000-8000-000000000002",
+      "databaseId": "01900000-0000-7000-8000-000000000001",
+      "title": "Leap",
+      "orderKey": "a2",
+      "isTemplate": false,
+      "trashedAt": null,
+      "createdAt": "2026-01-01T09:00:00.000Z",
+      "updatedAt": "2026-01-02T10:30:00.000Z",
+      "createdBy": "01900000-0000-7000-8000-0000000000a1",
+      "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+      "values": {
+        "pDate001": {
+          "start": "2024-02-29"
+        }
+      },
+      "computed": {}
+    },
+    "cases": [
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, \"years\")",
+        "expected": {
+          "value": {
+            "start": "2025-02-28"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 4, \"years\")",
+        "expected": {
+          "value": {
+            "start": "2028-02-29"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "dateBetween(dateAdd(prop(\"pDate001\"), 1, \"years\"), prop(\"pDate001\"), \"years\")",
+        "expected": {
+          "value": 1,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "dateAdd(prop(\"pDate001\"), 1, \"days\")",
+        "expected": {
+          "value": {
+            "start": "2024-03-01"
+          },
+          "type": "date"
+        }
+      },
+      {
+        "expression": "weekday(prop(\"pDate001\"))",
+        "expected": {
+          "value": 4,
+          "type": "number"
+        }
+      },
+      {
+        "expression": "prop(\"pEmpty01\") * 2",
+        "expected": {
+          "value": null,
+          "type": "number"
+        }
+      }
+    ]
+  },
+  {
+    "kind": "toNames",
+    "name": "ids to names",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pWhen001",
+          "name": "When",
+          "type": "date",
+          "date": {
+            "includeTime": true
+          }
+        },
+        {
+          "id": "pDateE01",
+          "name": "No date",
+          "type": "date"
+        },
+        {
+          "id": "pEmpty01",
+          "name": "No number",
+          "type": "number"
+        },
+        {
+          "id": "pTxtE001",
+          "name": "No text",
+          "type": "text"
+        },
+        {
+          "id": "pChk0001",
+          "name": "Done?",
+          "type": "checkbox"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pMul0001",
+          "name": "Tags",
+          "type": "multiSelect",
+          "options": [
+            {
+              "id": "tagRed01",
+              "name": "Red",
+              "colour": "red"
+            },
+            {
+              "id": "tagBlue1",
+              "name": "Blue",
+              "colour": "blue"
+            },
+            {
+              "id": "tagAr001",
+              "name": "أحمر",
+              "colour": "red"
+            }
+          ]
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pCrb0001",
+          "name": "Created by",
+          "type": "createdBy"
+        },
+        {
+          "id": "pRol0001",
+          "name": "Total",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "pQuot001",
+          "name": "Say \"hi\"",
+          "type": "text"
+        },
+        {
+          "id": "pArab001",
+          "name": "المبلغ",
+          "type": "number"
+        },
+        {
+          "id": "pDup0001",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pDup0002",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pOld0001",
+          "name": "Old",
+          "type": "number",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        },
+        {
+          "id": "fA000001",
+          "name": "fA000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"pNum0001\") * 2"
+          }
+        },
+        {
+          "id": "fB000001",
+          "name": "fB000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fA000001\") + 1"
+          }
+        },
+        {
+          "id": "fC000001",
+          "name": "fC000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fD000001\") + 1"
+          }
+        },
+        {
+          "id": "fD000001",
+          "name": "fD000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\") + 1"
+          }
+        },
+        {
+          "id": "fSelf001",
+          "name": "fSelf001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fSelf001\")"
+          }
+        },
+        {
+          "id": "fBroken1",
+          "name": "fBroken1",
+          "type": "formula",
+          "formula": {
+            "expression": "1 +"
+          }
+        },
+        {
+          "id": "fDiv0001",
+          "name": "fDiv0001",
+          "type": "formula",
+          "formula": {
+            "expression": "1 / 0"
+          }
+        },
+        {
+          "id": "fUseDiv1",
+          "name": "fUseDiv1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fDiv0001\") + 1"
+          }
+        },
+        {
+          "id": "fUseCyc1",
+          "name": "fUseCyc1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\")"
+          }
+        },
+        {
+          "id": "fEmpty01",
+          "name": "fEmpty01",
+          "type": "formula",
+          "formula": {
+            "expression": ""
+          }
+        },
+        {
+          "id": "fGone001",
+          "name": "fGone001",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "cases": [
+      {
+        "expression": "prop(\"pNum0001\") * 2",
+        "expected": "prop(\"Amount\") * 2"
+      },
+      {
+        "expression": "prop(\"nothere1\") + 1",
+        "expected": "prop(\"nothere1\") + 1"
+      },
+      {
+        "expression": "prop( \"pNum0001\" )+prop(\"pArab001\")",
+        "expected": "prop( \"Amount\" )+prop(\"المبلغ\")"
+      },
+      {
+        "expression": "prop(\"pQuot001\")",
+        "expected": "prop(\"Say \\\"hi\\\"\")"
+      },
+      {
+        "expression": "prop(\"pNum0001\") +",
+        "expected": "prop(\"Amount\") +"
+      },
+      {
+        "expression": "prop(\"pNum0001",
+        "expected": "prop(\"pNum0001"
+      },
+      {
+        "expression": "\"pNum0001\" + prop(\"pOld0001\")",
+        "expected": "\"pNum0001\" + prop(\"Old\")"
+      },
+      {
+        "expression": "concat(prop(\"title\"), \"!\")",
+        "expected": "concat(prop(\"Name\"), \"!\")"
+      }
+    ]
+  },
+  {
+    "kind": "toIds",
+    "name": "names to ids",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pWhen001",
+          "name": "When",
+          "type": "date",
+          "date": {
+            "includeTime": true
+          }
+        },
+        {
+          "id": "pDateE01",
+          "name": "No date",
+          "type": "date"
+        },
+        {
+          "id": "pEmpty01",
+          "name": "No number",
+          "type": "number"
+        },
+        {
+          "id": "pTxtE001",
+          "name": "No text",
+          "type": "text"
+        },
+        {
+          "id": "pChk0001",
+          "name": "Done?",
+          "type": "checkbox"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pMul0001",
+          "name": "Tags",
+          "type": "multiSelect",
+          "options": [
+            {
+              "id": "tagRed01",
+              "name": "Red",
+              "colour": "red"
+            },
+            {
+              "id": "tagBlue1",
+              "name": "Blue",
+              "colour": "blue"
+            },
+            {
+              "id": "tagAr001",
+              "name": "أحمر",
+              "colour": "red"
+            }
+          ]
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pCrb0001",
+          "name": "Created by",
+          "type": "createdBy"
+        },
+        {
+          "id": "pRol0001",
+          "name": "Total",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "pQuot001",
+          "name": "Say \"hi\"",
+          "type": "text"
+        },
+        {
+          "id": "pArab001",
+          "name": "المبلغ",
+          "type": "number"
+        },
+        {
+          "id": "pDup0001",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pDup0002",
+          "name": "Dup",
+          "type": "number"
+        },
+        {
+          "id": "pOld0001",
+          "name": "Old",
+          "type": "number",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        },
+        {
+          "id": "fA000001",
+          "name": "fA000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"pNum0001\") * 2"
+          }
+        },
+        {
+          "id": "fB000001",
+          "name": "fB000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fA000001\") + 1"
+          }
+        },
+        {
+          "id": "fC000001",
+          "name": "fC000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fD000001\") + 1"
+          }
+        },
+        {
+          "id": "fD000001",
+          "name": "fD000001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\") + 1"
+          }
+        },
+        {
+          "id": "fSelf001",
+          "name": "fSelf001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fSelf001\")"
+          }
+        },
+        {
+          "id": "fBroken1",
+          "name": "fBroken1",
+          "type": "formula",
+          "formula": {
+            "expression": "1 +"
+          }
+        },
+        {
+          "id": "fDiv0001",
+          "name": "fDiv0001",
+          "type": "formula",
+          "formula": {
+            "expression": "1 / 0"
+          }
+        },
+        {
+          "id": "fUseDiv1",
+          "name": "fUseDiv1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fDiv0001\") + 1"
+          }
+        },
+        {
+          "id": "fUseCyc1",
+          "name": "fUseCyc1",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fC000001\")"
+          }
+        },
+        {
+          "id": "fEmpty01",
+          "name": "fEmpty01",
+          "type": "formula",
+          "formula": {
+            "expression": ""
+          }
+        },
+        {
+          "id": "fGone001",
+          "name": "fGone001",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "cases": [
+      {
+        "expression": "prop(\"Amount\") * 2",
+        "expected": "prop(\"pNum0001\") * 2"
+      },
+      {
+        "expression": "prop(\"pNum0001\")",
+        "expected": "prop(\"pNum0001\")"
+      },
+      {
+        "expression": "prop(\"Nope\")",
+        "expected": "prop(\"Nope\")"
+      },
+      {
+        "expression": "prop(\"Say \\\"hi\\\"\")",
+        "expected": "prop(\"pQuot001\")"
+      },
+      {
+        "expression": "prop(\"المبلغ\") + 1",
+        "expected": "prop(\"pArab001\") + 1"
+      },
+      {
+        "expression": "prop(\"Dup\")",
+        "expected": "prop(\"pDup0001\")"
+      },
+      {
+        "expression": "prop(\"Old\")",
+        "expected": "prop(\"pOld0001\")"
+      },
+      {
+        "expression": "prop(\"Name\") + \"Amount\"",
+        "expected": "prop(\"title\") + \"Amount\""
+      },
+      {
+        "expression": "1 + @",
+        "expected": "1 + @"
+      }
+    ]
+  }
+]

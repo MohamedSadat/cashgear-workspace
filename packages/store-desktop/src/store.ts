@@ -5,6 +5,11 @@
 // the same way (planSettle, planRemote), against the mirror and an in-memory index of the outbox.
 // A remote plan goes with the ids its set-aside entries would take (one per deleted page): the Rust
 // store sets aside, in the plan's transaction, the logs it must not drop (schema 3).
+//
+// Schema 4 (databases): the mirror holds database and view records from the start, but no rows. A
+// plan that needs a database's rows (a type change, a relation, a cascade) or a row (an edit) reads
+// them from SQLite first and keeps them in the mirror, which every later write keeps in step. The
+// holds are read at open and kept beside the mirror, as the outbox index is.
 import {
   Mirror,
   STORE_SCHEMA_VERSION,
@@ -16,12 +21,14 @@ import {
   searchTerms,
   uuidv7,
   type AssetRecord,
+  type DbHold,
   type DocAck,
   type DocCursor,
   type HistoryEntry,
   type Id,
   type LocalStore,
   type LocalUpdate,
+  type MirrorReader,
   type MirrorSnapshot,
   type Operation,
   type OpResult,
@@ -33,6 +40,7 @@ import {
   type RemoteDocPull,
   type RemoteReader,
   type RepairState,
+  type RowRecord,
   type SearchEntry,
   type SearchHit,
   type StorageUsage,
@@ -55,7 +63,10 @@ type EntryHeader = Omit<QuarantineEntry, 'parts'> & { parts?: number };
 interface SetAside {
   reason: string;
   at: string;
-  /** One new entry id per deleted page, in the plan's order; only those set aside are used. */
+  /**
+   * One new entry id per deleted page, then one per deleted row, in the plan's order; only those
+   * set aside are used.
+   */
   ids: Id[];
 }
 
@@ -67,6 +78,8 @@ export class DesktopStore implements LocalStore {
     private readonly transport: Transport,
     private readonly mirror: Mirror,
     private readonly outbox: OutboxIndex,
+    /** Every hold, by database: what the remote planners ask (`dbHold`). */
+    private readonly holds: Map<Id, DbHold> = new Map(),
   ) {}
 
   static async open(transport: Transport): Promise<DesktopStore> {
@@ -79,7 +92,13 @@ export class DesktopStore implements LocalStore {
     const snapshot = (await probe.call<MirrorSnapshot>({ op: 'readMirror', workspaceId: null }))
       .value;
     const outbox = (await probe.call<OutboxEntry[]>({ op: 'outboxIndex' })).value;
-    return new DesktopStore(transport, new Mirror(snapshot), new OutboxIndex(outbox));
+    const holds = (await probe.call<DbHold[]>({ op: 'dbHolds', workspaceId: null })).value;
+    return new DesktopStore(
+      transport,
+      new Mirror(snapshot),
+      new OutboxIndex(outbox),
+      new Map(holds.map((h) => [h.databaseId, h])),
+    );
   }
 
   private async call<T>(
@@ -107,6 +126,10 @@ export class DesktopStore implements LocalStore {
   private async write(plan: Plan, setAside?: SetAside): Promise<void> {
     await this.call({ op: 'applyPlan', plan, ...(setAside ? { setAside } : {}) });
     this.mirror.apply(plan);
+    for (const hold of plan.holds) this.holds.set(hold.databaseId, hold);
+    for (const id of plan.deletePages) this.holds.delete(id);
+    for (const id of plan.deleteWorkspaces ?? [])
+      for (const [key, hold] of this.holds) if (hold.workspaceId === id) this.holds.delete(key);
     this.outbox.remove(plan.settled ?? []);
     for (const id of plan.deleteWorkspaces ?? []) this.outbox.removeWorkspace(id);
     if (plan.replaceOutbox) {
@@ -126,7 +149,7 @@ export class DesktopStore implements LocalStore {
    */
   private writeRemote(remote: Plan): Promise<void> {
     const plan = structuredClone(remote);
-    const gone = new Set(plan.deletePages);
+    const gone = new Set([...plan.deletePages, ...plan.deleteRows]);
     if (gone.size) {
       for (const f of this.mirror.favourites.values())
         if (gone.has(f.pageId))
@@ -135,24 +158,72 @@ export class DesktopStore implements LocalStore {
         if (gone.has(v.pageId))
           plan.deleteVisits.push({ workspaceId: v.workspaceId, pageId: v.pageId });
     }
-    const setAside = plan.deletePages.length
+    const removed = plan.deletePages.length + plan.deleteRows.length;
+    const setAside = removed
       ? {
           reason: 'page.removed',
           at: new Date().toISOString(),
-          ids: plan.deletePages.map(() => uuidv7()),
+          ids: Array.from({ length: removed }, () => uuidv7()),
         }
       : undefined;
     return this.write(plan, setAside);
   }
 
-  /** What the remote planners read: the mirror, and the outbox index. */
-  private reader(): RemoteReader {
+  /**
+   * Ids SQLite holds no row for. A row reaches SQLite only through a plan this store writes, and
+   * every plan's rows enter the mirror, which is asked first: so a miss stays a miss (a page's
+   * create asks whether its id is taken, and need not ask SQLite every time).
+   */
+  private readonly missingRows = new Set<Id>();
+
+  /** A row: from the mirror if a plan already read it, else from SQLite (and kept). */
+  private async row(id: Id): Promise<RowRecord | undefined> {
+    const known = this.mirror.rowRecords.get(id);
+    if (known) return known;
+    if (this.missingRows.has(id)) return undefined;
+    const row = (await this.call<RowRecord | null>({ op: 'getRow', id })).value;
+    if (row) this.mirror.putRow(row);
+    else {
+      if (this.missingRows.size > 100_000) this.missingRows.clear();
+      this.missingRows.add(id);
+    }
+    return row ?? undefined;
+  }
+
+  /** Every row held of a database: read from SQLite the first time a plan needs them. */
+  private async rowsOf(databaseId: Id): Promise<RowRecord[]> {
+    if (!this.mirror.rowsLoaded(databaseId))
+      this.mirror.loadRows(
+        databaseId,
+        (await this.call<RowRecord[]>({ op: 'readRows', databaseId })).value,
+      );
+    return this.mirror.rowsOf(databaseId);
+  }
+
+  /** What the planners read: the mirror (rows read in as needed), the outbox index, the holds. */
+  private reader(): MirrorReader & RemoteReader {
+    const mirror = this.mirror;
     return {
-      workspace: async (id) => this.mirror.workspaces.get(id),
-      workspacePages: async (id) =>
-        [...this.mirror.pages.values()].filter((p) => p.workspaceId === id),
-      workspaceSections: async (id) => this.mirror.sectionsOf(id),
+      workspace: async (id) => mirror.workspaces.get(id),
+      section: async (id) => mirror.sections.get(id),
+      page: async (id) => mirror.pages.get(id) ?? (await this.row(id)),
+      children: (id) => mirror.children(id),
+      sectionPages: (id) => mirror.sectionPages(id),
+      favourite: (workspaceId, pageId) => mirror.favourite(workspaceId, pageId),
+      database: async (id) => mirror.databases.get(id),
+      view: async (id) => mirror.views.get(id),
+      rows: (databaseId) => this.rowsOf(databaseId),
+      workspacePages: async (id) => [...mirror.pages.values()].filter((p) => p.workspaceId === id),
+      workspaceSections: async (id) => mirror.sectionsOf(id),
+      workspaceViews: async (id) => [...mirror.views.values()].filter((v) => v.workspaceId === id),
       pending: async (entityId, except) => this.outbox.pending(entityId, except),
+      rowIds: async (databaseId) =>
+        mirror.rowsLoaded(databaseId)
+          ? mirror.rowsOf(databaseId).map((r) => r.id)
+          : (await this.call<Id[]>({ op: 'rowIds', databaseId })).value,
+      workspaceRowIds: async (workspaceId) =>
+        (await this.call<Id[]>({ op: 'rowIds', workspaceId })).value,
+      dbHold: async (id) => this.holds.get(id),
     };
   }
 
@@ -231,7 +302,7 @@ export class DesktopStore implements LocalStore {
   }
 
   applyLocalOps(ops: Operation[]): Promise<void> {
-    return this.serial(async () => this.write(await planOps(ops, this.mirror)));
+    return this.serial(async () => this.write(await planOps(ops, this.reader())));
   }
 
   nextOutboxBatch(limit: number, workspaceId?: Id): Promise<Operation[]> {
@@ -252,7 +323,9 @@ export class DesktopStore implements LocalStore {
   }
 
   getPage(pageId: Id): Promise<PageRecord | null> {
-    return this.serial(async () => structuredClone(this.mirror.pages.get(pageId) ?? null));
+    return this.serial(async () =>
+      structuredClone(this.mirror.pages.get(pageId) ?? (await this.row(pageId)) ?? null),
+    );
   }
 
   // Sync (store schema 2) ----------------------------------------------------------------------
@@ -421,17 +494,19 @@ export class DesktopStore implements LocalStore {
         })
       ).value;
       const terms = searchTerms(normalisedQuery);
-      return rows
-        .map((row) => {
-          const inTitle = terms.every((t) => row.title.split(' ').some((w) => w.startsWith(t)));
-          return {
-            pageId: row.pageId,
-            title: this.mirror.pages.get(row.pageId)?.title ?? row.title,
-            snippet: inTitle ? '' : snippet(row.text, normalisedQuery),
-            score: inTitle ? 2 : 1,
-          };
-        })
-        .sort((a, b) => b.score - a.score);
+      const hits: SearchHit[] = [];
+      for (const row of rows) {
+        const inTitle = terms.every((t) => row.title.split(' ').some((w) => w.startsWith(t)));
+        // A page's title from the mirror; a row's from its record (read in once).
+        const page = this.mirror.pages.get(row.pageId) ?? (await this.row(row.pageId));
+        hits.push({
+          pageId: row.pageId,
+          title: page?.title ?? row.title,
+          snippet: inTitle ? '' : snippet(row.text, normalisedQuery),
+          score: inTitle ? 2 : 1,
+        });
+      }
+      return hits.sort((a, b) => b.score - a.score);
     });
   }
 
@@ -540,22 +615,62 @@ export class DesktopStore implements LocalStore {
     });
   }
 
-  async purgeTrash(workspaceId: Id, before: string): Promise<Id[]> {
-    const roots = this.mirror.trash(workspaceId).filter((p) => p.trashedAt! < before);
-    if (!roots.length) return [];
-    const gone = roots.flatMap((p) => [p.id, ...this.mirror.descendantIds(p.id)]);
-    await this.applyLocalOps(
-      roots.map((p) => ({
-        opId: uuidv7(),
-        type: 'page.delete' as const,
-        workspaceId,
-        entityId: p.id,
-        baseVersion: null,
-        payload: {},
-        createdAt: new Date().toISOString(),
-      })),
+  // Databases (store schema 4) ----------------------------------------------------------------
+
+  readRows(databaseId: Id): Promise<RowRecord[]> {
+    return this.serial(
+      async () => (await this.call<RowRecord[]>({ op: 'readRows', databaseId })).value,
     );
-    return gone;
+  }
+
+  trashedRows(workspaceId: Id): Promise<RowRecord[]> {
+    return this.serial(
+      async () => (await this.call<RowRecord[]>({ op: 'trashedRows', workspaceId })).value,
+    );
+  }
+
+  dbHold(databaseId: Id): Promise<DbHold | null> {
+    return this.serial(
+      async () => (await this.call<DbHold | null>({ op: 'dbHold', databaseId })).value,
+    );
+  }
+
+  dbHolds(workspaceId: Id): Promise<DbHold[]> {
+    return this.serial(
+      async () => (await this.call<DbHold[]>({ op: 'dbHolds', workspaceId })).value,
+    );
+  }
+
+  holdDatabase(hold: DbHold): Promise<void> {
+    return this.serial(async () => {
+      await this.call({ op: 'holdDatabase', hold });
+      this.holds.set(hold.databaseId, structuredClone(hold));
+    });
+  }
+
+  purgeTrash(workspaceId: Id, before: string): Promise<Id[]> {
+    return this.serial(async () => {
+      // Trash roots (pages, and rows that are their own), newest first, as the memory store takes them.
+      const rows = (await this.call<RowRecord[]>({ op: 'trashedRows', workspaceId })).value;
+      const roots = [...this.mirror.trash(workspaceId), ...rows]
+        .filter((p) => p.trashedAt! < before)
+        .sort((a, b) => (a.trashedAt! < b.trashedAt! ? 1 : -1));
+      if (!roots.length) return [];
+      const plan = await planOps(
+        roots.map((p) => ({
+          opId: uuidv7(),
+          type: 'page.delete' as const,
+          workspaceId,
+          entityId: p.id,
+          baseVersion: null,
+          payload: {},
+          createdAt: new Date().toISOString(),
+        })),
+        this.reader(),
+      );
+      await this.write(plan);
+      return [...plan.deletePages, ...plan.deleteRows];
+    });
   }
 
   schemaVersion(): Promise<number> {

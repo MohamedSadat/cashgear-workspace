@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import type { Id, MirrorSnapshot } from '@cgw/workspace';
+import { STORE_SCHEMA_VERSION, type Id, type MirrorSnapshot, type Operation } from '@cgw/workspace';
 import { describeLocalStore } from '@cgw/workspace/testing';
 import { DesktopStore } from './store';
 import { cliPath, cliTransport } from './testing/cli';
@@ -85,18 +85,21 @@ if (cliPath()) {
   });
 
   describe('SQLite store migration', () => {
-    for (const version of [1, 2])
-      it(`opens a store version ${version} wrote at version 3, with all it held`, async () => {
+    for (const version of [1, 2, 3])
+      it(`opens a store version ${version} wrote at version ${STORE_SCHEMA_VERSION}, with all it held`, async () => {
         const { dir, expected, answer } = fixture(version);
         const original = readFileSync(join(dir, 'workspace.db'));
         const cli = cliTransport(dir);
         const store = await DesktopStore.open(cli.transport);
-        expect(await store.schemaVersion()).toBe(3);
+        expect(await store.schemaVersion()).toBe(STORE_SCHEMA_VERSION);
 
         const mirror = answer<MirrorSnapshot>({ op: 'readMirror', workspaceId: null }).value;
         const now = await store.readMirror(null);
         for (const key of Object.keys(mirror) as (keyof MirrorSnapshot)[])
           expect(sorted<unknown>(now[key]), key).toEqual(sorted<unknown>(mirror[key]));
+        // Schema 4's records: none yet, and the old pages are still pages.
+        expect([now.databases, now.views]).toEqual([[], []]);
+        expect(now.pages.every((p) => p.kind === 'page')).toBe(true);
         for (const pageId of expected.pages) {
           const old = answer<{
             hasSnapshot: boolean;
@@ -112,7 +115,10 @@ if (cliPath()) {
           expect(await store.listHistory(pageId)).toEqual(
             answer({ op: 'listHistory', pageId }).value,
           );
-          expect(await store.repairState(pageId)).toBeNull();
+          expect(await store.repairState(pageId)).toEqual(
+            version >= 3 ? answer({ op: 'repairState', pageId }).value : null,
+          );
+          expect(await store.readRows(pageId)).toEqual([]);
         }
         expect(await store.getHistory(expected.history)).toEqual(
           answer({ op: 'getHistory', id: expected.history }).blobs[0],
@@ -165,16 +171,31 @@ if (cliPath()) {
           );
         }
 
-        // What schema 3 adds is there, empty, and works on what the old release wrote.
+        // What schema 3 adds is there (empty, from a store before it), and works on what the old
+        // release wrote; schema 4's is there and empty.
         for (const workspaceId of expected.workspaces) {
-          expect(await store.pins(workspaceId)).toEqual([]);
           const held = await store.heldPages(workspaceId);
           const usage = await store.storageUsage(workspaceId);
           expect(usage.pages).toBe(held.length);
-          expect(usage.quarantineBytes).toBe(0);
+          if (version >= 3) {
+            expect(await store.pins(workspaceId)).toEqual(
+              answer({ op: 'pins', workspaceId }).value,
+            );
+            expect(held).toEqual(answer({ op: 'heldPages', workspaceId }).value);
+            expect(usage).toEqual(answer({ op: 'storageUsage', workspaceId }).value);
+          } else {
+            expect(await store.pins(workspaceId)).toEqual([]);
+            expect(usage.quarantineBytes).toBe(0);
+          }
+          expect(await store.dbHolds(workspaceId)).toEqual([]);
+          expect(await store.trashedRows(workspaceId)).toEqual([]);
         }
         expect(await store.heldPages(ws)).toContain(expected.logPage);
-        expect(await store.quarantine(null)).toEqual([]);
+        const kept =
+          version >= 3 ? answer<{ id: Id }[]>({ op: 'quarantine', workspaceId: null }) : null;
+        const entries = await store.quarantine(null);
+        expect(entries.map((e) => e.id)).toEqual(kept ? kept.value.map((e) => e.id) : []);
+        expect(entries.flatMap((e) => e.parts)).toEqual(kept ? kept.blobs : []);
         const pin = { workspaceId: ws, pageId: expected.logPage, subtree: true, pinnedAt: 'x' };
         await store.pin(pin);
         expect(await store.pins(ws)).toEqual([pin]);
@@ -188,6 +209,67 @@ if (cliPath()) {
         expect(readFileSync(join(dir, `workspace.v${version}.db`))).toEqual(original);
       });
 
+    it('makes a database on a version-3 store it migrated, and plans with rows it reads in', async () => {
+      const { dir, expected } = fixture(3);
+      const cli = cliTransport(dir);
+      let store = await DesktopStore.open(cli.transport);
+      const [ws] = expected.workspaces;
+      const parent = (await store.getPage(expected.logPage))!;
+      const db = {
+        ...parent,
+        id: '0190f5a0-0000-7000-8000-00000000d001',
+        kind: 'database' as const,
+        parentPageId: parent.id,
+        orderKey: 'a9',
+        title: 'Tasks',
+      };
+      const row = {
+        ...db,
+        id: '0190f5a0-0000-7000-8000-00000000d002',
+        kind: 'row' as const,
+        parentPageId: db.id,
+        orderKey: 'a0',
+        title: 'One',
+      };
+      const create = (entityId: Id, payload: unknown) =>
+        ({
+          opId: `0190f5a0-0000-7000-8000-0000000${entityId.slice(-5)}`,
+          type: 'page.create',
+          workspaceId: ws,
+          entityId,
+          baseVersion: null,
+          payload,
+          createdAt: '2026-11-12T00:00:00.000Z',
+        }) as Operation;
+      await store.applyLocalOps([
+        create(db.id, {
+          ...db,
+          database: { properties: [{ id: 'Numb0001', name: 'Count', type: 'number' }] },
+        }),
+        create(row.id, { ...row, row: { values: { Numb0001: 3 } } }),
+      ]);
+      await cli.close();
+      // A new process: the mirror holds no rows until a plan needs them.
+      const again = cliTransport(dir);
+      store = await DesktopStore.open(again.transport);
+      expect((await store.readMirror(ws)).databases.map((d) => d.id)).toEqual([db.id]);
+      expect((await store.getPage(row.id))?.kind).toBe('row');
+      await store.applyLocalOps([
+        {
+          opId: '0190f5a0-0000-7000-8000-00000000d0e1',
+          type: 'db.update',
+          workspaceId: ws,
+          entityId: db.id,
+          baseVersion: null,
+          payload: { properties: [{ id: 'Numb0001', name: 'Count', type: 'text' }] },
+          createdAt: '2026-11-12T00:00:00.000Z',
+        },
+      ]);
+      expect((await store.readRows(db.id)).map((r) => r.values)).toEqual([{ Numb0001: '3' }]);
+      expect((await store.dbHold(db.id))?.mode).toBe('full');
+      await again.close();
+    });
+
     it('refuses a store a newer version wrote, and leaves it as it was', async () => {
       const first = cliTransport();
       const store = await DesktopStore.open(first.transport);
@@ -195,17 +277,18 @@ if (cliPath()) {
       await first.close();
       const path = join(first.dir, 'workspace.db');
       const db = new DatabaseSync(path);
-      db.prepare("UPDATE meta SET value = '4' WHERE key = 'schemaVersion'").run();
+      const newer = STORE_SCHEMA_VERSION + 1;
+      db.prepare(`UPDATE meta SET value = '${newer}' WHERE key = 'schemaVersion'`).run();
       db.close();
       const before = readFileSync(path);
       const second = cliTransport(first.dir);
       await expect(DesktopStore.open(second.transport)).rejects.toThrow(
-        /written by a newer version \(4\)/,
+        new RegExp(`written by a newer version \\(${newer}\\)`),
       );
       await second.close();
       expect(readFileSync(path)).toEqual(before);
       expect(readdirSync(first.dir).filter((f) => f.startsWith('workspace.v'))).toEqual([]);
-      expect(existsSync(join(first.dir, 'workspace.v4.db'))).toBe(false);
+      expect(existsSync(join(first.dir, `workspace.v${newer}.db`))).toBe(false);
     });
   });
 } else if (process.env.CI) {

@@ -158,6 +158,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var export = await Kit.Json(await ws.Client.PostAsync($"/api/v1/workspaces/{ws.Id}/exports", null));
         var invite = await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/invites", new { email = "someone@example.test", role = "member" }));
         var me = await ws.Client.GetFromJsonAsync<JsonElement>("/api/v1/account/me");
+        var database = await DatabaseTests.NewDatabase(ws, "Secret table");
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -168,6 +169,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["exportId"] = export.GetProperty("id").GetString()!,
             ["inviteId"] = invite.GetProperty("id").GetString()!,
             ["userId"] = member.Id.ToString(),
+            ["databaseId"] = database.ToString(),
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };

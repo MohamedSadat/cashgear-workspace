@@ -6,6 +6,7 @@
 // dropped without a trace. Only the view is rewritten, never the stored document.
 import { Mark, type MarkType, type NodeType, type Schema } from '@tiptap/pm/model';
 import type { DocJSON } from './binding';
+import { dateMentionText } from './dates';
 import { documentSchema } from './schema';
 
 export interface ReadOnlyStrings {
@@ -95,6 +96,11 @@ export function readOnlyView(
       } else if (type.isInline) {
         if (parent.contentMatch.matchType(type)) out.push(build(n, type, parent));
         else if (type.name === 'hardBreak') out.push(lineBreak());
+        else if (type.name === 'dateMention') {
+          // Where only text goes (a code block), a date is its text.
+          const date = dateMentionText(n.attrs);
+          if (date) out.push(textNode(date));
+        }
         return;
       }
       const before = out.length;

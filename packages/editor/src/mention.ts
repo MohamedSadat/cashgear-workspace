@@ -1,9 +1,12 @@
-// Page mentions: typing `@` opens a page picker at the caret; the chosen page goes in as a
-// pageMention node holding its id, and its title is drawn from the host (D6).
+// Mentions: typing `@` opens a picker at the caret. A chosen page goes in as a pageMention node
+// holding its id, its title drawn from the host (D6); a chosen date (schema version 3) goes in as
+// a dateMention holding the date (dates.ts).
 import { Extension, type NodeViewRenderer } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import type { EditorHost } from './host';
+import { localDate } from '@cgw/doc';
+import { insertDateMention, openDatePicker, type DateUi } from './dates';
+import type { EditorHost, SlashItem } from './host';
 import type { SlashKeys } from './slash';
 
 export interface MentionState {
@@ -29,6 +32,68 @@ export function insertMention(view: EditorView, pageId: string) {
   const tr = view.state.tr.replaceWith(from, view.state.selection.from, node).insertText(' ');
   view.dispatch(tr.setMeta(mentionKey, closed).scrollIntoView());
   view.focus();
+}
+
+/** The "@" menu's date items: today and tomorrow on this device, or a date from the picker. */
+const DATE_ITEMS = [
+  { id: 'date:today', days: 0, label: 'dateToday', glyph: '📅', words: ['today', 'date', 'now'] },
+  { id: 'date:tomorrow', days: 1, label: 'dateTomorrow', glyph: '📅', words: ['tomorrow', 'date'] },
+  { id: 'date:pick', days: 0, label: 'datePick', glyph: '🗓', words: ['date', 'pick', 'calendar'] },
+] as const;
+
+/** Lower case, without Arabic diacritics and tatweel, for matching what is typed after `@`. */
+const fold = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[\u0622\u0623\u0625]/g, '\u0627')
+    .trim();
+
+/**
+ * What the "@" menu lists for a query: pages whose titles match (from the host), and the dates
+ * whose names (in the interface language, or in English) start with it. With nothing typed, the
+ * pages come first; when a date's name was typed, the dates do.
+ */
+export function mentionItems(host: EditorHost, query: string): SlashItem[] {
+  const strings = host.strings;
+  const typed = fold(query);
+  const dates: SlashItem[] = DATE_ITEMS.filter(
+    (item) =>
+      !typed ||
+      [...fold(strings?.[item.label] ?? '').split(/\s+/), ...item.words].some((word) =>
+        word.startsWith(typed),
+      ),
+  ).map((item) => ({
+    id: item.id,
+    label: strings?.[item.label] ?? item.label,
+    glyph: item.glyph,
+    group: strings?.mentionDates,
+  }));
+  const pages: SlashItem[] = (host.pages?.search(query) ?? []).slice(0, 12).map((page) => ({
+    id: page.id,
+    label: page.title || (strings?.untitled ?? ''),
+    glyph: page.icon ?? '📄',
+    group: dates.length ? strings?.mentionPages : undefined,
+  }));
+  return typed && dates.length ? [...dates, ...pages] : [...pages, ...dates];
+}
+
+/** Puts the chosen item in place of `@query`: a page mention, or a date (and its picker). */
+export function chooseMention(view: EditorView, ui: DateUi, id: string): void {
+  const { from, active } = mentionState(view.state);
+  if (!active) return;
+  const item = DATE_ITEMS.find((d) => d.id === id);
+  if (!item) {
+    insertMention(view, id);
+    return;
+  }
+  const range = { from, to: view.state.selection.from };
+  const at = insertDateMention(view, range, localDate(item.days), (tr) =>
+    tr.setMeta(mentionKey, closed),
+  );
+  view.focus();
+  // "Pick a date" goes in as today, then asks.
+  if (item.id === 'date:pick') openDatePicker(view, ui, at);
 }
 
 export const Mentions = Extension.create<{ keys: () => SlashKeys | null }>({

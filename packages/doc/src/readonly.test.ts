@@ -79,13 +79,13 @@ describe('the read-only view from derived JSON', () => {
       paragraph('Ask ', { type: 'userMention', attrs: { userId: 'u1' } }, ' about it'),
       paragraph(
         'Due ',
-        { type: 'dateMention', attrs: { date: '2026-12-01' } },
+        { type: 'equation', attrs: { latex: 'x^2' } },
         { type: 'hardBreak' },
         text('done', 'bold'),
       ),
     );
     const { json, unknownNodes } = view(doc);
-    expect(unknownNodes).toEqual(['dateMention', 'userMention']);
+    expect(unknownNodes).toEqual(['equation', 'userMention']);
     expect(plainText(json)).toBe(`Ask ${strings.inline} about it\nDue ${strings.inline}\ndone`);
     expect(JSON.stringify(json)).toContain('"bold"');
   });

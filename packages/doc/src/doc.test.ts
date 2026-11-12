@@ -64,9 +64,11 @@ describe('schema', () => {
       'bookmark',
       'childPage',
       'tableOfContents',
+      'databaseView',
       'text',
       'hardBreak',
       'pageMention',
+      'dateMention',
     ])
       expect(nodes.has(name), name).toBe(true);
     for (const name of [
@@ -80,7 +82,7 @@ describe('schema', () => {
       'highlight',
     ])
       expect(marks.has(name), name).toBe(true);
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
   });
 
   it('allows only safe link schemes', () => {

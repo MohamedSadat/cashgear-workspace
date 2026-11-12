@@ -10,7 +10,7 @@ self.onmessage = (event: MessageEvent<ZipRequest>) => {
       const files: Zippable = {};
       // Text compresses; images and other media are already compressed.
       for (const [path, bytes] of Object.entries(event.data.files))
-        files[path] = [bytes, { level: /\.(md|json|txt)$/.test(path) ? 6 : 0 }];
+        files[path] = [bytes, { level: /\.(md|json|txt|csv)$/.test(path) ? 6 : 0 }];
       const zipped = zipSync(files, { mtime: new Date() });
       self.postMessage({ ok: zipped }, { transfer: [zipped.buffer] });
     } else {

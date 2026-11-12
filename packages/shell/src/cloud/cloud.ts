@@ -21,6 +21,7 @@ import {
   type SyncEvent,
   type SyncStatus,
 } from '@cgw/workspace';
+import type { DatabaseSync } from '../database/host';
 import type { CloudPlatform } from '../platform';
 import { NotOnDeviceError, type WorkspaceSession } from '../session';
 import { OfflineState } from './offline';
@@ -81,6 +82,7 @@ export class Cloud {
   private readonly firstCheck = new Promise<void>((done) => (this.firstCheckDone = done));
   private readonly listeners = new Set<() => void>();
   private readonly noticeListeners = new Set<(notice: CloudNotice) => void>();
+  private readonly memberListeners = new Set<(workspaceId: Id) => void>();
   private offEngine: (() => void) | null = null;
   private readonly cleanups: (() => void)[] = [];
 
@@ -187,7 +189,12 @@ export class Cloud {
         this.notify({ code: event.code, pageId: event.pageId, workspaceId: event.workspaceId });
         break;
       case 'members':
+        for (const listener of this.memberListeners) listener(event.workspaceId);
         this.emit();
+        break;
+      case 'rows':
+        // A held database's rows (or its hold) changed: the mirror reads them again.
+        this.session.rowsChanged(event.databaseId);
         break;
       case 'recover':
         void this.recovery.run();
@@ -200,7 +207,7 @@ export class Cloud {
 
   /** What an open page's document reports. */
   private onDocEvent(event: DocEvent) {
-    const page = this.session.mirror.pages.get(event.pageId);
+    const page = this.session.record(event.pageId);
     const syncs =
       !!page && this.session.mirror.workspaces.get(page.workspaceId)?.localOnly === false;
     switch (event.kind) {
@@ -305,7 +312,7 @@ export class Cloud {
    * NotOnDeviceError when it cannot be: offline, or nobody signed in.
    */
   private async fetchMissing(pageId: Id): Promise<boolean> {
-    const page = this.session.mirror.pages.get(pageId);
+    const page = this.session.record(pageId);
     const workspace = page && this.session.mirror.workspaces.get(page.workspaceId);
     if (!page || !workspace || workspace.localOnly) return false;
     await this.firstCheck;
@@ -399,6 +406,71 @@ export class Cloud {
     this.engine.stop();
     this.offEngine?.();
     for (const cleanup of this.cleanups) cleanup();
+  }
+
+  // Databases (Phase 4) ------------------------------------------------------------------------------
+
+  /** What the database views' host needs of the server (database/host.ts). */
+  databaseSync(): DatabaseSync {
+    return {
+      online: () => {
+        const state = this.engine.status.state;
+        return !!this.account_ && state !== 'offline' && state !== 'signedOut';
+      },
+      account: () => this.account_,
+      holdDatabase: (databaseId) => this.engine.holdDatabase(databaseId),
+      queryDatabase: (databaseId, request) => this.engine.queryDatabase(databaseId, request),
+      peekQuery: (databaseId, request) => this.sync.query(databaseId, request),
+      members: async (workspaceId) =>
+        (await this.members(workspaceId)).map((m) => ({
+          userId: m.userId,
+          displayName: m.displayName,
+          email: m.email,
+        })),
+      syncNow: () => this.engine.syncNow(),
+      importCsv: async (databaseId, request) => {
+        const answer = await data(
+          this.api.POST('/api/v1/databases/{databaseId}/import', {
+            params: { path: { databaseId } },
+            // A column not imported is null (contract section 4); the generated schema
+            // writes the items as strings only.
+            body: {
+              csv: request.csv,
+              columns: request.columns as string[],
+              header: request.header,
+            },
+          }),
+        );
+        return {
+          created: Number(answer.created),
+          problems: answer.problems.map((p) => ({ line: Number(p.line), message: p.message })),
+        };
+      },
+      exportCsv: async (databaseId, viewId, context) => {
+        const answer = await this.api.GET('/api/v1/databases/{databaseId}/export', {
+          params: {
+            path: { databaseId },
+            query: { viewId, today: context.today, offsetMinutes: context.offsetMinutes },
+          },
+          // The bytes as written (a BOM first, for spreadsheets), not decoded text.
+          parseAs: 'arrayBuffer',
+        });
+        if (!answer.response.ok) {
+          const body = answer.error as { code?: string; title?: string } | undefined;
+          throw new SyncHttpError(
+            answer.response.status,
+            body?.code ?? 'server.error',
+            body?.title ?? answer.response.statusText,
+          );
+        }
+        return new Uint8Array(answer.data as unknown as ArrayBuffer);
+      },
+      subscribe: (listener) => this.subscribe(listener),
+      onMembers: (listener) => {
+        this.memberListeners.add(listener);
+        return () => void this.memberListeners.delete(listener);
+      },
+    };
   }
 
   // Devices --------------------------------------------------------------------------------------

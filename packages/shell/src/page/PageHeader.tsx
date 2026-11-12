@@ -3,7 +3,7 @@
 import type { PageRecord } from '@cgw/workspace';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { WorkspaceSession } from '../session';
+import { isRowRecord, type WorkspaceSession } from '../session';
 import { assetUrl, pickFiles, storeAsset } from './editorHost';
 
 /** A curated set, drawn by the system's emoji font; Unicode data, no third-party list. */
@@ -237,7 +237,11 @@ export function PageHeader({
 export function Breadcrumbs({ session, page }: { session: WorkspaceSession; page: PageRecord }) {
   const { t } = useTranslation();
   const section = session.mirror.sections.get(page.sectionId);
-  const ancestors = session.mirror.ancestors(page.id);
+  // A row is not in the tree: its trail goes through its database's page.
+  const database = isRowRecord(page) ? session.mirror.pages.get(page.databaseId) : undefined;
+  const ancestors = database
+    ? [...session.mirror.ancestors(database.id), database]
+    : session.mirror.ancestors(page.id);
   // Track U5's breadcrumb with overflow, stand-in: long trails keep the first and the last two.
   const shown = ancestors.length > 3 ? [ancestors[0], null, ...ancestors.slice(-2)] : ancestors;
   return (

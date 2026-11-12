@@ -180,6 +180,94 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("AuditLog", (string)null);
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.DatabaseRow", b =>
+                {
+                    b.Property<byte[]>("PageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Computed")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long?>("ComputedVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("PropertyVersions")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("Seq")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Values")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("PageId");
+
+                    b.HasIndex("DatabaseId", "PageId");
+
+                    b.HasIndex("DatabaseId", "Seq");
+
+                    b.ToTable("DatabaseRows");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.DatabaseView", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Config")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("OrderKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "DatabaseId");
+
+                    b.ToTable("DatabaseViews");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.Device", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -433,6 +521,12 @@ namespace Cgw.Core.Data.Migrations
                         .HasFilter("[TrashedAt] IS NOT NULL AND [DeletedAt] IS NULL");
 
                     SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TrashedAt"), new[] { "WorkspaceId", "TrashRootId" });
+
+                    b.HasIndex("WorkspaceId")
+                        .HasDatabaseName("IX_Pages_Tree")
+                        .HasFilter("[Kind] <> N'row' AND [DeletedAt] IS NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("WorkspaceId"), new[] { "ParentPageId", "SectionId", "Restricted" });
 
                     b.HasIndex("WorkspaceId", "TrashedAt");
 
@@ -996,6 +1090,50 @@ namespace Cgw.Core.Data.Migrations
                     b.HasIndex("CreatedAt");
 
                     b.ToTable("WorkspaceChanges");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkspaceDatabase", b =>
+                {
+                    b.Property<byte[]>("PageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<bool>("ComputePending")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Properties")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("RowCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("RowsVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("PageId");
+
+                    b.HasIndex("ComputePending")
+                        .HasFilter("[ComputePending] = 1");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("ComputePending"), new[] { "WorkspaceId" });
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("Databases", (string)null);
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.WorkspaceExport", b =>

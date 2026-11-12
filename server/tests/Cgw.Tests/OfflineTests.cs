@@ -400,17 +400,17 @@ public sealed class OfflineTests(ServerFixture server)
         Assert.Equal(UpdateStatus.Rejected, fromOld.Status);
         Assert.Contains("newer than the app that pushed it", fromOld.Problem);
         Assert.Equal(1, oldPage.DocSchemaVersion);
-        // Version 3, which this worker does not know, even from an app that says it does.
-        var (three, threePage) = await Decide("claimsV3", 3);
+        // Version 3 from an app that knows only version 2.
+        var (three, threePage) = await Decide("claimsV3", 2);
         Assert.Equal(UpdateStatus.Rejected, three.Status);
-        Assert.Contains("newer than this worker knows", three.Problem);
+        Assert.Contains("newer than the app that pushed it", three.Problem);
         Assert.Equal(1, threePage.DocSchemaVersion);
         // A version 2 element in a document still at version 1.
         var (toc, tocPage) = await Decide("tocOnly", 2);
         Assert.Equal(UpdateStatus.Rejected, toc.Status);
         Assert.Contains("tableOfContents", toc.Problem);
         Assert.Equal(1, tocPage.DocSchemaVersion);
-        Assert.Equal(2, Schema.Latest);
+        // (Version 4, which this worker does not know: DatabaseTests.)
     }
 
     // ------------------------------------------------------------------ the trash

@@ -3,24 +3,35 @@
 // and revoked while a device is offline. (The Yjs table is the document layer's: S1's fuzz.)
 //
 // Rows with no script here: "a permission change" (not an operation: the shell calls the
-// permissions API, whose version check is the server's own tests'), and the two database-row rows
-// (Phase 4: there are no rows yet).
+// permissions API, whose version check is the server's own tests'). Phase 4 adds the database
+// rows of the Metadata table and the database rules of contract section 2, the same way.
 import { describe, expect, it } from 'vitest';
 import { newOp } from '../build';
+import { queryRows } from '../db/query';
+import type { PropertyDef } from '../db/types';
+import { cellValue } from '../db/values';
 import { uuidv7, type Id } from '../ids';
 import { MemoryStore } from '../memory';
 import { fakeCodec, fakeUpdate, FakeServer } from '../testing/fakeServer';
 import {
   ALICE,
   BOB,
+  PROP,
+  STAGE,
+  TASK_PROPS,
   device,
+  heldRows,
+  makeDatabase,
   mirrorShape,
   pageRecord,
+  rowCreate,
+  serverRow,
+  serverRows,
   serverShape,
   sharedWorkspace,
   type Device,
 } from '../testing/syncHarness';
-import { STORE_SCHEMA_VERSION } from '../types';
+import { STORE_SCHEMA_VERSION, type RowRecord } from '../types';
 
 const type = (store: MemoryStore, pageId: Id, text: string, client = 71) =>
   store.appendDocUpdates(pageId, [{ updateId: uuidv7(), data: fakeUpdate(client, text) }]);
@@ -501,5 +512,360 @@ describe('access granted and revoked while a device is offline', () => {
     await sync(bob);
     expect(await mirrorShape(bob.store, ws.id)).toEqual(await serverShape(server, BOB, ws.id));
     expect(await mirrorShape(bob.store, ws.id)).toEqual(await mirrorShape(one.store, ws.id));
+  });
+});
+
+// Databases (Phase 4) ------------------------------------------------------------------------------
+
+/** `twoPeople` with Alice's tasks database under Alpha (its view, three rows), held by both. */
+async function twoOnTasks() {
+  const people = await twoPeople();
+  const made = await makeDatabase(people.one.store, people.ws.id, people.section.id, people.a.id);
+  await sync(people.one, people.bob);
+  await people.bob.engine.holdDatabase(made.db.id);
+  await sync(people.bob);
+  return { ...people, ...made };
+}
+
+const rowOf = async (d: Device, id: Id) => (await d.store.getPage(id)) as RowRecord;
+
+const recordOf = async (d: Device, workspaceId: Id, databaseId: Id) =>
+  (await d.store.readMirror(workspaceId)).databases.find((x) => x.id === databaseId)!;
+
+const defOf = (id: Id) => TASK_PROPS.find((p) => p.id === id)!;
+
+const rowUpdate = (ws: Id, rowId: Id, values: Record<string, unknown>) =>
+  newOp('row.update', ws, rowId, { values } as never);
+
+/** Each device holds exactly what the server holds of the database: its record and its rows. */
+async function converged(server: FakeServer, ws: Id, db: Id, ...devices: Device[]) {
+  const rows = await serverRows(server, ALICE, db);
+  const record = server.spaces.get(ws)!.mirror.databases.get(db)!;
+  for (const d of devices) {
+    expect(await heldRows(d.store, db)).toEqual(rows);
+    expect(await recordOf(d, ws, db)).toEqual(record);
+  }
+}
+
+describe('Database rows (SYNC_DESIGN.md, Metadata; contract section 2)', () => {
+  it('two edits to different properties of one row: both stand, and no one is told', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    const r = rows[0].id;
+    await one.store.applyLocalOps([rowUpdate(ws.id, r, { [PROP.notes]: 'Alice' })]);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, r, { [PROP.done]: true })]);
+    await sync(one, bob, one);
+    expect(serverRow(server, r)).toMatchObject({
+      values: { [PROP.count]: 1, [PROP.notes]: 'Alice', [PROP.done]: true },
+      versions: { [PROP.count]: 1, [PROP.notes]: 1, [PROP.done]: 1 },
+      version: 3,
+    });
+    await converged(server, ws.id, db.id, one, bob);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+
+  it("two edits to the same property: the last to reach the server wins, and the property's version rises", async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    const r = rows[0].id;
+    await one.store.applyLocalOps([rowUpdate(ws.id, r, { [PROP.count]: 10 })]);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, r, { [PROP.count]: 20 })]);
+    await sync(one, bob, one);
+    expect(serverRow(server, r)).toMatchObject({
+      values: { [PROP.count]: 20 },
+      versions: { [PROP.count]: 3 },
+    });
+    expect((await rowOf(one, r)).values[PROP.count]).toBe(20);
+    await converged(server, ws.id, db.id, one, bob);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+
+  it('a type change racing an offline edit: the edit lands converted', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    await one.store.applyLocalOps([rowUpdate(ws.id, rows[1].id, { [PROP.notes]: 'abc' })]);
+    await sync(one, bob);
+    // Bob, offline, writes "42" as text; Alice meanwhile makes Notes a number.
+    await bob.store.applyLocalOps([rowUpdate(ws.id, rows[0].id, { [PROP.notes]: '42' })]);
+    const number: PropertyDef = {
+      ...defOf(PROP.notes),
+      type: 'number',
+      number: { format: 'number', decimals: null },
+    };
+    await one.store.applyLocalOps([newOp('db.update', ws.id, db.id, { properties: [number] })]);
+    await sync(one, bob, one);
+    expect(serverRow(server, rows[0].id)!.values[PROP.notes]).toBe(42);
+    // Every row the server has was converted: text that is no number is cleared.
+    expect(serverRow(server, rows[1].id)!.values[PROP.notes]).toBeUndefined();
+    const notes = (await recordOf(bob, ws.id, db.id)).properties.find((p) => p.id === PROP.notes);
+    expect(notes).toMatchObject({ type: 'number' });
+    await converged(server, ws.id, db.id, one, bob);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+
+  it('a property deleted while another person edits it: the row and its value stay, hidden until restored', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    const r = rows[0].id;
+    const notes = defOf(PROP.notes);
+    await one.store.applyLocalOps([
+      newOp('db.update', ws.id, db.id, {
+        properties: [{ ...notes, trashedAt: new Date().toISOString() }],
+      }),
+    ]);
+    await sync(one);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, r, { [PROP.notes]: 'kept', [PROP.count]: 7 })]);
+    await sync(bob, one);
+    expect(serverRow(server, r)!.values).toMatchObject({ [PROP.notes]: 'kept', [PROP.count]: 7 });
+    await converged(server, ws.id, db.id, one, bob);
+    const row = await rowOf(bob, r);
+    expect(cellValue(await recordOf(bob, ws.id, db.id), row, PROP.notes)).toBeNull();
+    expect(cellValue(await recordOf(bob, ws.id, db.id), row, PROP.count)).toBe(7);
+    await one.store.applyLocalOps([
+      newOp('db.update', ws.id, db.id, { properties: [{ ...notes, trashedAt: null }] }),
+    ]);
+    await sync(one, bob);
+    const restored = await recordOf(bob, ws.id, db.id);
+    expect(cellValue(restored, await rowOf(bob, r), PROP.notes)).toBe('kept');
+    await converged(server, ws.id, db.id, one, bob);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+
+  it('an option deleted while another person sets it: the value reads as empty', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    await one.store.applyLocalOps([rowUpdate(ws.id, rows[1].id, { [PROP.stage]: STAGE.open })]);
+    await sync(one, bob);
+    const stage = defOf(PROP.stage);
+    await one.store.applyLocalOps([
+      newOp('db.update', ws.id, db.id, {
+        properties: [{ ...stage, options: stage.options!.filter((o) => o.id !== STAGE.open) }],
+      }),
+    ]);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, rows[0].id, { [PROP.stage]: STAGE.open })]);
+    await sync(one, bob, one);
+    // Written after the delete: coerced away. Written before: the id stays, and reads as empty.
+    expect(serverRow(server, rows[0].id)!.values[PROP.stage]).toBeUndefined();
+    expect(serverRow(server, rows[1].id)!.values[PROP.stage]).toBe(STAGE.open);
+    await converged(server, ws.id, db.id, one, bob);
+    const record = await recordOf(bob, ws.id, db.id);
+    const held = await bob.store.readRows(db.id);
+    for (const row of held) expect(cellValue(record, row, PROP.stage)).toBeNull();
+    const empty = queryRows(
+      record,
+      held,
+      {
+        filter: {
+          kind: 'group',
+          op: 'and',
+          children: [{ kind: 'condition', propertyId: PROP.stage, operator: 'isEmpty' }],
+        },
+        sorts: [],
+        group: null,
+      },
+      { today: '2026-11-12', offsetMinutes: 0, me: null },
+    );
+    expect(empty.rows).toHaveLength(3);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+
+  it('relations are kept in step across people, both ways, offline edits included', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    const [r0, r1, r2] = rows.map((r) => r.id);
+    await one.store.applyLocalOps([rowUpdate(ws.id, r0, { [PROP.link]: [r1] })]);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, r2, { [PROP.link]: [r1] })]);
+    await sync(one, bob, one);
+    expect(serverRow(server, r1)!.values[PROP.back]).toEqual([r0, r2]);
+    await converged(server, ws.id, db.id, one, bob);
+    // Bob points One at Three instead; Alice, offline, unlinks Three from Two.
+    await bob.store.applyLocalOps([rowUpdate(ws.id, r0, { [PROP.link]: [r2] })]);
+    await one.store.applyLocalOps([rowUpdate(ws.id, r2, { [PROP.link]: null })]);
+    await sync(bob, one, bob);
+    expect(serverRow(server, r0)!.values[PROP.link]).toEqual([r2]);
+    expect(serverRow(server, r2)!.values[PROP.back]).toEqual([r0]);
+    expect(serverRow(server, r1)!.values[PROP.back]).toBeUndefined();
+    expect(serverRow(server, r2)!.values[PROP.link]).toBeUndefined();
+    await converged(server, ws.id, db.id, one, bob);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+
+  it("a row edit the server refuses (the row was trashed) takes the server's row, and the user is told", async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    const r = rows[1].id;
+    await one.store.applyLocalOps([
+      newOp('page.trash', ws.id, r, {}, (await rowOf(one, r)).version),
+    ]);
+    await sync(one);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, r, { [PROP.count]: 9 })]);
+    await sync(bob);
+    expect(bob.notices()).toEqual(['page.trashed']);
+    expect(await rowOf(bob, r)).toMatchObject({ trashRootId: r, values: { [PROP.count]: 2 } });
+    await converged(server, ws.id, db.id, one, bob);
+  });
+
+  it("a database change the server refuses (the database was trashed) takes the server's record; its rows went with it", async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    await one.store.applyLocalOps([
+      newOp('page.trash', ws.id, db.id, {}, (await one.store.getPage(db.id))!.version),
+    ]);
+    await sync(one);
+    await bob.store.applyLocalOps([
+      newOp('db.update', ws.id, db.id, {
+        properties: [{ id: 'Extra001', name: 'Extra', type: 'text' }],
+      }),
+    ]);
+    await sync(bob);
+    expect(bob.notices()).toEqual(['page.trashed']);
+    const record = await recordOf(bob, ws.id, db.id);
+    expect(record.properties.map((p) => p.id)).not.toContain('Extra001');
+    expect((await bob.store.getPage(db.id))!.trashedAt).not.toBeNull();
+    // On the server the rows were trashed with their database, and come back with it.
+    for (const r of rows) expect(serverRow(server, r.id)).toMatchObject({ trashRootId: db.id });
+    await sync(one);
+    await converged(server, ws.id, db.id, one, bob);
+    await one.store.applyLocalOps([newOp('page.restore', ws.id, db.id, {})]);
+    await sync(one, bob);
+    for (const r of rows) expect(serverRow(server, r.id)).toMatchObject({ trashedAt: null });
+    await converged(server, ws.id, db.id, one, bob);
+  });
+
+  // Found by the simulator: a refused operation's answer carries its own entity only, but the
+  // planner here had already changed other records with it.
+  it('a refused relation edit: the rows it relinked here are taken again from the server', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    // One goes to the trash; Bob, offline, makes One block Two.
+    await one.store.applyLocalOps([
+      newOp('page.trash', ws.id, rows[0].id, {}, (await rowOf(one, rows[0].id)).version),
+    ]);
+    await sync(one);
+    await bob.store.applyLocalOps([rowUpdate(ws.id, rows[0].id, { [PROP.link]: [rows[1].id] })]);
+    // Kept in step here at once: Two is blocked by One.
+    expect((await rowOf(bob, rows[1].id)).values[PROP.back]).toEqual([rows[0].id]);
+    await sync(bob);
+    expect(bob.notices()).toEqual(['page.trashed']);
+    expect((await rowOf(bob, rows[1].id)).values[PROP.back]).toBeUndefined();
+    await converged(server, ws.id, db.id, one, bob);
+  });
+
+  it('a refused type change: the rows it converted here are taken again from the server', async () => {
+    const { server, one, bob, ws, db, rows } = await twoOnTasks();
+    // The rows go to the trash one by one, Bob sees that; then the database (which then trashes
+    // no row), which Bob does not see before he changes a type.
+    await one.store.applyLocalOps(
+      await Promise.all(
+        rows.map(async (r) =>
+          newOp('page.trash', ws.id, r.id, {}, (await rowOf(one, r.id)).version),
+        ),
+      ),
+    );
+    await sync(one, bob);
+    await one.store.applyLocalOps([
+      newOp('page.trash', ws.id, db.id, {}, (await one.store.getPage(db.id))!.version),
+    ]);
+    await sync(one);
+    await bob.store.applyLocalOps([
+      newOp('db.update', ws.id, db.id, { properties: [{ ...defOf(PROP.count), type: 'text' }] }),
+    ]);
+    expect((await rowOf(bob, rows[0].id)).values[PROP.count]).toBe('1');
+    await sync(bob);
+    expect(bob.notices()).toEqual(['page.trashed']);
+    for (const [i, r] of rows.entries())
+      expect((await rowOf(bob, r.id)).values[PROP.count]).toBe(i + 1);
+    await converged(server, ws.id, db.id, one, bob);
+  });
+
+  it('a refused relation to another database: the reverse property made there is taken back', async () => {
+    const { server, one, bob, ws, section, db } = await twoOnTasks();
+    const projects = await makeDatabase(one.store, ws.id, section.id, null, ['P'], 'Projects');
+    await sync(one, bob);
+    await one.store.applyLocalOps([
+      newOp('page.trash', ws.id, db.id, {}, (await one.store.getPage(db.id))!.version),
+    ]);
+    await sync(one);
+    const relation: PropertyDef = {
+      id: 'Proj0001',
+      name: 'Project',
+      type: 'relation',
+      relation: { databaseId: projects.db.id, reversePropertyId: 'Task0001' },
+    };
+    await bob.store.applyLocalOps([newOp('db.update', ws.id, db.id, { properties: [relation] })]);
+    const ids = async () =>
+      (await recordOf(bob, ws.id, projects.db.id)).properties.map((p) => p.id);
+    expect(await ids()).toContain('Task0001');
+    await sync(bob);
+    expect(bob.notices()).toEqual(['page.trashed']);
+    expect(await ids()).not.toContain('Task0001');
+    expect(await recordOf(bob, ws.id, projects.db.id)).toEqual(
+      server.spaces.get(ws.id)!.mirror.databases.get(projects.db.id),
+    );
+  });
+
+  it('a row made offline in a database trashed meanwhile: refused, removed here, and the user is told', async () => {
+    const { server, one, bob, ws, section, db } = await twoOnTasks();
+    await one.store.applyLocalOps([
+      newOp('page.trash', ws.id, db.id, {}, (await one.store.getPage(db.id))!.version),
+    ]);
+    await sync(one);
+    const late = rowCreate(ws.id, section.id, db.id, 'Late', { [PROP.count]: 4 }, 'b0');
+    await bob.store.applyLocalOps([newOp('page.create', ws.id, late.id, late)]);
+    await sync(bob);
+    expect(bob.notices()).toEqual(['page.trashed']);
+    expect(await bob.store.getPage(late.id)).toBeNull();
+    expect(serverRow(server, late.id)).toBeUndefined();
+    await converged(server, ws.id, db.id, one, bob);
+  });
+
+  it('two people change one view: the last to reach the server wins', async () => {
+    const { server, one, bob, ws, view } = await twoOnTasks();
+    await one.store.applyLocalOps([
+      newOp('view.upsert', ws.id, view.id, { ...view, name: 'By Alice' }),
+    ]);
+    await bob.store.applyLocalOps([
+      newOp('view.upsert', ws.id, view.id, { ...view, name: 'By Bob' }),
+    ]);
+    await sync(one, bob, one);
+    const there = server.spaces.get(ws.id)!.mirror.views.get(view.id)!;
+    expect(there).toMatchObject({ name: 'By Bob', version: 3 });
+    for (const d of [one, bob])
+      expect((await d.store.readMirror(ws.id)).views.find((v) => v.id === view.id)).toEqual(there);
+    expect([...one.notices(), ...bob.notices()]).toEqual([]);
+  });
+});
+
+describe('access to a database granted and revoked while a device is offline', () => {
+  it('revoked: the database, its views and rows go, an offline edit of a row is not sent; granted, it all comes back', async () => {
+    const { server, one, bob, ws, db, view, rows } = await twoOnTasks();
+    await bob.store.applyLocalOps([rowUpdate(ws.id, rows[0].id, { [PROP.notes]: 'Bob offline' })]);
+    server.revoke(ws.id, db.id, BOB.id);
+    await sync(bob);
+    expect(await bob.store.getPage(db.id)).toBeNull();
+    expect(await bob.store.readRows(db.id)).toEqual([]);
+    expect(await bob.store.dbHold(db.id)).toBeNull();
+    expect((await bob.store.readMirror(ws.id)).databases).toEqual([]);
+    expect((await bob.store.readMirror(ws.id)).views).toEqual([]);
+    expect(await bob.store.nextOutboxBatch(10, ws.id)).toEqual([]);
+    expect(bob.notices()).toEqual(['not.found']);
+    expect(serverRow(server, rows[0].id)!.values[PROP.notes]).toBeUndefined();
+    expect(await mirrorShape(bob.store, ws.id)).toEqual(await serverShape(server, BOB, ws.id));
+
+    // Alice works in it meanwhile; then Bob may see it again.
+    await one.store.applyLocalOps([rowUpdate(ws.id, rows[1].id, { [PROP.notes]: 'while away' })]);
+    await sync(one);
+    server.grant(ws.id, db.id, BOB.id);
+    await sync(bob);
+    expect((await bob.store.readMirror(ws.id)).views.map((v) => v.id)).toEqual([view.id]);
+    await bob.engine.holdDatabase(db.id);
+    await sync(bob);
+    expect(await heldRows(bob.store, db.id)).toEqual(await serverRows(server, BOB, db.id));
+    await converged(server, ws.id, db.id, one, bob);
+  });
+
+  it("edit access removed while offline: the row edit is refused with the server's row, and held rows come again at the new level", async () => {
+    const { server, bob, ws, db, rows } = await twoOnTasks();
+    await bob.store.applyLocalOps([rowUpdate(ws.id, rows[0].id, { [PROP.count]: 99 })]);
+    server.demote(ws.id, BOB.id);
+    const fetched = server.calls.filter((c) => c === 'rows').length;
+    await sync(bob);
+    expect(bob.notices()).toEqual(['access.denied']);
+    expect((await rowOf(bob, rows[0].id)).values[PROP.count]).toBe(1);
+    expect(server.calls.filter((c) => c === 'rows').length).toBeGreaterThan(fetched);
+    expect(await bob.store.dbHold(db.id)).toMatchObject({ mode: 'full', complete: true });
+    for (const row of await bob.store.readRows(db.id)) expect(row.access).toBe('view');
+    expect(await bob.store.nextOutboxBatch(10, ws.id)).toEqual([]);
   });
 });

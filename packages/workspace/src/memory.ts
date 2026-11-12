@@ -9,6 +9,7 @@ import { snippet, searchTerms } from './search';
 import {
   STORE_SCHEMA_VERSION,
   type AssetRecord,
+  type DbHold,
   type DocAck,
   type DocCursor,
   type HistoryEntry,
@@ -23,6 +24,7 @@ import {
   type RemoteBatch,
   type RepairState,
   type RemoteDocPull,
+  type RowRecord,
   type SearchEntry,
   type SearchHit,
   type StorageUsage,
@@ -55,6 +57,7 @@ export class MemoryStore implements LocalStore {
   private readonly pins_ = new Map<Id, PinRecord>();
   private readonly quarantine_: QuarantineEntry[] = [];
   private readonly repairs = new Map<Id, RepairState>();
+  private readonly holds_ = new Map<Id, DbHold>();
   /** Serialises calls, as a database transaction would. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -106,9 +109,21 @@ export class MemoryStore implements LocalStore {
     });
   }
 
+  /** A page, a database's page or a row. */
+  private pageOf(pageId: Id): PageRecord | undefined {
+    return this.mirror.pages.get(pageId) ?? this.mirror.rowRecords.get(pageId);
+  }
+
+  /** Every page and row of a workspace. */
+  private allPages(workspaceId: Id): PageRecord[] {
+    return [...this.mirror.pages.values(), ...this.mirror.rowRecords.values()].filter(
+      (p) => p.workspaceId === workspaceId,
+    );
+  }
+
   /** Whether a page belongs to a workspace that syncs (its unsent updates are kept and pushed). */
   private synced(pageId: Id): boolean {
-    const page = this.mirror.pages.get(pageId);
+    const page = this.pageOf(pageId);
     const workspace = page && this.mirror.workspaces.get(page.workspaceId);
     return !!workspace && !workspace.localOnly;
   }
@@ -169,8 +184,17 @@ export class MemoryStore implements LocalStore {
       const plan = await planOps(ops, this.mirror);
       this.mirror.apply(plan);
       this.outbox.push(...plan.outbox.map((op) => structuredClone(op)));
-      for (const id of plan.deletePages) this.dropPageData(id);
+      this.writeHolds(plan);
+      for (const id of [...plan.deletePages, ...plan.deleteRows]) this.dropPageData(id);
     });
+  }
+
+  /** A plan's holds written; a database page that went takes its hold. */
+  private writeHolds(plan: Plan) {
+    for (const hold of plan.holds) this.holds_.set(hold.databaseId, structuredClone(hold));
+    for (const id of plan.deletePages) this.holds_.delete(id);
+    for (const id of plan.deleteWorkspaces ?? [])
+      for (const [key, hold] of this.holds_) if (hold.workspaceId === id) this.holds_.delete(key);
   }
 
   private dropPageData(pageId: Id) {
@@ -199,13 +223,22 @@ export class MemoryStore implements LocalStore {
       workspaceSections: async (id) => this.mirror.sectionsOf(id),
       pending: async (entityId, except) =>
         this.outbox.some((op) => op.entityId === entityId && !except?.has(op.opId)),
+      database: async (id) => this.mirror.databases.get(id),
+      workspaceViews: async (id) =>
+        [...this.mirror.views.values()].filter((v) => v.workspaceId === id),
+      rows: async (id) => this.mirror.rowsOf(id),
+      rowIds: async (id) => this.mirror.rowsOf(id).map((r) => r.id),
+      workspaceRowIds: async (id) =>
+        [...this.mirror.rowRecords.values()].filter((r) => r.workspaceId === id).map((r) => r.id),
+      dbHold: async (id) => this.holds_.get(id),
     };
   }
 
   /** Writes a remote plan: the mirror, the outbox and the cursors together. */
   private writeRemote(plan: Plan) {
     // Nothing unsent goes on the server's word: a removed page's log is set aside first.
-    for (const id of plan.deletePages) this.setAside(id, 'page.removed');
+    const removed = [...plan.deletePages, ...plan.deleteRows];
+    for (const id of removed) this.setAside(id, 'page.removed');
     const settled = new Set(plan.settled ?? []);
     for (let i = this.outbox.length - 1; i >= 0; i--)
       if (settled.has(this.outbox[i].opId)) this.outbox.splice(i, 1);
@@ -216,7 +249,8 @@ export class MemoryStore implements LocalStore {
       for (const [assetId, asset] of this.mirror.assets)
         if (asset.workspaceId === id) this.assetBytes.delete(assetId);
     }
-    for (const id of plan.deletePages) this.dropPageData(id);
+    for (const id of removed) this.dropPageData(id);
+    this.writeHolds(plan);
     this.mirror.apply(structuredClone(plan));
     if (plan.cursor) this.syncCursors.set(plan.cursor.workspaceId, plan.cursor.value);
   }
@@ -323,7 +357,7 @@ export class MemoryStore implements LocalStore {
     return this.run(() => {
       const out: Record<Id, DocCursor> = {};
       for (const [pageId, cursor] of this.docCursors_)
-        if (this.mirror.pages.get(pageId)?.workspaceId === workspaceId) out[pageId] = { ...cursor };
+        if (this.pageOf(pageId)?.workspaceId === workspaceId) out[pageId] = { ...cursor };
       return out;
     });
   }
@@ -371,7 +405,14 @@ export class MemoryStore implements LocalStore {
   }
 
   getPage(pageId: Id): Promise<PageRecord | null> {
-    return this.run(() => structuredClone(this.mirror.pages.get(pageId) ?? null));
+    return this.run(() => structuredClone(this.pageOf(pageId) ?? null));
+  }
+
+  /** Whether a page reads as trashed: it is, or it is a row whose database page is. */
+  private readsTrashed(page: PageRecord): boolean {
+    if (page.trashedAt) return true;
+    const row = this.mirror.rowRecords.get(page.id);
+    return !!row && !!this.mirror.pages.get(row.databaseId)?.trashedAt;
   }
 
   putSearchEntry(entry: SearchEntry): Promise<void> {
@@ -391,8 +432,8 @@ export class MemoryStore implements LocalStore {
       const hits: SearchHit[] = [];
       for (const entry of this.search_.values()) {
         if (entry.workspaceId !== workspaceId) continue;
-        const page = this.mirror.pages.get(entry.pageId);
-        if (!page || page.trashedAt) continue;
+        const page = this.pageOf(entry.pageId);
+        if (!page || this.readsTrashed(page)) continue;
         const words = `${entry.title} ${entry.text}`.split(' ');
         if (!terms.every((t) => words.some((w) => w.startsWith(t)))) continue;
         const inTitle = terms.every((t) => entry.title.split(' ').some((w) => w.startsWith(t)));
@@ -456,8 +497,8 @@ export class MemoryStore implements LocalStore {
 
   heldPages(workspaceId: Id): Promise<Id[]> {
     return this.run(() =>
-      [...this.mirror.pages.values()]
-        .filter((p) => p.workspaceId === workspaceId && this.holds(p.id))
+      this.allPages(workspaceId)
+        .filter((p) => this.holds(p.id))
         .map((p) => p.id)
         .sort(),
     );
@@ -472,8 +513,7 @@ export class MemoryStore implements LocalStore {
         historyBytes: 0,
         quarantineBytes: 0,
       };
-      for (const page of this.mirror.pages.values()) {
-        if (page.workspaceId !== workspaceId) continue;
+      for (const page of this.allPages(workspaceId)) {
         const log = this.docs.get(page.id);
         if (this.holds(page.id)) usage.pages++;
         if (log)
@@ -485,7 +525,7 @@ export class MemoryStore implements LocalStore {
         if (this.mirror.assets.get(assetId)?.workspaceId === workspaceId)
           usage.assetBytes += bytes.byteLength;
       for (const h of this.history.values())
-        if (this.mirror.pages.get(h.entry.pageId)?.workspaceId === workspaceId)
+        if (this.pageOf(h.entry.pageId)?.workspaceId === workspaceId)
           usage.historyBytes += h.data.byteLength;
       for (const entry of this.quarantine_)
         if (entry.workspaceId === workspaceId)
@@ -497,7 +537,7 @@ export class MemoryStore implements LocalStore {
   /** The page's log into a pending entry, its unsent updates out of the log; null if none. */
   private setAside(pageId: Id, reason: string): QuarantineEntry | null {
     const log = this.docs.get(pageId);
-    const page = this.mirror.pages.get(pageId);
+    const page = this.pageOf(pageId);
     if (!log || !page || !this.synced(pageId) || !log.updates.some((u) => u.seq === null))
       return null;
     const entry: QuarantineEntry = {
@@ -553,11 +593,44 @@ export class MemoryStore implements LocalStore {
     return this.run(() => void this.repairs.set(state.pageId, { ...state }));
   }
 
+  // Databases (store schema 4) ---------------------------------------------------------------
+
+  readRows(databaseId: Id): Promise<RowRecord[]> {
+    return this.run(() =>
+      this.mirror
+        .rowsOf(databaseId)
+        .sort((a, b) => (a.id < b.id ? -1 : 1))
+        .map((r) => structuredClone(r)),
+    );
+  }
+
+  trashedRows(workspaceId: Id): Promise<RowRecord[]> {
+    return this.run(() => this.mirror.trashedRows(workspaceId).map((r) => structuredClone(r)));
+  }
+
+  dbHold(databaseId: Id): Promise<DbHold | null> {
+    return this.run(() => structuredClone(this.holds_.get(databaseId) ?? null));
+  }
+
+  dbHolds(workspaceId: Id): Promise<DbHold[]> {
+    return this.run(() =>
+      [...this.holds_.values()]
+        .filter((h) => h.workspaceId === workspaceId)
+        .sort((a, b) => (a.databaseId < b.databaseId ? -1 : 1))
+        .map((h) => ({ ...h })),
+    );
+  }
+
+  holdDatabase(hold: DbHold): Promise<void> {
+    return this.run(() => void this.holds_.set(hold.databaseId, { ...hold }));
+  }
+
   purgeTrash(workspaceId: Id, before: string): Promise<Id[]> {
     return this.run(async () => {
-      const roots = this.mirror
-        .trash(workspaceId)
+      // Trash roots (pages, and rows that are their own), newest first.
+      const roots = [...this.mirror.trash(workspaceId), ...this.mirror.trashedRows(workspaceId)]
         .filter((p) => p.trashedAt! < before)
+        .sort((a, b) => (a.trashedAt! < b.trashedAt! ? 1 : -1))
         .map((p) => p.id);
       const ops: Operation[] = roots.map((id) => ({
         opId: uuidv7(),
@@ -572,8 +645,10 @@ export class MemoryStore implements LocalStore {
       const plan = await planOps(ops, this.mirror);
       this.mirror.apply(plan);
       this.outbox.push(...ops);
-      for (const id of plan.deletePages) this.dropPageData(id);
-      return plan.deletePages;
+      this.writeHolds(plan);
+      const gone = [...plan.deletePages, ...plan.deleteRows];
+      for (const id of gone) this.dropPageData(id);
+      return gone;
     });
   }
 

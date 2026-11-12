@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { BlockEditor } from '../editor';
 import type { EditorHost, SlashItem } from '../host';
-import { closeMention, insertMention, mentionState } from '../mention';
+import { chooseMention, closeMention, mentionItems, mentionState } from '../mention';
 import { CommandMenu } from './SlashMenu';
 
-/** The page picker after `@`: pages whose titles match, chosen by keyboard or pointer. */
+/**
+ * The picker after `@`: pages whose titles match, and dates (Today, Tomorrow, Pick a date),
+ * chosen by keyboard or pointer.
+ */
 export function MentionMenu({ editor, host }: { editor: BlockEditor; host: EditorHost }) {
   const view = editor.editor.view;
   const cache = useRef('');
@@ -24,14 +27,7 @@ export function MentionMenu({ editor, host }: { editor: BlockEditor; host: Edito
   );
   const state = mentionState(editor.editor.state);
   const items: SlashItem[] = useMemo(
-    () =>
-      key
-        ? (host.pages?.search(state.query) ?? []).slice(0, 12).map((page) => ({
-            id: page.id,
-            label: page.title || (host.strings?.untitled ?? ''),
-            glyph: page.icon ?? '📄',
-          }))
-        : [],
+    () => (key ? mentionItems(host, state.query) : []),
     // The key holds the query and position.
     [key, host],
   );
@@ -49,7 +45,7 @@ export function MentionMenu({ editor, host }: { editor: BlockEditor; host: Edito
           setActive((index - 1 + list.length) % Math.max(1, list.length));
         else if (event.key === 'Enter' || event.key === 'Tab') {
           if (!list[index]) return false;
-          insertMention(view, list[index].id);
+          chooseMention(view, editor.ui, list[index].id);
         } else return false;
         event.preventDefault();
         return true;
@@ -75,7 +71,7 @@ export function MentionMenu({ editor, host }: { editor: BlockEditor; host: Edito
       anchor={anchor}
       activeIndex={active}
       onActiveIndex={setActive}
-      onChoose={(item) => insertMention(view, item.id)}
+      onChoose={(item) => chooseMention(view, editor.ui, item.id)}
       emptyText={host.strings?.noPages ?? ''}
       label={host.strings?.pagePicker ?? ''}
     />

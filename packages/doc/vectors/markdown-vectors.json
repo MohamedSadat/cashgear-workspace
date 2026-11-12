@@ -3291,6 +3291,670 @@
     "markdown": "# Title\n\nAfter\n\n- Item\n\n  Child of a table of contents\n"
   },
   {
+    "name": "date mentions",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Due "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "From "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": "2026-12-05"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " to the end"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "At "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-11-12T09:30:00Z",
+                    "end": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Span "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-11-12T09:30:00Z",
+                    "end": "2026-11-12T17:00:00Z"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Bad "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "12/01/2026",
+                    "end": null
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", none "
+                },
+                {
+                  "type": "dateMention"
+                },
+                {
+                  "type": "text",
+                  "text": ", end only "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": null,
+                    "end": "2026-12-05"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", bad end "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": "soon"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", other digits "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "٢٠٢٦-١٢-٠١",
+                    "end": null
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", a number "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": 20261201,
+                    "end": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " at the start of a line"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "heading",
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Due "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "checkItem",
+                    "checked": false
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "By "
+                    },
+                    {
+                      "type": "dateMention",
+                      "attrs": {
+                        "date": "2026-12-02",
+                        "end": null
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "quote"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Quoted "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "next line"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "headerRow": true
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "When"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "What"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "dateMention",
+                          "attrs": {
+                            "date": "2026-12-01",
+                            "end": "2026-12-02"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Launch"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "bold ",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  },
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph",
+                "dir": "rtl"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "الموعد "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " للتسليم"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "codeBlock",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "in code "
+                },
+                {
+                  "type": "dateMention",
+                  "attrs": {
+                    "date": "2026-12-01",
+                    "end": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Due 2026-12-01.\n\nFrom 2026-12-01 → 2026-12-05 to the end\n\nAt 2026-11-12T09:30:00Z\n\nSpan 2026-11-12T09:30:00Z → 2026-11-12T17:00:00Z\n\nBad , none , end only , bad end 2026-12-01, other digits , a number \n\n2026-12-01 at the start of a line\n\n## Due 2026-12-01\n\n- Item 2026-12-01\n\n  - [ ] By 2026-12-02\n\n> Quoted 2026-12-01  \n>   next line\n\n| When | What |\n| --- | --- |\n| 2026-12-01 → 2026-12-02 | Launch |\n\n**bold** 2026-12-01\n\nالموعد 2026-12-01 للتسليم\n\n```\nin code 2026-12-01\n```\n"
+  },
+  {
+    "name": "database views write nothing",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Before"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "databaseView",
+              "attrs": {
+                "databaseId": "01936f6e-0000-7000-8000-0000000000d1",
+                "viewId": "01936f6e-0000-7000-8000-0000000000d2"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "databaseView",
+              "attrs": {
+                "databaseId": "01936f6e-0000-7000-8000-0000000000d1",
+                "viewId": null
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "databaseView"
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item"
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "databaseView",
+                  "attrs": {
+                    "databaseId": "01936f6e-0000-7000-8000-0000000000d1",
+                    "viewId": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "databaseView",
+              "attrs": {
+                "databaseId": "01936f6e-0000-7000-8000-0000000000d1"
+              }
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "paragraph"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Child of a database view"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Before\n\n- Item\n\n  Child of a database view\n\nAfter\n"
+  },
+  {
     "name": "an empty document",
     "doc": {
       "type": "doc",

@@ -558,6 +558,8 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
         var json = Yjs.ToJson(state);
         var text = Yjs.ToText(state);
         var (pages, assets) = Outgoing(json);
+        // A row's files are shown by its page too: they stay referenced (and readable) by it.
+        if (page.Kind == PageKinds.Row) assets.AddRange((await RowFilesAsync(db, pageId, ct)).Except(assets));
         var derived = await db.PageDocDerived.FirstOrDefaultAsync(d => d.PageId == pageId, ct);
         if (derived is null) db.PageDocDerived.Add(derived = new PageDocDerived { PageId = pageId, WorkspaceId = page.WorkspaceId });
         derived.UpToSeq = page.DocHeadSeq;
@@ -578,7 +580,21 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
         await tx.CommitAsync(ct);
     }
 
-    /// <summary>The ids a document holds: pages it links to and assets it shows (DATA_MODEL.md, D6).</summary>
+    /// <summary>The assets a row's files properties hold.</summary>
+    public static async Task<List<Guid>> RowFilesAsync(CgwDb db, Guid rowId, CancellationToken ct)
+    {
+        var row = await db.DatabaseRows.AsNoTracking().FirstOrDefaultAsync(r => r.PageId == rowId, ct);
+        if (row is null) return [];
+        var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == row.DatabaseId, ct);
+        if (record is null) return [];
+        var schema = Cgw.Core.Databases.Schema.Parse(record.PageId, record.Version, record.Properties);
+        var values = Cgw.Core.Databases.ValueJson.ReadMap(row.Values);
+        return schema.Properties.Where(p => p.Type == Cgw.Core.Databases.PropertyTypes.Files)
+            .SelectMany(p => values.GetValueOrDefault(p.Id) as string[] ?? [])
+            .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).Distinct().ToList();
+    }
+
+    /// <summary>The ids a document holds: pages it links to (child pages, mentions, the databases its views show) and assets it shows (DATA_MODEL.md, D6).</summary>
     public static (List<Guid> Pages, List<Guid> Assets) Outgoing(string json)
     {
         var pages = new HashSet<Guid>();
@@ -591,6 +607,9 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
             {
                 if (type is "childPage" or "pageMention" && attrs.TryGetProperty("pageId", out var p) && Guid.TryParse(p.GetString(), out var pageId))
                     pages.Add(pageId);
+                // A database view shows a database, which is a page: its backlink, as a child page's.
+                if (type == "databaseView" && attrs.TryGetProperty("databaseId", out var d) && d.ValueKind == JsonValueKind.String && Guid.TryParse(d.GetString(), out var databaseId))
+                    pages.Add(databaseId);
                 if (type is "image" or "file" && attrs.TryGetProperty("assetId", out var a) && Guid.TryParse(a.GetString(), out var assetId))
                     assets.Add(assetId);
             }

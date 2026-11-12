@@ -1,0 +1,5543 @@
+[
+  {
+    "kind": "coerce",
+    "name": "text as is",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": "hello",
+    "expected": "hello"
+  },
+  {
+    "kind": "coerce",
+    "name": "text keeps its spaces",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": "  padded  ",
+    "expected": "  padded  "
+  },
+  {
+    "kind": "coerce",
+    "name": "text of spaces is empty",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": "   ",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "empty text is empty",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": "",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "text from a number",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": 42,
+    "expected": "42"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from a float",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": 0.30000000000000004,
+    "expected": "0.30000000000000004"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from true",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": true,
+    "expected": "true"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from false",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": false,
+    "expected": "false"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from a date",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": {
+      "start": "2026-03-01"
+    },
+    "expected": "2026-03-01"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from a span",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": {
+      "start": "2026-03-01",
+      "end": "2026-03-05"
+    },
+    "expected": "2026-03-01 → 2026-03-05"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from a list",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": ["a", "b"],
+    "expected": "a, b"
+  },
+  {
+    "kind": "coerce",
+    "name": "text from null",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": null,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "text from an object",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": {
+      "foo": 1
+    },
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "Arabic text",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "raw": "مرحبا بالعالم",
+    "expected": "مرحبا بالعالم"
+  },
+  {
+    "kind": "coerce",
+    "name": "title",
+    "def": {
+      "id": "title",
+      "name": "Name",
+      "type": "title"
+    },
+    "raw": "Report",
+    "expected": "Report"
+  },
+  {
+    "kind": "coerce",
+    "name": "title of spaces",
+    "def": {
+      "id": "title",
+      "name": "Name",
+      "type": "title"
+    },
+    "raw": "  ",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "url trimmed",
+    "def": {
+      "id": "pUrl0001",
+      "name": "Link",
+      "type": "url"
+    },
+    "raw": "  https://example.com/a  ",
+    "expected": "https://example.com/a"
+  },
+  {
+    "kind": "coerce",
+    "name": "email trimmed",
+    "def": {
+      "id": "pEml0001",
+      "name": "Email",
+      "type": "email"
+    },
+    "raw": " a@b.co ",
+    "expected": "a@b.co"
+  },
+  {
+    "kind": "coerce",
+    "name": "phone kept",
+    "def": {
+      "id": "pPho0001",
+      "name": "Phone",
+      "type": "phone"
+    },
+    "raw": "+966 50 000 0000",
+    "expected": "+966 50 000 0000"
+  },
+  {
+    "kind": "coerce",
+    "name": "phone from a number",
+    "def": {
+      "id": "pPho0001",
+      "name": "Phone",
+      "type": "phone"
+    },
+    "raw": 5551234,
+    "expected": "5551234"
+  },
+  {
+    "kind": "coerce",
+    "name": "number",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": 12.5,
+    "expected": 12.5
+  },
+  {
+    "kind": "coerce",
+    "name": "number from text",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "12.5",
+    "expected": 12.5
+  },
+  {
+    "kind": "coerce",
+    "name": "number with thousands",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": " 1,234.5 ",
+    "expected": 1234.5
+  },
+  {
+    "kind": "coerce",
+    "name": "number in Arabic digits",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "١٢٣٫٥",
+    "expected": 123.5
+  },
+  {
+    "kind": "coerce",
+    "name": "number with Arabic separators",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "١٬٢٣٤٫٥",
+    "expected": 1234.5
+  },
+  {
+    "kind": "coerce",
+    "name": "number with an exponent",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "1e3",
+    "expected": 1000
+  },
+  {
+    "kind": "coerce",
+    "name": "number with a plus",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "+5",
+    "expected": 5
+  },
+  {
+    "kind": "coerce",
+    "name": "number with a point first",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": ".5",
+    "expected": 0.5
+  },
+  {
+    "kind": "coerce",
+    "name": "number with a point last",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "7.",
+    "expected": 7
+  },
+  {
+    "kind": "coerce",
+    "name": "number negative zero",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "-0",
+    "expected": 0
+  },
+  {
+    "kind": "coerce",
+    "name": "number not a number",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "abc",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "number with letters",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "12abc",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "number badly grouped",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "1,23",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "number too large",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "1e400",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "number from true",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": true,
+    "expected": 1
+  },
+  {
+    "kind": "coerce",
+    "name": "number from false",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": false,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "number from a date",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": {
+      "start": "2026-01-01"
+    },
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "number with a percent",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "raw": "5%",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "date",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01",
+    "expected": {
+      "start": "2026-03-01"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time in UTC",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01T10:15:30Z",
+    "expected": {
+      "start": "2026-03-01T10:15:30Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time with a space, no seconds",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01 10:15",
+    "expected": {
+      "start": "2026-03-01T10:15:00Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time with a fraction and an offset",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01T10:15:30.789+03:00",
+    "expected": {
+      "start": "2026-03-01T07:15:30Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time with a negative offset",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01T01:00:00-05:30",
+    "expected": {
+      "start": "2026-03-01T06:30:00Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time crossing midnight",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01T23:30:00-01:00",
+    "expected": {
+      "start": "2026-03-02T00:30:00Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time with a short offset",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01T10:00+0300",
+    "expected": {
+      "start": "2026-03-01T07:00:00Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date-time in lower case",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01t10:00z",
+    "expected": {
+      "start": "2026-03-01T10:00:00Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date that does not exist",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-02-30",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "leap day",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2024-02-29",
+    "expected": {
+      "start": "2024-02-29"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "not a leap day",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2023-02-29",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "year zero",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "0000-01-01",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "last instant",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "9999-12-31T23:59:59Z",
+    "expected": {
+      "start": "9999-12-31T23:59:59Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "past the last instant",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "9999-12-31T23:00:00-02:00",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "span from text",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01 → 2026-03-05",
+    "expected": {
+      "start": "2026-03-01",
+      "end": "2026-03-05"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "span without spaces",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01→2026-03-05",
+    "expected": {
+      "start": "2026-03-01",
+      "end": "2026-03-05"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "span with a bad end",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "2026-03-01 → nope",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "date object with a null end",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": {
+      "start": "2026-03-01",
+      "end": null
+    },
+    "expected": {
+      "start": "2026-03-01"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date object with offsets",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": {
+      "start": "2026-03-01T10:00:00+02:00",
+      "end": "2026-03-01T12:00:00+02:00"
+    },
+    "expected": {
+      "start": "2026-03-01T08:00:00Z",
+      "end": "2026-03-01T10:00:00Z"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date object with extra keys",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": {
+      "start": "2026-03-01",
+      "zone": "x"
+    },
+    "expected": {
+      "start": "2026-03-01"
+    }
+  },
+  {
+    "kind": "coerce",
+    "name": "date object that does not read",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": {
+      "start": "soon"
+    },
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "date from a number",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": 20260301,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "day first is not read",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "raw": "01/03/2026",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox true",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": true,
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox false is no value",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": false,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox yes",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": "YES",
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox no",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": " No ",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox in Arabic",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": "نعم",
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox x",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": "x",
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox tick",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": "✓",
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox Arabic one",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": "١",
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox other word",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": "maybe",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox zero",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": 0,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "checkbox two",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "raw": 2,
+    "expected": true
+  },
+  {
+    "kind": "coerce",
+    "name": "select by id",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": "optDone1",
+    "expected": "optDone1"
+  },
+  {
+    "kind": "coerce",
+    "name": "select by name",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": " Done ",
+    "expected": "optDone1"
+  },
+  {
+    "kind": "coerce",
+    "name": "select names match exactly",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": "done",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "select unknown",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": "nope",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "select first that is one",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": ["nope", "optTodo1", "optDone1"],
+    "expected": "optTodo1"
+  },
+  {
+    "kind": "coerce",
+    "name": "select Arabic name",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": "متأخر",
+    "expected": "optLate1"
+  },
+  {
+    "kind": "coerce",
+    "name": "select from a number",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": 5,
+    "expected": "optFive1"
+  },
+  {
+    "kind": "coerce",
+    "name": "select from true",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "raw": true,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "status by name",
+    "def": {
+      "id": "pSta0001",
+      "name": "Status",
+      "type": "status",
+      "options": [
+        {
+          "id": "staTodo1",
+          "name": "Not started",
+          "colour": "default",
+          "group": "todo"
+        },
+        {
+          "id": "staProg1",
+          "name": "In progress",
+          "colour": "default",
+          "group": "inProgress"
+        },
+        {
+          "id": "staDone1",
+          "name": "Done",
+          "colour": "default",
+          "group": "complete"
+        }
+      ]
+    },
+    "raw": "In progress",
+    "expected": "staProg1"
+  },
+  {
+    "kind": "coerce",
+    "name": "status by id",
+    "def": {
+      "id": "pSta0001",
+      "name": "Status",
+      "type": "status",
+      "options": [
+        {
+          "id": "staTodo1",
+          "name": "Not started",
+          "colour": "default",
+          "group": "todo"
+        },
+        {
+          "id": "staProg1",
+          "name": "In progress",
+          "colour": "default",
+          "group": "inProgress"
+        },
+        {
+          "id": "staDone1",
+          "name": "Done",
+          "colour": "default",
+          "group": "complete"
+        }
+      ]
+    },
+    "raw": "staDone1",
+    "expected": "staDone1"
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select ids",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": ["tagRed01", "tagBlue1"],
+    "expected": ["tagRed01", "tagBlue1"]
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select once each",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": ["tagBlue1", "tagRed01", "tagBlue1"],
+    "expected": ["tagBlue1", "tagRed01"]
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select from names",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": "Red, Blue",
+    "expected": ["tagRed01", "tagBlue1"]
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select from an id",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": "tagRed01",
+    "expected": ["tagRed01"]
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select drops unknown",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": ["Red", "nope"],
+    "expected": ["tagRed01"]
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select Arabic names",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": "أحمر, Blue",
+    "expected": ["tagAr001", "tagBlue1"]
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select none known",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": "nope",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "multi-select empty list",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "raw": [],
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "person list",
+    "def": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "raw": ["01900000-0000-7000-8000-0000000000a1", "01900000-0000-7000-8000-0000000000b0"],
+    "expected": ["01900000-0000-7000-8000-0000000000a1", "01900000-0000-7000-8000-0000000000b0"]
+  },
+  {
+    "kind": "coerce",
+    "name": "person one id",
+    "def": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "raw": "01900000-0000-7000-8000-0000000000a1",
+    "expected": ["01900000-0000-7000-8000-0000000000a1"]
+  },
+  {
+    "kind": "coerce",
+    "name": "person drops repeats and junk",
+    "def": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "raw": ["01900000-0000-7000-8000-0000000000a1", "01900000-0000-7000-8000-0000000000a1", "", 5],
+    "expected": ["01900000-0000-7000-8000-0000000000a1"]
+  },
+  {
+    "kind": "coerce",
+    "name": "person empty text",
+    "def": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "raw": "",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "person empty list",
+    "def": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "raw": [],
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "files",
+    "def": {
+      "id": "pFil0001",
+      "name": "Attachments",
+      "type": "files"
+    },
+    "raw": ["asset-1", "asset-2"],
+    "expected": ["asset-1", "asset-2"]
+  },
+  {
+    "kind": "coerce",
+    "name": "relation",
+    "def": {
+      "id": "pRel0001",
+      "name": "Projects",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "reversePropertyId": "pRev0001"
+      }
+    },
+    "raw": ["01900000-0000-7000-8000-000000000001", "01900000-0000-7000-8000-000000000002"],
+    "expected": ["01900000-0000-7000-8000-000000000001", "01900000-0000-7000-8000-000000000002"]
+  },
+  {
+    "kind": "coerce",
+    "name": "formula stores nothing",
+    "def": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "raw": 5,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "rollup stores nothing",
+    "def": {
+      "id": "pRol0001",
+      "name": "Total",
+      "type": "rollup",
+      "rollup": {
+        "relationPropertyId": "pRel0001",
+        "targetPropertyId": "qNum0001",
+        "fn": "sum"
+      }
+    },
+    "raw": 5,
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "created time stores nothing",
+    "def": {
+      "id": "pCrt0001",
+      "name": "Created",
+      "type": "createdTime"
+    },
+    "raw": "2026-01-01",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "created by stores nothing",
+    "def": {
+      "id": "pCrb0001",
+      "name": "Created by",
+      "type": "createdBy"
+    },
+    "raw": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "edited time stores nothing",
+    "def": {
+      "id": "pEdt0001",
+      "name": "Edited",
+      "type": "lastEditedTime"
+    },
+    "raw": "2026-01-01",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "edited by stores nothing",
+    "def": {
+      "id": "pEdb0001",
+      "name": "Edited by",
+      "type": "lastEditedBy"
+    },
+    "raw": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to number",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": "12",
+    "expected": 12
+  },
+  {
+    "kind": "convert",
+    "name": "text to number that does not read",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": "x",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text of spaces to number",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": "  ",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to date",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "value": "2026-05-01",
+    "expected": {
+      "start": "2026-05-01"
+    }
+  },
+  {
+    "kind": "convert",
+    "name": "text to checkbox true",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": "true",
+    "expected": true
+  },
+  {
+    "kind": "convert",
+    "name": "text to checkbox no",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": "no",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to checkbox other",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": "maybe",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to select",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": " Done ",
+    "expected": "optDone1"
+  },
+  {
+    "kind": "convert",
+    "name": "text to select without the option",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": "Other",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to multi-select",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "value": "Red, Blue, Green",
+    "expected": ["tagRed01", "tagBlue1"]
+  },
+  {
+    "kind": "convert",
+    "name": "text to url",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pUrl0001",
+      "name": "Link",
+      "type": "url"
+    },
+    "value": " https://x.example ",
+    "expected": "https://x.example"
+  },
+  {
+    "kind": "convert",
+    "name": "text to person",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "value": "01900000-0000-7000-8000-0000000000a1",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to files",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pFil0001",
+      "name": "Attachments",
+      "type": "files"
+    },
+    "value": "a.png",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to formula",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "value": "abc",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "url to email",
+    "from": {
+      "id": "pUrl0001",
+      "name": "Link",
+      "type": "url"
+    },
+    "to": {
+      "id": "pEml0001",
+      "name": "Email",
+      "type": "email"
+    },
+    "value": "a@b.example",
+    "expected": "a@b.example"
+  },
+  {
+    "kind": "convert",
+    "name": "phone to number",
+    "from": {
+      "id": "pPho0001",
+      "name": "Phone",
+      "type": "phone"
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": " 5551234 ",
+    "expected": 5551234
+  },
+  {
+    "kind": "convert",
+    "name": "email to select",
+    "from": {
+      "id": "pEml0001",
+      "name": "Email",
+      "type": "email"
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": "Done",
+    "expected": "optDone1"
+  },
+  {
+    "kind": "convert",
+    "name": "edited time to text",
+    "from": {
+      "id": "pEdt0001",
+      "name": "Edited",
+      "type": "lastEditedTime"
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": {
+      "start": "2026-01-02T10:30:15Z"
+    },
+    "expected": "2026-01-02T10:30:15Z"
+  },
+  {
+    "kind": "convert",
+    "name": "title to text",
+    "from": {
+      "id": "title",
+      "name": "Name",
+      "type": "title"
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": "Hello",
+    "expected": "Hello"
+  },
+  {
+    "kind": "convert",
+    "name": "number to text",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": 100,
+    "expected": "100"
+  },
+  {
+    "kind": "convert",
+    "name": "large number to text",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": 1e21,
+    "expected": "1e+21"
+  },
+  {
+    "kind": "convert",
+    "name": "small number to text",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": 1e-7,
+    "expected": "1e-7"
+  },
+  {
+    "kind": "convert",
+    "name": "negative number to text",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": -1.5,
+    "expected": "-1.5"
+  },
+  {
+    "kind": "convert",
+    "name": "number to checkbox zero",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": 0,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "number to checkbox",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": -3,
+    "expected": true
+  },
+  {
+    "kind": "convert",
+    "name": "number to select",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": 5,
+    "expected": "optFive1"
+  },
+  {
+    "kind": "convert",
+    "name": "number to multi-select",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "value": 5,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "number to date",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "value": 20260101,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "number to relation",
+    "from": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "to": {
+      "id": "pRel0001",
+      "name": "Projects",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "reversePropertyId": "pRev0001"
+      }
+    },
+    "value": 1,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "span to text",
+    "from": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": {
+      "start": "2026-03-01",
+      "end": "2026-03-04"
+    },
+    "expected": "2026-03-01 → 2026-03-04"
+  },
+  {
+    "kind": "convert",
+    "name": "instant to text",
+    "from": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": {
+      "start": "2026-03-01T10:00:00Z"
+    },
+    "expected": "2026-03-01T10:00:00Z"
+  },
+  {
+    "kind": "convert",
+    "name": "date to number",
+    "from": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": {
+      "start": "2026-03-01"
+    },
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "date to checkbox",
+    "from": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": {
+      "start": "2026-03-01"
+    },
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "date to select",
+    "from": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "pSel0001",
+      "type": "select",
+      "options": [
+        {
+          "id": "optDay01",
+          "name": "2026-03-01",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": {
+      "start": "2026-03-01"
+    },
+    "expected": "optDay01"
+  },
+  {
+    "kind": "convert",
+    "name": "checkbox to text",
+    "from": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": true,
+    "expected": "true"
+  },
+  {
+    "kind": "convert",
+    "name": "checkbox to number",
+    "from": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": true,
+    "expected": 1
+  },
+  {
+    "kind": "convert",
+    "name": "checkbox to select without a \"true\" option",
+    "from": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": true,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "checkbox to date",
+    "from": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "to": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "value": true,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "select to text",
+    "from": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": "optDone1",
+    "expected": "Done"
+  },
+  {
+    "kind": "convert",
+    "name": "select unknown option to text",
+    "from": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": "optGone1",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "select to multi-select, same options",
+    "from": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pSel0001",
+      "name": "pSel0001",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": "optDone1",
+    "expected": ["optDone1"]
+  },
+  {
+    "kind": "convert",
+    "name": "select to status by name",
+    "from": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pSta0001",
+      "name": "Status",
+      "type": "status",
+      "options": [
+        {
+          "id": "staTodo1",
+          "name": "Not started",
+          "colour": "default",
+          "group": "todo"
+        },
+        {
+          "id": "staProg1",
+          "name": "In progress",
+          "colour": "default",
+          "group": "inProgress"
+        },
+        {
+          "id": "staDone1",
+          "name": "Done",
+          "colour": "default",
+          "group": "complete"
+        }
+      ]
+    },
+    "value": "optDone1",
+    "expected": "staDone1"
+  },
+  {
+    "kind": "convert",
+    "name": "select to number",
+    "from": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": "optFive1",
+    "expected": 5
+  },
+  {
+    "kind": "convert",
+    "name": "select to date",
+    "from": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "value": "optDone1",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "multi-select to text",
+    "from": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": ["tagRed01", "tagBlue1"],
+    "expected": "Red, Blue"
+  },
+  {
+    "kind": "convert",
+    "name": "multi-select to text drops unknown",
+    "from": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": ["tagGone1", "tagRed01"],
+    "expected": "Red"
+  },
+  {
+    "kind": "convert",
+    "name": "multi-select to select",
+    "from": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "to": {
+      "id": "pMul0001",
+      "name": "pMul0001",
+      "type": "select",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "value": ["tagBlue1", "tagRed01"],
+    "expected": "tagBlue1"
+  },
+  {
+    "kind": "convert",
+    "name": "multi-select of one to number",
+    "from": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": ["tagRed01"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "status to select",
+    "from": {
+      "id": "pSta0001",
+      "name": "Status",
+      "type": "status",
+      "options": [
+        {
+          "id": "staTodo1",
+          "name": "Not started",
+          "colour": "default",
+          "group": "todo"
+        },
+        {
+          "id": "staProg1",
+          "name": "In progress",
+          "colour": "default",
+          "group": "inProgress"
+        },
+        {
+          "id": "staDone1",
+          "name": "Done",
+          "colour": "default",
+          "group": "complete"
+        }
+      ]
+    },
+    "to": {
+      "id": "pSta0001",
+      "name": "Status",
+      "type": "select",
+      "options": [
+        {
+          "id": "staTodo1",
+          "name": "Not started",
+          "colour": "default"
+        },
+        {
+          "id": "staProg1",
+          "name": "In progress",
+          "colour": "default"
+        },
+        {
+          "id": "staDone1",
+          "name": "Done",
+          "colour": "default"
+        }
+      ]
+    },
+    "value": "staProg1",
+    "expected": "staProg1"
+  },
+  {
+    "kind": "convert",
+    "name": "person to text",
+    "from": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "person to person",
+    "from": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "to": {
+      "id": "pPer0002",
+      "name": "pPer0002",
+      "type": "person"
+    },
+    "value": ["01900000-0000-7000-8000-0000000000a1", "01900000-0000-7000-8000-0000000000b0"],
+    "expected": ["01900000-0000-7000-8000-0000000000a1", "01900000-0000-7000-8000-0000000000b0"]
+  },
+  {
+    "kind": "convert",
+    "name": "person to created by",
+    "from": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "to": {
+      "id": "pCrb0001",
+      "name": "Created by",
+      "type": "createdBy"
+    },
+    "value": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "files to files",
+    "from": {
+      "id": "pFil0001",
+      "name": "Attachments",
+      "type": "files"
+    },
+    "to": {
+      "id": "pFil0002",
+      "name": "pFil0002",
+      "type": "files"
+    },
+    "value": ["asset-1"],
+    "expected": ["asset-1"]
+  },
+  {
+    "kind": "convert",
+    "name": "files to person",
+    "from": {
+      "id": "pFil0001",
+      "name": "Attachments",
+      "type": "files"
+    },
+    "to": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "value": ["asset-1"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "relation to the same database",
+    "from": {
+      "id": "pRel0001",
+      "name": "Projects",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "reversePropertyId": "pRev0001"
+      }
+    },
+    "to": {
+      "id": "pRel0003",
+      "name": "pRel0003",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "reversePropertyId": null
+      }
+    },
+    "value": ["01900000-0000-7000-8000-000000000001"],
+    "expected": ["01900000-0000-7000-8000-000000000001"]
+  },
+  {
+    "kind": "convert",
+    "name": "relation to another database",
+    "from": {
+      "id": "pRel0001",
+      "name": "Projects",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "reversePropertyId": "pRev0001"
+      }
+    },
+    "to": {
+      "id": "pRel0002",
+      "name": "Links",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "reversePropertyId": null
+      }
+    },
+    "value": ["01900000-0000-7000-8000-000000000001"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "relation to text",
+    "from": {
+      "id": "pRel0001",
+      "name": "Projects",
+      "type": "relation",
+      "relation": {
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "reversePropertyId": "pRev0001"
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": ["01900000-0000-7000-8000-000000000001"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "created time to date",
+    "from": {
+      "id": "pCrt0001",
+      "name": "Created",
+      "type": "createdTime"
+    },
+    "to": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "value": {
+      "start": "2026-01-01T09:00:00Z"
+    },
+    "expected": {
+      "start": "2026-01-01T09:00:00Z"
+    }
+  },
+  {
+    "kind": "convert",
+    "name": "created time to text",
+    "from": {
+      "id": "pCrt0001",
+      "name": "Created",
+      "type": "createdTime"
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": {
+      "start": "2026-01-01T09:00:00Z"
+    },
+    "expected": "2026-01-01T09:00:00Z"
+  },
+  {
+    "kind": "convert",
+    "name": "created by to person",
+    "from": {
+      "id": "pCrb0001",
+      "name": "Created by",
+      "type": "createdBy"
+    },
+    "to": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "value": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": ["01900000-0000-7000-8000-0000000000a1"]
+  },
+  {
+    "kind": "convert",
+    "name": "edited by to text",
+    "from": {
+      "id": "pEdb0001",
+      "name": "Edited by",
+      "type": "lastEditedBy"
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "formula number to text",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": 3.5,
+    "expected": "3.5"
+  },
+  {
+    "kind": "convert",
+    "name": "formula text to number",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": "abc",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "formula true to checkbox",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": true,
+    "expected": true
+  },
+  {
+    "kind": "convert",
+    "name": "formula false to checkbox",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": false,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "formula false to text",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": false,
+    "expected": "false"
+  },
+  {
+    "kind": "convert",
+    "name": "formula date to date",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "value": {
+      "start": "2026-01-01"
+    },
+    "expected": {
+      "start": "2026-01-01"
+    }
+  },
+  {
+    "kind": "convert",
+    "name": "formula list to multi-select",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "value": ["Red", "Blue"],
+    "expected": ["tagRed01", "tagBlue1"]
+  },
+  {
+    "kind": "convert",
+    "name": "formula error to text",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": {
+      "error": "formula.type"
+    },
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "formula empty to text",
+    "from": {
+      "id": "pFor0001",
+      "name": "Score",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": null,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "rollup to number",
+    "from": {
+      "id": "pRol0001",
+      "name": "Total",
+      "type": "rollup",
+      "rollup": {
+        "relationPropertyId": "pRel0001",
+        "targetPropertyId": "qNum0001",
+        "fn": "sum"
+      }
+    },
+    "to": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "value": 7,
+    "expected": 7
+  },
+  {
+    "kind": "convertProperty",
+    "name": "text to select makes options in first-seen order",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select"
+    },
+    "values": ["Done", " Done ", "To do", null, "", "Done", "مكتمل"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "select",
+        "options": [
+          {
+            "id": "CazVKn31",
+            "name": "Done",
+            "colour": "purple"
+          },
+          {
+            "id": "EeMrW0qx",
+            "name": "To do",
+            "colour": "brown"
+          },
+          {
+            "id": "gwspXlhY",
+            "name": "مكتمل",
+            "colour": "yellow"
+          }
+        ]
+      },
+      "values": ["CazVKn31", "CazVKn31", "EeMrW0qx", null, null, "CazVKn31", "gwspXlhY"]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "text to multi-select splits on commas",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "multiSelect"
+    },
+    "values": ["a, b", "b,c", "  ", "c"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "multiSelect",
+        "options": [
+          {
+            "id": "VE99TVro",
+            "name": "a",
+            "colour": "brown"
+          },
+          {
+            "id": "CG7SkeOz",
+            "name": "b",
+            "colour": "blue"
+          },
+          {
+            "id": "fYY5pmj8",
+            "name": "c",
+            "colour": "blue"
+          }
+        ]
+      },
+      "values": [["VE99TVro", "CG7SkeOz"], ["CG7SkeOz", "fYY5pmj8"], null, ["fYY5pmj8"]]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "text to status: new options are to do",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "status"
+    },
+    "values": ["Open", "Closed"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "status",
+        "options": [
+          {
+            "id": "HQ93wm5v",
+            "name": "Open",
+            "colour": "red",
+            "group": "todo"
+          },
+          {
+            "id": "A2yfhYIF",
+            "name": "Closed",
+            "colour": "gray",
+            "group": "todo"
+          }
+        ]
+      },
+      "values": ["HQ93wm5v", "A2yfhYIF"]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "text to select keeps the options given",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select",
+      "options": [
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        }
+      ]
+    },
+    "values": ["Done", "New"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "select",
+        "options": [
+          {
+            "id": "optDone1",
+            "name": "Done",
+            "colour": "green"
+          },
+          {
+            "id": "J8k6dK8h",
+            "name": "New",
+            "colour": "gray"
+          }
+        ]
+      },
+      "values": ["optDone1", "J8k6dK8h"]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "select to multi-select keeps the options and ids",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "multiSelect"
+    },
+    "values": ["optDone1", "optGone1", null],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "multiSelect",
+        "options": [
+          {
+            "id": "optTodo1",
+            "name": "To do",
+            "colour": "gray"
+          },
+          {
+            "id": "optDone1",
+            "name": "Done",
+            "colour": "green"
+          },
+          {
+            "id": "optLate1",
+            "name": "متأخر",
+            "colour": "red"
+          },
+          {
+            "id": "optFive1",
+            "name": "5",
+            "colour": "default"
+          }
+        ]
+      },
+      "values": [["optDone1"], null, null]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "select to status gives the options a group",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "status"
+    },
+    "values": ["optLate1"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "status",
+        "options": [
+          {
+            "id": "optTodo1",
+            "name": "To do",
+            "colour": "gray",
+            "group": "todo"
+          },
+          {
+            "id": "optDone1",
+            "name": "Done",
+            "colour": "green",
+            "group": "todo"
+          },
+          {
+            "id": "optLate1",
+            "name": "متأخر",
+            "colour": "red",
+            "group": "todo"
+          },
+          {
+            "id": "optFive1",
+            "name": "5",
+            "colour": "default",
+            "group": "todo"
+          }
+        ]
+      },
+      "values": ["optLate1"]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "multi-select to select keeps the first",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select"
+    },
+    "values": [["tagBlue1", "tagRed01"], ["tagGone1"]],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "select",
+        "options": [
+          {
+            "id": "tagRed01",
+            "name": "Red",
+            "colour": "red"
+          },
+          {
+            "id": "tagBlue1",
+            "name": "Blue",
+            "colour": "blue"
+          },
+          {
+            "id": "tagAr001",
+            "name": "أحمر",
+            "colour": "red"
+          }
+        ]
+      },
+      "values": ["tagBlue1", null]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "number to select names options by the number",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "number"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select"
+    },
+    "values": [1, 2.5, 1, null],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "select",
+        "options": [
+          {
+            "id": "jPE3JMp0",
+            "name": "1",
+            "colour": "blue"
+          },
+          {
+            "id": "hMWS14pW",
+            "name": "2.5",
+            "colour": "green"
+          }
+        ]
+      },
+      "values": ["jPE3JMp0", "hMWS14pW", "jPE3JMp0", null]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "date to select names options by the date",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "date"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select"
+    },
+    "values": [
+      {
+        "start": "2026-03-01"
+      },
+      {
+        "start": "2026-03-01",
+        "end": "2026-03-02"
+      }
+    ],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "select",
+        "options": [
+          {
+            "id": "eC1aBCzu",
+            "name": "2026-03-01",
+            "colour": "orange"
+          },
+          {
+            "id": "U4VxWJmg",
+            "name": "2026-03-01 → 2026-03-02",
+            "colour": "gray"
+          }
+        ]
+      },
+      "values": ["eC1aBCzu", "U4VxWJmg"]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "checkbox to select",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "checkbox"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select"
+    },
+    "values": [true, null],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "select",
+        "options": [
+          {
+            "id": "se3Pciv0",
+            "name": "true",
+            "colour": "yellow"
+          }
+        ]
+      },
+      "values": ["se3Pciv0", null]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "select to text writes names and adds no options",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "values": ["optDone1", "optGone1"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "text"
+      },
+      "values": ["Done", null]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "text to number",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "number"
+    },
+    "values": ["1", "x", "1,000"],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "number"
+      },
+      "values": [1, null, 1000]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "formula results to text",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "formula",
+      "formula": {
+        "expression": "1"
+      }
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "text"
+    },
+    "values": [
+      3,
+      "x",
+      true,
+      {
+        "start": "2026-01-01"
+      },
+      ["a", "b"],
+      {
+        "error": "formula.type"
+      },
+      null
+    ],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "text"
+      },
+      "values": ["3", "x", "true", "2026-01-01", "a, b", null, null]
+    }
+  },
+  {
+    "kind": "convertProperty",
+    "name": "created time to date",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "from": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "createdTime"
+    },
+    "to": {
+      "id": "pConv001",
+      "name": "Converted",
+      "type": "date"
+    },
+    "values": [
+      {
+        "start": "2026-01-01T09:00:00Z"
+      }
+    ],
+    "expected": {
+      "def": {
+        "id": "pConv001",
+        "name": "Converted",
+        "type": "date"
+      },
+      "values": [
+        {
+          "start": "2026-01-01T09:00:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "derivedOption",
+    "name": "derived option for \"Done\"",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "propertyId": "pConv001",
+    "optionName": "Done",
+    "taken": [],
+    "expected": {
+      "id": "CazVKn31",
+      "colour": "purple"
+    }
+  },
+  {
+    "kind": "derivedOption",
+    "name": "derived option for \"مكتمل\"",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "propertyId": "pConv001",
+    "optionName": "مكتمل",
+    "taken": [],
+    "expected": {
+      "id": "gwspXlhY",
+      "colour": "yellow"
+    }
+  },
+  {
+    "kind": "derivedOption",
+    "name": "derived option for \"\"",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "propertyId": "pConv001",
+    "optionName": "",
+    "taken": [],
+    "expected": {
+      "id": "cLrB7817",
+      "colour": "yellow"
+    }
+  },
+  {
+    "kind": "derivedOption",
+    "name": "derived option for \"Done\" with its id taken",
+    "databaseId": "01900000-0000-7000-8000-000000000001",
+    "propertyId": "pConv001",
+    "optionName": "Done",
+    "taken": ["CazVKn31"],
+    "expected": {
+      "id": "nOyPU8zd",
+      "colour": "green"
+    }
+  },
+  {
+    "kind": "numberText",
+    "name": "0",
+    "value": 0,
+    "expected": "0"
+  },
+  {
+    "kind": "numberText",
+    "name": "1",
+    "value": 1,
+    "expected": "1"
+  },
+  {
+    "kind": "numberText",
+    "name": "-1.5",
+    "value": -1.5,
+    "expected": "-1.5"
+  },
+  {
+    "kind": "numberText",
+    "name": "0.1",
+    "value": 0.1,
+    "expected": "0.1"
+  },
+  {
+    "kind": "numberText",
+    "name": "0.30000000000000004",
+    "value": 0.30000000000000004,
+    "expected": "0.30000000000000004"
+  },
+  {
+    "kind": "numberText",
+    "name": "100.5",
+    "value": 100.5,
+    "expected": "100.5"
+  },
+  {
+    "kind": "numberText",
+    "name": "123456.789",
+    "value": 123456.789,
+    "expected": "123456.789"
+  },
+  {
+    "kind": "numberText",
+    "name": "0.3333333333333333",
+    "value": 0.3333333333333333,
+    "expected": "0.3333333333333333"
+  },
+  {
+    "kind": "numberText",
+    "name": "0.6666666666666666",
+    "value": 0.6666666666666666,
+    "expected": "0.6666666666666666"
+  },
+  {
+    "kind": "numberText",
+    "name": "100000000000000000000",
+    "value": 100000000000000000000,
+    "expected": "100000000000000000000"
+  },
+  {
+    "kind": "numberText",
+    "name": "1e+21",
+    "value": 1e21,
+    "expected": "1e+21"
+  },
+  {
+    "kind": "numberText",
+    "name": "1.5e+300",
+    "value": 1.5e300,
+    "expected": "1.5e+300"
+  },
+  {
+    "kind": "numberText",
+    "name": "1.7976931348623157e+308",
+    "value": 1.7976931348623157e308,
+    "expected": "1.7976931348623157e+308"
+  },
+  {
+    "kind": "numberText",
+    "name": "9007199254740992",
+    "value": 9007199254740992,
+    "expected": "9007199254740992"
+  },
+  {
+    "kind": "numberText",
+    "name": "123456789012345680000",
+    "value": 123456789012345680000,
+    "expected": "123456789012345680000"
+  },
+  {
+    "kind": "numberText",
+    "name": "0.000001",
+    "value": 0.000001,
+    "expected": "0.000001"
+  },
+  {
+    "kind": "numberText",
+    "name": "1e-7",
+    "value": 1e-7,
+    "expected": "1e-7"
+  },
+  {
+    "kind": "numberText",
+    "name": "-1e-7",
+    "value": -1e-7,
+    "expected": "-1e-7"
+  },
+  {
+    "kind": "numberText",
+    "name": "1.23e-18",
+    "value": 1.23e-18,
+    "expected": "1.23e-18"
+  },
+  {
+    "kind": "numberText",
+    "name": "5e-324",
+    "value": 5e-324,
+    "expected": "5e-324"
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"7\"",
+    "text": "7",
+    "expected": 7
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"  7 \"",
+    "text": "  7 ",
+    "expected": 7
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"-.5\"",
+    "text": "-.5",
+    "expected": -0.5
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"1,234,567\"",
+    "text": "1,234,567",
+    "expected": 1234567
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"1,234,567.25\"",
+    "text": "1,234,567.25",
+    "expected": 1234567.25
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"12,34\"",
+    "text": "12,34",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"1.2.3\"",
+    "text": "1.2.3",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"1e\"",
+    "text": "1e",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"\"",
+    "text": "",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"Infinity\"",
+    "text": "Infinity",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"NaN\"",
+    "text": "NaN",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"0x10\"",
+    "text": "0x10",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"$5\"",
+    "text": "$5",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"−5\"",
+    "text": "−5",
+    "expected": null
+  },
+  {
+    "kind": "parseNumber",
+    "name": "\"۱۲۳\"",
+    "text": "۱۲۳",
+    "expected": 123
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"true\"",
+    "text": "true",
+    "expected": true
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"FALSE\"",
+    "text": "FALSE",
+    "expected": false
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\" y \"",
+    "text": " y ",
+    "expected": true
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"on\"",
+    "text": "on",
+    "expected": true
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"off\"",
+    "text": "off",
+    "expected": false
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"checked\"",
+    "text": "checked",
+    "expected": true
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"unchecked\"",
+    "text": "unchecked",
+    "expected": false
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"0\"",
+    "text": "0",
+    "expected": false
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"٠\"",
+    "text": "٠",
+    "expected": false
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"✔\"",
+    "text": "✔",
+    "expected": true
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"لا\"",
+    "text": "لا",
+    "expected": false
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"nope\"",
+    "text": "nope",
+    "expected": null
+  },
+  {
+    "kind": "parseBoolean",
+    "name": "\"\"",
+    "text": "",
+    "expected": null
+  },
+  {
+    "kind": "cells",
+    "name": "what a cell reads as",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pChk0001",
+          "name": "Done?",
+          "type": "checkbox"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pMul0001",
+          "name": "Tags",
+          "type": "multiSelect",
+          "options": [
+            {
+              "id": "tagRed01",
+              "name": "Red",
+              "colour": "red"
+            },
+            {
+              "id": "tagBlue1",
+              "name": "Blue",
+              "colour": "blue"
+            },
+            {
+              "id": "tagAr001",
+              "name": "أحمر",
+              "colour": "red"
+            }
+          ]
+        },
+        {
+          "id": "pSta0001",
+          "name": "Status",
+          "type": "status",
+          "options": [
+            {
+              "id": "staTodo1",
+              "name": "Not started",
+              "colour": "default",
+              "group": "todo"
+            },
+            {
+              "id": "staProg1",
+              "name": "In progress",
+              "colour": "default",
+              "group": "inProgress"
+            },
+            {
+              "id": "staDone1",
+              "name": "Done",
+              "colour": "default",
+              "group": "complete"
+            }
+          ]
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pCrb0001",
+          "name": "Created by",
+          "type": "createdBy"
+        },
+        {
+          "id": "pEdt0001",
+          "name": "Edited",
+          "type": "lastEditedTime"
+        },
+        {
+          "id": "pEdb0001",
+          "name": "Edited by",
+          "type": "lastEditedBy"
+        },
+        {
+          "id": "pFor0001",
+          "name": "Score",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          }
+        },
+        {
+          "id": "pRol0001",
+          "name": "Total",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "pOld0001",
+          "name": "Old",
+          "type": "text",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "cases": [
+      {
+        "name": "title from the page",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "title",
+        "computed": null,
+        "expected": "Report"
+      },
+      {
+        "name": "empty title",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "title",
+        "computed": null,
+        "expected": null
+      },
+      {
+        "name": "text",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pText001",
+        "computed": null,
+        "expected": "hi"
+      },
+      {
+        "name": "number",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pNum0001",
+        "computed": null,
+        "expected": 3
+      },
+      {
+        "name": "number stored as text reads as empty",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pNum0001": "3"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pNum0001",
+        "computed": null,
+        "expected": null
+      },
+      {
+        "name": "unchecked checkbox is false",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pChk0001",
+        "computed": null,
+        "expected": false
+      },
+      {
+        "name": "checked checkbox",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pChk0001": true
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pChk0001",
+        "computed": null,
+        "expected": true
+      },
+      {
+        "name": "unknown option is empty",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pSel0001",
+        "computed": null,
+        "expected": null
+      },
+      {
+        "name": "multi-select keeps known options",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pMul0001",
+        "computed": null,
+        "expected": ["tagRed01", "tagBlue1"]
+      },
+      {
+        "name": "status",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pSta0001",
+        "computed": null,
+        "expected": "staDone1"
+      },
+      {
+        "name": "date span",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pDate001",
+        "computed": null,
+        "expected": {
+          "start": "2026-03-01",
+          "end": "2026-03-03"
+        }
+      },
+      {
+        "name": "person",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pPer0001",
+        "computed": null,
+        "expected": ["01900000-0000-7000-8000-0000000000a1", "01900000-0000-7000-8000-0000000000b0"]
+      },
+      {
+        "name": "relation",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pRel0001",
+        "computed": null,
+        "expected": ["01900000-0000-7000-8000-000000000007"]
+      },
+      {
+        "name": "created time from the page",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pCrt0001",
+        "computed": null,
+        "expected": {
+          "start": "2026-01-01T09:00:00Z"
+        }
+      },
+      {
+        "name": "edited time drops the fraction",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pEdt0001",
+        "computed": null,
+        "expected": {
+          "start": "2026-01-02T10:30:15Z"
+        }
+      },
+      {
+        "name": "created by",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pCrb0001",
+        "computed": null,
+        "expected": ["01900000-0000-7000-8000-0000000000a1"]
+      },
+      {
+        "name": "edited by",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pEdb0001",
+        "computed": null,
+        "expected": ["01900000-0000-7000-8000-0000000000b0"]
+      },
+      {
+        "name": "edited by unknown",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": null,
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pEdb0001",
+        "computed": null,
+        "expected": null
+      },
+      {
+        "name": "formula: the server's result",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pFor0001",
+        "computed": null,
+        "expected": 9
+      },
+      {
+        "name": "formula: this device's result first",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pFor0001",
+        "computed": {
+          "pFor0001": 10
+        },
+        "expected": 10
+      },
+      {
+        "name": "rollup error as stored",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pRol0001",
+        "computed": null,
+        "expected": {
+          "error": "formula.type"
+        }
+      },
+      {
+        "name": "deleted property is empty",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "pOld0001",
+        "computed": null,
+        "expected": null
+      },
+      {
+        "name": "unknown property is empty",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "Report",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:15.250Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000b0",
+          "values": {
+            "pText001": "hi",
+            "pNum0001": 3,
+            "pSel0001": "optGone1",
+            "pMul0001": ["tagRed01", "tagGone1", "tagBlue1"],
+            "pSta0001": "staDone1",
+            "pDate001": {
+              "start": "2026-03-01",
+              "end": "2026-03-03"
+            },
+            "pPer0001": [
+              "01900000-0000-7000-8000-0000000000a1",
+              "01900000-0000-7000-8000-0000000000b0"
+            ],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"],
+            "pOld0001": "old"
+          },
+          "computed": {
+            "pFor0001": 9,
+            "pRol0001": {
+              "error": "formula.type"
+            }
+          }
+        },
+        "propertyId": "nothere1",
+        "computed": null,
+        "expected": null
+      }
+    ]
+  }
+]

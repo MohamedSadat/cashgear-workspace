@@ -1,16 +1,18 @@
-// Kill during a local store migration (Phase 3, M3.5): a store written by an earlier release
-// (crates/cgw-store/tests/fixtures/v1 and v2, made by v0.1.0's and v0.2.0's own store code; their
-// expected.json lists what that release answered to a fixed set of reads) is copied into a fresh
-// data folder, the release desktop app is started on it and killed at a random moment of its
-// start, which is when the store is copied aside (workspace.v{n}.db) and migrated to schema 3.
+// Kill during a local store migration (Phase 3, M3.5; Phase 4 adds v3): a store written by an
+// earlier release (crates/cgw-store/tests/fixtures/v1, v2 and v3, made by v0.1.0's, v0.2.0's and
+// v0.3.0's own store code; their expected.json lists what that release answered to a fixed set of
+// reads) is copied into a fresh data folder, the release desktop app is started on it and killed
+// at a random moment of its start, which is when the store is copied aside (workspace.v{n}.db)
+// and migrated to this build's schema (crates/cgw-store's SCHEMA_VERSION, 4 from Phase 4).
 // The killed folder is then copied: on one copy the store is opened again by the store's own
 // code (cgw-store-cli, the code the app runs at start) and every read of expected.json must give
 // the release's answer and bytes exactly, and the copy beside it must be the old store byte for
 // byte; on the other the app itself starts again, over CDP, and must migrate and open with the
 // fixture's workspace and pages in its tree (its own start then writes as it always does: a
 // visit, the trash's 60 days on the fixture's old trashed page; so that copy is checked for
-// schema 3, the old store beside it and the workspaces).
-//   node scripts/kill-migration.mjs [--runs 100] [--fixtures 1,2] [--out file]
+// the schema, the old store beside it and the workspaces). A `readMirror` the release answered
+// is compared without the databases and views schema 4 answers too, which must be empty.
+//   node scripts/kill-migration.mjs [--runs 100] [--fixtures 1,2,3] [--out file]
 // Kill moments, in turn: at once when the copy starts (its .part file appears) or when it is in
 // place (the migration's transaction runs next), from a watch on the folder; a random time from
 // the start to just after the copy is usually seen; and, twice as often, a random moment within 12 ms of when the copy has been
@@ -43,7 +45,13 @@ const arg = (name, fallback) => {
   return at > 0 ? process.argv[at + 1] : fallback;
 };
 const runs = Number(arg('runs', 10));
-const fixtures = arg('fixtures', '1,2').split(',').map(Number);
+const fixtures = arg('fixtures', '1,2,3').split(',').map(Number);
+/** The schema this build migrates to, as the store's own code says it. */
+const SCHEMA = Number(
+  /pub const SCHEMA_VERSION: i64 = (\d+);/.exec(
+    readFileSync(join(root, 'crates/cgw-store/src/lib.rs'), 'utf8'),
+  )[1],
+);
 const out = arg('out', join(root, 'bench/results/kill-migration.json'));
 const padMB = Number(arg('pad-mb', 96));
 const exe = join(root, 'target/release/cgw-desktop.exe');
@@ -144,6 +152,13 @@ function storedVersion(data) {
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/** An answer as the release gave it: a migrated store's mirror has no databases or views yet. */
+function asBefore(request, answer) {
+  if (request.op !== 'readMirror' || !answer) return answer;
+  const { databases, views, ...rest } = answer;
+  return same(databases, []) && same(views, []) ? rest : answer;
+}
+
 /**
  * The fixture with `mb` megabytes of free pages added (a table of zeros made and dropped): the
  * same store, every read answers the same, but its copy before the migration takes long enough
@@ -178,6 +193,7 @@ const median = (values, fallback) =>
 const results = {
   runs: 0,
   fixtures,
+  schema: SCHEMA,
   failures: [],
   startedAt: new Date().toISOString(),
   moments: { timed: 0, band: 0, copying: 0, copied: 0 },
@@ -275,7 +291,7 @@ try {
       ? 'during the copy'
       : !existsSync(join(data, copyName))
         ? 'before the copy'
-        : stored === 3
+        : stored === SCHEMA
           ? 'after the migration committed'
           : 'after the copy, before the migration committed';
     results.killedAt[where] = (results.killedAt[where] ?? 0) + 1;
@@ -293,12 +309,12 @@ try {
       const store = await openStoreCli(data);
       try {
         const { ok: now } = await store.call({ op: 'schemaVersion' });
-        if (now !== 3) throw new Error(`schema ${now}`);
+        if (now !== SCHEMA) throw new Error(`schema ${now}`);
         // (A watch that missed the copy left the app running for 5 s: its page wrote.)
         for (const read of killedBy === 'late' ? [] : expected.reads) {
           const { ok, blobs } = await store.call(read.request);
           results.reads++;
-          if (!same(read.answer, ok))
+          if (!same(read.answer, asBefore(read.request, ok)))
             results.failures.push({ run, version, where, read: read.request, problem: 'answer' });
           else if (
             !same(
@@ -365,7 +381,7 @@ try {
       try {
         const { ok: now } = await store.call({ op: 'schemaVersion' });
         const { ok: held } = await store.call({ op: 'readMirror', workspaceId: null });
-        if (now !== 3 || !same(held.workspaces, mirror.workspaces))
+        if (now !== SCHEMA || !same(held.workspaces, mirror.workspaces))
           results.failures.push({ run, version, where, app: true, problem: `schema ${now}` });
       } finally {
         await store.close();

@@ -43,7 +43,7 @@ function contextOf(data: Context | undefined): TextContext {
 
 const { docOf, heading, paragraph, bullet, numbered, todo, toggle, quote, callout, divider, code } =
   build;
-const { text, table, textBlock, block, bookmark, childPage } = build;
+const { text, table, textBlock, block, bookmark, childPage, databaseView, dateMention } = build;
 
 const PLANS = '01936f6e-0000-7000-8000-000000000001';
 const EMPTY = '01936f6e-0000-7000-8000-000000000002';
@@ -51,6 +51,8 @@ const UNKNOWN_PAGE = '01936f6e-0000-7000-8000-00000000000f';
 const REPORT = '01936f6e-0000-7000-8000-0000000000a1';
 const PHOTO = '01936f6e-0000-7000-8000-0000000000a2';
 const UNKNOWN_ASSET = '01936f6e-0000-7000-8000-0000000000af';
+const TASKS = '01936f6e-0000-7000-8000-0000000000d1';
+const BOARD = '01936f6e-0000-7000-8000-0000000000d2';
 
 const coloured = (value: string, type: string, token: string): DocJSON => ({
   type: 'text',
@@ -383,6 +385,63 @@ function cases(): Omit<Vector, 'markdown'>[] {
         paragraph('After'),
         bullet(['Item'], [block({ type: 'tableOfContents', attrs: {} })]),
         block({ type: 'tableOfContents' }, [paragraph('Child of a table of contents')]),
+      ),
+    },
+    {
+      // Schema version 3: a date writes its stored form, and ` → ` its end when it has one.
+      name: 'date mentions',
+      doc: docOf(
+        paragraph('Due ', dateMention('2026-12-01'), '.'),
+        paragraph('From ', dateMention('2026-12-01', '2026-12-05'), ' to the end'),
+        paragraph('At ', dateMention('2026-11-12T09:30:00Z')),
+        paragraph('Span ', dateMention('2026-11-12T09:30:00Z', '2026-11-12T17:00:00Z')),
+        paragraph(
+          'Bad ',
+          { type: 'dateMention', attrs: { date: '12/01/2026', end: null } },
+          ', none ',
+          { type: 'dateMention' },
+          ', end only ',
+          { type: 'dateMention', attrs: { date: null, end: '2026-12-05' } },
+          ', bad end ',
+          { type: 'dateMention', attrs: { date: '2026-12-01', end: 'soon' } },
+          ', other digits ',
+          { type: 'dateMention', attrs: { date: '٢٠٢٦-١٢-٠١', end: null } },
+          ', a number ',
+          { type: 'dateMention', attrs: { date: 20261201, end: null } },
+        ),
+        paragraph(dateMention('2026-12-01'), ' at the start of a line'),
+        heading(2, 'Due ', dateMention('2026-12-01')),
+        bullet(
+          ['Item ', dateMention('2026-12-01')],
+          [todo(false, 'By ', dateMention('2026-12-02'))],
+        ),
+        quote('Quoted ', dateMention('2026-12-01'), hardBreak, 'next line'),
+        table([
+          ['When', 'What'],
+          [dateMention('2026-12-01', '2026-12-02'), 'Launch'],
+        ]),
+        paragraph(text('bold ', 'bold'), {
+          type: 'dateMention',
+          attrs: { date: '2026-12-01', end: null },
+          marks: [{ type: 'bold' }],
+        }),
+        textBlock('paragraph', ['الموعد ', dateMention('2026-12-01'), ' للتسليم'], { dir: 'rtl' }),
+        block({ type: 'codeBlock', content: [text('in code '), dateMention('2026-12-01')] }),
+      ),
+    },
+    {
+      // Schema version 3: a database view writes nothing; its rows are pages of their own.
+      name: 'database views write nothing',
+      doc: docOf(
+        paragraph('Before'),
+        databaseView(TASKS, BOARD),
+        databaseView(TASKS),
+        block({ type: 'databaseView' }),
+        bullet(['Item'], [databaseView(TASKS)]),
+        block({ type: 'databaseView', attrs: { databaseId: TASKS } }, [
+          paragraph('Child of a database view'),
+        ]),
+        paragraph('After'),
       ),
     },
     { name: 'an empty document', doc: { type: 'doc', content: [] } },

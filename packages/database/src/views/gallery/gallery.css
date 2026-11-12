@@ -1,0 +1,84 @@
+/* The gallery: cards placed on a grid by logical offsets (mirrored in RTL), a picture on top. */
+
+.cgw-gallery {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.cgw-gallery-scroll {
+  position: relative;
+  flex: 1;
+  box-sizing: border-box;
+  min-block-size: 160px;
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline: none;
+}
+
+.cgw-gallery.is-embedded .cgw-gallery-scroll {
+  flex: none;
+  max-block-size: min(70vh, 680px);
+}
+
+.cgw-gallery-grid {
+  position: relative;
+}
+
+.cgw-gallery-cover {
+  overflow: hidden;
+  border-block-end: 1px solid var(--cg-border);
+  background: var(--cg-surface-subtle, var(--cgw-db-default-bg));
+}
+
+.cgw-gallery-cover[data-empty] {
+  background:
+    linear-gradient(
+      135deg,
+      transparent 48%,
+      var(--cg-border) 49%,
+      var(--cg-border) 51%,
+      transparent 52%
+    ),
+    var(--cg-surface-subtle, var(--cgw-db-default-bg));
+  background-size: 18px 18px;
+  opacity: 0.6;
+}
+
+.cgw-gallery-cover img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.cgw-gallery-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+  cursor: default;
+}
+
+.cgw-gallery-new-button {
+  justify-content: center;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.cgw-gallery-draft {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  padding-inline: 10px;
+}
+
+.cgw-gallery-empty {
+  margin: 0;
+  padding: var(--cg-space-4, 16px);
+  color: var(--cg-text-secondary);
+}

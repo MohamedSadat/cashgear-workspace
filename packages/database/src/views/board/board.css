@@ -1,0 +1,185 @@
+/* The board: columns side by side (a flex row, so RTL runs them right to left), the board
+   scrolling as one with each column's header sticky at the top. */
+
+.cgw-board {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.cgw-board-scroll {
+  position: relative;
+  flex: 1;
+  min-block-size: 160px;
+  overflow: auto;
+  outline: none;
+  overscroll-behavior: contain;
+}
+
+.cgw-board.is-embedded .cgw-board-scroll {
+  flex: none;
+  max-block-size: min(70vh, 640px);
+}
+
+.cgw-board-note {
+  margin-block: 4px;
+  margin-inline: 8px;
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-board-columns {
+  display: flex;
+  box-sizing: border-box;
+  align-items: flex-start;
+  gap: 12px;
+  inline-size: max-content;
+  min-inline-size: 100%;
+  padding-block: 8px 16px;
+  padding-inline: 8px;
+}
+
+.cgw-board-column {
+  flex: none;
+  inline-size: 272px;
+  border-radius: var(--cg-radius-md, 6px);
+  background: var(--cg-surface-subtle, var(--cgw-db-default-bg));
+}
+
+.cgw-board-column[data-collapsed] {
+  inline-size: 44px;
+}
+
+.cgw-board-head {
+  position: sticky;
+  z-index: 3;
+  inset-block-start: 0;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 4px;
+  block-size: 44px;
+  padding-inline: 6px;
+  border-start-start-radius: var(--cg-radius-md, 6px);
+  border-start-end-radius: var(--cg-radius-md, 6px);
+  background: var(--cg-surface-subtle, var(--cgw-db-default-bg));
+}
+
+.cgw-board-column[data-collapsed] .cgw-board-head {
+  flex-direction: column;
+  block-size: auto;
+  min-block-size: 160px;
+  padding-block: 8px;
+  border-radius: var(--cg-radius-md, 6px);
+}
+
+.cgw-board-column[data-collapsed] .cgw-board-name {
+  flex: none;
+  writing-mode: vertical-rl;
+}
+
+.cgw-board-chevron {
+  display: inline-block;
+  transition: transform var(--cg-transition-fast, 120ms) ease;
+}
+
+.cgw-board-toggle[aria-expanded='false'] .cgw-board-chevron {
+  transform: rotate(-90deg);
+}
+
+.cgw-board-toggle[aria-expanded='false']:dir(rtl) .cgw-board-chevron {
+  transform: rotate(90deg);
+}
+
+.cgw-board-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cgw-board-count {
+  flex: none;
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-board-cards {
+  position: relative;
+  min-block-size: 40px;
+  margin-inline: 8px;
+}
+
+.cgw-board-empty {
+  margin: 0;
+  padding-block: 10px;
+  color: var(--cg-text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.cgw-board-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding-block: 2px 8px;
+  padding-inline: 8px;
+}
+
+.cgw-board-new {
+  display: flex;
+  align-items: center;
+  block-size: 30px;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--cg-radius-sm, 3px);
+  background: transparent;
+  color: var(--cg-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cgw-board-new:hover {
+  background: var(--cg-hover, var(--cgw-db-row-hover));
+  color: var(--cg-text);
+}
+
+.cgw-board-new:focus-visible {
+  outline: var(--cg-focus-ring-width, 2px) solid var(--cg-focus-ring-color, var(--cg-accent));
+  outline-offset: -1px;
+}
+
+.cgw-board-hidden {
+  inline-size: 220px;
+  background: transparent;
+}
+
+.cgw-board-hidden .cgw-board-head {
+  background: var(--cg-surface);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-board-hidden-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-block: 0 8px;
+  padding-inline: 8px;
+  list-style: none;
+}
+
+.cgw-board-hidden-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-block-size: 30px;
+}

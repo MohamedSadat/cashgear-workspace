@@ -656,3 +656,36 @@
 .cgw-dialog:has(.cgw-history) {
   inline-size: min(900px, calc(100vw - 32px));
 }
+
+/* Phase 4: databases. A database's own page is wider than a page of text: its views need the room. */
+.cgw-page.cgw-database-page {
+  max-inline-size: min(1280px, 100%);
+}
+
+/* A database block's root inside the editor's frame (database/mount.tsx). */
+.cgw-db-block {
+  display: block;
+  inline-size: 100%;
+}
+
+.cgw-db-block-loading,
+.cgw-row-props-loading {
+  min-block-size: 32px;
+  padding: 8px 12px;
+  color: var(--cg-text-secondary);
+}
+
+/* A database block on a page shared by link: shown in the app only. */
+.cgw-db-shared-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--cg-border);
+  border-radius: 6px;
+  color: var(--cg-text-secondary);
+}
+
+/* The editor's database placeholder is `hidden` while the database is drawn, but its own rule
+   (display: flex) wins over the attribute: kept hidden here until editor.css says so itself. */
+.cgw-database-placeholder[hidden] {
+  display: none;
+}

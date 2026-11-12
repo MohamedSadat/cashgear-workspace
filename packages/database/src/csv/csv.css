@@ -1,0 +1,141 @@
+/* The CSV import dialog. */
+
+.cgw-csv {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--cg-text);
+}
+
+.cgw-csv-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--cg-border-strong, var(--cg-border));
+  border-radius: var(--cg-radius-md, 6px);
+}
+
+.cgw-csv-hint,
+.cgw-csv-note {
+  margin: 0;
+  color: var(--cg-text-secondary);
+  font-size: 13px;
+}
+
+.cgw-csv-note progress {
+  display: block;
+  inline-size: 100%;
+  margin-block-start: 6px;
+}
+
+.cgw-csv-error {
+  margin: 0;
+  color: var(--cg-danger-text);
+  font-size: 13px;
+}
+
+.cgw-csv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-csv-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cgw-csv-mode legend {
+  padding: 0;
+  margin-block-end: 4px;
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-csv-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-csv-table-box {
+  max-block-size: 18rem;
+  overflow: auto;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+}
+
+.cgw-csv-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.cgw-csv-caption {
+  padding: 6px;
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+  text-align: start;
+}
+
+.cgw-csv-table th,
+.cgw-csv-table td {
+  min-inline-size: 8rem;
+  max-inline-size: 16rem;
+  padding-block: 4px;
+  padding-inline: 8px;
+  overflow: hidden;
+  border-block-start: 1px solid var(--cg-border);
+  border-inline-end: 1px solid var(--cg-border);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cgw-csv-table th {
+  position: sticky;
+  inset-block-start: 0;
+  background: var(--cg-surface);
+  vertical-align: top;
+}
+
+.cgw-csv-column {
+  display: block;
+  margin-block-end: 4px;
+  font-weight: 600;
+}
+
+.cgw-csv-type {
+  color: var(--cg-text-secondary);
+  font-weight: 400;
+}
+
+.cgw-csv-table td[data-skipped] {
+  color: var(--cg-disabled-text, var(--cg-text-secondary));
+  text-decoration: line-through;
+}
+
+.cgw-csv-table td[data-problem] {
+  background: var(--cg-danger-soft, transparent);
+  color: var(--cg-danger-text);
+}
+
+.cgw-csv-problems {
+  max-block-size: 10rem;
+  margin: 0;
+  padding-inline-start: 1.2rem;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.cgw-csv-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  inline-size: 100%;
+}

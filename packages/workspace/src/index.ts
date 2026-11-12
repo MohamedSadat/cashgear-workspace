@@ -1,9 +1,18 @@
 export * from './types';
+export * from './db/types';
+export * from './db';
 export { idTime, isId, uuidv7 } from './ids';
 export { compareSiblings, isOrderKey, keyBetween, keysBetween, validateOrderKey } from './order';
-export { planOps, type MirrorReader, type Plan } from './ops';
+export { isRow, planOps, type MirrorReader, type Plan } from './ops';
 export { Mirror } from './mirror';
-export { emptyPlan, planRemote, planSettle, uploadOps, type RemoteReader } from './remote';
+export {
+  emptyPlan,
+  planRemote,
+  planSettle,
+  uploadOps,
+  type RemoteReader,
+  type UploadDatabases,
+} from './remote';
 export { MemoryStore } from './memory';
 export { normaliseText, searchTerms, snippet } from './search';
 export { newOp } from './build';
@@ -14,6 +23,7 @@ export {
   batchOf,
   impossibleTree,
   pushBatches,
+  type HoldProgress,
   type OfflineProgress,
   type SyncEvent,
   type SyncOptions,
@@ -29,6 +39,9 @@ export {
   type DocRepairAnswer,
   type DocRepairRequest,
   type DocStateHash,
+  type QueryAnswer,
+  type QueryRequest,
+  type RowsPage,
   type SyncApi,
 } from './sync/api';
 export { httpSyncApi, fromBase64, retryAfterMs, toBase64 } from './sync/http';

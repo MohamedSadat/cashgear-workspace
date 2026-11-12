@@ -18,6 +18,8 @@ public static class Codes
     public const string PageGone = "page.gone";
     /// <summary>The change feed no longer holds what came after the cursor: fetch the tree again.</summary>
     public const string FeedExpired = "feed.expired";
+    /// <summary>An import over 50,000 rows or 20 MB (413).</summary>
+    public const string DbTooLarge = "db.tooLarge";
     public const string LimitSize = "limit.size";
     public const string LimitRate = "limit.rate";
     public const string AssetTypeNotAllowed = "asset.typeNotAllowed";
@@ -30,7 +32,7 @@ public static class Codes
     [
         AuthRequired, AccessDenied, NotFound, VersionConflict, TreeCycle, TreeParentMissing,
         TreeSection, DocEpochMismatch, ClientTooOld, PageGone, FeedExpired, LimitSize, LimitRate,
-        AssetTypeNotAllowed, RequestInvalid, Conflict, ServerError,
+        AssetTypeNotAllowed, RequestInvalid, Conflict, ServerError, DbTooLarge,
     ];
 }
 

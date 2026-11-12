@@ -1,0 +1,158 @@
+/* Cards (board and gallery), the copy that follows the pointer while a card is dragged, and the
+   drop indicator. Logical properties (mirrored in RTL), colours from the --cg-* tokens; only the
+   dragged copy is placed by physical pointer coordinates (top and left), as pointers report them. */
+
+.cgw-card {
+  position: absolute;
+  inset-inline: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-md, 6px);
+  background: var(--cg-surface);
+  box-shadow: var(--cg-shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.06));
+  color: var(--cg-text);
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  contain: layout paint;
+}
+
+.cgw-card:hover {
+  border-color: var(--cg-border-strong, var(--cg-border));
+  background: linear-gradient(var(--cgw-db-row-hover), var(--cgw-db-row-hover)), var(--cg-surface);
+}
+
+.cgw-card:focus-visible {
+  box-shadow: 0 0 0 var(--cg-focus-ring-width, 2px) var(--cg-focus-ring-color, var(--cg-accent));
+}
+
+.cgw-card[data-dragging] {
+  opacity: 0.35;
+}
+
+.cgw-card-body {
+  display: flex;
+  flex-direction: column;
+  padding-block: 8px;
+  padding-inline: 10px;
+}
+
+.cgw-card-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  block-size: 22px;
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.cgw-card-title > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cgw-card-untitled {
+  color: var(--cg-text-secondary);
+  font-weight: 400;
+}
+
+.cgw-card-icon {
+  flex: none;
+}
+
+.cgw-card-line {
+  display: flex;
+  align-items: center;
+  block-size: 24px;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--cg-text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.cgw-card-line > * {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cgw-card-draft {
+  display: flex;
+  align-items: center;
+  padding-inline: 10px;
+  cursor: text;
+}
+
+.cgw-card-input {
+  font-weight: 600;
+}
+
+/* The copy under the pointer (a card or a calendar row), in the body: placed by translate3d from
+   the viewport's top left. */
+body > .cgw-drag-ghost {
+  position: fixed;
+  z-index: 10000;
+  inset: 0 auto auto 0;
+  margin: 0;
+  box-shadow: var(--cg-shadow-lg, 0 10px 28px rgba(0, 0, 0, 0.22));
+  font-family: var(--cg-font-family);
+  opacity: 0.96;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cgw-drop-indicator {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 2px;
+  border-radius: 1px;
+  background: var(--cgw-db-active);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.cgw-drop-indicator[data-mode='column'] {
+  block-size: 100%;
+  min-block-size: 40px;
+  border-radius: var(--cg-radius-md, 6px);
+  background: var(--cgw-db-active-bg);
+  outline: 2px dashed var(--cgw-db-active);
+  outline-offset: -2px;
+}
+
+.cgw-views-sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cgw-view-setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+  padding: var(--cg-space-6, 32px);
+  color: var(--cg-text-secondary);
+  text-align: center;
+}
+
+.cgw-view-setup p {
+  margin: 0;
+}
+
+.cgw-view-setup-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+  color: var(--cg-text);
+}

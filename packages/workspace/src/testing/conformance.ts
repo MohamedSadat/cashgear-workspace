@@ -2,15 +2,20 @@
 // cases run against every store, so the browser's IndexedDB store and the desktop's SQLite store
 // behave the same. Call it from a test file with a factory that returns an empty store.
 import { describe, expect, it } from 'vitest';
+import type { DatabaseRecord, PropertyDef, Value, ViewRecord } from '../db/types';
 import { isId, uuidv7, type Id } from '../ids';
 import { keyBetween } from '../order';
+import { uploadOps } from '../remote';
 import { normaliseText } from '../search';
 import {
   STORE_SCHEMA_VERSION,
+  type DbHold,
   type LocalStore,
   type Operation,
+  type PageCreate,
   type PageRecord,
   type PinRecord,
+  type RowRecord,
   type SectionRecord,
   type WorkspaceRecord,
 } from '../types';
@@ -109,6 +114,145 @@ export async function syncedTree(store: LocalStore) {
   const tree = await seedTree(store);
   await store.beginUpload(tree.ws.id, ACCOUNT, []);
   return tree;
+}
+
+// Databases (store schema 4) -------------------------------------------------------------------
+
+/** Property ids the database cases use (8 characters of base 62). */
+export const P = {
+  text: 'Text0001',
+  number: 'Numb0001',
+  done: 'Done0001',
+  status: 'Stag0001',
+  relation: 'Rela0001',
+  back: 'Back0001',
+  self: 'Self0001',
+  selfBack: 'Self0002',
+  formula: 'Form0001',
+} as const;
+
+export const OPTION_OPEN = 'Open0001';
+
+/** A database's first properties, as `page.create` carries them (the title is added). */
+export const DB_PROPS: PropertyDef[] = [
+  { id: P.text, name: 'Notes', type: 'text' },
+  { id: P.number, name: 'Count', type: 'number', number: { format: 'number', decimals: null } },
+  { id: P.done, name: 'Done', type: 'checkbox' },
+  {
+    id: P.status,
+    name: 'Stage',
+    type: 'select',
+    options: [
+      { id: OPTION_OPEN, name: 'Open', colour: 'blue' },
+      { id: 'Shut0001', name: 'Closed', colour: 'green' },
+    ],
+  },
+];
+
+export function databasePage(
+  workspaceId: Id,
+  sectionId: Id,
+  parentPageId: Id | null,
+  title: string,
+  orderKey = 'a5',
+): PageRecord {
+  return { ...pageRecord(workspaceId, sectionId, parentPageId, title, orderKey), kind: 'database' };
+}
+
+export function viewRecord(
+  workspaceId: Id,
+  databaseId: Id,
+  name = 'Table',
+  orderKey = 'a0',
+): ViewRecord {
+  return {
+    id: uuidv7(),
+    workspaceId,
+    databaseId,
+    name,
+    type: 'table',
+    orderKey,
+    config: {
+      filter: null,
+      sorts: [],
+      group: null,
+      properties: { order: [], hidden: [], widths: {} },
+    },
+    version: 1,
+    createdAt: at(),
+  };
+}
+
+/** A row as `page.create` makes one, with its first values. */
+export function rowCreate(
+  workspaceId: Id,
+  sectionId: Id,
+  databaseId: Id | null,
+  title: string,
+  values: Record<string, Value> = {},
+  orderKey = 'a0',
+): PageCreate {
+  return {
+    ...pageRecord(workspaceId, sectionId, databaseId, title, orderKey),
+    kind: 'row',
+    row: { values },
+  };
+}
+
+/** A row as the server sends one. */
+export function rowRecord(
+  workspaceId: Id,
+  sectionId: Id,
+  databaseId: Id,
+  title: string,
+  values: Record<string, Value> = {},
+  orderKey = 'a0',
+): RowRecord {
+  return {
+    ...pageRecord(workspaceId, sectionId, databaseId, title, orderKey),
+    kind: 'row',
+    databaseId,
+    values,
+    versions: {},
+    computed: {},
+    computedVersion: null,
+    createdBy: null,
+    updatedBy: null,
+  };
+}
+
+/** `seedTree` (or `syncedTree`) with a database under A: its first view and two rows. */
+export async function seedDatabase(store: LocalStore, synced = false) {
+  const tree = synced ? await syncedTree(store) : await seedTree(store);
+  const { ws, section, a } = tree;
+  const db = databasePage(ws.id, section.id, a.id, 'Tasks');
+  const view = viewRecord(ws.id, db.id);
+  const r1 = rowCreate(ws.id, section.id, db.id, 'One', { [P.text]: 'first', [P.number]: 1 }, 'a0');
+  const r2 = rowCreate(
+    ws.id,
+    section.id,
+    db.id,
+    'Two',
+    { [P.number]: 2, [P.status]: OPTION_OPEN },
+    'a1',
+  );
+  await store.applyLocalOps([
+    op('page.create', ws.id, db.id, { ...db, database: { properties: DB_PROPS } }),
+    op('view.upsert', ws.id, view.id, view),
+    op('page.create', ws.id, r1.id, r1),
+    op('page.create', ws.id, r2.id, r2),
+  ]);
+  return { ...tree, db, view, r1, r2 };
+}
+
+/** Every operation of the workspace answered as applied, with no entity. */
+export async function settleAll(store: LocalStore, workspaceId: Id) {
+  await store.settleOps(
+    (await store.nextOutboxBatch(10_000, workspaceId)).map((o) => ({
+      opId: o.opId,
+      status: 'applied' as const,
+    })),
+  );
 }
 
 const bytes = (...values: number[]) => new Uint8Array(values);
@@ -535,10 +679,10 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.close();
     });
 
-    it('reports schema version 3', async () => {
+    it('reports schema version 4', async () => {
       const store = await factory();
-      expect(STORE_SCHEMA_VERSION).toBe(3);
-      expect(await store.schemaVersion()).toBe(3);
+      expect(STORE_SCHEMA_VERSION).toBe(4);
+      expect(await store.schemaVersion()).toBe(4);
       await store.close();
     });
 
@@ -1263,6 +1407,830 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.settleQuarantine(recovered.id, 'dismissed');
       byId = new Map((await store.quarantine(ws.id)).map((e) => [e.id, e]));
       expect(byId.get(recovered.id)).toMatchObject({ status: 'dismissed', recoveredPageId: made });
+      await store.close();
+    });
+  });
+
+  describe(`LocalStore conformance, databases (schema 4): ${name}`, () => {
+    const sorted = (ids: Id[]) => [...ids].sort();
+    const rowIds = async (store: LocalStore, databaseId: Id) =>
+      sorted((await store.readRows(databaseId)).map((r) => r.id));
+    const row = async (store: LocalStore, id: Id) => (await store.getPage(id)) as RowRecord | null;
+    const dbOf = async (store: LocalStore, ws: Id, id: Id) =>
+      (await store.readMirror(ws)).databases.find((d) => d.id === id);
+    const update = (ws: Id, id: Id, values: Record<string, Value | null>) =>
+      op('row.update', ws, id, { values });
+
+    it('makes a database page with its record, a title property and a full hold; rows stay out of the tree', async () => {
+      const store = await factory();
+      const { ws, a, db, view, r1, r2 } = await seedDatabase(store);
+      const mirror = await store.readMirror(ws.id);
+      expect(mirror.pages.find((p) => p.id === db.id)).toMatchObject({
+        kind: 'database',
+        parentPageId: a.id,
+        version: 1,
+      });
+      expect(mirror.pages.some((p) => p.kind === 'row')).toBe(false);
+      expect(mirror.databases).toHaveLength(1);
+      const record = mirror.databases[0];
+      expect(record).toMatchObject({ id: db.id, workspaceId: ws.id, version: 1, rowCount: 2 });
+      expect(record.properties.map((p) => p.id)).toEqual(['title', ...DB_PROPS.map((p) => p.id)]);
+      expect(record.properties[0].type).toBe('title');
+      expect(mirror.views).toEqual([{ ...view, version: 1 }]);
+      expect(await row(store, r1.id)).toMatchObject({
+        id: r1.id,
+        kind: 'row',
+        databaseId: db.id,
+        parentPageId: db.id,
+        title: 'One',
+        values: { [P.text]: 'first', [P.number]: 1 },
+        versions: {},
+        computed: {},
+        computedVersion: null,
+        version: 1,
+        trashedAt: null,
+      });
+      expect(await rowIds(store, db.id)).toEqual(sorted([r1.id, r2.id]));
+      const hold = await store.dbHold(db.id);
+      expect(hold).toMatchObject({
+        databaseId: db.id,
+        workspaceId: ws.id,
+        mode: 'full',
+        complete: true,
+        after: null,
+      });
+      expect(await store.dbHolds(ws.id)).toEqual([hold]);
+      expect(await store.dbHold(uuidv7())).toBeNull();
+      expect((await store.nextOutboxBatch(100, ws.id)).slice(-4).map((o) => o.type)).toEqual([
+        'page.create',
+        'view.upsert',
+        'page.create',
+        'page.create',
+      ]);
+      await store.close();
+    });
+
+    it('keeps rows in their database and nothing but rows under a database', async () => {
+      const store = await factory();
+      const { ws, section, a, c, db, r1, r2 } = await seedDatabase(store);
+      const refused = async (operation: Operation, code: string) =>
+        expect(store.applyLocalOp(operation)).rejects.toMatchObject({ code });
+      const under = pageRecord(ws.id, section.id, db.id, 'Under a database');
+      await refused(op('page.create', ws.id, under.id, under), 'invalid');
+      const underRow = pageRecord(ws.id, section.id, r1.id, 'Under a row');
+      await refused(op('page.create', ws.id, underRow.id, underRow), 'invalid');
+      const inner = databasePage(ws.id, section.id, db.id, 'Inner');
+      await refused(
+        op('page.create', ws.id, inner.id, { ...inner, database: { properties: [] } }),
+        'invalid',
+      );
+      const stray = rowCreate(ws.id, section.id, a.id, 'Stray');
+      await refused(op('page.create', ws.id, stray.id, stray), 'invalid');
+      const top = rowCreate(ws.id, section.id, null, 'Top');
+      await refused(op('page.create', ws.id, top.id, top), 'invalid');
+      const move = (id: Id, parentPageId: Id | null, orderKey = 'a0') =>
+        op('page.move', ws.id, id, { sectionId: section.id, parentPageId, orderKey });
+      await refused(move(c.id, db.id), 'invalid');
+      await refused(move(c.id, r1.id), 'invalid');
+      await refused(move(r1.id, a.id), 'invalid');
+      await refused(move(r1.id, null), 'invalid');
+      // A row's move reorders it among its database's rows.
+      await store.applyLocalOp(move(r1.id, db.id, 'a2'));
+      expect(await row(store, r1.id)).toMatchObject({
+        orderKey: 'a2',
+        parentPageId: db.id,
+        version: 2,
+      });
+      expect(await rowIds(store, db.id)).toEqual(sorted([r1.id, r2.id]));
+      // A database page itself moves as any page does.
+      await store.applyLocalOp(move(db.id, c.id));
+      expect((await store.getPage(db.id))!.parentPageId).toBe(c.id);
+      await store.close();
+    });
+
+    it('writes row values merged per property, coerced to their types; null clears one', async () => {
+      const store = await factory();
+      const { ws, r1 } = await seedDatabase(store);
+      const before = (await row(store, r1.id))!;
+      await store.applyLocalOp(update(ws.id, r1.id, { [P.number]: 5, [P.done]: true }));
+      let after = (await row(store, r1.id))!;
+      expect(after.values).toEqual({ [P.text]: 'first', [P.number]: 5, [P.done]: true });
+      expect(after.version).toBe(2);
+      expect(after.updatedAt >= before.updatedAt).toBe(true);
+      // Null clears; an empty text is no value; a value that cannot be coerced is cleared.
+      await store.applyLocalOp(
+        update(ws.id, r1.id, {
+          [P.text]: null,
+          [P.done]: null,
+          [P.number]: { start: '2026-01-01' },
+        }),
+      );
+      after = (await row(store, r1.id))!;
+      expect(after.values).toEqual({});
+      await store.applyLocalOp(update(ws.id, r1.id, { [P.text]: '' }));
+      expect((await row(store, r1.id))!.values).toEqual({});
+      // Only stored properties the database has are written.
+      await expect(
+        store.applyLocalOp(update(ws.id, r1.id, { NoSuch01: 'x' })),
+      ).rejects.toMatchObject({ code: 'invalid' });
+      await expect(store.applyLocalOp(update(ws.id, r1.id, { title: 'x' }))).rejects.toMatchObject({
+        code: 'invalid',
+      });
+      await expect(
+        store.applyLocalOp(update(ws.id, uuidv7(), { [P.text]: 'x' })),
+      ).rejects.toMatchObject({ code: 'not.found' });
+      await store.close();
+    });
+
+    it('trashes a row on its own; rows read as trashed while their database is', async () => {
+      const store = await factory();
+      const { ws, a, db, r1, r2 } = await seedDatabase(store);
+      await store.applyLocalOp(op('page.trash', ws.id, r1.id, {}, 1));
+      const trashed = (await row(store, r1.id))!;
+      expect(trashed.trashRootId).toBe(r1.id);
+      expect((await store.trashedRows(ws.id)).map((r) => r.id)).toEqual([r1.id]);
+      await expect(
+        store.applyLocalOp(update(ws.id, r1.id, { [P.text]: 'x' })),
+      ).rejects.toMatchObject({ code: 'page.trashed' });
+      await store.applyLocalOp(op('page.restore', ws.id, r1.id, {}));
+      expect((await row(store, r1.id))!.trashedAt).toBeNull();
+      expect(await store.trashedRows(ws.id)).toEqual([]);
+      // Trashing the database's page (here, with its parent) does not touch its rows.
+      await store.applyLocalOp(op('page.trash', ws.id, a.id, {}, 1));
+      expect((await store.getPage(db.id))!.trashRootId).toBe(a.id);
+      expect((await row(store, r2.id))!.trashedAt).toBeNull();
+      expect(await store.trashedRows(ws.id)).toEqual([]);
+      await expect(
+        store.applyLocalOp(update(ws.id, r2.id, { [P.text]: 'x' })),
+      ).rejects.toMatchObject({ code: 'page.trashed' });
+      await expect(
+        store.applyLocalOp(op('page.update', ws.id, r2.id, { title: 'x' })),
+      ).rejects.toMatchObject({ code: 'page.trashed' });
+      await expect(
+        store.applyLocalOp(op('db.update', ws.id, db.id, { properties: [] })),
+      ).rejects.toMatchObject({ code: 'page.trashed' });
+      await store.applyLocalOp(op('page.restore', ws.id, a.id, {}));
+      await store.applyLocalOp(update(ws.id, r2.id, { [P.text]: 'back' }));
+      expect((await row(store, r2.id))!.values[P.text]).toBe('back');
+      await store.close();
+    });
+
+    it('deletes a database for good with its record, views, rows and hold', async () => {
+      const store = await factory();
+      const { ws, a, c, db, r1, r2 } = await seedDatabase(store);
+      await store.appendDocUpdates(r1.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      await store.addHistory(r1.id, bytes(2), 5);
+      await store.putSearchEntry({ pageId: r1.id, workspaceId: ws.id, title: 'one', text: 'kept' });
+      await store.pin({ workspaceId: ws.id, pageId: r1.id, subtree: false, pinnedAt: at() });
+      await store.setRepairState({ pageId: r1.id, epoch: 0, checkedSeq: 1, at: at(), repairs: 0 });
+      await store.applyLocalOp(
+        op('favourite.set', ws.id, r2.id, { favourite: true, orderKey: 'a0' }),
+      );
+      await store.applyLocalOp(op('page.trash', ws.id, a.id, {}, 1));
+      await store.applyLocalOp(op('page.delete', ws.id, a.id, {}));
+      const mirror = await store.readMirror(ws.id);
+      expect(mirror.databases).toEqual([]);
+      expect(mirror.views).toEqual([]);
+      expect(mirror.favourites).toEqual([]);
+      expect(mirror.pages.map((p) => p.id)).toEqual([c.id]);
+      for (const id of [db.id, r1.id, r2.id]) expect(await store.getPage(id)).toBeNull();
+      expect(await store.readRows(db.id)).toEqual([]);
+      expect(await store.dbHold(db.id)).toBeNull();
+      expect(await store.dbHolds(ws.id)).toEqual([]);
+      expect(await store.loadDoc(r1.id)).toEqual({
+        snapshot: null,
+        snapshotCovers: 0,
+        updates: [],
+      });
+      expect(await store.listHistory(r1.id)).toEqual([]);
+      expect(await store.search(ws.id, 'kept', 10)).toEqual([]);
+      expect(await store.pins(ws.id)).toEqual([]);
+      expect(await store.repairState(r1.id)).toBeNull();
+      await store.close();
+    });
+
+    it('deletes a trashed row for good, and purges trashed rows with the trash', async () => {
+      const store = await factory();
+      const { ws, db, r1, r2 } = await seedDatabase(store);
+      await store.appendDocUpdates(r1.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      await expect(store.applyLocalOp(op('page.delete', ws.id, r1.id, {}))).rejects.toMatchObject({
+        code: 'page.notTrashed',
+      });
+      await store.applyLocalOp(op('page.trash', ws.id, r1.id, {}, 1));
+      await store.applyLocalOp(op('page.delete', ws.id, r1.id, {}));
+      expect(await store.getPage(r1.id)).toBeNull();
+      expect((await store.loadDoc(r1.id)).updates).toEqual([]);
+      expect(await rowIds(store, db.id)).toEqual([r2.id]);
+      await store.applyLocalOp(op('page.trash', ws.id, r2.id, {}, 1));
+      expect(await store.purgeTrash(ws.id, '2000-01-01T00:00:00.000Z')).toEqual([]);
+      expect(await store.purgeTrash(ws.id, '9999-01-01T00:00:00.000Z')).toEqual([r2.id]);
+      expect(await store.readRows(db.id)).toEqual([]);
+      expect(await store.trashedRows(ws.id)).toEqual([]);
+      await store.close();
+    });
+
+    it('moves a database to another section with its rows', async () => {
+      const store = await factory();
+      const { ws, a, db, r1, r2 } = await seedDatabase(store);
+      const other = sectionRecord(ws.id, 'Private', 'a1');
+      await store.applyLocalOp(op('section.create', ws.id, other.id, other));
+      await store.applyLocalOp(
+        op(
+          'page.move',
+          ws.id,
+          a.id,
+          { sectionId: other.id, parentPageId: null, orderKey: 'a0' },
+          1,
+        ),
+      );
+      expect((await store.getPage(db.id))!.sectionId).toBe(other.id);
+      for (const id of [r1.id, r2.id])
+        expect(await row(store, id)).toMatchObject({ sectionId: other.id, version: 2 });
+      await store.close();
+    });
+
+    it("merges a database's properties per property; deleting one or an option rewrites no row", async () => {
+      const store = await factory();
+      const { ws, db, r1, r2 } = await seedDatabase(store);
+      const added: PropertyDef = { id: 'Added001', name: 'Added', type: 'text' };
+      await store.applyLocalOp(op('db.update', ws.id, db.id, { properties: [added] }));
+      let record = (await dbOf(store, ws.id, db.id))!;
+      expect(record.version).toBe(2);
+      expect(record.properties.map((p) => p.id)).toEqual([
+        'title',
+        ...DB_PROPS.map((p) => p.id),
+        added.id,
+      ]);
+      await store.applyLocalOp(op('db.update', ws.id, db.id, { order: [P.number, 'title'] }));
+      record = (await dbOf(store, ws.id, db.id))!;
+      expect(record.properties.map((p) => p.id)).toEqual([
+        P.number,
+        'title',
+        ...DB_PROPS.map((p) => p.id).filter((id) => id !== P.number),
+        added.id,
+      ]);
+      // A rename replaces the def in place.
+      const notes = DB_PROPS.find((p) => p.id === P.text)!;
+      await store.applyLocalOp(
+        op('db.update', ws.id, db.id, { properties: [{ ...notes, name: 'Remarks' }] }),
+      );
+      record = (await dbOf(store, ws.id, db.id))!;
+      expect(record.properties.find((p) => p.id === P.text)?.name).toBe('Remarks');
+      // Deleting a property and an option leaves every row as it was.
+      const rowsBefore = await store.readRows(db.id);
+      const stage = DB_PROPS.find((p) => p.id === P.status)!;
+      await store.applyLocalOp(
+        op('db.update', ws.id, db.id, {
+          properties: [
+            { ...notes, name: 'Remarks', trashedAt: at() },
+            { ...stage, options: stage.options!.slice(1) },
+          ],
+        }),
+      );
+      record = (await dbOf(store, ws.id, db.id))!;
+      expect(record.properties.find((p) => p.id === P.text)?.trashedAt).toBeTruthy();
+      expect(record.properties.find((p) => p.id === P.status)?.options).toHaveLength(1);
+      expect(await store.readRows(db.id)).toEqual(rowsBefore);
+      expect((await row(store, r1.id))!.values[P.text]).toBe('first');
+      expect((await row(store, r2.id))!.values[P.status]).toBe(OPTION_OPEN);
+      // Restored, it reads again.
+      await store.applyLocalOp(
+        op('db.update', ws.id, db.id, { properties: [{ ...notes, trashedAt: null }] }),
+      );
+      expect(
+        (await dbOf(store, ws.id, db.id))!.properties.find((p) => p.id === P.text)?.trashedAt,
+      ).toBeNull();
+      // The title stays the one title.
+      for (const properties of [
+        [{ id: 'title', name: 'Name', type: 'text' }],
+        [{ id: 'title', name: 'Name', type: 'title', trashedAt: at() }],
+        [{ id: 'Second01', name: 'Second', type: 'title' }],
+        [{ id: 'bad id', name: 'Bad', type: 'text' }],
+      ] as PropertyDef[][])
+        await expect(
+          store.applyLocalOp(op('db.update', ws.id, db.id, { properties })),
+        ).rejects.toMatchObject({ code: 'invalid' });
+      await store.close();
+    });
+
+    it('converts every held row when a property changes type', async () => {
+      const store = await factory();
+      const { ws, db, r1, r2 } = await seedDatabase(store);
+      const count = DB_PROPS.find((p) => p.id === P.number)!;
+      await store.applyLocalOp(
+        op('db.update', ws.id, db.id, {
+          properties: [{ id: count.id, name: count.name, type: 'text' }],
+        }),
+      );
+      expect(
+        (await dbOf(store, ws.id, db.id))!.properties.find((p) => p.id === P.number)?.type,
+      ).toBe('text');
+      expect(await row(store, r1.id)).toMatchObject({ values: { [P.number]: '1' }, version: 2 });
+      expect(await row(store, r2.id)).toMatchObject({ values: { [P.number]: '2' }, version: 2 });
+      // And back: the text reads as numbers again.
+      await store.applyLocalOp(op('db.update', ws.id, db.id, { properties: [count] }));
+      expect((await row(store, r1.id))!.values[P.number]).toBe(1);
+      await store.close();
+    });
+
+    it('keeps relations two-way on held rows and adds the reverse property to the target', async () => {
+      const store = await factory();
+      const { ws, section, c, db, r1, r2 } = await seedDatabase(store);
+      const people = databasePage(ws.id, section.id, c.id, 'People');
+      const p1 = rowCreate(ws.id, section.id, people.id, 'Ann', {}, 'a0');
+      const p2 = rowCreate(ws.id, section.id, people.id, 'Bob', {}, 'a1');
+      await store.applyLocalOps([
+        op('page.create', ws.id, people.id, { ...people, database: { properties: [] } }),
+        op('page.create', ws.id, p1.id, p1),
+        op('page.create', ws.id, p2.id, p2),
+      ]);
+      const relation: PropertyDef = {
+        id: P.relation,
+        name: 'Owners',
+        type: 'relation',
+        relation: { databaseId: people.id, reversePropertyId: P.back },
+      };
+      await store.applyLocalOp(op('db.update', ws.id, db.id, { properties: [relation] }));
+      const target = (await dbOf(store, ws.id, people.id))!;
+      expect(target.version).toBe(2);
+      expect(target.properties.find((p) => p.id === P.back)).toMatchObject({
+        type: 'relation',
+        relation: { databaseId: db.id, reversePropertyId: P.relation },
+      });
+      const back = async (id: Id) => (await row(store, id))!.values[P.back];
+      await store.applyLocalOp(update(ws.id, r1.id, { [P.relation]: [p1.id, p2.id] }));
+      expect(await back(p1.id)).toEqual([r1.id]);
+      expect(await back(p2.id)).toEqual([r1.id]);
+      expect((await row(store, p1.id))!.version).toBe(2);
+      await store.applyLocalOp(update(ws.id, r1.id, { [P.relation]: [p2.id] }));
+      expect(await back(p1.id)).toBeUndefined();
+      await store.applyLocalOp(update(ws.id, r2.id, { [P.relation]: [p2.id] }));
+      expect(await back(p2.id)).toEqual([r1.id, r2.id]);
+      // A new row's relations reach the rows it names.
+      const r3 = rowCreate(ws.id, section.id, db.id, 'Three', { [P.relation]: [p1.id] }, 'a2');
+      await store.applyLocalOp(op('page.create', ws.id, r3.id, r3));
+      expect(await back(p1.id)).toEqual([r3.id]);
+      // Cleared, the reverse goes too.
+      await store.applyLocalOp(update(ws.id, r2.id, { [P.relation]: null }));
+      expect(await back(p2.id)).toEqual([r1.id]);
+      // A self-relation's reverse is a second property in the same database.
+      await store.applyLocalOp(
+        op('db.update', ws.id, db.id, {
+          properties: [
+            {
+              id: P.self,
+              name: 'Blocks',
+              type: 'relation',
+              relation: { databaseId: db.id, reversePropertyId: P.selfBack },
+            },
+          ],
+        }),
+      );
+      const own = (await dbOf(store, ws.id, db.id))!;
+      expect(own.properties.find((p) => p.id === P.selfBack)?.relation).toEqual({
+        databaseId: db.id,
+        reversePropertyId: P.self,
+      });
+      await store.applyLocalOp(update(ws.id, r1.id, { [P.self]: [r2.id, r1.id] }));
+      expect((await row(store, r2.id))!.values[P.selfBack]).toEqual([r1.id]);
+      expect((await row(store, r1.id))!.values).toMatchObject({
+        [P.self]: [r2.id, r1.id],
+        [P.selfBack]: [r1.id],
+      });
+      await store.close();
+    });
+
+    it('keeps views: upserts with rising versions, and deletes', async () => {
+      const store = await factory();
+      const { ws, section, c, db, view } = await seedDatabase(store);
+      await store.applyLocalOp(op('view.upsert', ws.id, view.id, { ...view, name: 'All tasks' }));
+      const board = { ...viewRecord(ws.id, db.id, 'Board', 'a1'), type: 'board' as const };
+      await store.applyLocalOp(op('view.upsert', ws.id, board.id, board));
+      let views = (await store.readMirror(ws.id)).views;
+      expect(views.find((v) => v.id === view.id)).toEqual({
+        ...view,
+        name: 'All tasks',
+        version: 2,
+      });
+      expect(views.find((v) => v.id === board.id)?.version).toBe(1);
+      await store.applyLocalOp(op('view.delete', ws.id, view.id, {}));
+      views = (await store.readMirror(ws.id)).views;
+      expect(views.map((v) => v.id)).toEqual([board.id]);
+      const other = databasePage(ws.id, section.id, c.id, 'Other');
+      await store.applyLocalOp(
+        op('page.create', ws.id, other.id, { ...other, database: { properties: [] } }),
+      );
+      await expect(
+        store.applyLocalOp(op('view.upsert', ws.id, board.id, { ...board, databaseId: other.id })),
+      ).rejects.toMatchObject({ code: 'invalid' });
+      const lost = viewRecord(ws.id, uuidv7());
+      await expect(
+        store.applyLocalOp(op('view.upsert', ws.id, lost.id, lost)),
+      ).rejects.toMatchObject({ code: 'not.found' });
+      await store.close();
+    });
+
+    it("counts a local-only database's rows; a synced one's count is the server's", async () => {
+      const store = await factory();
+      const { ws, db, r1, r2 } = await seedDatabase(store);
+      const count = async (workspaceId: Id, id: Id) =>
+        (await dbOf(store, workspaceId, id))!.rowCount;
+      expect(await count(ws.id, db.id)).toBe(2);
+      await store.applyLocalOp(op('page.trash', ws.id, r1.id, {}, 1));
+      expect(await count(ws.id, db.id)).toBe(1);
+      await store.applyLocalOp(op('page.update', ws.id, r2.id, { isTemplate: true }));
+      expect(await count(ws.id, db.id)).toBe(0);
+      await store.applyLocalOp(op('page.restore', ws.id, r1.id, {}));
+      expect(await count(ws.id, db.id)).toBe(1);
+      const synced = await seedDatabase(store, true);
+      expect(await count(synced.ws.id, synced.db.id)).toBe(0);
+      await store.close();
+    });
+
+    it("takes the server's databases and views, unless an operation on them waits", async () => {
+      const store = await factory();
+      const { ws, db, view } = await seedDatabase(store, true);
+      const record = (await dbOf(store, ws.id, db.id))!;
+      await settleAll(store, ws.id);
+      await store.applyRemote({
+        workspaceId: ws.id,
+        databases: [{ ...record, version: 5, rowCount: 7 }],
+        views: [{ ...view, name: 'Remote', version: 4 }],
+      });
+      expect(await dbOf(store, ws.id, db.id)).toMatchObject({ version: 5, rowCount: 7 });
+      expect((await store.readMirror(ws.id)).views[0]).toMatchObject({
+        name: 'Remote',
+        version: 4,
+      });
+      await store.applyLocalOps([
+        op('db.update', ws.id, db.id, { order: [P.text] }),
+        op('view.upsert', ws.id, view.id, { ...view, name: 'Mine', version: 4 }),
+      ]);
+      await store.applyRemote({
+        workspaceId: ws.id,
+        databases: [{ ...record, version: 9 }],
+        views: [{ ...view, name: 'Theirs', version: 9 }],
+      });
+      expect((await dbOf(store, ws.id, db.id))!.version).toBe(6);
+      expect((await store.readMirror(ws.id)).views[0].name).toBe('Mine');
+      await store.close();
+    });
+
+    it('writes rows only for a database it holds, or one the batch holds, unless an edit waits', async () => {
+      const store = await factory();
+      const { ws, section, c, db, r1, r2 } = await seedDatabase(store, true);
+      const remote = databasePage(ws.id, section.id, c.id, 'From elsewhere');
+      const remoteRecord: DatabaseRecord = {
+        id: remote.id,
+        workspaceId: ws.id,
+        properties: [{ id: 'title', name: 'Name', type: 'title' }],
+        version: 1,
+        rowCount: 1,
+        createdAt: at(),
+      };
+      const theirs = rowRecord(ws.id, section.id, remote.id, 'Not held');
+      await settleAll(store, ws.id);
+      const mine = { ...(await row(store, r1.id))!, title: 'Remote one', version: 9 };
+      await store.applyLocalOp(update(ws.id, r2.id, { [P.text]: 'waiting' }));
+      await store.applyRemote({
+        workspaceId: ws.id,
+        pages: [remote],
+        databases: [remoteRecord],
+        rows: [mine, theirs, { ...(await row(store, r2.id))!, title: 'Remote two', version: 9 }],
+      });
+      expect(await row(store, r1.id)).toMatchObject({ title: 'Remote one', version: 9 });
+      expect((await row(store, r2.id))!.title).toBe('Two');
+      expect(await store.getPage(theirs.id)).toBeNull();
+      expect(await store.dbHold(remote.id)).toBeNull();
+      // The batch that holds it writes its rows.
+      const hold: DbHold = {
+        databaseId: remote.id,
+        workspaceId: ws.id,
+        mode: 'partial',
+        complete: false,
+        after: theirs.id,
+        heldAt: at(),
+      };
+      await store.applyRemote({ workspaceId: ws.id, rows: [theirs], holds: [hold] });
+      expect(await row(store, theirs.id)).toEqual(theirs);
+      expect(await store.dbHold(remote.id)).toEqual(hold);
+      expect(await rowIds(store, remote.id)).toEqual([theirs.id]);
+      // Deletes always apply.
+      await store.appendDocUpdates(r2.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      await store.applyRemote({ workspaceId: ws.id, deleteRows: [r2.id, theirs.id] });
+      expect(await store.getPage(r2.id)).toBeNull();
+      expect(await rowIds(store, db.id)).toEqual([r1.id]);
+      expect(await store.readRows(remote.id)).toEqual([]);
+      expect((await store.quarantine(ws.id)).map((e) => [e.pageId, e.title, e.reason])).toEqual([
+        [r2.id, 'Two', 'page.removed'],
+      ]);
+      await store.close();
+    });
+
+    it('holds databases: a hold started, replaced and listed by workspace', async () => {
+      const store = await factory();
+      const { ws, db } = await seedDatabase(store, true);
+      const other = await syncedTree(store);
+      const ids = [uuidv7(), uuidv7()];
+      const hold = (databaseId: Id, workspaceId: Id, mode: DbHold['mode']): DbHold => ({
+        databaseId,
+        workspaceId,
+        mode,
+        complete: false,
+        after: null,
+        heldAt: at(),
+      });
+      await store.holdDatabase(hold(ids[0], ws.id, 'partial'));
+      const replaced = { ...hold(ids[0], ws.id, 'full'), after: uuidv7() };
+      await store.holdDatabase(replaced);
+      await store.holdDatabase(hold(ids[1], other.ws.id, 'partial'));
+      expect(await store.dbHold(ids[0])).toEqual(replaced);
+      expect((await store.dbHolds(ws.id)).map((h) => h.databaseId)).toEqual(
+        sorted([db.id, ids[0]]),
+      );
+      expect((await store.dbHolds(other.ws.id)).map((h) => h.databaseId)).toEqual([ids[1]]);
+      await store.close();
+    });
+
+    it('removes a database page the server deletes with all it holds, setting aside unsent row edits', async () => {
+      const store = await factory();
+      const { ws, db, r1, r2 } = await seedDatabase(store, true);
+      await store.appendDocUpdates(r1.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      const sent = uuidv7();
+      await store.appendDocUpdates(r2.id, [{ updateId: sent, data: bytes(2) }]);
+      await store.ackDocUpdates(r2.id, [{ updateId: sent, seq: 1 }]);
+      await store.applyRemote({ workspaceId: ws.id, deletePages: [db.id] });
+      const mirror = await store.readMirror(ws.id);
+      expect(mirror.databases).toEqual([]);
+      expect(mirror.views).toEqual([]);
+      expect(await store.readRows(db.id)).toEqual([]);
+      expect(await store.getPage(r1.id)).toBeNull();
+      expect(await store.dbHold(db.id)).toBeNull();
+      expect((await store.loadDoc(r2.id)).updates).toEqual([]);
+      const entries = await store.quarantine(ws.id);
+      expect(entries.map((e) => [e.pageId, e.title, e.reason, plain(e.parts)])).toEqual([
+        [r1.id, 'One', 'page.removed', [[1]]],
+      ]);
+      await store.close();
+    });
+
+    it('removes a database a tree or a subtree no longer holds, and views the whole tree does not', async () => {
+      const store = await factory();
+      const tree = await seedDatabase(store, true);
+      const { ws, section, a, b, c, d, db, view, r1 } = tree;
+      const extra = viewRecord(ws.id, db.id, 'Extra', 'a1');
+      await store.applyLocalOp(op('view.upsert', ws.id, extra.id, extra));
+      await settleAll(store, ws.id);
+      const record = (await dbOf(store, ws.id, db.id))!;
+      const pages = (await store.readMirror(ws.id)).pages;
+      await store.applyRemote({
+        workspaceId: ws.id,
+        sections: [section],
+        pages,
+        databases: [record],
+        views: [{ ...view, version: 1 }],
+        replace: { root: null },
+      });
+      let mirror = await store.readMirror(ws.id);
+      expect(mirror.views.map((v) => v.id)).toEqual([view.id]);
+      expect(mirror.databases.map((x) => x.id)).toEqual([db.id]);
+      // Rows are never removed by a replace: a tree holds none.
+      expect(await rowIds(store, db.id)).toHaveLength(2);
+      // A subtree under a without the database page: it goes with its rows.
+      await store.applyRemote({
+        workspaceId: ws.id,
+        pages: pages.filter((p) => [a.id, b.id, d.id].includes(p.id)),
+        replace: { root: a.id },
+      });
+      mirror = await store.readMirror(ws.id);
+      expect(mirror.databases).toEqual([]);
+      expect(mirror.views).toEqual([]);
+      expect(mirror.pages.map((p) => p.id).sort()).toEqual(sorted([a.id, b.id, c.id, d.id]));
+      expect(await store.getPage(r1.id)).toBeNull();
+      expect(await store.dbHold(db.id)).toBeNull();
+      await store.close();
+    });
+
+    it('removes the databases, views, rows and holds of a workspace the account lost', async () => {
+      const store = await factory();
+      const { ws, db, r1 } = await seedDatabase(store, true);
+      await store.appendDocUpdates(r1.id, [{ updateId: uuidv7(), data: bytes(1) }]);
+      await store.applyRemote({ workspaceId: ws.id, deleteWorkspace: true });
+      const mirror = await store.readMirror(ws.id);
+      expect([mirror.databases, mirror.views, mirror.pages]).toEqual([[], [], []]);
+      expect(await store.readRows(db.id)).toEqual([]);
+      expect(await store.dbHolds(ws.id)).toEqual([]);
+      expect(await store.getPage(r1.id)).toBeNull();
+      expect((await store.quarantine(ws.id)).map((e) => e.pageId)).toEqual([r1.id]);
+      await store.close();
+    });
+
+    it('settles database, view and row answers, and drops a row the server refused', async () => {
+      const store = await factory();
+      const { ws, section, db, view, r1 } = await seedDatabase(store, true);
+      await settleAll(store, ws.id);
+      const edit = update(ws.id, r1.id, { [P.number]: 3 });
+      const order = op('db.update', ws.id, db.id, { order: [P.text] });
+      const rename = op('view.upsert', ws.id, view.id, { ...view, name: 'Local' });
+      const refusedRow = rowCreate(ws.id, section.id, db.id, 'Refused', {}, 'a9');
+      const create = op('page.create', ws.id, refusedRow.id, refusedRow);
+      await store.applyLocalOps([edit, order, rename, create]);
+      await store.appendDocUpdates(refusedRow.id, [{ updateId: uuidv7(), data: bytes(4) }]);
+      const server = (await row(store, r1.id))!;
+      const record = (await dbOf(store, ws.id, db.id))!;
+      await store.settleOps([
+        {
+          opId: edit.opId,
+          status: 'applied',
+          entityType: 'row',
+          entity: { ...server, values: { [P.number]: 4 }, versions: { [P.number]: 2 }, version: 5 },
+        },
+        {
+          opId: order.opId,
+          status: 'applied',
+          entityType: 'database',
+          entity: { ...record, version: 11 },
+        },
+        {
+          opId: rename.opId,
+          status: 'applied',
+          entityType: 'view',
+          entity: { ...view, name: 'Server', version: 8 },
+        },
+        {
+          opId: create.opId,
+          status: 'rejected',
+          error: { code: 'invalid' },
+          entityType: 'row',
+          entity: null,
+        },
+      ]);
+      expect(await row(store, r1.id)).toMatchObject({
+        values: { [P.number]: 4 },
+        versions: { [P.number]: 2 },
+        version: 5,
+      });
+      expect((await dbOf(store, ws.id, db.id))!.version).toBe(11);
+      expect((await store.readMirror(ws.id)).views[0]).toMatchObject({
+        name: 'Server',
+        version: 8,
+      });
+      expect(await store.getPage(refusedRow.id)).toBeNull();
+      expect((await store.quarantine(ws.id)).map((e) => [e.pageId, e.title])).toEqual([
+        [refusedRow.id, 'Refused'],
+      ]);
+      expect(await store.nextOutboxBatch(10, ws.id)).toEqual([]);
+      await store.close();
+    });
+
+    it('gives a held row whose edit waits the type the server changed, coerced', async () => {
+      const store = await factory();
+      const { ws, db, r1, r2 } = await seedDatabase(store, true);
+      await settleAll(store, ws.id);
+      await store.applyLocalOp(update(ws.id, r1.id, { [P.number]: 7 }));
+      const record = (await dbOf(store, ws.id, db.id))!;
+      const server = (await row(store, r2.id))!;
+      await store.applyRemote({
+        workspaceId: ws.id,
+        databases: [
+          {
+            ...record,
+            version: record.version + 1,
+            properties: record.properties.map((p) =>
+              p.id === P.number ? { id: p.id, name: p.name, type: 'text' } : p,
+            ),
+          },
+        ],
+        rows: [{ ...server, values: { [P.number]: '2' }, version: 4 }],
+      });
+      expect((await row(store, r1.id))!.values[P.number]).toBe('7');
+      expect((await row(store, r2.id))!.values[P.number]).toBe('2');
+      await store.close();
+    });
+
+    it("holds rows' documents as pages', and finds rows in search unless they read as trashed", async () => {
+      const store = await factory();
+      const { ws, a, r1, r2 } = await seedDatabase(store, true);
+      await store.appendDocUpdates(r1.id, [{ updateId: uuidv7(), data: bytes(1, 2) }]);
+      await store.applyRemoteDocUpdates(r2.id, { epoch: 0, headSeq: 0, updates: [] });
+      expect(await store.heldPages(ws.id)).toEqual(sorted([r1.id, r2.id]));
+      expect((await store.storageUsage(ws.id)).docBytes).toBe(2);
+      expect(Object.keys(await store.docCursors(ws.id))).toEqual([r2.id]);
+      expect((await store.unsentDocUpdates(10)).map((u) => u.pageId)).toEqual([r1.id]);
+      await store.putSearchEntry({
+        pageId: r1.id,
+        workspaceId: ws.id,
+        title: normaliseText('One'),
+        text: normaliseText('Quarterly figures'),
+      });
+      expect(
+        (await store.search(ws.id, normaliseText('quarter'), 10)).map((h) => h.pageId),
+      ).toEqual([r1.id]);
+      expect((await store.search(ws.id, normaliseText('one'), 10))[0].title).toBe('One');
+      await store.applyLocalOp(op('page.trash', ws.id, a.id, {}, 1));
+      expect(await store.search(ws.id, normaliseText('quarter'), 10)).toEqual([]);
+      // Set aside like a page's: the row's own title.
+      expect((await store.setAsideDoc(r1.id, 'access.denied'))?.title).toBe('One');
+      await store.close();
+    });
+
+    it("uploads a local workspace's databases: records, views, then rows, relations after", async () => {
+      const store = await factory();
+      const tree = await seedDatabase(store);
+      const { ws, section, c, db, view, r1, r2 } = tree;
+      const people = databasePage(ws.id, section.id, c.id, 'People');
+      const p1 = rowCreate(ws.id, section.id, people.id, 'Ann');
+      const relation: PropertyDef = {
+        id: P.relation,
+        name: 'Owners',
+        type: 'relation',
+        relation: { databaseId: people.id, reversePropertyId: P.back },
+      };
+      const formula: PropertyDef = {
+        id: P.formula,
+        name: 'Twice',
+        type: 'formula',
+        formula: { expression: `prop("${P.number}") * 2` },
+      };
+      await store.applyLocalOps([
+        op('page.create', ws.id, people.id, { ...people, database: { properties: [] } }),
+        op('page.create', ws.id, p1.id, p1),
+        op('db.update', ws.id, db.id, { properties: [relation, formula] }),
+        update(ws.id, r1.id, { [P.relation]: [p1.id] }),
+        op('page.trash', ws.id, r2.id, {}, 1),
+        op('favourite.set', ws.id, r1.id, { favourite: true, orderKey: 'a0' }),
+      ]);
+      const mirror = await store.readMirror(ws.id);
+      const databases = {
+        databases: mirror.databases,
+        views: mirror.views,
+        rows: [] as RowRecord[],
+      };
+      for (const record of mirror.databases)
+        databases.rows.push(...(await store.readRows(record.id)));
+      const ops = uploadOps(
+        mirror.workspaces[0],
+        mirror.sections,
+        mirror.pages,
+        mirror.favourites,
+        uuidv7,
+        databases,
+      );
+      const kinds = ops.map((o) => `${o.type}:${o.entityId}`);
+      const index = (type: string, id: Id) => kinds.indexOf(`${type}:${id}`);
+      const createDb = ops[index('page.create', db.id)] as Extract<
+        Operation,
+        { type: 'page.create' }
+      >;
+      expect(createDb.payload.database?.properties.map((p) => p.id)).toEqual([
+        'title',
+        ...DB_PROPS.map((p) => p.id),
+      ]);
+      const later = ops[index('db.update', db.id)] as Extract<Operation, { type: 'db.update' }>;
+      expect(later.payload.properties?.map((p) => p.id)).toEqual([P.relation, P.formula]);
+      expect(later.payload.order).toEqual(
+        (await dbOf(store, ws.id, db.id))!.properties.map((p) => p.id),
+      );
+      // The reverse side, already in People's record, comes the same way.
+      expect(index('db.update', people.id)).toBeGreaterThan(index('page.create', people.id));
+      expect(index('db.update', db.id)).toBeGreaterThan(index('page.create', people.id));
+      expect(index('view.upsert', view.id)).toBeGreaterThan(index('db.update', db.id));
+      const createRow = ops[index('page.create', r1.id)] as Extract<
+        Operation,
+        { type: 'page.create' }
+      >;
+      expect(createRow.payload).toMatchObject({ kind: 'row', parentPageId: db.id, version: 1 });
+      expect(createRow.payload.row?.values).toEqual({ [P.text]: 'first', [P.number]: 1 });
+      expect(createRow.payload).not.toHaveProperty('values');
+      expect(index('page.create', r1.id)).toBeGreaterThan(index('view.upsert', view.id));
+      const relate = ops[index('row.update', r1.id)] as Extract<Operation, { type: 'row.update' }>;
+      expect(relate.payload.values).toEqual({ [P.relation]: [p1.id] });
+      expect(index('row.update', r1.id)).toBeGreaterThan(index('page.create', p1.id));
+      expect(index('page.trash', r2.id)).toBeGreaterThan(index('row.update', r1.id));
+      expect(index('favourite.set', r1.id)).toBeGreaterThan(index('page.trash', r2.id));
+      // They plan, in order, on an empty store as they will on the server.
+      const fresh = await factory();
+      await fresh.applyLocalOps([
+        op('workspace.create', ws.id, ws.id, mirror.workspaces[0]),
+        ...ops,
+      ]);
+      const again = await fresh.readMirror(ws.id);
+      expect(sorted(again.pages.map((p) => p.id))).toEqual(sorted(mirror.pages.map((p) => p.id)));
+      for (const record of mirror.databases) {
+        expect((await dbOf(fresh, ws.id, record.id))!.properties).toEqual(record.properties);
+        const rows = (await fresh.readRows(record.id)).map((r) => [r.id, r.values, !!r.trashedAt]);
+        expect(rows).toEqual(
+          (await store.readRows(record.id)).map((r) => [r.id, r.values, !!r.trashedAt]),
+        );
+      }
+      expect(again.views.map((v) => v.id)).toEqual([view.id]);
+      expect(again.favourites.map((f) => f.pageId)).toEqual([r1.id]);
+      // The upload keeps the databases held here.
+      await store.beginUpload(ws.id, ACCOUNT, ops);
+      expect((await store.dbHolds(ws.id)).map((h) => [h.databaseId, h.mode, h.complete])).toEqual(
+        sorted([db.id, people.id]).map((id) => [id, 'full', true]),
+      );
+      await fresh.close();
       await store.close();
     });
   });

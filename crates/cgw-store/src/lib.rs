@@ -20,6 +20,11 @@
 //! plan, sent with `setAside`) removes a page of a synced workspace whose log holds unsent updates,
 //! its log is set aside first, in the same transaction.
 //!
+//! Store schema 4 (Phase 4, databases) adds database and view records, rows (pages of kind `row`,
+//! kept in their own table and never in `readMirror`) and holds: which databases' rows this device
+//! keeps. A database page that goes takes its record, views, rows (each as a removed page) and
+//! hold, in the same transaction; a remote plan's `setAside` names an id for each removed row too.
+//!
 //! An older store is copied beside itself (`workspace.v{n}.db`) and then migrated in one
 //! transaction; a newer one is refused, never wiped.
 
@@ -31,7 +36,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// The store schema version this build reads and writes.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// The largest frame accepted: a few large images and a page's log fit well inside.
 pub const MAX_FRAME: usize = 256 * 1024 * 1024;
@@ -241,12 +246,46 @@ CREATE TABLE quarantine_parts (
 CREATE TABLE repairs (page_id TEXT PRIMARY KEY, body TEXT NOT NULL);
 "#;
 
+/// Schema 4 (Phase 4, databases): database and view records, the rows this device holds (a row's
+/// trash root and time in columns, for the trash and search), and the holds, each with its
+/// workspace for a lost workspace and a listing.
+const MIGRATE_3_TO_4: &str = r#"
+CREATE TABLE databases (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, body TEXT NOT NULL);
+CREATE INDEX databases_workspace ON databases (workspace_id);
+CREATE TABLE db_views (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, database_id TEXT NOT NULL, body TEXT NOT NULL);
+CREATE INDEX db_views_workspace ON db_views (workspace_id);
+CREATE INDEX db_views_database ON db_views (database_id);
+CREATE TABLE db_rows (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, database_id TEXT NOT NULL, trash_root_id TEXT,
+  trashed_at TEXT, body TEXT NOT NULL);
+CREATE INDEX db_rows_database ON db_rows (database_id);
+CREATE INDEX db_rows_workspace ON db_rows (workspace_id);
+CREATE INDEX db_rows_trash ON db_rows (trash_root_id) WHERE trash_root_id IS NOT NULL;
+CREATE TABLE db_holds (database_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, body TEXT NOT NULL);
+CREATE INDEX db_holds_workspace ON db_holds (workspace_id);
+"#;
+
 /// The migrations in order: `MIGRATIONS[n - 1]` takes a store from version `n` to `n + 1`.
-const MIGRATIONS: [&str; 2] = [MIGRATE_1_TO_2, MIGRATE_2_TO_3];
+const MIGRATIONS: [&str; 3] = [MIGRATE_1_TO_2, MIGRATE_2_TO_3, MIGRATE_3_TO_4];
 const _: () = assert!(MIGRATIONS.len() as i64 == SCHEMA_VERSION - 1);
 
 /// A workspace that syncs, for a query that names its row `w`: `localOnly` is false in its body.
 const SYNCED: &str = "COALESCE(json_extract(w.body, '$.localOnly'), 0) = 0";
+
+/// The ids of a workspace's pages and rows (the workspace is `?1`): rows are pages with documents.
+const MINE: &str =
+    "(SELECT id FROM pages WHERE workspace_id = ?1 UNION ALL SELECT id FROM db_rows WHERE workspace_id = ?1)";
+
+/// Whether the page or row whose id the SQL expression gives belongs to a synced workspace.
+fn synced_page(id: &str) -> String {
+    format!(
+        "(EXISTS (SELECT 1 FROM pages p JOIN workspaces w ON w.id = p.workspace_id
+           WHERE p.id = {id} AND {SYNCED})
+         OR EXISTS (SELECT 1 FROM db_rows p JOIN workspaces w ON w.id = p.workspace_id
+           WHERE p.id = {id} AND {SYNCED}))"
+    )
+}
 
 /// A page whose document this device holds, for a query that names its row `p`: a cursor, an
 /// update, or a snapshot.
@@ -425,6 +464,13 @@ impl Store {
             "settleQuarantine" => none(self.settle_quarantine(&header)?),
             "repairState" => none(self.repair_state(check_id(str_of(&header, "pageId")?)?)?),
             "setRepairState" => none(self.set_repair_state(&header["state"])?),
+            "readRows" => none(self.read_rows(check_id(str_of(&header, "databaseId")?)?)?),
+            "getRow" => none(self.get_row(check_id(str_of(&header, "id")?)?)?),
+            "rowIds" => none(self.row_ids(&header)?),
+            "trashedRows" => none(self.trashed_rows(check_id(str_of(&header, "workspaceId")?)?)?),
+            "dbHold" => none(self.db_hold(check_id(str_of(&header, "databaseId")?)?)?),
+            "dbHolds" => none(self.db_holds(optional_id(&header, "workspaceId")?)?),
+            "holdDatabase" => none(self.hold_database(&header["hold"])?),
             other => fail(format!("unknown request: {other:.40}")),
         }
     }
@@ -515,10 +561,7 @@ impl Store {
         )?;
         // In a synced workspace, updates not yet on the server stay to be pushed.
         let keep_unsent: bool = tx.query_row(
-            &format!(
-                "SELECT EXISTS (SELECT 1 FROM pages p JOIN workspaces w ON w.id = p.workspace_id
-                 WHERE p.id = ?1 AND {SYNCED})"
-            ),
+            &format!("SELECT {}", synced_page("?1")),
             params![page],
             |r| r.get(0),
         )?;
@@ -571,11 +614,10 @@ impl Store {
                SELECT u.page_id, u.local_seq, u.update_id, u.data,
                  FIRST_VALUE(u.update_id) OVER (PARTITION BY u.page_id ORDER BY u.local_seq) AS first_id
                FROM doc_updates u
-               JOIN pages p ON p.id = u.page_id
-               JOIN workspaces w ON w.id = p.workspace_id
-               WHERE u.seq IS NULL AND {SYNCED})
+               WHERE u.seq IS NULL AND {})
              SELECT page_id, local_seq, update_id, data FROM unsent
-             ORDER BY first_id, page_id, local_seq LIMIT ?1"
+             ORDER BY first_id, page_id, local_seq LIMIT ?1",
+            synced_page("u.page_id")
         ))?;
         let mut rows = statement.query(params![limit.max(0)])?;
         let mut updates = Vec::new();
@@ -702,10 +744,9 @@ impl Store {
 
     /// The cursors of a workspace's pages, by page id.
     fn doc_cursors(&mut self, workspace: &str) -> Result<Value> {
-        let mut statement = self.conn.prepare(
-            "SELECT c.page_id, c.head_seq, c.epoch FROM doc_cursors c JOIN pages p ON p.id = c.page_id
-             WHERE p.workspace_id = ?1",
-        )?;
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT c.page_id, c.head_seq, c.epoch FROM doc_cursors c WHERE c.page_id IN {MINE}"
+        ))?;
         let rows = statement.query_map(params![workspace], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -856,6 +897,8 @@ impl Store {
             "favourites": read("SELECT body FROM favourites", "SELECT body FROM favourites WHERE workspace_id = ?1")?,
             "visits": read("SELECT body FROM visits", "SELECT body FROM visits WHERE workspace_id = ?1")?,
             "assets": read("SELECT body FROM assets", "SELECT body FROM assets WHERE workspace_id = ?1")?,
+            "databases": read("SELECT body FROM databases", "SELECT body FROM databases WHERE workspace_id = ?1")?,
+            "views": read("SELECT body FROM db_views", "SELECT body FROM db_views WHERE workspace_id = ?1")?,
         });
         tx.commit()?;
         Ok(snapshot)
@@ -866,9 +909,13 @@ impl Store {
     /// plan's parts go first: answered operations leave the outbox, lost workspaces go with all they
     /// hold, and an upload's creates replace a workspace's outbox.
     ///
-    /// A remote plan comes with `setAside` (`reason`, `at`, and `ids`, one per deleted page): before
-    /// anything else, each deleted page of a synced workspace whose log holds an unsent update has
-    /// its log set aside under its id. A local plan (the user's own delete) has none.
+    /// A remote plan comes with `setAside` (`reason`, `at`, and `ids`, one per deleted page, then
+    /// one per deleted row): before anything else, each deleted page or row of a synced workspace
+    /// whose log holds an unsent update has its log set aside under its id. A local plan (the
+    /// user's own delete) has none.
+    ///
+    /// Schema 4: databases, views, rows and holds are written after the pages; a deleted database
+    /// page takes its record, views, hold and every row of it (as a removed page) with it.
     fn apply_plan(&mut self, plan: &Value, set_aside_with: Option<&Value>) -> Result<Value> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -887,10 +934,11 @@ impl Store {
         if let Some(aside) = set_aside_with {
             let reason = reason_of(aside)?;
             let at = time_of(aside, "at")?;
-            let pages = ids_of(plan, "deletePages")?;
+            let mut pages = ids_of(plan, "deletePages")?;
+            pages.extend(ids_of(plan, "deleteRows")?);
             let ids = ids_of(aside, "ids")?;
             if ids.len() != pages.len() {
-                return fail("applyPlan: one set-aside id per deleted page");
+                return fail("applyPlan: one set-aside id per deleted page and row");
             }
             for (page, id) in pages.iter().zip(&ids) {
                 set_aside(&tx, page, reason, id, at)?;
@@ -997,10 +1045,61 @@ impl Store {
                 )?;
             }
         }
+        for d in list("databases") {
+            tx.execute(
+                "INSERT OR REPLACE INTO databases (id, workspace_id, body) VALUES (?1, ?2, ?3)",
+                params![
+                    check_id(str_of(&d, "id")?)?,
+                    check_id(str_of(&d, "workspaceId")?)?,
+                    d.to_string()
+                ],
+            )?;
+        }
+        for v in list("views") {
+            tx.execute(
+                "INSERT OR REPLACE INTO db_views (id, workspace_id, database_id, body)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    check_id(str_of(&v, "id")?)?,
+                    check_id(str_of(&v, "workspaceId")?)?,
+                    check_id(str_of(&v, "databaseId")?)?,
+                    v.to_string()
+                ],
+            )?;
+        }
+        for r in list("rows") {
+            let database = check_id(str_of(&r, "databaseId")?)?;
+            check_id(str_of(&r, "sectionId")?)?;
+            if r.get("parentPageId").and_then(Value::as_str) != Some(database) {
+                return fail("applyPlan: a row's parent is its database");
+            }
+            tx.execute(
+                "INSERT OR REPLACE INTO db_rows (id, workspace_id, database_id, trash_root_id,
+                   trashed_at, body) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    check_id(str_of(&r, "id")?)?,
+                    check_id(str_of(&r, "workspaceId")?)?,
+                    database,
+                    optional_id(&r, "trashRootId")?,
+                    r.get("trashedAt").and_then(Value::as_str),
+                    r.to_string()
+                ],
+            )?;
+        }
+        for h in list("holds") {
+            put_hold(&tx, &h)?;
+        }
+        for id in ids_of(plan, "deleteViews")? {
+            tx.execute("DELETE FROM db_views WHERE id = ?1", params![id])?;
+        }
         for op in list("outbox") {
             insert_op(&tx, &op)?;
         }
         for id in ids_of(plan, "deletePages")? {
+            drop_database(&tx, &id)?;
+            drop_page(&tx, &id)?;
+        }
+        for id in ids_of(plan, "deleteRows")? {
             drop_page(&tx, &id)?;
         }
         if let Some(cursor) = present(plan, "cursor") {
@@ -1129,9 +1228,13 @@ impl Store {
         if expression.is_empty() {
             return Ok(json!([]));
         }
+        // A page not in the trash, or a row that does not read as trashed (nor its database).
         let mut statement = self.conn.prepare(
-            "SELECT s.page_id, s.title, s.text FROM search s JOIN pages p ON p.id = s.page_id
-             WHERE search MATCH ?1 AND s.workspace_id = ?2 AND p.trashed_at IS NULL
+            "SELECT s.page_id, s.title, s.text FROM search s
+             WHERE search MATCH ?1 AND s.workspace_id = ?2 AND (
+               EXISTS (SELECT 1 FROM pages p WHERE p.id = s.page_id AND p.trashed_at IS NULL)
+               OR EXISTS (SELECT 1 FROM db_rows r JOIN pages d ON d.id = r.database_id
+                 WHERE r.id = s.page_id AND r.trashed_at IS NULL AND d.trashed_at IS NULL))
              ORDER BY bm25(search, 0.0, 0.0, 4.0, 1.0) LIMIT ?3",
         )?;
         let rows = statement.query_map(params![expression, workspace, limit], |r| {
@@ -1274,10 +1377,10 @@ impl Store {
         Ok(Value::Array(out))
     }
 
-    /// The workspace's pages whose document this device holds, in id order.
+    /// The workspace's pages (and rows) whose document this device holds, in id order.
     fn held_pages(&mut self, workspace: &str) -> Result<Value> {
         let mut statement = self.conn.prepare(&format!(
-            "SELECT p.id FROM pages p WHERE p.workspace_id = ?1 AND {HELD} ORDER BY p.id"
+            "SELECT p.id FROM {MINE} p WHERE {HELD} ORDER BY p.id"
         ))?;
         let rows = statement.query_map(params![workspace], |r| r.get::<_, String>(0))?;
         Ok(Value::Array(
@@ -1294,13 +1397,13 @@ impl Store {
             .query_row(
                 &format!(
                     "SELECT
-                   (SELECT COUNT(*) FROM pages p WHERE p.workspace_id = ?1 AND {HELD}),
+                   (SELECT COUNT(*) FROM {MINE} p WHERE {HELD}),
                    (SELECT COALESCE(SUM(LENGTH(l.snapshot)), 0) FROM doc_logs l
-                      JOIN pages p ON p.id = l.page_id WHERE p.workspace_id = ?1)
+                      WHERE l.page_id IN {MINE})
                    + (SELECT COALESCE(SUM(LENGTH(u.data)), 0) FROM doc_updates u
-                      JOIN pages p ON p.id = u.page_id WHERE p.workspace_id = ?1),
+                      WHERE u.page_id IN {MINE}),
                    (SELECT COALESCE(SUM(h.size_bytes), 0) FROM history h
-                      JOIN pages p ON p.id = h.page_id WHERE p.workspace_id = ?1),
+                      WHERE h.page_id IN {MINE}),
                    (SELECT COALESCE(SUM(LENGTH(q.data)), 0) FROM quarantine_parts q
                       JOIN quarantine e ON e.id = q.entry_id WHERE e.workspace_id = ?1)"
                 ),
@@ -1423,6 +1526,119 @@ impl Store {
         )?;
         Ok(Value::Null)
     }
+
+    // Databases (store schema 4) -----------------------------------------------------------------
+
+    /// The JSON bodies a query answers, in its order.
+    fn bodies(&mut self, sql: &str, args: impl rusqlite::Params) -> Result<Value> {
+        let mut statement = self.conn.prepare(sql)?;
+        let rows = statement.query_map(args, |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(serde_json::from_str::<Value>(&row?)?);
+        }
+        Ok(Value::Array(out))
+    }
+
+    /// Every row this device holds of a database, trashed rows and templates included, by id.
+    fn read_rows(&mut self, database: &str) -> Result<Value> {
+        self.bodies(
+            "SELECT body FROM db_rows WHERE database_id = ?1 ORDER BY id",
+            params![database],
+        )
+    }
+
+    fn get_row(&mut self, id: &str) -> Result<Value> {
+        let body: Option<String> = self
+            .conn
+            .query_row("SELECT body FROM db_rows WHERE id = ?1", params![id], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        Ok(match body {
+            Some(text) => serde_json::from_str(&text)?,
+            None => Value::Null,
+        })
+    }
+
+    /// The ids of the rows held of a database (`databaseId`) or of a workspace (`workspaceId`).
+    fn row_ids(&mut self, header: &Value) -> Result<Value> {
+        let (sql, id) = match optional_id(header, "databaseId")? {
+            Some(id) => (
+                "SELECT id FROM db_rows WHERE database_id = ?1 ORDER BY id",
+                id,
+            ),
+            None => (
+                "SELECT id FROM db_rows WHERE workspace_id = ?1 ORDER BY id",
+                check_id(str_of(header, "workspaceId")?)?,
+            ),
+        };
+        let mut statement = self.conn.prepare(sql)?;
+        let rows = statement.query_map(params![id], |r| r.get::<_, String>(0))?;
+        Ok(Value::Array(
+            rows.map(|row| row.map(Value::String))
+                .collect::<rusqlite::Result<_>>()?,
+        ))
+    }
+
+    /// Rows of a workspace that are their own trash root, newest first.
+    fn trashed_rows(&mut self, workspace: &str) -> Result<Value> {
+        self.bodies(
+            "SELECT body FROM db_rows WHERE workspace_id = ?1 AND trash_root_id = id
+             ORDER BY trashed_at DESC, id",
+            params![workspace],
+        )
+    }
+
+    fn db_hold(&mut self, database: &str) -> Result<Value> {
+        let body: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT body FROM db_holds WHERE database_id = ?1",
+                params![database],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(match body {
+            Some(text) => serde_json::from_str(&text)?,
+            None => Value::Null,
+        })
+    }
+
+    /// A workspace's holds (every one when null), by database id.
+    fn db_holds(&mut self, workspace: Option<&str>) -> Result<Value> {
+        self.bodies(
+            "SELECT body FROM db_holds WHERE ?1 IS NULL OR workspace_id = ?1 ORDER BY database_id",
+            params![workspace],
+        )
+    }
+
+    fn hold_database(&mut self, hold: &Value) -> Result<Value> {
+        let tx = self.conn.transaction()?;
+        put_hold(&tx, hold)?;
+        tx.commit()?;
+        Ok(Value::Null)
+    }
+}
+
+/// A hold, checked (ids, its mode, whether it is complete, where its fetch goes on) and written.
+fn put_hold(tx: &Transaction, hold: &Value) -> Result<()> {
+    let database = check_id(str_of(hold, "databaseId")?)?;
+    let workspace = check_id(str_of(hold, "workspaceId")?)?;
+    let mode = str_of(hold, "mode")?;
+    if mode != "full" && mode != "partial" {
+        return fail(format!("hold: not a mode: {mode:.20}"));
+    }
+    if !hold.get("complete").is_some_and(Value::is_boolean) {
+        return fail("hold: missing boolean \"complete\"");
+    }
+    optional_id(hold, "after")?;
+    time_of(hold, "heldAt")?;
+    tx.execute(
+        "INSERT OR REPLACE INTO db_holds (database_id, workspace_id, body) VALUES (?1, ?2, ?3)",
+        params![database, workspace, hold.to_string()],
+    )?;
+    Ok(())
 }
 
 /// Why a log was set aside: a short code such as `page.removed` or `doc.epochMismatch`.
@@ -1462,8 +1678,10 @@ fn set_aside(
     let found: Option<(String, Option<String>)> = tx
         .query_row(
             &format!(
-                "SELECT p.workspace_id, json_extract(p.body, '$.title') FROM pages p
-                 JOIN workspaces w ON w.id = p.workspace_id WHERE p.id = ?1 AND {SYNCED}"
+                "SELECT p.workspace_id, json_extract(p.body, '$.title') FROM
+                   (SELECT workspace_id, body FROM pages WHERE id = ?1
+                    UNION ALL SELECT workspace_id, body FROM db_rows WHERE id = ?1) p
+                 JOIN workspaces w ON w.id = p.workspace_id WHERE {SYNCED}"
             ),
             params![page],
             |r| Ok((r.get(0)?, r.get(1)?)),
@@ -1526,13 +1744,14 @@ fn set_aside(
     Ok(Some((entry, parts)))
 }
 
-/// A page removed for good: its record, document and its cursor, history, search entry,
+/// A page (or a row) removed for good: its record, document and its cursor, history, search entry,
 /// favourites, visits, pin and repair state. What was set aside from it stays.
 fn drop_page(tx: &Transaction, id: &str) -> Result<()> {
     for sql in [
         "DELETE FROM pins WHERE page_id = ?1",
         "DELETE FROM repairs WHERE page_id = ?1",
         "DELETE FROM pages WHERE id = ?1",
+        "DELETE FROM db_rows WHERE id = ?1",
         "DELETE FROM doc_logs WHERE page_id = ?1",
         "DELETE FROM doc_updates WHERE page_id = ?1",
         "DELETE FROM doc_cursors WHERE page_id = ?1",
@@ -1546,9 +1765,30 @@ fn drop_page(tx: &Transaction, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// A workspace removed with all it holds: its pages (as `drop_page`), sections, favourites,
-/// visits, search entries, asset records, outbox operations and change-feed cursor. Returns its
-/// asset ids: their files go after the commit.
+/// A database page gone: its record, views and hold, and every row of it as a removed page (a
+/// remote plan names them in `deleteRows`, so they were set aside first where they must be).
+fn drop_database(tx: &Transaction, id: &str) -> Result<()> {
+    let rows: Vec<String> = {
+        let mut statement = tx.prepare("SELECT id FROM db_rows WHERE database_id = ?1")?;
+        let rows = statement.query_map(params![id], |r| r.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<_>>()?
+    };
+    for row in rows {
+        drop_page(tx, &row)?;
+    }
+    for sql in [
+        "DELETE FROM databases WHERE id = ?1",
+        "DELETE FROM db_views WHERE database_id = ?1",
+        "DELETE FROM db_holds WHERE database_id = ?1",
+    ] {
+        tx.execute(sql, params![id])?;
+    }
+    Ok(())
+}
+
+/// A workspace removed with all it holds: its pages and rows (as `drop_page`), sections, databases,
+/// views, holds, favourites, visits, search entries, asset records, outbox operations and
+/// change-feed cursor. Returns its asset ids: their files go after the commit.
 fn drop_workspace(tx: &Transaction, id: &str) -> Result<Vec<String>> {
     let ids = |sql: &str| -> Result<Vec<String>> {
         let mut statement = tx.prepare(sql)?;
@@ -1559,8 +1799,14 @@ fn drop_workspace(tx: &Transaction, id: &str) -> Result<Vec<String>> {
     for page in ids("SELECT id FROM pages WHERE workspace_id = ?1")? {
         drop_page(tx, &page)?;
     }
+    for row in ids("SELECT id FROM db_rows WHERE workspace_id = ?1")? {
+        drop_page(tx, &row)?;
+    }
     let assets = ids("SELECT id FROM assets WHERE workspace_id = ?1")?;
     for sql in [
+        "DELETE FROM databases WHERE workspace_id = ?1",
+        "DELETE FROM db_views WHERE workspace_id = ?1",
+        "DELETE FROM db_holds WHERE workspace_id = ?1",
         "DELETE FROM assets WHERE workspace_id = ?1",
         "DELETE FROM sections WHERE workspace_id = ?1",
         "DELETE FROM favourites WHERE workspace_id = ?1",
@@ -1735,6 +1981,18 @@ mod tests {
         serde_json::from_value(value.clone()).unwrap()
     }
 
+    /// A read an earlier release answered, asked of this build: `readMirror` now also answers
+    /// databases and views (schema 4), which a migrated store holds none of.
+    fn read_as_before(store: &mut Store, request: &Value) -> (Value, Vec<Vec<u8>>) {
+        let (mut answer, blobs) = call(store, request.clone(), &[]);
+        if request["op"] == "readMirror" {
+            let ok = answer["ok"].as_object_mut().expect("a mirror");
+            assert_eq!(ok.remove("databases"), Some(json!([])), "{request}");
+            assert_eq!(ok.remove("views"), Some(json!([])), "{request}");
+        }
+        (answer, blobs)
+    }
+
     /// The answer the release gave to a request of the kind, for a key's value.
     fn answer_to<'a>(expected: &'a Value, op: &str, key: &str, id: &str) -> &'a Value {
         expected["reads"]
@@ -1756,7 +2014,7 @@ mod tests {
 
             // Every read the old store answered is answered the same way.
             for read in expected["reads"].as_array().unwrap() {
-                let (answer, blobs) = call(&mut store, read["request"].clone(), &[]);
+                let (answer, blobs) = read_as_before(&mut store, &read["request"]);
                 assert_eq!(
                     answer["ok"], read["answer"],
                     "v{version}: {}",
@@ -1770,13 +2028,24 @@ mod tests {
                 );
             }
 
-            // The new collections are there, and empty; the held pages and usage add up.
+            // Schema 3's collections are there (empty, from a store before it; a version-3 store's
+            // answered above); the held pages and usage add up. Schema 4's are there and empty.
             let (mirror, _) = call(&mut store, json!({ "op": "readMirror" }), &[]);
             let pages = mirror["ok"]["pages"].as_array().unwrap();
             for workspace in expected["workspaces"].as_array().unwrap() {
                 let ws = workspace.as_str().unwrap();
                 let (pins, _) = call(&mut store, json!({ "op": "pins", "workspaceId": ws }), &[]);
-                assert_eq!(pins["ok"], json!([]));
+                if version < 3 {
+                    assert_eq!(pins["ok"], json!([]));
+                }
+                for request in [
+                    json!({ "op": "dbHolds", "workspaceId": ws }),
+                    json!({ "op": "trashedRows", "workspaceId": ws }),
+                    json!({ "op": "rowIds", "workspaceId": ws }),
+                ] {
+                    let (answer, _) = call(&mut store, request.clone(), &[]);
+                    assert_eq!(answer["ok"], json!([]), "v{version}: {request}");
+                }
                 let mut held = Vec::new();
                 let mut doc_bytes = 0;
                 for page in pages.iter().filter(|p| p["workspaceId"] == *workspace) {
@@ -1796,7 +2065,17 @@ mod tests {
                         json!({ "op": "repairState", "pageId": id }),
                         &[],
                     );
-                    assert_eq!(repair["ok"], Value::Null);
+                    if version < 3 {
+                        assert_eq!(repair["ok"], Value::Null);
+                    }
+                    let (rows, _) = call(
+                        &mut store,
+                        json!({ "op": "readRows", "databaseId": id }),
+                        &[],
+                    );
+                    assert_eq!(rows["ok"], json!([]));
+                    let (row, _) = call(&mut store, json!({ "op": "getRow", "id": id }), &[]);
+                    assert_eq!(row["ok"], Value::Null);
                 }
                 held.sort();
                 let (answer, _) = call(
@@ -1812,14 +2091,18 @@ mod tests {
                 );
                 assert_eq!(usage["ok"]["pages"], held.len(), "v{version}");
                 assert_eq!(usage["ok"]["docBytes"], doc_bytes, "v{version}");
-                assert_eq!(usage["ok"]["quarantineBytes"], 0);
+                if version < 3 {
+                    assert_eq!(usage["ok"]["quarantineBytes"], 0);
+                }
             }
-            let (entries, blobs) = call(
-                &mut store,
-                json!({ "op": "quarantine", "workspaceId": null }),
-                &[],
-            );
-            assert_eq!((entries["ok"].clone(), blobs.len()), (json!([]), 0));
+            if version < 3 {
+                let (entries, blobs) = call(
+                    &mut store,
+                    json!({ "op": "quarantine", "workspaceId": null }),
+                    &[],
+                );
+                assert_eq!((entries["ok"].clone(), blobs.len()), (json!([]), 0));
+            }
 
             // The update kept in the corrupt area is still there, and the rest of its log loads.
             let corrupt = &expected["corrupt"];
@@ -1836,7 +2119,7 @@ mod tests {
                 .unwrap();
             assert_eq!(kept, blobs_of(&json!([corrupt["data"]]))[0]);
 
-            // What schema 3 adds works on what the old store wrote.
+            // What schema 3 adds works on what the old store wrote (schema 4's: the tests below).
             let page = expected["logPage"].as_str().unwrap();
             let entry_id = "0190f5a0-0000-7000-8000-00000000e001";
             let (entry, parts) = call(
@@ -1866,80 +2149,86 @@ mod tests {
     }
 
     #[test]
-    fn copies_a_version_2_store_before_the_migration_changes_anything() {
-        let (dir, _) = fixture(2);
-        // A write still in the WAL (no checkpoint runs while this connection is open): the copy
-        // holds it only if the WAL went in first.
-        let old = Connection::open(dir.path().join("workspace.db")).unwrap();
-        old.execute_batch("PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;")
-            .unwrap();
-        old.execute(
-            "INSERT INTO prefs (key, value) VALUES ('late', '\"in the WAL\"')",
-            [],
-        )
-        .unwrap();
-        let mut store = Store::open(dir.path()).unwrap();
-        drop(old);
-        let (answer, _) = call(&mut store, json!({ "op": "getPref", "key": "late" }), &[]);
-        assert_eq!(answer["ok"], "in the WAL");
-        let copy = Connection::open(dir.path().join("workspace.v2.db")).unwrap();
-        let (version, late, pins): (String, String, i64) = copy
-            .query_row(
-                "SELECT (SELECT value FROM meta WHERE key = 'schemaVersion'),
-                        (SELECT value FROM prefs WHERE key = 'late'),
-                        (SELECT COUNT(*) FROM sqlite_master WHERE name = 'pins')",
+    fn copies_an_older_store_before_the_migration_changes_anything() {
+        // Each fixture, and a table the next schema adds.
+        for (from, added) in [(2, "pins"), (3, "db_rows")] {
+            let (dir, _) = fixture(from);
+            // A write still in the WAL (no checkpoint runs while this connection is open): the
+            // copy holds it only if the WAL went in first.
+            let old = Connection::open(dir.path().join("workspace.db")).unwrap();
+            old.execute_batch("PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;")
+                .unwrap();
+            old.execute(
+                "INSERT INTO prefs (key, value) VALUES ('late', '\"in the WAL\"')",
                 [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .unwrap();
-        assert_eq!(
-            (version.as_str(), late.as_str(), pins),
-            ("2", "\"in the WAL\"", 0)
-        );
-        let tables: i64 = store
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE name IN
-                   ('pins', 'quarantine', 'quarantine_parts', 'repairs')",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(tables, 4);
+            let mut store = Store::open(dir.path()).unwrap();
+            drop(old);
+            let (answer, _) = call(&mut store, json!({ "op": "getPref", "key": "late" }), &[]);
+            assert_eq!(answer["ok"], "in the WAL");
+            let copy = Connection::open(dir.path().join(format!("workspace.v{from}.db"))).unwrap();
+            let (version, late, tables): (String, String, i64) = copy
+                .query_row(
+                    "SELECT (SELECT value FROM meta WHERE key = 'schemaVersion'),
+                            (SELECT value FROM prefs WHERE key = 'late'),
+                            (SELECT COUNT(*) FROM sqlite_master WHERE name = ?1)",
+                    params![added],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap();
+            assert_eq!(
+                (version, late.as_str(), tables),
+                (from.to_string(), "\"in the WAL\"", 0)
+            );
+            let tables: i64 = store
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE name IN
+                       ('pins', 'quarantine', 'quarantine_parts', 'repairs',
+                        'databases', 'db_views', 'db_rows', 'db_holds')",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(tables, 8);
+        }
     }
 
     #[test]
     fn a_migration_that_fails_leaves_the_store_as_it_was() {
-        let (dir, expected) = fixture(2);
+        let (dir, expected) = fixture(3);
         let path = dir.path().join("workspace.db");
         let before = fs::read(&path).unwrap();
-        // Schema 3's tables are made, then a statement fails: the whole migration rolls back.
-        let failing = format!("{MIGRATE_2_TO_3}\nINSERT INTO no_such_table VALUES (1);");
-        match Store::open_with(dir.path(), &[MIGRATE_1_TO_2, &failing]) {
+        // Schema 4's tables are made, then a statement fails: the whole migration rolls back.
+        let failing = format!("{MIGRATE_3_TO_4}\nINSERT INTO no_such_table VALUES (1);");
+        match Store::open_with(dir.path(), &[MIGRATE_1_TO_2, MIGRATE_2_TO_3, &failing]) {
             Err(error) => assert!(error.0.contains("no_such_table"), "{}", error.0),
             Ok(_) => panic!("the failing migration succeeded"),
         }
         assert_eq!(fs::read(&path).unwrap(), before);
         assert_eq!(
-            fs::read(dir.path().join("workspace.v2.db")).unwrap(),
+            fs::read(dir.path().join("workspace.v3.db")).unwrap(),
             before
         );
         let conn = Connection::open(&path).unwrap();
-        let (version, pins): (String, i64) = conn
+        let (version, rows): (String, i64) = conn
             .query_row(
                 "SELECT (SELECT value FROM meta WHERE key = 'schemaVersion'),
-                        (SELECT COUNT(*) FROM sqlite_master WHERE name = 'pins')",
+                        (SELECT COUNT(*) FROM sqlite_master WHERE name = 'db_rows')",
                 [],
                 |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .unwrap();
-        assert_eq!((version.as_str(), pins), ("2", 0));
+        assert_eq!((version.as_str(), rows), ("3", 0));
         drop(conn);
         // The next start migrates it, with all it held.
         let mut store = Store::open(dir.path()).unwrap();
-        let read = &expected["reads"][0];
-        let (answer, _) = call(&mut store, read["request"].clone(), &[]);
-        assert_eq!(answer["ok"], read["answer"]);
+        for read in expected["reads"].as_array().unwrap() {
+            let (answer, blobs) = read_as_before(&mut store, &read["request"]);
+            assert_eq!(answer["ok"], read["answer"], "{}", read["request"]);
+            assert_eq!(blobs, blobs_of(&read["blobs"]));
+        }
     }
 
     #[test]
@@ -2276,5 +2565,294 @@ mod tests {
         assert_eq!(answer["ok"], Value::Null);
         let (_, blobs) = call(&mut store, json!({ "op": "loadDoc", "pageId": PAGE }), &[]);
         assert!(blobs.is_empty());
+    }
+
+    const DB: &str = "0193a1b2-c3d4-7e5f-8a9b-000000000050";
+    const VIEW: &str = "0193a1b2-c3d4-7e5f-8a9b-000000000051";
+    const ROW1: &str = "0193a1b2-c3d4-7e5f-8a9b-000000000061";
+    const ROW2: &str = "0193a1b2-c3d4-7e5f-8a9b-000000000062";
+
+    fn row_body(id: &str, title: &str, trashed: Option<&str>) -> Value {
+        json!({ "id": id, "workspaceId": WS, "sectionId": SECTION, "parentPageId": DB,
+                "kind": "row", "title": title, "databaseId": DB, "values": { "Numb0001": 1 },
+                "trashedAt": trashed, "trashRootId": trashed.map(|_| id) })
+    }
+
+    fn hold_body(mode: &str) -> Value {
+        json!({ "databaseId": DB, "workspaceId": WS, "mode": mode, "complete": true,
+                "after": null, "heldAt": "2026-11-12T00:00:00.000Z" })
+    }
+
+    /// A synced workspace with a database page, its record, a view, two rows and a hold.
+    fn database_store(dir: &Path) -> Store {
+        let mut store = Store::open(dir).unwrap();
+        let database_page = json!({ "id": DB, "workspaceId": WS, "sectionId": SECTION,
+                                    "parentPageId": PAGE, "kind": "database", "title": "Tasks",
+                                    "trashedAt": null });
+        let plan = json!({
+            "workspaces": [{ "id": WS, "name": "Synced", "localOnly": false }],
+            "pages": [page_body(), database_page],
+            "databases": [{ "id": DB, "workspaceId": WS, "properties": [], "version": 1 }],
+            "views": [{ "id": VIEW, "workspaceId": WS, "databaseId": DB, "name": "Table" }],
+            "rows": [row_body(ROW1, "One", None),
+                     row_body(ROW2, "Two", Some("2026-11-01T00:00:00.000Z"))],
+            "holds": [hold_body("full")],
+        });
+        let (answer, _) = call(&mut store, json!({ "op": "applyPlan", "plan": plan }), &[]);
+        assert_eq!(answer["ok"], Value::Null, "{answer}");
+        store
+    }
+
+    #[test]
+    fn keeps_databases_views_rows_and_holds_apart_from_the_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = database_store(dir.path());
+        let (mirror, _) = call(&mut store, json!({ "op": "readMirror" }), &[]);
+        assert_eq!(mirror["ok"]["databases"][0]["id"], DB);
+        assert_eq!(mirror["ok"]["views"][0]["id"], VIEW);
+        let kinds: Vec<&Value> = mirror["ok"]["pages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| &p["kind"])
+            .collect();
+        assert!(kinds.iter().all(|k| *k != "row"), "{kinds:?}");
+        let (one, _) = call(
+            &mut store,
+            json!({ "op": "readMirror", "workspaceId": WS }),
+            &[],
+        );
+        assert_eq!(one["ok"]["views"], mirror["ok"]["views"]);
+        let (rows, _) = call(
+            &mut store,
+            json!({ "op": "readRows", "databaseId": DB }),
+            &[],
+        );
+        assert_eq!(
+            rows["ok"],
+            json!([
+                row_body(ROW1, "One", None),
+                row_body(ROW2, "Two", Some("2026-11-01T00:00:00.000Z"))
+            ])
+        );
+        let (row, _) = call(&mut store, json!({ "op": "getRow", "id": ROW1 }), &[]);
+        assert_eq!(row["ok"], row_body(ROW1, "One", None));
+        for request in [
+            json!({ "op": "rowIds", "databaseId": DB }),
+            json!({ "op": "rowIds", "workspaceId": WS }),
+        ] {
+            let (ids, _) = call(&mut store, request, &[]);
+            assert_eq!(ids["ok"], json!([ROW1, ROW2]));
+        }
+        let (trash, _) = call(
+            &mut store,
+            json!({ "op": "trashedRows", "workspaceId": WS }),
+            &[],
+        );
+        assert_eq!(trash["ok"][0]["id"], ROW2);
+        assert_eq!(trash["ok"].as_array().unwrap().len(), 1);
+        // Holds: written by plans and by holdDatabase, checked, listed.
+        call(
+            &mut store,
+            json!({ "op": "holdDatabase", "hold": hold_body("partial") }),
+            &[],
+        );
+        let (hold, _) = call(&mut store, json!({ "op": "dbHold", "databaseId": DB }), &[]);
+        assert_eq!(hold["ok"], hold_body("partial"));
+        for request in [
+            json!({ "op": "dbHolds", "workspaceId": WS }),
+            json!({ "op": "dbHolds", "workspaceId": null }),
+        ] {
+            let (holds, _) = call(&mut store, request, &[]);
+            assert_eq!(holds["ok"], json!([hold_body("partial")]));
+        }
+        for bad in [
+            json!({ "op": "holdDatabase", "hold": hold_body("most") }),
+            json!({ "op": "holdDatabase", "hold": { "databaseId": DB, "workspaceId": WS,
+                    "mode": "full", "heldAt": "x" } }),
+            json!({ "op": "holdDatabase", "hold": { "databaseId": "../x", "workspaceId": WS,
+                    "mode": "full", "complete": true, "heldAt": "x" } }),
+        ] {
+            let (answer, _) = call(&mut store, bad, &[]);
+            assert!(answer["error"].is_string(), "{answer}");
+        }
+        // A row's parent is its database.
+        let mut stray = row_body(ROW1, "Stray", None);
+        stray["parentPageId"] = json!(PAGE);
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": { "rows": [stray] } }),
+            &[],
+        );
+        assert!(answer["error"]
+            .as_str()
+            .unwrap()
+            .contains("parent is its database"));
+        // A row's document counts as a page's.
+        call(
+            &mut store,
+            json!({ "op": "appendDocUpdates", "pageId": ROW1, "updateIds": [OP] }),
+            &[vec![1, 2]],
+        );
+        let (held, _) = call(
+            &mut store,
+            json!({ "op": "heldPages", "workspaceId": WS }),
+            &[],
+        );
+        assert_eq!(held["ok"], json!([ROW1]));
+        let (unsent, _) = call(
+            &mut store,
+            json!({ "op": "unsentDocUpdates", "limit": 10 }),
+            &[],
+        );
+        assert_eq!(unsent["ok"][0]["pageId"], ROW1);
+        let (usage, _) = call(
+            &mut store,
+            json!({ "op": "storageUsage", "workspaceId": WS }),
+            &[],
+        );
+        assert_eq!(
+            (
+                usage["ok"]["pages"].clone(),
+                usage["ok"]["docBytes"].clone()
+            ),
+            (json!(1), json!(2))
+        );
+    }
+
+    #[test]
+    fn finds_a_row_in_search_unless_it_or_its_database_is_in_the_trash() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = database_store(dir.path());
+        for (id, title) in [(ROW1, "one"), (ROW2, "two")] {
+            call(
+                &mut store,
+                json!({ "op": "putSearchEntry", "entry": { "pageId": id, "workspaceId": WS,
+                        "title": title, "text": "quarterly" } }),
+                &[],
+            );
+        }
+        let search = |store: &mut Store| {
+            let (hits, _) = call(
+                store,
+                json!({ "op": "search", "workspaceId": WS, "query": "quarter", "limit": 10 }),
+                &[],
+            );
+            hits["ok"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|h| h["pageId"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        };
+        // Row two is in the trash.
+        assert_eq!(search(&mut store), vec![ROW1.to_owned()]);
+        let trashed = json!({ "id": DB, "workspaceId": WS, "sectionId": SECTION,
+                              "parentPageId": PAGE, "kind": "database", "title": "Tasks",
+                              "trashedAt": "2026-11-02T00:00:00.000Z" });
+        call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": { "pages": [trashed] } }),
+            &[],
+        );
+        assert!(search(&mut store).is_empty());
+    }
+
+    #[test]
+    fn a_database_page_that_goes_takes_its_record_views_rows_and_hold() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = database_store(dir.path());
+        call(
+            &mut store,
+            json!({ "op": "appendDocUpdates", "pageId": ROW1, "updateIds": [OP] }),
+            &[vec![7]],
+        );
+        call(
+            &mut store,
+            json!({ "op": "pin", "pin": { "workspaceId": WS, "pageId": ROW1, "subtree": false,
+                    "pinnedAt": "2026-11-12T00:00:00.000Z" } }),
+            &[],
+        );
+        let plan = json!({ "deletePages": [DB], "deleteRows": [ROW1, ROW2] });
+        // A remote plan names an id for each page and each row it removes.
+        let short = json!({ "reason": "page.removed", "at": "2026-11-12T00:00:00.000Z",
+                            "ids": [ASSET] });
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": plan, "setAside": short }),
+            &[],
+        );
+        assert!(answer["error"]
+            .as_str()
+            .unwrap()
+            .contains("one set-aside id per deleted page and row"));
+        let ids = [
+            "0193a1b2-c3d4-7e5f-8a9b-000000000071",
+            "0193a1b2-c3d4-7e5f-8a9b-000000000072",
+            "0193a1b2-c3d4-7e5f-8a9b-000000000073",
+        ];
+        let aside = json!({ "reason": "page.removed", "at": "2026-11-12T00:00:00.000Z",
+                            "ids": ids });
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": plan, "setAside": aside }),
+            &[],
+        );
+        assert_eq!(answer["ok"], Value::Null, "{answer}");
+        // Row one's unsent edit was set aside under its own id, with its own title.
+        let (entries, blobs) = call(&mut store, json!({ "op": "quarantine" }), &[]);
+        assert_eq!(entries["ok"][0]["id"], ids[1]);
+        assert_eq!(entries["ok"][0]["pageId"], ROW1);
+        assert_eq!(entries["ok"][0]["title"], "One");
+        assert_eq!(blobs, vec![vec![7]]);
+        let (mirror, _) = call(&mut store, json!({ "op": "readMirror" }), &[]);
+        assert_eq!(mirror["ok"]["databases"], json!([]));
+        assert_eq!(mirror["ok"]["views"], json!([]));
+        for request in [
+            json!({ "op": "readRows", "databaseId": DB }),
+            json!({ "op": "dbHolds", "workspaceId": WS }),
+            json!({ "op": "pins", "workspaceId": WS }),
+        ] {
+            let (answer, _) = call(&mut store, request.clone(), &[]);
+            assert_eq!(answer["ok"], json!([]), "{request}");
+        }
+        let (_, blobs) = call(&mut store, json!({ "op": "loadDoc", "pageId": ROW1 }), &[]);
+        assert!(blobs.is_empty());
+        // A row a plan does not name goes with its database all the same.
+        let mut store = database_store(dir.path());
+        let (answer, _) = call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": { "deletePages": [DB] } }),
+            &[],
+        );
+        assert_eq!(answer["ok"], Value::Null);
+        let (rows, _) = call(
+            &mut store,
+            json!({ "op": "rowIds", "workspaceId": WS }),
+            &[],
+        );
+        assert_eq!(rows["ok"], json!([]));
+        // And a lost workspace takes them all.
+        let mut store = database_store(dir.path());
+        call(
+            &mut store,
+            json!({ "op": "applyPlan", "plan": { "deleteWorkspaces": [WS] } }),
+            &[],
+        );
+        for request in [
+            json!({ "op": "rowIds", "workspaceId": WS }),
+            json!({ "op": "dbHolds", "workspaceId": null }),
+        ] {
+            let (answer, _) = call(&mut store, request.clone(), &[]);
+            assert_eq!(answer["ok"], json!([]), "{request}");
+        }
+        let (mirror, _) = call(&mut store, json!({ "op": "readMirror" }), &[]);
+        assert_eq!(
+            (
+                mirror["ok"]["databases"].clone(),
+                mirror["ok"]["views"].clone()
+            ),
+            (json!([]), json!([]))
+        );
     }
 }

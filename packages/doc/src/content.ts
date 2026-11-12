@@ -62,6 +62,14 @@ export const code = (language: string | null, source: string) =>
   block({ type: 'codeBlock', attrs: { language }, content: source ? [text(source)] : [] });
 export const bookmark = (url: string) => block({ type: 'bookmark', attrs: { url } });
 export const childPage = (pageId: string) => block({ type: 'childPage', attrs: { pageId } });
+/** Schema version 3: a view of a database (a page of kind `database`); null is its first view. */
+export const databaseView = (databaseId: string | null, viewId: string | null = null) =>
+  block({ type: 'databaseView', attrs: { databaseId, viewId } });
+/** Schema version 3: a date in a line (`YYYY-MM-DD` or a UTC instant), with an optional end. */
+export const dateMention = (date: string, end: string | null = null): DocJSON => ({
+  type: 'dateMention',
+  attrs: { date, end },
+});
 
 export function table(rows: Inline[][], headerRow = true): DocJSON {
   return block({
@@ -95,7 +103,11 @@ export function withoutIds(node: DocJSON): DocJSON {
   return copy;
 }
 
-/** Rewrites page references (child pages, mentions) and asset ids, for a copied subtree. */
+/**
+ * Rewrites page references (child pages, mentions, database views) and asset ids, for a copied
+ * subtree. A database view whose database is not in the map keeps pointing at the same one; the
+ * map may also hold view ids, for a copy that copied the database with its views.
+ */
 export function remapRefs(
   node: DocJSON,
   pages: ReadonlyMap<string, string>,
@@ -107,6 +119,10 @@ export function remapRefs(
     const next = { ...attrs };
     if (typeof attrs.pageId === 'string' && pages.has(attrs.pageId))
       next.pageId = pages.get(attrs.pageId);
+    if (typeof attrs.databaseId === 'string' && pages.has(attrs.databaseId))
+      next.databaseId = pages.get(attrs.databaseId);
+    if (typeof attrs.viewId === 'string' && pages.has(attrs.viewId))
+      next.viewId = pages.get(attrs.viewId);
     if (typeof attrs.assetId === 'string' && assets.has(attrs.assetId))
       next.assetId = assets.get(attrs.assetId);
     copy.attrs = next;

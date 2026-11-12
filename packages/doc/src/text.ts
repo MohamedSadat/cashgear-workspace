@@ -1,6 +1,7 @@
 // A page's content as plain text (for search) and as Markdown (for export and copy), read from
 // ProseMirror JSON, so it runs without an editor: in a worker, in Node, in the exporter.
 import type { DocJSON } from './binding';
+import { dateMentionText } from './dates';
 
 /** Names for what the document stores only by id (D6): titles and file names, resolved now. */
 export interface TextContext {
@@ -24,6 +25,7 @@ function inlineText(nodes: DocJSON[] | undefined, context: TextContext): string 
     else if (node.type === 'hardBreak') out += '\n';
     else if (node.type === 'pageMention')
       out += context.pageTitle?.(String(node.attrs?.pageId ?? '')) ?? '';
+    else if (node.type === 'dateMention') out += dateMentionText(node.attrs);
   }
   return out;
 }
@@ -47,6 +49,8 @@ function bodyText(body: DocJSON, context: TextContext): string {
       return String(body.attrs?.url ?? '');
     case 'childPage':
       return context.pageTitle?.(String(body.attrs?.pageId ?? '')) ?? '';
+    // A table of contents and a database view hold no text of this page (a database's rows are
+    // pages of their own, searched and exported as such).
     default:
       return '';
   }
@@ -113,6 +117,11 @@ function inlineMarkdown(
       const title = context.pageTitle?.(id) ?? id;
       const href = context.pageHref?.(id, node.attrs?.blockId as string | null);
       out += href ? `[${escapeInline(title)}](${href})` : escapeInline(title);
+      continue;
+    }
+    if (node.type === 'dateMention') {
+      // Digits, `-`, `T`, `:`, `Z`, a space and an arrow: nothing Markdown reads as syntax.
+      out += dateMentionText(node.attrs);
       continue;
     }
     if (node.type !== 'text') continue;
@@ -232,6 +241,7 @@ function bodyMarkdown(body: DocJSON, context: TextContext, indent: string, numbe
     }
     case 'table':
       return tableMarkdown(body, context, indent);
+    // A table of contents and a database view write nothing (contracts, section 5).
     default:
       return '';
   }

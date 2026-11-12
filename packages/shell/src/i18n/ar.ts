@@ -1,7 +1,10 @@
+import { ar as databaseAr } from '../../../database/src/i18n/ar';
 import type { Catalogue } from './catalogue';
 
-// The Arabic catalogue. Same keys as `en.ts`; the type checks it.
+// The Arabic catalogue. Same keys as `en.ts`; the type checks it. The database views' section
+// comes from `@cgw/database` (see en.ts).
 export const ar: Catalogue = {
+  ...databaseAr,
   app: {
     title: 'مساحة عمل كاش جير',
     loading: 'جارٍ التحميل…',
@@ -106,6 +109,17 @@ export const ar: Catalogue = {
     readOnlyInline: '[يحتاج إلى إصدار أحدث]',
     tocLabel: 'جدول المحتويات',
     tocEmpty: 'ستظهر هنا عناوين هذه الصفحة.',
+    databaseView: 'قاعدة بيانات',
+    databaseUnavailable: 'لا يمكن عرض قاعدة البيانات هذه هنا.',
+    databaseNotChosen: 'لم تُختر قاعدة بيانات.',
+    databaseChoose: 'اختيار قاعدة بيانات',
+    mentionPages: 'الصفحات',
+    mentionDates: 'التاريخ',
+    dateToday: 'اليوم',
+    dateTomorrow: 'غدًا',
+    datePick: 'اختيار تاريخ',
+    datePicker: 'اختيار التاريخ',
+    dateInvalid: 'بلا تاريخ',
     untitled: 'بدون عنوان',
     missingPage: 'الصفحة غير موجودة',
     dragHandle: 'اسحب للنقل، وانقر لقائمة الكتلة',
@@ -192,6 +206,8 @@ export const ar: Catalogue = {
     childPage: 'صفحة',
     pageLink: 'رابط إلى صفحة',
     tableOfContents: 'جدول المحتويات',
+    database: 'قاعدة بيانات',
+    linkedView: 'عرض مرتبط لقاعدة بيانات',
   },
   blockKeywords: {
     paragraph: 'نص فقرة عادي',
@@ -213,6 +229,8 @@ export const ar: Catalogue = {
     childPage: 'صفحة فرعية جديدة',
     pageLink: 'رابط إشارة صفحة',
     tableOfContents: 'جدول المحتويات فهرس عناوين ملخص',
+    database: 'قاعدة بيانات جدول سجلات صفوف',
+    linkedView: 'عرض مرتبط قاعدة بيانات موجودة جدول',
   },
   trash: {
     title: 'المهملات',
@@ -501,5 +519,26 @@ export const ar: Catalogue = {
     theme: 'مظهر داكن فاتح لون ألوان',
     language: 'لغة إنجليزي عربي',
     search: 'بحث إيجاد صفحات انتقال',
+    newDatabase: 'قاعدة بيانات جديدة جدول إنشاء صفوف سجلات',
+    importCsv: 'استيراد ملف csv جدول بيانات قاعدة بيانات صفوف',
+  },
+  databases: {
+    newDatabase: 'قاعدة بيانات جديدة',
+    newDatabaseIn: 'إضافة قاعدة بيانات في {{name}}',
+    addInside: 'إضافة قاعدة بيانات بداخلها',
+    importCsv: 'استيراد ملف CSV كقاعدة بيانات جديدة',
+    importCsvInside: 'استيراد ملف CSV كقاعدة بيانات بداخلها',
+    pickTitle: 'اختيار قاعدة بيانات',
+    pickSearch: 'البحث عن قاعدة بيانات بالاسم',
+    pickEmpty: 'لا توجد قاعدة بيانات في مساحة العمل هذه بعد.',
+    pickNone: 'لا توجد قاعدة بيانات بهذا الاسم.',
+    rowIn: 'في {{database}}',
+    rowsHeld: 'الصفوف على هذا الجهاز: {{held}} من {{total}}.',
+    rowsHeldAll: 'كل الصفوف على هذا الجهاز: {{total}}.',
+    sharedPlaceholder: 'تُعرض قواعد البيانات في التطبيق، لا في صفحة مشتركة.',
+    trashRows: 'الصفوف',
+    trashRowsNote: 'صفوف حُذفت من قاعدة بيانات. استعادة صف تعيده إلى قاعدة بياناته.',
+    confirmRow: 'سيُحذف «{{title}}» من قاعدة بياناته نهائيًا. لا يمكن التراجع عن ذلك.',
+    locating: 'جارٍ البحث عن الصف…',
   },
 };

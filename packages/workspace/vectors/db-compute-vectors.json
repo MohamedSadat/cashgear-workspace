@@ -1,0 +1,2097 @@
+[
+  {
+    "kind": "computeRow",
+    "name": "rollups and formulas",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pRel0003",
+          "name": "Far",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000003",
+            "reversePropertyId": null
+          }
+        },
+        {
+          "id": "fOrder01",
+          "name": "fOrder01",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fTot0001\") + prop(\"fNum0001\")"
+          }
+        },
+        {
+          "id": "rCnt0001",
+          "name": "rCnt0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "count"
+          }
+        },
+        {
+          "id": "rCntV001",
+          "name": "rCntV001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "countValues"
+          }
+        },
+        {
+          "id": "rCntM001",
+          "name": "rCntM001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qMul0001",
+            "fn": "countValues"
+          }
+        },
+        {
+          "id": "rUniq001",
+          "name": "rUniq001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qSel0001",
+            "fn": "countUnique"
+          }
+        },
+        {
+          "id": "rUniM001",
+          "name": "rUniM001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qMul0001",
+            "fn": "countUnique"
+          }
+        },
+        {
+          "id": "rEmp0001",
+          "name": "rEmp0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "countEmpty"
+          }
+        },
+        {
+          "id": "rNEmp001",
+          "name": "rNEmp001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "countNotEmpty"
+          }
+        },
+        {
+          "id": "rPEmp001",
+          "name": "rPEmp001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "percentEmpty"
+          }
+        },
+        {
+          "id": "rPNE0001",
+          "name": "rPNE0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "percentNotEmpty"
+          }
+        },
+        {
+          "id": "rSum0001",
+          "name": "rSum0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rAvg0001",
+          "name": "rAvg0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "average"
+          }
+        },
+        {
+          "id": "rMed0001",
+          "name": "rMed0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "median"
+          }
+        },
+        {
+          "id": "rMin0001",
+          "name": "rMin0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "min"
+          }
+        },
+        {
+          "id": "rMax0001",
+          "name": "rMax0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "max"
+          }
+        },
+        {
+          "id": "rRng0001",
+          "name": "rRng0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "range"
+          }
+        },
+        {
+          "id": "rSumF001",
+          "name": "rSumF001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qFor0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rEarl001",
+          "name": "rEarl001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qDate001",
+            "fn": "earliest"
+          }
+        },
+        {
+          "id": "rLate001",
+          "name": "rLate001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qDate001",
+            "fn": "latest"
+          }
+        },
+        {
+          "id": "rChk0001",
+          "name": "rChk0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qChk0001",
+            "fn": "checked"
+          }
+        },
+        {
+          "id": "rUnch001",
+          "name": "rUnch001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qChk0001",
+            "fn": "unchecked"
+          }
+        },
+        {
+          "id": "rPChk001",
+          "name": "rPChk001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qChk0001",
+            "fn": "percentChecked"
+          }
+        },
+        {
+          "id": "rOrS0001",
+          "name": "rOrS0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qSel0001",
+            "fn": "showOriginal"
+          }
+        },
+        {
+          "id": "rOrN0001",
+          "name": "rOrN0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "showOriginal"
+          }
+        },
+        {
+          "id": "rOrP0001",
+          "name": "rOrP0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qPer0001",
+            "fn": "showOriginal"
+          }
+        },
+        {
+          "id": "rOrD0001",
+          "name": "rOrD0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qDate001",
+            "fn": "showOriginal"
+          }
+        },
+        {
+          "id": "rBadT001",
+          "name": "rBadT001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qTxt0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rBadE001",
+          "name": "rBadE001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "earliest"
+          }
+        },
+        {
+          "id": "rBadC001",
+          "name": "rBadC001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "checked"
+          }
+        },
+        {
+          "id": "rUnk0001",
+          "name": "rUnk0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "nothere1",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rNotR001",
+          "name": "rNotR001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pNum0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rOldT001",
+          "name": "rOldT001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qOld0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rBrkF001",
+          "name": "rBrkF001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qBad0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rFar0001",
+          "name": "rFar0001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0003",
+            "targetPropertyId": "zNum0001",
+            "fn": "sum"
+          }
+        },
+        {
+          "id": "rGone001",
+          "name": "rGone001",
+          "type": "rollup",
+          "rollup": {
+            "relationPropertyId": "pRel0001",
+            "targetPropertyId": "qNum0001",
+            "fn": "count"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        },
+        {
+          "id": "fTot0001",
+          "name": "fTot0001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"rSum0001\") * 2"
+          }
+        },
+        {
+          "id": "fNum0001",
+          "name": "fNum0001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"pNum0001\") + 1"
+          }
+        },
+        {
+          "id": "fCyc0001",
+          "name": "fCyc0001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fCyc0002\") + 1"
+          }
+        },
+        {
+          "id": "fCyc0002",
+          "name": "fCyc0002",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fCyc0001\") + 1"
+          }
+        },
+        {
+          "id": "fOfCyc01",
+          "name": "fOfCyc01",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"fCyc0001\") + 1"
+          }
+        },
+        {
+          "id": "fFar0001",
+          "name": "fFar0001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"rFar0001\") + 1"
+          }
+        },
+        {
+          "id": "fAvgR001",
+          "name": "fAvgR001",
+          "type": "formula",
+          "formula": {
+            "expression": "round(prop(\"rAvg0001\"), 2)"
+          }
+        },
+        {
+          "id": "fErr0001",
+          "name": "fErr0001",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"rBadT001\") + 1"
+          }
+        },
+        {
+          "id": "fGone001",
+          "name": "fGone001",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "held": [
+      {
+        "id": "01900000-0000-7000-8000-000000000002",
+        "properties": [
+          {
+            "id": "title",
+            "name": "Name",
+            "type": "title"
+          },
+          {
+            "id": "qNum0001",
+            "name": "Hours",
+            "type": "number"
+          },
+          {
+            "id": "qDate001",
+            "name": "When",
+            "type": "date"
+          },
+          {
+            "id": "qChk0001",
+            "name": "Done",
+            "type": "checkbox"
+          },
+          {
+            "id": "qSel0001",
+            "name": "Kind",
+            "type": "select",
+            "options": [
+              {
+                "id": "qOptA01",
+                "name": "A",
+                "colour": "default"
+              },
+              {
+                "id": "qOptB01",
+                "name": "B",
+                "colour": "default"
+              }
+            ]
+          },
+          {
+            "id": "qMul0001",
+            "name": "Tags",
+            "type": "multiSelect",
+            "options": [
+              {
+                "id": "qTagX01",
+                "name": "X",
+                "colour": "default"
+              },
+              {
+                "id": "qTagY01",
+                "name": "Y",
+                "colour": "default"
+              }
+            ]
+          },
+          {
+            "id": "qPer0001",
+            "name": "Who",
+            "type": "person"
+          },
+          {
+            "id": "qTxt0001",
+            "name": "Note",
+            "type": "text"
+          },
+          {
+            "id": "qFor0001",
+            "name": "Tenfold",
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"qNum0001\") * 10"
+            }
+          },
+          {
+            "id": "qBad0001",
+            "name": "Broken",
+            "type": "formula",
+            "formula": {
+              "expression": "1 +"
+            }
+          },
+          {
+            "id": "qOld0001",
+            "name": "Old",
+            "type": "number",
+            "trashedAt": "2026-02-01T00:00:00.000Z"
+          },
+          {
+            "id": "pRev0001",
+            "name": "Tasks",
+            "type": "relation",
+            "relation": {
+              "databaseId": "01900000-0000-7000-8000-000000000001",
+              "reversePropertyId": "pRel0001"
+            }
+          }
+        ],
+        "version": 1
+      }
+    ],
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000101",
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "title": "B101",
+        "orderKey": "a101",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "qNum0001": 10,
+          "qDate001": {
+            "start": "2026-03-01"
+          },
+          "qChk0001": true,
+          "qSel0001": "qOptA01",
+          "qMul0001": ["qTagX01", "qTagY01"],
+          "qPer0001": ["01900000-0000-7000-8000-0000000000a1"],
+          "qTxt0001": "x"
+        },
+        "computed": {
+          "qFor0001": 100
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000102",
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "title": "B102",
+        "orderKey": "a102",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "qNum0001": 20,
+          "qDate001": {
+            "start": "2026-02-15T10:00:00Z"
+          },
+          "qSel0001": "qOptA01",
+          "qMul0001": ["qTagX01"],
+          "qPer0001": ["01900000-0000-7000-8000-0000000000b0"]
+        },
+        "computed": {
+          "qFor0001": 200
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000103",
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "title": "B103",
+        "orderKey": "a103",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "qChk0001": true,
+          "qSel0001": "qOptB01",
+          "qTxt0001": "y"
+        },
+        "computed": {
+          "qFor0001": {
+            "error": "formula.type"
+          }
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000104",
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "title": "B104",
+        "orderKey": "a104",
+        "isTemplate": false,
+        "trashedAt": "2026-02-01T00:00:00.000Z",
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "qNum0001": 1000
+        },
+        "computed": {
+          "qFor0001": 10000
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000105",
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "title": "B105",
+        "orderKey": "a105",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "qNum0001": 5,
+          "qDate001": {
+            "start": "2026-04-01",
+            "end": "2026-04-03"
+          },
+          "qSel0001": "qGone01"
+        },
+        "computed": {
+          "qFor0001": 50
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000106",
+        "databaseId": "01900000-0000-7000-8000-000000000002",
+        "title": "B106",
+        "orderKey": "a106",
+        "isTemplate": true,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "qNum0001": 999
+        },
+        "computed": {}
+      }
+    ],
+    "cases": [
+      {
+        "name": "every rollup function over held rows; trashed, template and missing rows left out",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "A1",
+          "orderKey": "a1",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:00.000Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+          "values": {
+            "pNum0001": 3,
+            "pRel0001": [
+              "01900000-0000-7000-8000-000000000101",
+              "01900000-0000-7000-8000-000000000102",
+              "01900000-0000-7000-8000-000000000103",
+              "01900000-0000-7000-8000-000000000104",
+              "01900000-0000-7000-8000-000000000105",
+              "01900000-0000-7000-8000-000000000106",
+              "01900000-0000-7000-8000-000000000199",
+              "01900000-0000-7000-8000-000000000101"
+            ]
+          },
+          "computed": {
+            "rFar0001": 41
+          }
+        },
+        "expected": {
+          "rCnt0001": 4,
+          "rCntV001": 3,
+          "rCntM001": 3,
+          "rUniq001": 2,
+          "rUniM001": 2,
+          "rEmp0001": 1,
+          "rNEmp001": 3,
+          "rPEmp001": 0.25,
+          "rPNE0001": 0.75,
+          "rSum0001": 35,
+          "rAvg0001": 11.666666666666666,
+          "rMed0001": 10,
+          "rMin0001": 5,
+          "rMax0001": 20,
+          "rRng0001": 15,
+          "rSumF001": 350,
+          "rEarl001": {
+            "start": "2026-02-15T10:00:00Z"
+          },
+          "rLate001": {
+            "start": "2026-04-01"
+          },
+          "rChk0001": 2,
+          "rUnch001": 2,
+          "rPChk001": 0.5,
+          "rOrS0001": ["A", "A", "B"],
+          "rOrN0001": ["10", "20", "5"],
+          "rOrP0001": [
+            "01900000-0000-7000-8000-0000000000a1",
+            "01900000-0000-7000-8000-0000000000b0"
+          ],
+          "rOrD0001": ["2026-03-01", "2026-02-15T10:00:00Z", "2026-04-01 → 2026-04-03"],
+          "rBadT001": {
+            "error": "formula.type"
+          },
+          "rBadE001": {
+            "error": "formula.type"
+          },
+          "rBadC001": {
+            "error": "formula.type"
+          },
+          "rUnk0001": {
+            "error": "formula.unknownProperty"
+          },
+          "rNotR001": {
+            "error": "formula.unknownProperty"
+          },
+          "rOldT001": {
+            "error": "formula.unknownProperty"
+          },
+          "rBrkF001": {
+            "error": "formula.syntax"
+          },
+          "fCyc0001": {
+            "error": "formula.cycle"
+          },
+          "fCyc0002": {
+            "error": "formula.cycle"
+          },
+          "fOfCyc01": {
+            "error": "formula.cycle"
+          },
+          "fErr0001": {
+            "error": "formula.type"
+          },
+          "fOrder01": 74,
+          "fTot0001": 70,
+          "fNum0001": 4,
+          "fFar0001": 42,
+          "fAvgR001": 11.67
+        }
+      },
+      {
+        "name": "two related rows: an even median",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "A2",
+          "orderKey": "a2",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:00.000Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+          "values": {
+            "pNum0001": 1,
+            "pRel0001": [
+              "01900000-0000-7000-8000-000000000101",
+              "01900000-0000-7000-8000-000000000102"
+            ]
+          },
+          "computed": {}
+        },
+        "expected": {
+          "rCnt0001": 2,
+          "rCntV001": 2,
+          "rCntM001": 3,
+          "rUniq001": 1,
+          "rUniM001": 2,
+          "rEmp0001": 0,
+          "rNEmp001": 2,
+          "rPEmp001": 0,
+          "rPNE0001": 1,
+          "rSum0001": 30,
+          "rAvg0001": 15,
+          "rMed0001": 15,
+          "rMin0001": 10,
+          "rMax0001": 20,
+          "rRng0001": 10,
+          "rSumF001": 300,
+          "rEarl001": {
+            "start": "2026-02-15T10:00:00Z"
+          },
+          "rLate001": {
+            "start": "2026-03-01"
+          },
+          "rChk0001": 1,
+          "rUnch001": 1,
+          "rPChk001": 0.5,
+          "rOrS0001": ["A", "A"],
+          "rOrN0001": ["10", "20"],
+          "rOrP0001": [
+            "01900000-0000-7000-8000-0000000000a1",
+            "01900000-0000-7000-8000-0000000000b0"
+          ],
+          "rOrD0001": ["2026-03-01", "2026-02-15T10:00:00Z"],
+          "rBadT001": {
+            "error": "formula.type"
+          },
+          "rBadE001": {
+            "error": "formula.type"
+          },
+          "rBadC001": {
+            "error": "formula.type"
+          },
+          "rUnk0001": {
+            "error": "formula.unknownProperty"
+          },
+          "rNotR001": {
+            "error": "formula.unknownProperty"
+          },
+          "rOldT001": {
+            "error": "formula.unknownProperty"
+          },
+          "rBrkF001": {
+            "error": "formula.syntax"
+          },
+          "fCyc0001": {
+            "error": "formula.cycle"
+          },
+          "fCyc0002": {
+            "error": "formula.cycle"
+          },
+          "fOfCyc01": {
+            "error": "formula.cycle"
+          },
+          "fErr0001": {
+            "error": "formula.type"
+          },
+          "fOrder01": 62,
+          "fTot0001": 60,
+          "fNum0001": 2,
+          "fFar0001": null,
+          "fAvgR001": 15
+        }
+      },
+      {
+        "name": "no related rows",
+        "row": {
+          "id": "01900000-0000-7000-8000-000000000003",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "title": "A3",
+          "orderKey": "a3",
+          "isTemplate": false,
+          "trashedAt": null,
+          "createdAt": "2026-01-01T09:00:00.000Z",
+          "updatedAt": "2026-01-02T10:30:00.000Z",
+          "createdBy": "01900000-0000-7000-8000-0000000000a1",
+          "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+          "values": {},
+          "computed": {}
+        },
+        "expected": {
+          "rCnt0001": 0,
+          "rCntV001": 0,
+          "rCntM001": 0,
+          "rUniq001": 0,
+          "rUniM001": 0,
+          "rEmp0001": 0,
+          "rNEmp001": 0,
+          "rPEmp001": null,
+          "rPNE0001": null,
+          "rSum0001": 0,
+          "rAvg0001": null,
+          "rMed0001": null,
+          "rMin0001": null,
+          "rMax0001": null,
+          "rRng0001": null,
+          "rSumF001": 0,
+          "rEarl001": null,
+          "rLate001": null,
+          "rChk0001": 0,
+          "rUnch001": 0,
+          "rPChk001": null,
+          "rOrS0001": null,
+          "rOrN0001": null,
+          "rOrP0001": null,
+          "rOrD0001": null,
+          "rBadT001": {
+            "error": "formula.type"
+          },
+          "rBadE001": {
+            "error": "formula.type"
+          },
+          "rBadC001": {
+            "error": "formula.type"
+          },
+          "rUnk0001": {
+            "error": "formula.unknownProperty"
+          },
+          "rNotR001": {
+            "error": "formula.unknownProperty"
+          },
+          "rOldT001": {
+            "error": "formula.unknownProperty"
+          },
+          "rBrkF001": {
+            "error": "formula.syntax"
+          },
+          "fCyc0001": {
+            "error": "formula.cycle"
+          },
+          "fCyc0002": {
+            "error": "formula.cycle"
+          },
+          "fOfCyc01": {
+            "error": "formula.cycle"
+          },
+          "fErr0001": {
+            "error": "formula.type"
+          },
+          "fOrder01": null,
+          "fTot0001": 0,
+          "fNum0001": null,
+          "fFar0001": null,
+          "fAvgR001": null
+        }
+      }
+    ]
+  },
+  {
+    "kind": "relationChange",
+    "name": "reverse-side edits",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pRel0002",
+          "name": "Blocks",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pSelR001"
+          }
+        },
+        {
+          "id": "pSelR001",
+          "name": "Blocked by",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pRel0002"
+          }
+        },
+        {
+          "id": "pRel0003",
+          "name": "Far",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000003",
+            "reversePropertyId": null
+          }
+        },
+        {
+          "id": "pSym0001",
+          "name": "Related",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pSym0001"
+          }
+        },
+        {
+          "id": "pTrR0001",
+          "name": "Old",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pTrRv001"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "cases": [
+      {
+        "name": "adds and removes: removed first, in order",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": [
+              "01900000-0000-7000-8000-000000000101",
+              "01900000-0000-7000-8000-000000000102"
+            ]
+          }
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": [
+              "01900000-0000-7000-8000-000000000102",
+              "01900000-0000-7000-8000-000000000103",
+              "01900000-0000-7000-8000-000000000104"
+            ]
+          }
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "rowId": "01900000-0000-7000-8000-000000000101",
+            "propertyId": "pRev0001",
+            "add": [],
+            "remove": ["01900000-0000-7000-8000-000000000001"]
+          },
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "rowId": "01900000-0000-7000-8000-000000000103",
+            "propertyId": "pRev0001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          },
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "rowId": "01900000-0000-7000-8000-000000000104",
+            "propertyId": "pRev0001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          }
+        ]
+      },
+      {
+        "name": "a new row",
+        "before": null,
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": ["01900000-0000-7000-8000-000000000101"],
+            "pRel0002": ["01900000-0000-7000-8000-000000000002"]
+          }
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "rowId": "01900000-0000-7000-8000-000000000101",
+            "propertyId": "pRev0001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          },
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "rowId": "01900000-0000-7000-8000-000000000002",
+            "propertyId": "pSelR001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          }
+        ]
+      },
+      {
+        "name": "a removed row",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": ["01900000-0000-7000-8000-000000000101"]
+          }
+        },
+        "after": null,
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "rowId": "01900000-0000-7000-8000-000000000101",
+            "propertyId": "pRev0001",
+            "add": [],
+            "remove": ["01900000-0000-7000-8000-000000000001"]
+          }
+        ]
+      },
+      {
+        "name": "no reverse property",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {}
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0003": ["01900000-0000-7000-8000-000000000300"]
+          }
+        },
+        "expected": []
+      },
+      {
+        "name": "a deleted relation keeps nothing in step",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {}
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pTrR0001": ["01900000-0000-7000-8000-000000000101"]
+          }
+        },
+        "expected": []
+      },
+      {
+        "name": "a self-relation with a second property, the row itself included",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {}
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0002": [
+              "01900000-0000-7000-8000-000000000002",
+              "01900000-0000-7000-8000-000000000001"
+            ]
+          }
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "rowId": "01900000-0000-7000-8000-000000000002",
+            "propertyId": "pSelR001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          },
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "rowId": "01900000-0000-7000-8000-000000000001",
+            "propertyId": "pSelR001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          }
+        ]
+      },
+      {
+        "name": "a symmetric self-relation leaves out the row itself",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {}
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pSym0001": [
+              "01900000-0000-7000-8000-000000000002",
+              "01900000-0000-7000-8000-000000000001"
+            ]
+          }
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "rowId": "01900000-0000-7000-8000-000000000002",
+            "propertyId": "pSym0001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          }
+        ]
+      },
+      {
+        "name": "unchanged",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": ["01900000-0000-7000-8000-000000000101"]
+          }
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": ["01900000-0000-7000-8000-000000000101"]
+          }
+        },
+        "expected": []
+      },
+      {
+        "name": "both sides of a self-relation changed at once",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {}
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0002": ["01900000-0000-7000-8000-000000000002"],
+            "pSelR001": ["01900000-0000-7000-8000-000000000002"]
+          }
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "rowId": "01900000-0000-7000-8000-000000000002",
+            "propertyId": "pSelR001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          },
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "rowId": "01900000-0000-7000-8000-000000000002",
+            "propertyId": "pRel0002",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          }
+        ]
+      },
+      {
+        "name": "repeated ids count once",
+        "before": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {}
+        },
+        "after": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "values": {
+            "pRel0001": [
+              "01900000-0000-7000-8000-000000000101",
+              "01900000-0000-7000-8000-000000000101"
+            ]
+          }
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "rowId": "01900000-0000-7000-8000-000000000101",
+            "propertyId": "pRev0001",
+            "add": ["01900000-0000-7000-8000-000000000001"],
+            "remove": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "kind": "applyRelationEdit",
+    "name": "a reverse value after an edit",
+    "cases": [
+      {
+        "name": "remove and append",
+        "current": ["x", "y"],
+        "edit": {
+          "add": ["z"],
+          "remove": ["x"]
+        },
+        "expected": ["y", "z"]
+      },
+      {
+        "name": "onto nothing",
+        "current": null,
+        "edit": {
+          "add": ["a"],
+          "remove": []
+        },
+        "expected": ["a"]
+      },
+      {
+        "name": "to nothing",
+        "current": ["a"],
+        "edit": {
+          "add": [],
+          "remove": ["a"]
+        },
+        "expected": null
+      },
+      {
+        "name": "already there",
+        "current": ["a"],
+        "edit": {
+          "add": ["a"],
+          "remove": []
+        },
+        "expected": ["a"]
+      }
+    ]
+  },
+  {
+    "kind": "relationTypeChange",
+    "name": "a relation that no longer pairs leaves its reverse one-way",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pRel0002",
+          "name": "Blocks",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pSelR001"
+          }
+        },
+        {
+          "id": "pSelR001",
+          "name": "Blocked by",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pRel0002"
+          }
+        },
+        {
+          "id": "pRel0003",
+          "name": "Far",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000003",
+            "reversePropertyId": null
+          }
+        },
+        {
+          "id": "pSym0001",
+          "name": "Related",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pSym0001"
+          }
+        },
+        {
+          "id": "pTrR0001",
+          "name": "Old",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pTrRv001"
+          },
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "cases": [
+      {
+        "name": "changed into text",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "text"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0001"
+              }
+            },
+            {
+              "id": "qNum0001",
+              "name": "Hours",
+              "type": "number"
+            }
+          ],
+          "version": 1
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "properties": [
+              {
+                "id": "pRev0001",
+                "name": "Tasks",
+                "type": "relation",
+                "relation": {
+                  "databaseId": "01900000-0000-7000-8000-000000000001",
+                  "reversePropertyId": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "changed into a number, renamed too",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Count",
+          "type": "number"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0001"
+              }
+            },
+            {
+              "id": "qNum0001",
+              "name": "Hours",
+              "type": "number"
+            }
+          ],
+          "version": 1
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "properties": [
+              {
+                "id": "pRev0001",
+                "name": "Tasks",
+                "type": "relation",
+                "relation": {
+                  "databaseId": "01900000-0000-7000-8000-000000000001",
+                  "reversePropertyId": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "pointed at another reverse",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pNew0001"
+          }
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0001"
+              }
+            },
+            {
+              "id": "qNum0001",
+              "name": "Hours",
+              "type": "number"
+            }
+          ],
+          "version": 1
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "properties": [
+              {
+                "id": "pRev0001",
+                "name": "Tasks",
+                "type": "relation",
+                "relation": {
+                  "databaseId": "01900000-0000-7000-8000-000000000001",
+                  "reversePropertyId": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "made one-way itself",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": null
+          }
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0001"
+              }
+            },
+            {
+              "id": "qNum0001",
+              "name": "Hours",
+              "type": "number"
+            }
+          ],
+          "version": 1
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "properties": [
+              {
+                "id": "pRev0001",
+                "name": "Tasks",
+                "type": "relation",
+                "relation": {
+                  "databaseId": "01900000-0000-7000-8000-000000000001",
+                  "reversePropertyId": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "pointed at another database",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000003",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0001"
+              }
+            },
+            {
+              "id": "qNum0001",
+              "name": "Hours",
+              "type": "number"
+            }
+          ],
+          "version": 1
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "properties": [
+              {
+                "id": "pRev0001",
+                "name": "Tasks",
+                "type": "relation",
+                "relation": {
+                  "databaseId": "01900000-0000-7000-8000-000000000001",
+                  "reversePropertyId": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "still paired, only renamed",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts!",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0001"
+              }
+            },
+            {
+              "id": "qNum0001",
+              "name": "Hours",
+              "type": "number"
+            }
+          ],
+          "version": 1
+        },
+        "expected": []
+      },
+      {
+        "name": "the target is not held here",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "text"
+        },
+        "target": null,
+        "expected": []
+      },
+      {
+        "name": "no reverse property",
+        "before": {
+          "id": "pRel0003",
+          "name": "Far",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000003",
+            "reversePropertyId": null
+          }
+        },
+        "after": {
+          "id": "pRel0003",
+          "name": "Far",
+          "type": "text"
+        },
+        "target": null,
+        "expected": []
+      },
+      {
+        "name": "a self-relation: the second property in the same database",
+        "before": {
+          "id": "pRel0002",
+          "name": "Blocks",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pSelR001"
+          }
+        },
+        "after": {
+          "id": "pRel0002",
+          "name": "Blocks",
+          "type": "text"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRel0001",
+              "name": "Parts",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000002",
+                "reversePropertyId": "pRev0001"
+              }
+            },
+            {
+              "id": "pRel0002",
+              "name": "Blocks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pSelR001"
+              }
+            },
+            {
+              "id": "pSelR001",
+              "name": "Blocked by",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0002"
+              }
+            },
+            {
+              "id": "pRel0003",
+              "name": "Far",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000003",
+                "reversePropertyId": null
+              }
+            },
+            {
+              "id": "pSym0001",
+              "name": "Related",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pSym0001"
+              }
+            },
+            {
+              "id": "pTrR0001",
+              "name": "Old",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000002",
+                "reversePropertyId": "pTrRv001"
+              },
+              "trashedAt": "2026-02-01T00:00:00.000Z"
+            }
+          ],
+          "version": 1
+        },
+        "expected": [
+          {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "properties": [
+              {
+                "id": "pSelR001",
+                "name": "Blocked by",
+                "type": "relation",
+                "relation": {
+                  "databaseId": "01900000-0000-7000-8000-000000000001",
+                  "reversePropertyId": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "a symmetric self-relation has no other side",
+        "before": {
+          "id": "pSym0001",
+          "name": "Related",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000001",
+            "reversePropertyId": "pSym0001"
+          }
+        },
+        "after": {
+          "id": "pSym0001",
+          "name": "Related",
+          "type": "text"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRel0001",
+              "name": "Parts",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000002",
+                "reversePropertyId": "pRev0001"
+              }
+            },
+            {
+              "id": "pRel0002",
+              "name": "Blocks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pSelR001"
+              }
+            },
+            {
+              "id": "pSelR001",
+              "name": "Blocked by",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pRel0002"
+              }
+            },
+            {
+              "id": "pRel0003",
+              "name": "Far",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000003",
+                "reversePropertyId": null
+              }
+            },
+            {
+              "id": "pSym0001",
+              "name": "Related",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000001",
+                "reversePropertyId": "pSym0001"
+              }
+            },
+            {
+              "id": "pTrR0001",
+              "name": "Old",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000002",
+                "reversePropertyId": "pTrRv001"
+              },
+              "trashedAt": "2026-02-01T00:00:00.000Z"
+            }
+          ],
+          "version": 1
+        },
+        "expected": []
+      },
+      {
+        "name": "a reverse that points elsewhere is left alone",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "text"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "relation",
+              "relation": {
+                "databaseId": "01900000-0000-7000-8000-000000000003",
+                "reversePropertyId": "pRel0001"
+              }
+            }
+          ],
+          "version": 1
+        },
+        "expected": []
+      },
+      {
+        "name": "a reverse that is no longer a relation is left alone",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "text"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "pRev0001",
+              "name": "Tasks",
+              "type": "text"
+            }
+          ],
+          "version": 1
+        },
+        "expected": []
+      },
+      {
+        "name": "a reverse the target lacks",
+        "before": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        "after": {
+          "id": "pRel0001",
+          "name": "Parts",
+          "type": "text"
+        },
+        "target": {
+          "id": "01900000-0000-7000-8000-000000000002",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            }
+          ],
+          "version": 1
+        },
+        "expected": []
+      },
+      {
+        "name": "not a relation before",
+        "before": {
+          "id": "pNum0001",
+          "name": "pNum0001",
+          "type": "number"
+        },
+        "after": {
+          "id": "pNum0001",
+          "name": "pNum0001",
+          "type": "text"
+        },
+        "target": null,
+        "expected": []
+      }
+    ]
+  }
+]

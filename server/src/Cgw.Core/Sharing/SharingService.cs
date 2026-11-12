@@ -72,6 +72,8 @@ public sealed class SharingService(CgwDb db, Access access, ChangeLog changes, A
     /// </summary>
     public async Task<Result<PermissionsDto>> SetAsync(Member member, Actor actor, Page page, PermissionsUpdate request, long? ifVersion, CancellationToken ct = default)
     {
+        // A row's access is its database's: it is never restricted nor given a list of its own.
+        if (page.Kind == PageKinds.Row) return Failure.Invalid("A row has its database's access; share the database");
         var entries = request.Entries ?? [];
         if (entries.Count > MaxEntries) return Failure.Invalid($"A page has at most {MaxEntries} entries");
         foreach (var entry in entries)
@@ -160,6 +162,7 @@ public sealed class SharingService(CgwDb db, Access access, ChangeLog changes, A
     {
         var days = request.ExpiresInDays ?? DefaultLinkDays;
         if (days is < 1 or > MaxLinkDays) return Failure.Invalid($"expiresInDays is 1 to {MaxLinkDays}");
+        if (page.Kind == PageKinds.Row) return Failure.Invalid("A row has its database's access; share the database");
         if (page.TrashedAt is not null) return Failure.Conflict(Codes.Conflict, "The page is in the trash");
         var section = await db.Sections.AsNoTracking().FirstAsync(s => s.Id == page.SectionId, ct);
         if (section.Visibility == "private") return Failure.Invalid("Pages in a private section are not shared; move the page to a shared section first");

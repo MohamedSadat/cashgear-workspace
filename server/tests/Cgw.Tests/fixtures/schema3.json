@@ -1,0 +1,26 @@
+[
+  {
+    "name": "migrate3",
+    "client": 1001,
+    "data": "AQ/pBwyo6QcAAX0Dh+kHAgMFYmxvY2sHAOkHDQMMZGF0YWJhc2VWaWV3KADpBw4KZGF0YWJhc2VJZAF3JDAxOTVmNGEwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMSgA6QcOBnZpZXdJZAF+KADpBw0CaWQBdwxEdjFEdjJEdjNEdjSH6QcNAwVibG9jawcA6QcSAwh0ZXh0Qm9keQcA6QcTBgQA6QcUBER1ZSCH6QcUAwtkYXRlTWVudGlvbigA6QcZBGRhdGUBdwoyMDI2LTExLTEzKADpBxkDZW5kAX4oAOkHEwRraW5kAXcJcGFyYWdyYXBoKADpBxICaWQBdwxEbTFEbTJEbTNEbTQB6QcBAAE=",
+    "why": "the migration to version 3: meta.schemaVersion set to 3, a database view and a date mention added, in one transaction"
+  },
+  {
+    "name": "viewOnly",
+    "client": 1001,
+    "data": "AQXpBwyH6QcCAwVibG9jawcA6QcMAwxkYXRhYmFzZVZpZXcoAOkHDQpkYXRhYmFzZUlkAXckMDE5NWY0YTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAxKADpBw0Gdmlld0lkAX4oAOkHDAJpZAF3DER2MUR2MkR2M0R2NAA=",
+    "why": "a database view in a document still at version 1: an element versions 1 and 2 lack"
+  },
+  {
+    "name": "dateOnly",
+    "client": 1001,
+    "data": "AQnpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgQA6QcOBER1ZSCH6QcOAwtkYXRlTWVudGlvbigA6QcTBGRhdGUBdwoyMDI2LTExLTEzKADpBxMDZW5kAX4oAOkHDQRraW5kAXcJcGFyYWdyYXBoKADpBwwCaWQBdwxEbTFEbTJEbTNEbTQA",
+    "why": "a date mention in a document still at version 1"
+  },
+  {
+    "name": "claimsV4",
+    "client": 1001,
+    "data": "AQHpBwyo6QcAAX0EAekHAQAB",
+    "why": "a document claiming version 4, newer than the worker knows"
+  }
+]

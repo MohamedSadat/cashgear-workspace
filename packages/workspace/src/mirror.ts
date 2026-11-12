@@ -1,6 +1,13 @@
 // The metadata mirror in memory: what the sidebar, breadcrumbs, title search and page links draw
 // from (DATA_MODEL.md, "Large workspaces"). Children are indexed by parent, so expanding a node in
 // a 10,000-page workspace reads only that node's children.
+//
+// Phase 4: database and view records come with every snapshot. Rows do not (they are never in the
+// tree, the sidebar or `readMirror`): a mirror holds the rows it is given (`loadRows`, and the rows
+// plans write), indexed by database, so the planner can read them (`rows`, and `page` for a row).
+// The in-memory store keeps every row here; the desktop store loads a database's rows when a plan
+// first needs them.
+import type { DatabaseRecord, ViewRecord } from './db/types';
 import type { Id } from './ids';
 import { compareSiblings } from './order';
 import type { MirrorReader, Plan } from './ops';
@@ -9,6 +16,7 @@ import type {
   FavouriteRecord,
   MirrorSnapshot,
   PageRecord,
+  RowRecord,
   SectionRecord,
   VisitRecord,
   WorkspaceRecord,
@@ -24,6 +32,14 @@ export class Mirror implements MirrorReader {
   readonly favourites = new Map<string, FavouriteRecord>();
   readonly visits = new Map<string, VisitRecord>();
   readonly assets = new Map<Id, AssetRecord>();
+  readonly databases = new Map<Id, DatabaseRecord>();
+  readonly views = new Map<Id, ViewRecord>();
+  /** The rows this mirror holds (not every row of a database unless `rowsLoaded` says so). */
+  readonly rowRecords = new Map<Id, RowRecord>();
+  /** Database id to the ids of the rows held. */
+  private readonly rowIndex = new Map<Id, Set<Id>>();
+  /** Databases whose every held row is here. */
+  private readonly loaded = new Set<Id>();
   /** Parent key (a page id, or `section:{id}` for the top) to child ids. */
   private readonly childIndex = new Map<string, Set<Id>>();
   private readonly listeners = new Set<() => void>();
@@ -40,6 +56,9 @@ export class Mirror implements MirrorReader {
     for (const f of snapshot.favourites) this.favourites.set(favKey(f.workspaceId, f.pageId), f);
     for (const v of snapshot.visits) this.visits.set(favKey(v.workspaceId, v.pageId), v);
     for (const a of snapshot.assets) this.assets.set(a.id, a);
+    // A snapshot from before schema 4 has no databases or views.
+    for (const d of snapshot.databases ?? []) this.databases.set(d.id, d);
+    for (const v of snapshot.views ?? []) this.views.set(v.id, v);
     this.emit();
   }
 
@@ -51,6 +70,11 @@ export class Mirror implements MirrorReader {
     this.favourites.clear();
     this.visits.clear();
     this.assets.clear();
+    this.databases.clear();
+    this.views.clear();
+    this.rowRecords.clear();
+    this.rowIndex.clear();
+    this.loaded.clear();
     this.childIndex.clear();
     this.load(snapshot);
   }
@@ -67,6 +91,8 @@ export class Mirror implements MirrorReader {
       favourites: mine(this.favourites.values()),
       visits: mine(this.visits.values()),
       assets: mine(this.assets.values()),
+      databases: mine(this.databases.values()),
+      views: mine(this.views.values()),
     };
   }
 
@@ -77,12 +103,62 @@ export class Mirror implements MirrorReader {
     for (const s of plan.sections) this.sections.set(s.id, s);
     for (const id of plan.deleteSections) this.sections.delete(id);
     for (const p of plan.pages) this.setPage(p);
+    // Upserts before deletes: a record both written and removed by one plan ends up removed.
+    for (const d of plan.databases ?? []) this.databases.set(d.id, d);
+    for (const v of plan.views ?? []) this.views.set(v.id, v);
+    for (const r of plan.rows ?? []) this.setRow(r);
     for (const id of plan.deletePages) this.deletePage(id);
+    for (const id of plan.deleteViews ?? []) this.views.delete(id);
+    for (const id of plan.deleteRows ?? []) this.deleteRow(id);
     for (const f of plan.favourites) this.favourites.set(favKey(f.workspaceId, f.pageId), f);
     for (const f of plan.deleteFavourites) this.favourites.delete(favKey(f.workspaceId, f.pageId));
     for (const v of plan.visits) this.visits.set(favKey(v.workspaceId, v.pageId), v);
     for (const v of plan.deleteVisits) this.visits.delete(favKey(v.workspaceId, v.pageId));
+    // A database page that went took its record, views and rows with it (deletePage).
     this.emit();
+  }
+
+  /** Every held row of a database, put here (the rows a store read for a plan, or for a view). */
+  loadRows(databaseId: Id, rows: RowRecord[]) {
+    for (const id of [...(this.rowIndex.get(databaseId) ?? [])]) this.deleteRow(id);
+    for (const row of rows) this.setRow(row);
+    this.loaded.add(databaseId);
+    this.emit();
+  }
+
+  /** Whether every row this device holds of the database is in this mirror. */
+  rowsLoaded(databaseId: Id): boolean {
+    return this.loaded.has(databaseId);
+  }
+
+  /** One row, put here (read from a store for a plan); its database's other rows are not. */
+  putRow(row: RowRecord) {
+    this.setRow(row);
+  }
+
+  private setRow(row: RowRecord) {
+    const old = this.rowRecords.get(row.id);
+    if (old && old.databaseId !== row.databaseId) this.rowIndex.get(old.databaseId)?.delete(row.id);
+    this.rowRecords.set(row.id, row);
+    let set = this.rowIndex.get(row.databaseId);
+    if (!set) this.rowIndex.set(row.databaseId, (set = new Set()));
+    set.add(row.id);
+  }
+
+  private deleteRow(id: Id) {
+    const old = this.rowRecords.get(id);
+    if (!old) return;
+    this.rowIndex.get(old.databaseId)?.delete(id);
+    this.rowRecords.delete(id);
+  }
+
+  /** A database and all it holds here, gone with its page. */
+  private deleteDatabase(id: Id) {
+    this.databases.delete(id);
+    for (const [key, v] of this.views) if (v.databaseId === id) this.views.delete(key);
+    for (const rowId of [...(this.rowIndex.get(id) ?? [])]) this.rowRecords.delete(rowId);
+    this.rowIndex.delete(id);
+    this.loaded.delete(id);
   }
 
   /** A workspace and everything it holds, gone (a synced workspace the account lost). */
@@ -93,6 +169,10 @@ export class Mirror implements MirrorReader {
     for (const [key, f] of this.favourites) if (f.workspaceId === id) this.favourites.delete(key);
     for (const [key, v] of this.visits) if (v.workspaceId === id) this.visits.delete(key);
     for (const [key, a] of this.assets) if (a.workspaceId === id) this.assets.delete(key);
+    for (const d of [...this.databases.values()])
+      if (d.workspaceId === id) this.deleteDatabase(d.id);
+    for (const [key, v] of this.views) if (v.workspaceId === id) this.views.delete(key);
+    for (const r of [...this.rowRecords.values()]) if (r.workspaceId === id) this.deleteRow(r.id);
   }
 
   putAsset(asset: AssetRecord) {
@@ -115,6 +195,9 @@ export class Mirror implements MirrorReader {
   }
 
   private deletePage(id: Id) {
+    // A row named as a page (a refused create answered as one) goes as a row.
+    this.deleteRow(id);
+    this.deleteDatabase(id);
     const old = this.pages.get(id);
     if (!old) return;
     this.childIndex.get(this.parentKey(old))?.delete(id);
@@ -128,8 +211,8 @@ export class Mirror implements MirrorReader {
   async section(id: Id) {
     return this.sections.get(id);
   }
-  async page(id: Id) {
-    return this.pages.get(id);
+  async page(id: Id): Promise<PageRecord | undefined> {
+    return this.pages.get(id) ?? this.rowRecords.get(id);
   }
   async children(parentPageId: Id) {
     return this.childrenOf(parentPageId, true);
@@ -140,8 +223,29 @@ export class Mirror implements MirrorReader {
   async favourite(workspaceId: Id, pageId: Id) {
     return this.favourites.get(favKey(workspaceId, pageId));
   }
+  async database(id: Id) {
+    return this.databases.get(id);
+  }
+  async view(id: Id) {
+    return this.views.get(id);
+  }
+  async rows(databaseId: Id) {
+    return this.rowsOf(databaseId);
+  }
 
   // Reads for the interface, synchronous
+  /** The rows of a database held here, in no order; trashed rows and templates included. */
+  rowsOf(databaseId: Id): RowRecord[] {
+    return [...(this.rowIndex.get(databaseId) ?? [])].map((id) => this.rowRecords.get(id)!);
+  }
+
+  /** A database's views, in their order. */
+  viewsOf(databaseId: Id): ViewRecord[] {
+    return [...this.views.values()]
+      .filter((v) => v.databaseId === databaseId)
+      .sort(compareSiblings);
+  }
+
   /** Children in drawn order; trashed pages are left out unless asked for. */
   childrenOf(parent: Id, includeTrashed = false): PageRecord[] {
     const ids = this.childIndex.get(parent);
@@ -202,6 +306,13 @@ export class Mirror implements MirrorReader {
   trash(workspaceId: Id): PageRecord[] {
     return [...this.pages.values()]
       .filter((p) => p.workspaceId === workspaceId && p.trashRootId === p.id)
+      .sort((a, b) => (a.trashedAt! < b.trashedAt! ? 1 : -1));
+  }
+
+  /** Rows of a workspace that are their own trash root, newest first (the trash lists them). */
+  trashedRows(workspaceId: Id): RowRecord[] {
+    return [...this.rowRecords.values()]
+      .filter((r) => r.workspaceId === workspaceId && r.trashRootId === r.id)
       .sort((a, b) => (a.trashedAt! < b.trashedAt! ? 1 : -1));
   }
 

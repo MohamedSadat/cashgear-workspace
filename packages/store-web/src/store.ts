@@ -2,6 +2,10 @@
 // local operations, planSettle and planRemote for what the server says) run inside the same
 // transaction their plan is written in, so the mirror, the outbox and the cursors change together
 // or not at all.
+//
+// Schema 4 (Phase 4, databases) adds database and view records, rows (pages of kind `row`, kept
+// apart from `pages` and never in the mirror's snapshot) and the holds that say which databases'
+// rows this device keeps. A database page that goes takes its record, views, rows and hold.
 import {
   STORE_SCHEMA_VERSION,
   planOps,
@@ -11,6 +15,8 @@ import {
   snippet,
   uuidv7,
   type AssetRecord,
+  type DatabaseRecord,
+  type DbHold,
   type DocAck,
   type DocCursor,
   type FavouriteRecord,
@@ -30,6 +36,7 @@ import {
   type RemoteDocPull,
   type RemoteReader,
   type RepairState,
+  type RowRecord,
   type SearchEntry,
   type SearchHit,
   type SectionRecord,
@@ -37,6 +44,7 @@ import {
   type StoredDoc,
   type StoredUpdate,
   type UnsentDoc,
+  type ViewRecord,
   type VisitRecord,
   type WorkspaceRecord,
 } from '@cgw/workspace';
@@ -70,6 +78,11 @@ const S = {
   pins: 'pins',
   quarantine: 'quarantine',
   repairs: 'repairs',
+  // Schema 4
+  databases: 'databases',
+  views: 'views',
+  rows: 'rows',
+  dbHolds: 'dbHolds',
 } as const;
 type StoreName = (typeof S)[keyof typeof S];
 
@@ -94,12 +107,17 @@ const PLAN_STORES: StoreName[] = [
   S.pins,
   S.quarantine,
   S.repairs,
+  S.databases,
+  S.views,
+  S.rows,
+  S.dbHolds,
 ];
 
 /** What setting a page's log aside reads and writes (setAsideDoc, and inside a remote plan). */
 const SET_ASIDE_STORES: StoreName[] = [
   S.workspaces,
   S.pages,
+  S.rows,
   S.docLogs,
   S.docUpdates,
   S.unsentPages,
@@ -187,6 +205,22 @@ const STEPS: Record<number, (db: IDBDatabase, tx: IDBTransaction) => void> = {
     db.createObjectStore(S.repairs, { keyPath: 'pageId' });
     // Logs whose snapshot covers something, so heldPages finds them without reading a snapshot.
     tx.objectStore(S.docLogs).createIndex('covers', 'snapshotCovers');
+  },
+  4: (db) => {
+    // Databases (Phase 4): their records, views, the rows this device holds, and its holds.
+    db.createObjectStore(S.databases, { keyPath: 'id' }).createIndex('workspace', 'workspaceId');
+    const views = db.createObjectStore(S.views, { keyPath: 'id' });
+    views.createIndex('workspace', 'workspaceId');
+    views.createIndex('database', 'databaseId');
+    const rows = db.createObjectStore(S.rows, { keyPath: 'id' });
+    rows.createIndex('database', 'databaseId');
+    rows.createIndex('workspace', 'workspaceId');
+    // Rows in the trash: a row not in it has a null root, which an index leaves out.
+    rows.createIndex('trashRoot', 'trashRootId');
+    db.createObjectStore(S.dbHolds, { keyPath: 'databaseId' }).createIndex(
+      'workspace',
+      'workspaceId',
+    );
   },
 };
 
@@ -327,7 +361,7 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async compactDoc(pageId: Id, snapshot: Uint8Array, coversLocalUpTo: number): Promise<void> {
-    const tx = this.tx([S.docLogs, S.docUpdates, S.pages, S.workspaces], 'readwrite');
+    const tx = this.tx([S.docLogs, S.docUpdates, S.pages, S.rows, S.workspaces], 'readwrite');
     const logs = tx.objectStore(S.docLogs);
     const updates = tx.objectStore(S.docUpdates);
     const [found, keepUnsent] = await Promise.all([
@@ -353,9 +387,24 @@ export class IndexedDbStore implements LocalStore {
     await done(tx);
   }
 
+  /** A page, a database's page, or a row; the transaction includes `pages` and `rows`. */
+  private async pageOrRow(tx: IDBTransaction, pageId: Id): Promise<PageRecord | undefined> {
+    const page = this.pageOf((await request(tx.objectStore(S.pages).get(pageId))) as PageRow);
+    return page ?? ((await request(tx.objectStore(S.rows).get(pageId))) as RowRecord | undefined);
+  }
+
+  /** The ids of a workspace's pages and rows. */
+  private async workspacePageIds(tx: IDBTransaction, workspaceId: Id): Promise<Id[]> {
+    const [pages, rows] = await Promise.all([
+      getAllKeys(tx.objectStore(S.pages).index('workspace'), workspaceId),
+      getAllKeys(tx.objectStore(S.rows).index('workspace'), workspaceId),
+    ]);
+    return [...pages, ...rows] as Id[];
+  }
+
   /** Whether a page belongs to a workspace that syncs (its unsent updates are kept and pushed). */
   private async synced(tx: IDBTransaction, pageId: Id): Promise<boolean> {
-    const page = (await request(tx.objectStore(S.pages).get(pageId))) as PageRow | undefined;
+    const page = await this.pageOrRow(tx, pageId);
     const workspace =
       page &&
       ((await request(tx.objectStore(S.workspaces).get(page.workspaceId))) as
@@ -388,7 +437,7 @@ export class IndexedDbStore implements LocalStore {
 
   async unsentDocUpdates(limit: number): Promise<UnsentDoc[]> {
     if (limit <= 0) return [];
-    const tx = this.tx([S.workspaces, S.pages, S.unsentPages, S.docUpdates]);
+    const tx = this.tx([S.workspaces, S.pages, S.rows, S.unsentPages, S.docUpdates]);
     const [workspaces, candidates] = await Promise.all([
       getAll<WorkspaceRecord>(tx.objectStore(S.workspaces)),
       getAllKeys(tx.objectStore(S.unsentPages)) as Promise<Id[]>,
@@ -396,11 +445,7 @@ export class IndexedDbStore implements LocalStore {
     const syncing = workspaces.filter((w) => !w.localOnly).map((w) => w.id);
     if (!syncing.length || !candidates.length) return [];
     const syncedPages = new Set(
-      (
-        await Promise.all(
-          syncing.map((id) => getAllKeys(tx.objectStore(S.pages).index('workspace'), id)),
-        )
-      ).flat() as Id[],
+      (await Promise.all(syncing.map((id) => this.workspacePageIds(tx, id)))).flat(),
     );
     const pending = (
       await Promise.all(
@@ -501,12 +546,12 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async docCursors(workspaceId: Id): Promise<Record<Id, DocCursor>> {
-    const tx = this.tx([S.pages, S.docCursors]);
+    const tx = this.tx([S.pages, S.rows, S.docCursors]);
     const [pageIds, rows] = await Promise.all([
-      getAllKeys(tx.objectStore(S.pages).index('workspace'), workspaceId),
+      this.workspacePageIds(tx, workspaceId),
       getAll<DocCursorRow>(tx.objectStore(S.docCursors)),
     ]);
-    const mine = new Set(pageIds as Id[]);
+    const mine = new Set(pageIds);
     const out: Record<Id, DocCursor> = {};
     for (const row of rows)
       if (mine.has(row.pageId)) out[row.pageId] = { headSeq: row.headSeq, epoch: row.epoch };
@@ -591,7 +636,7 @@ export class IndexedDbStore implements LocalStore {
     const deleted = await this.transact(PLAN_STORES, async (tx) => {
       const plan = await planOps(ops, this.reader(tx));
       await this.writePlan(tx, plan);
-      return plan.deletePages;
+      return [...plan.deletePages, ...plan.deleteRows];
     });
     this.index?.remove(deleted);
   }
@@ -605,10 +650,15 @@ export class IndexedDbStore implements LocalStore {
    */
   private async writePlan(tx: IDBTransaction, plan: Plan, remote = false): Promise<void> {
     const store = (name: StoreName) => tx.objectStore(name);
-    if (remote && plan.deletePages.length) {
+    // A database page that goes takes its rows: those the plan names, and any other held here.
+    const rows = new Set(plan.deleteRows);
+    for (const id of plan.deletePages)
+      for (const rowId of await getAllKeys(store(S.rows).index('database'), id))
+        rows.add(rowId as Id);
+    const removed = [...plan.deletePages, ...rows];
+    if (remote && removed.length) {
       const unsent = new Set((await getAllKeys(store(S.unsentPages))) as Id[]);
-      for (const id of plan.deletePages)
-        if (unsent.has(id)) await this.setAside(tx, id, 'page.removed');
+      for (const id of removed) if (unsent.has(id)) await this.setAside(tx, id, 'page.removed');
     }
     const outbox = store(S.outbox);
     if (plan.settled?.length) {
@@ -626,13 +676,27 @@ export class IndexedDbStore implements LocalStore {
     for (const f of plan.deleteFavourites) store(S.favourites).delete([f.workspaceId, f.pageId]);
     for (const v of plan.visits) store(S.visits).put(v);
     for (const v of plan.deleteVisits) store(S.visits).delete([v.workspaceId, v.pageId]);
+    for (const d of plan.databases) store(S.databases).put(d);
+    for (const v of plan.views) store(S.views).put(v);
+    for (const r of plan.rows) store(S.rows).put(r);
+    for (const h of plan.holds) store(S.dbHolds).put(h);
+    for (const id of plan.deleteViews) store(S.views).delete(id);
     for (const op of plan.outbox) outbox.add(op);
     if (plan.cursor)
       store(S.syncCursors).put({
         workspaceId: plan.cursor.workspaceId,
         cursor: plan.cursor.value,
       } satisfies SyncCursorRow);
-    await Promise.all(plan.deletePages.map((id) => this.dropPageData(tx, id)));
+    await Promise.all(plan.deletePages.map((id) => this.dropDatabase(tx, id)));
+    await Promise.all(removed.map((id) => this.dropPageData(tx, id)));
+  }
+
+  /** A database page gone: its record, views and hold (its rows go as removed pages). */
+  private async dropDatabase(tx: IDBTransaction, pageId: Id) {
+    tx.objectStore(S.databases).delete(pageId);
+    tx.objectStore(S.dbHolds).delete(pageId);
+    for (const key of await getAllKeys(tx.objectStore(S.views).index('database'), pageId))
+      tx.objectStore(S.views).delete(key);
   }
 
   private pageRow(page: PageRecord): PageRow {
@@ -644,12 +708,13 @@ export class IndexedDbStore implements LocalStore {
   }
 
   /**
-   * A page removed for good, with its document log, cursor, history, search entry, pin and repair
-   * state. What was set aside from it stays.
+   * A page (or a row) removed for good, with its document log, cursor, history, search entry, pin
+   * and repair state. What was set aside from it stays.
    */
   private async dropPageData(tx: IDBTransaction, pageId: Id) {
     for (const name of [
       S.pages,
+      S.rows,
       S.docLogs,
       S.docCursors,
       S.unsentPages,
@@ -673,14 +738,26 @@ export class IndexedDbStore implements LocalStore {
   private async dropWorkspace(tx: IDBTransaction, workspaceId: Id) {
     const keysOf = (name: StoreName) =>
       getAllKeys(tx.objectStore(name).index('workspace'), workspaceId);
-    const [ops, assets, sections, pages, favourites, visits] = await Promise.all([
-      keysOf(S.outbox),
-      keysOf(S.assets),
-      keysOf(S.sections),
-      keysOf(S.pages),
-      keysOf(S.favourites),
-      keysOf(S.visits),
-    ]);
+    const [ops, assets, sections, pages, favourites, visits, databases, views, rows, holds] =
+      await Promise.all([
+        keysOf(S.outbox),
+        keysOf(S.assets),
+        keysOf(S.sections),
+        keysOf(S.pages),
+        keysOf(S.favourites),
+        keysOf(S.visits),
+        keysOf(S.databases),
+        keysOf(S.views),
+        keysOf(S.rows),
+        keysOf(S.dbHolds),
+      ]);
+    for (const [name, keys] of [
+      [S.databases, databases],
+      [S.views, views],
+      [S.rows, rows],
+      [S.dbHolds, holds],
+    ] as const)
+      for (const key of keys) tx.objectStore(name).delete(key);
     for (const key of ops) tx.objectStore(S.outbox).delete(key);
     for (const key of assets) {
       tx.objectStore(S.assets).delete(key);
@@ -697,14 +774,27 @@ export class IndexedDbStore implements LocalStore {
   /** What the planners read, from inside the transaction their plan is written in. */
   private reader(tx: IDBTransaction): MirrorReader & RemoteReader {
     const pages = tx.objectStore(S.pages);
+    const rows = tx.objectStore(S.rows);
     const pageList = async (source: IDBIndex, key: IDBValidKey) =>
       (await getAll<PageRow>(source, key)).map((p) => this.pageOf(p)!);
     return {
+      database: async (id) =>
+        (await request(tx.objectStore(S.databases).get(id))) as DatabaseRecord | undefined,
+      view: async (id) =>
+        (await request(tx.objectStore(S.views).get(id))) as ViewRecord | undefined,
+      rows: (databaseId) => getAll<RowRecord>(rows.index('database'), databaseId),
+      rowIds: async (databaseId) => (await getAllKeys(rows.index('database'), databaseId)) as Id[],
+      workspaceRowIds: async (workspaceId) =>
+        (await getAllKeys(rows.index('workspace'), workspaceId)) as Id[],
+      workspaceViews: (workspaceId) =>
+        getAll<ViewRecord>(tx.objectStore(S.views).index('workspace'), workspaceId),
+      dbHold: async (id) =>
+        (await request(tx.objectStore(S.dbHolds).get(id))) as DbHold | undefined,
       workspace: async (id) =>
         (await request(tx.objectStore(S.workspaces).get(id))) as WorkspaceRecord | undefined,
       section: async (id) =>
         (await request(tx.objectStore(S.sections).get(id))) as SectionRecord | undefined,
-      page: async (id) => this.pageOf((await request(pages.get(id))) as PageRow | undefined),
+      page: (id) => this.pageOrRow(tx, id),
       children: (parentPageId) => pageList(pages.index('parent'), parentPageId),
       sectionPages: (sectionId) => pageList(pages.index('section'), sectionId),
       favourite: async (workspaceId, pageId) =>
@@ -737,7 +827,7 @@ export class IndexedDbStore implements LocalStore {
       const ops = new Map(found.flat().map((op) => [op.opId, op]));
       const plan = await planSettle(results, ops, this.reader(tx));
       await this.writePlan(tx, plan, true);
-      return plan.deletePages;
+      return [...plan.deletePages, ...plan.deleteRows];
     });
     this.index?.remove(deleted);
   }
@@ -746,7 +836,7 @@ export class IndexedDbStore implements LocalStore {
     const deleted = await this.transact(PLAN_STORES, async (tx) => {
       const plan = await planRemote(batch, this.reader(tx));
       await this.writePlan(tx, plan, true);
-      return plan.deletePages;
+      return [...plan.deletePages, ...plan.deleteRows];
     });
     this.index?.remove(deleted);
   }
@@ -785,23 +875,35 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async readMirror(workspaceId: Id | null): Promise<MirrorSnapshot> {
-    const tx = this.tx([S.workspaces, S.sections, S.pages, S.favourites, S.visits, S.assets]);
+    const tx = this.tx([
+      S.workspaces,
+      S.sections,
+      S.pages,
+      S.favourites,
+      S.visits,
+      S.assets,
+      S.databases,
+      S.views,
+    ]);
     const scoped = <T>(name: StoreName) =>
       workspaceId === null
         ? getAll<T>(tx.objectStore(name))
         : getAll<T>(tx.objectStore(name).index('workspace'), workspaceId);
-    const [workspaces, sections, pages, favourites, visits, assets] = await Promise.all([
-      workspaceId === null
-        ? getAll<WorkspaceRecord>(tx.objectStore(S.workspaces))
-        : request(tx.objectStore(S.workspaces).get(workspaceId)).then((w) =>
-            w ? [w as WorkspaceRecord] : [],
-          ),
-      scoped<SectionRecord>(S.sections),
-      scoped<PageRow>(S.pages),
-      scoped<FavouriteRecord>(S.favourites),
-      scoped<VisitRecord>(S.visits),
-      scoped<AssetRecord>(S.assets),
-    ]);
+    const [workspaces, sections, pages, favourites, visits, assets, databases, views] =
+      await Promise.all([
+        workspaceId === null
+          ? getAll<WorkspaceRecord>(tx.objectStore(S.workspaces))
+          : request(tx.objectStore(S.workspaces).get(workspaceId)).then((w) =>
+              w ? [w as WorkspaceRecord] : [],
+            ),
+        scoped<SectionRecord>(S.sections),
+        scoped<PageRow>(S.pages),
+        scoped<FavouriteRecord>(S.favourites),
+        scoped<VisitRecord>(S.visits),
+        scoped<AssetRecord>(S.assets),
+        scoped<DatabaseRecord>(S.databases),
+        scoped<ViewRecord>(S.views),
+      ]);
     return {
       workspaces,
       sections,
@@ -809,13 +911,23 @@ export class IndexedDbStore implements LocalStore {
       favourites,
       visits,
       assets,
+      databases,
+      views,
     };
   }
 
   async getPage(pageId: Id): Promise<PageRecord | null> {
-    const row = (await request(this.tx([S.pages]).objectStore(S.pages).get(pageId))) as
-      PageRow | undefined;
-    return this.pageOf(row) ?? null;
+    return (await this.pageOrRow(this.tx([S.pages, S.rows]), pageId)) ?? null;
+  }
+
+  /** Whether a page reads as trashed: it is, or it is a row whose database page is. */
+  private async readsTrashed(tx: IDBTransaction, page: PageRecord): Promise<boolean> {
+    if (page.trashedAt) return true;
+    if (page.kind !== 'row') return false;
+    const db = this.pageOf(
+      (await request(tx.objectStore(S.pages).get((page as RowRecord).databaseId))) as PageRow,
+    );
+    return !!db?.trashedAt;
   }
 
   // Search -------------------------------------------------------------------------------------
@@ -841,13 +953,11 @@ export class IndexedDbStore implements LocalStore {
     if (this.index) {
       // The worker ranks; this side drops the trash and writes the snippets.
       const found = await this.index.search(workspaceId, normalisedQuery, limit * 2);
-      const tx = this.tx([S.pages]);
+      const tx = this.tx([S.pages, S.rows]);
       const hits: SearchHit[] = [];
       for (const hit of found) {
-        const page = this.pageOf(
-          (await request(tx.objectStore(S.pages).get(hit.pageId))) as PageRow | undefined,
-        );
-        if (!page || page.trashedAt) continue;
+        const page = await this.pageOrRow(tx, hit.pageId);
+        if (!page || (await this.readsTrashed(tx, page))) continue;
         const inTitle = terms.every((t) => hit.title.split(' ').some((w) => w.startsWith(t)));
         hits.push({
           pageId: hit.pageId,
@@ -859,7 +969,7 @@ export class IndexedDbStore implements LocalStore {
       }
       return hits.sort((a, b) => b.score - a.score);
     }
-    const tx = this.tx([S.search, S.pages]);
+    const tx = this.tx([S.search, S.pages, S.rows]);
     const entries = await getAll<SearchEntry>(
       tx.objectStore(S.search).index('workspace'),
       workspaceId,
@@ -868,10 +978,8 @@ export class IndexedDbStore implements LocalStore {
     for (const entry of entries) {
       const words = `${entry.title} ${entry.text}`.split(' ');
       if (!terms.every((t) => words.some((w) => w.startsWith(t)))) continue;
-      const page = this.pageOf(
-        (await request(tx.objectStore(S.pages).get(entry.pageId))) as PageRow | undefined,
-      );
-      if (!page || page.trashedAt) continue;
+      const page = await this.pageOrRow(tx, entry.pageId);
+      if (!page || (await this.readsTrashed(tx, page))) continue;
       const inTitle = terms.every((t) => entry.title.split(' ').some((w) => w.startsWith(t)));
       hits.push({
         pageId: entry.pageId,
@@ -962,10 +1070,10 @@ export class IndexedDbStore implements LocalStore {
    * the `covers` index finds without reading one (a snapshot covering nothing is read to know).
    */
   async heldPages(workspaceId: Id): Promise<Id[]> {
-    const tx = this.tx([S.pages, S.docLogs, S.docUpdates, S.docCursors]);
+    const tx = this.tx([S.pages, S.rows, S.docLogs, S.docUpdates, S.docCursors]);
     const logs = tx.objectStore(S.docLogs);
     const [pageIds, cursors, withLog, covering] = await Promise.all([
-      getAllKeys(tx.objectStore(S.pages).index('workspace'), workspaceId) as Promise<Id[]>,
+      this.workspacePageIds(tx, workspaceId),
       getAllKeys(tx.objectStore(S.docCursors)) as Promise<Id[]>,
       getAllKeys(logs) as Promise<Id[]>,
       getAllKeys(logs.index('covers'), IDBKeyRange.lowerBound(1)) as Promise<Id[]>,
@@ -990,6 +1098,7 @@ export class IndexedDbStore implements LocalStore {
   async storageUsage(workspaceId: Id): Promise<StorageUsage> {
     const tx = this.tx([
       S.pages,
+      S.rows,
       S.docLogs,
       S.docUpdates,
       S.docCursors,
@@ -1005,10 +1114,7 @@ export class IndexedDbStore implements LocalStore {
       historyBytes: 0,
       quarantineBytes: 0,
     };
-    const pageIds = (await getAllKeys(
-      tx.objectStore(S.pages).index('workspace'),
-      workspaceId,
-    )) as Id[];
+    const pageIds = await this.workspacePageIds(tx, workspaceId);
     for (const pageId of pageIds) {
       const [log, rows, cursor] = await Promise.all([
         request(tx.objectStore(S.docLogs).get(pageId)) as Promise<DocLog | undefined>,
@@ -1046,9 +1152,7 @@ export class IndexedDbStore implements LocalStore {
     pageId: Id,
     reason: string,
   ): Promise<QuarantineEntry | null> {
-    const page = this.pageOf(
-      (await request(tx.objectStore(S.pages).get(pageId))) as PageRow | undefined,
-    );
+    const page = await this.pageOrRow(tx, pageId);
     if (!page) return null;
     const [workspace, log, rows] = await Promise.all([
       request(tx.objectStore(S.workspaces).get(page.workspaceId)) as Promise<
@@ -1115,11 +1219,55 @@ export class IndexedDbStore implements LocalStore {
     await done(tx);
   }
 
+  // Databases (store schema 4) ----------------------------------------------------------------
+
+  /** By row id: the index keeps a database's rows by their key. */
+  async readRows(databaseId: Id): Promise<RowRecord[]> {
+    return getAll<RowRecord>(this.tx([S.rows]).objectStore(S.rows).index('database'), databaseId);
+  }
+
+  /** Newest first; only rows in the trash are in the index. */
+  async trashedRows(workspaceId: Id): Promise<RowRecord[]> {
+    return (await this.trashRows(this.tx([S.rows]), workspaceId)).sort((a, b) =>
+      a.trashedAt! < b.trashedAt! ? 1 : -1,
+    );
+  }
+
+  private async trashRows(tx: IDBTransaction, workspaceId: Id): Promise<RowRecord[]> {
+    return (await getAll<RowRecord>(tx.objectStore(S.rows).index('trashRoot'))).filter(
+      (r) => r.workspaceId === workspaceId && r.trashRootId === r.id,
+    );
+  }
+
+  async dbHold(databaseId: Id): Promise<DbHold | null> {
+    return (
+      ((await request(this.tx([S.dbHolds]).objectStore(S.dbHolds).get(databaseId))) as
+        DbHold | undefined) ?? null
+    );
+  }
+
+  /** In database order: the index keeps a workspace's holds by their key. */
+  async dbHolds(workspaceId: Id): Promise<DbHold[]> {
+    return getAll<DbHold>(
+      this.tx([S.dbHolds]).objectStore(S.dbHolds).index('workspace'),
+      workspaceId,
+    );
+  }
+
+  async holdDatabase(hold: DbHold): Promise<void> {
+    const tx = this.tx([S.dbHolds], 'readwrite');
+    tx.objectStore(S.dbHolds).put(hold);
+    await done(tx);
+  }
+
   async purgeTrash(workspaceId: Id, before: string): Promise<Id[]> {
     const deleted = await this.transact(PLAN_STORES, async (tx) => {
-      // Trash roots, newest first, as the in-memory store takes them.
-      const roots = (await getAll<PageRow>(tx.objectStore(S.pages).index('workspace'), workspaceId))
-        .filter((p) => p.trashRootId === p.id && p.trashedAt! < before)
+      // Trash roots (pages, and rows that are their own), newest first, as the memory store takes them.
+      const pages = (
+        await getAll<PageRow>(tx.objectStore(S.pages).index('workspace'), workspaceId)
+      ).filter((p) => p.trashRootId === p.id);
+      const roots = [...pages, ...(await this.trashRows(tx, workspaceId))]
+        .filter((p) => p.trashedAt! < before)
         .sort((a, b) => (a.trashedAt! < b.trashedAt! ? 1 : -1));
       if (!roots.length) return [];
       const ops = roots.map((p): Operation => ({
@@ -1133,7 +1281,7 @@ export class IndexedDbStore implements LocalStore {
       }));
       const plan = await planOps(ops, this.reader(tx));
       await this.writePlan(tx, plan);
-      return plan.deletePages;
+      return [...plan.deletePages, ...plan.deleteRows];
     });
     this.index?.remove(deleted);
     return deleted;

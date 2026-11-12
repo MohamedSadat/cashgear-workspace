@@ -44,6 +44,9 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<WorkspaceChange> WorkspaceChanges => Set<WorkspaceChange>();
     public DbSet<AppliedOp> AppliedOps => Set<AppliedOp>();
+    public DbSet<WorkspaceDatabase> Databases => Set<WorkspaceDatabase>();
+    public DbSet<DatabaseView> DatabaseViews => Set<DatabaseView>();
+    public DbSet<DatabaseRow> DatabaseRows => Set<DatabaseRow>();
     public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
     public DbSet<LinkPreview> LinkPreviews => Set<LinkPreview>();
     public DbSet<WorkspaceExport> WorkspaceExports => Set<WorkspaceExport>();
@@ -135,6 +138,34 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.SearchTitle).HasMaxLength(1000);
             e.Property(x => x.Icon).HasMaxLength(64);
             e.Property(x => x.DocStateHash).HasMaxLength(64).IsUnicode(false);
+            // Access over the whole workspace (Access.AllLevelsAsync: the feed, the tree, search)
+            // reads pages and databases, never rows: a database of 50,000 rows costs it nothing.
+            e.HasIndex(x => x.WorkspaceId).HasDatabaseName("IX_Pages_Tree")
+                .HasFilter("[Kind] <> N'row' AND [DeletedAt] IS NULL")
+                .IncludeProperties(x => new { x.ParentPageId, x.SectionId, x.Restricted });
+        });
+        b.Entity<WorkspaceDatabase>(e =>
+        {
+            e.ToTable("Databases");
+            e.HasKey(x => x.PageId);
+            e.HasIndex(x => x.WorkspaceId);
+            // Rows' values compute in the worker while this is set.
+            e.HasIndex(x => x.ComputePending).HasFilter("[ComputePending] = 1").IncludeProperties(x => x.WorkspaceId);
+        });
+        b.Entity<DatabaseView>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.WorkspaceId, x.DatabaseId });
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Type).HasMaxLength(20);
+            e.Property(x => x.OrderKey).HasMaxLength(200).UseCollation(BinaryCollation);
+        });
+        b.Entity<DatabaseRow>(e =>
+        {
+            e.HasKey(x => x.PageId);
+            e.HasIndex(x => new { x.DatabaseId, x.PageId });
+            // The query cache reads the rows written since the version it holds.
+            e.HasIndex(x => new { x.DatabaseId, x.Seq });
         });
         b.Entity<PageAncestor>(e =>
         {
@@ -288,6 +319,9 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<AppliedOp>(b);
         Filter<LinkPreview>(b);
         Filter<WorkspaceExport>(b);
+        Filter<WorkspaceDatabase>(b);
+        Filter<DatabaseView>(b);
+        Filter<DatabaseRow>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

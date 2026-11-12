@@ -7,6 +7,9 @@ namespace Cgw.Core.Sync;
 /// The change feed and the tree (SYNC_DESIGN.md, Channel 2, Pull). Each change carries its entity
 /// as the caller may see it now; one the caller may not see is a delete, so a client drops what it
 /// lost access to. Several changes to one entity in a page of the feed are sent once, as the last.
+/// A row is a page, and every change to one is logged as a <c>page</c> change (the worker's head
+/// moves included): it is sent as a <c>row</c> change with the row, never as a page (Phase 4
+/// contracts, section 4). Databases and views are sent to those who may see their database's page.
 /// </summary>
 public sealed class FeedService(CgwDb db, Access access)
 {
@@ -37,15 +40,30 @@ public sealed class FeedService(CgwDb db, Access access)
             .Concat(mine.Where(r => r.EntityType == "access"))
             .OrderBy(r => r.Seq).ToList();
 
-        var pageIds = latest.Where(r => r.EntityType is "page" or "favourite" or "visit").Select(r => r.EntityId).Distinct().ToList();
+        var pageIds = latest.Where(r => r.EntityType is "page" or "row" or "favourite" or "visit").Select(r => r.EntityId).Distinct().ToList();
         var pages = new Dictionary<Guid, Page>();
         foreach (var chunk in Chunked.Of(pageIds))
             foreach (var page in await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id)).ToListAsync(ct))
                 pages[page.Id] = page;
+        // Rows, databases and views, read only when the feed names some.
+        var rowValues = new Dictionary<Guid, DatabaseRow>();
+        var rowIds = pages.Values.Where(p => p.Kind == PageKinds.Row && p.DeletedAt == null).Select(p => p.Id).ToList();
+        foreach (var chunk in Chunked.Of(rowIds))
+            foreach (var record in await db.DatabaseRows.AsNoTracking().Where(r => chunk.Contains(r.PageId)).ToListAsync(ct))
+                rowValues[record.PageId] = record;
+        var databaseIds = latest.Where(r => r.EntityType == "database").Select(r => r.EntityId).Distinct().ToList();
+        var databases = databaseIds.Count == 0 ? [] : await db.Databases.AsNoTracking().Where(d => databaseIds.Contains(d.PageId)).ToDictionaryAsync(d => d.PageId, ct);
+        var viewIds = latest.Where(r => r.EntityType == "view").Select(r => r.EntityId).Distinct().ToList();
+        var views = viewIds.Count == 0 ? [] : await db.DatabaseViews.AsNoTracking().Where(v => viewIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
         // Every page's level at once: a few queries, not a few per page (the feed is polled often).
-        var all = pageIds.Count > 50 ? await access.AllLevelsAsync(member) : null;
-        var levels = all ?? await access.LevelsAsync(member, pageIds, ct);
+        // A row's level is its database's.
+        var levelIds = pageIds.Concat(databaseIds).Concat(views.Values.Select(v => v.DatabaseId))
+            .Concat(pages.Values.Where(p => p.Kind == PageKinds.Row && p.ParentPageId is not null).Select(p => p.ParentPageId!.Value))
+            .Distinct().ToList();
+        var all = levelIds.Count > 50 ? await access.AllLevelsAsync(member) : null;
+        var levels = all ?? await access.LevelsAsync(member, levelIds, ct);
         string Level(Guid id) => levels.GetValueOrDefault(id, Levels.None);
+        string PageLevel(Page page) => all is not null ? Access.LevelIn(all, page) : Level(page.Id);
 
         var sectionIds = latest.Where(r => r.EntityType == "section").Select(r => r.EntityId).ToList();
         var sections = await db.Sections.AsNoTracking().Where(s => sectionIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);
@@ -59,12 +77,37 @@ public sealed class FeedService(CgwDb db, Access access)
             switch (row.EntityType)
             {
                 case "page":
+                case "row":
                 {
                     var page = pages.GetValueOrDefault(row.EntityId);
-                    var level = page is null || page.DeletedAt is not null ? Levels.None : Level(page.Id);
+                    var level = page is null || page.DeletedAt is not null ? Levels.None : PageLevel(page);
+                    if (page?.Kind == PageKinds.Row || row.EntityType == "row")
+                    {
+                        var values = page is null ? null : rowValues.GetValueOrDefault(page.Id);
+                        changes.Add(level == Levels.None || values is null
+                            ? new ChangeDto(row.Seq, "row", row.EntityId, "delete", null)
+                            : new ChangeDto(row.Seq, "row", row.EntityId, "upsert", new EntityDto(Row: RowDto.From(page!, values, level))));
+                        break;
+                    }
                     changes.Add(level == Levels.None
                         ? new ChangeDto(row.Seq, "page", row.EntityId, "delete", null)
                         : new ChangeDto(row.Seq, "page", row.EntityId, "upsert", new EntityDto(Page: PageDto.From(page!, level))));
+                    break;
+                }
+                case "database":
+                {
+                    var database = databases.GetValueOrDefault(row.EntityId);
+                    changes.Add(database is null || Level(database.PageId) == Levels.None
+                        ? new ChangeDto(row.Seq, "database", row.EntityId, "delete", null)
+                        : new ChangeDto(row.Seq, "database", row.EntityId, "upsert", new EntityDto(Database: DatabaseDto.From(database))));
+                    break;
+                }
+                case "view":
+                {
+                    var view = views.GetValueOrDefault(row.EntityId);
+                    changes.Add(view is null || Level(view.DatabaseId) == Levels.None
+                        ? new ChangeDto(row.Seq, "view", row.EntityId, "delete", null)
+                        : new ChangeDto(row.Seq, "view", row.EntityId, "upsert", new EntityDto(View: ViewDto.From(view))));
                     break;
                 }
                 case "section":
@@ -116,7 +159,8 @@ public sealed class FeedService(CgwDb db, Access access)
         var workspace = await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == member.WorkspaceId, ct);
         var cursor = workspace.ChangeSeq;
         var levels = await access.AllLevelsAsync(member);
-        var query = db.Pages.AsNoTracking().Where(p => p.DeletedAt == null);
+        // Pages and databases; rows come by their own route (GET /databases/{id}/rows).
+        var query = db.Pages.AsNoTracking().Where(p => p.Kind != PageKinds.Row && p.DeletedAt == null);
         if (root is { } r) query = query.Where(p => db.PageAncestors.Any(a => a.PageId == p.Id && a.AncestorPageId == r));
         var pages = (await query.ToListAsync(ct))
             .Where(p => levels.GetValueOrDefault(p.Id, Levels.None) != Levels.None)
@@ -131,12 +175,21 @@ public sealed class FeedService(CgwDb db, Access access)
             .Where(f => visible.Contains(f.PageId)).Select(f => new FavouriteDto(f.WorkspaceId, f.PageId, f.OrderKey)).ToList();
         var visits = (await db.PageVisits.AsNoTracking().Where(v => v.UserId == member.UserId).ToListAsync(ct))
             .Where(v => visible.Contains(v.PageId)).Select(v => new VisitDto(v.WorkspaceId, v.PageId, v.LastVisitedAt)).ToList();
-        return new TreeDto(WorkspaceDto.From(workspace, member.Role), sections, pages, favourites, visits, cursor);
+        // The databases and views of database pages the caller sees (none read when there are none).
+        var shown = pages.Where(p => p.Kind == PageKinds.Database).Select(p => p.Id).ToHashSet();
+        List<DatabaseDto> databases = [];
+        List<ViewDto> views = [];
+        if (shown.Count > 0)
+        {
+            databases = (await db.Databases.AsNoTracking().ToListAsync(ct)).Where(d => shown.Contains(d.PageId)).Select(DatabaseDto.From).ToList();
+            views = (await db.DatabaseViews.AsNoTracking().ToListAsync(ct)).Where(v => shown.Contains(v.DatabaseId)).Select(ViewDto.From).ToList();
+        }
+        return new TreeDto(WorkspaceDto.From(workspace, member.Role), sections, pages, favourites, visits, cursor, databases, views);
     }
 
     /// <summary>The sections a guest sees: those holding a page they may open, anywhere in the workspace.</summary>
     private async Task<HashSet<Guid>> GuestSectionsAsync(Dictionary<Guid, string> levels, CancellationToken ct) =>
-        (await db.Pages.AsNoTracking().Where(p => p.DeletedAt == null).Select(p => new { p.Id, p.SectionId }).ToListAsync(ct))
+        (await db.Pages.AsNoTracking().Where(p => p.Kind != PageKinds.Row && p.DeletedAt == null).Select(p => new { p.Id, p.SectionId }).ToListAsync(ct))
             .Where(p => levels.GetValueOrDefault(p.Id, Levels.None) != Levels.None)
             .Select(p => p.SectionId).ToHashSet();
 }

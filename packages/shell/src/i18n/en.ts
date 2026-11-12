@@ -1,6 +1,13 @@
 // The English catalogue. `ar.ts` must have exactly the same keys: its type is derived from this
 // one, so a missing or extra key fails the typecheck, and `t()` only accepts keys that exist.
+//
+// The database views' strings are their own section, `database`, written in `@cgw/database` and
+// merged here (read from its catalogue module, not the package's index, so the frame's bundle
+// does not take the views with it).
+import { en as databaseEn } from '../../../database/src/i18n/en';
+
 export const en = {
+  ...databaseEn,
   app: {
     title: 'Cash Gear Workspace',
     loading: 'Loading…',
@@ -106,6 +113,17 @@ export const en = {
     readOnlyInline: '[needs a newer version]',
     tocLabel: 'Table of contents',
     tocEmpty: 'Headings on this page will be listed here.',
+    databaseView: 'Database',
+    databaseUnavailable: 'This database can’t be shown here.',
+    databaseNotChosen: 'No database chosen.',
+    databaseChoose: 'Choose a database',
+    mentionPages: 'Pages',
+    mentionDates: 'Date',
+    dateToday: 'Today',
+    dateTomorrow: 'Tomorrow',
+    datePick: 'Pick a date',
+    datePicker: 'Choose a date',
+    dateInvalid: 'No date',
     untitled: 'Untitled',
     missingPage: 'Page not found',
     dragHandle: 'Drag to move, click for the block menu',
@@ -192,6 +210,8 @@ export const en = {
     childPage: 'Page',
     pageLink: 'Link to page',
     tableOfContents: 'Table of contents',
+    database: 'Database',
+    linkedView: 'Linked view of a database',
   },
   blockKeywords: {
     paragraph: 'text paragraph plain',
@@ -213,6 +233,8 @@ export const en = {
     childPage: 'page subpage new',
     pageLink: 'link mention page reference',
     tableOfContents: 'toc table of contents headings outline summary index',
+    database: 'database db table inline rows records',
+    linkedView: 'linked view database existing db table',
   },
   trash: {
     title: 'Trash',
@@ -509,5 +531,26 @@ export const en = {
     theme: 'theme dark light colour color appearance',
     language: 'language english arabic',
     search: 'search find pages go to',
+    newDatabase: 'new database table create db rows records',
+    importCsv: 'import csv spreadsheet file database table rows',
+  },
+  databases: {
+    newDatabase: 'New database',
+    newDatabaseIn: 'Add a database in {{name}}',
+    addInside: 'Add a database inside',
+    importCsv: 'Import a CSV file as a new database',
+    importCsvInside: 'Import a CSV file as a database inside',
+    pickTitle: 'Choose a database',
+    pickSearch: 'Find a database by name',
+    pickEmpty: 'There is no database in this workspace yet.',
+    pickNone: 'No database has that name.',
+    rowIn: 'In {{database}}',
+    rowsHeld: 'Rows on this device: {{held}} of {{total}}.',
+    rowsHeldAll: 'Every row is on this device: {{total}}.',
+    sharedPlaceholder: 'Databases are shown in the app, not on a shared page.',
+    trashRows: 'Rows',
+    trashRowsNote: 'Rows deleted from a database. Restoring one puts it back in its database.',
+    confirmRow: '“{{title}}” will be deleted from its database for good. This cannot be undone.',
+    locating: 'Finding the row…',
   },
 } as const;

@@ -326,12 +326,22 @@ fn collect_text<T: ReadTxn>(txn: &T, node: &XmlOut, depth: usize, out: &mut Stri
             }
         }
         XmlOut::Element(element) => {
+            // Schema version 3's inline date: its date as stored (the doc layer's
+            // `dateMentionText`); a database view, an atom with no children, writes nothing.
+            if element.tag().as_ref() == "dateMention" {
+                out.push_str(&date_mention_text(txn, element));
+                return Ok(());
+            }
             let mut inner = String::new();
             for child in element.children(txn) {
                 collect_text(txn, &child, depth + 1, &mut inner)?;
             }
             // Each text body ends a line, so words in two blocks never run together.
-            let has_text = element.children(txn).any(|c| matches!(c, XmlOut::Text(_)));
+            let has_text = element.children(txn).any(|c| match c {
+                XmlOut::Text(_) => true,
+                XmlOut::Element(inline) => inline.tag().as_ref() == "dateMention",
+                XmlOut::Fragment(_) => false,
+            });
             out.push_str(&inner);
             if has_text && !inner.ends_with('\n') {
                 out.push('\n');
@@ -340,6 +350,46 @@ fn collect_text<T: ReadTxn>(txn: &T, node: &XmlOut, depth: usize, out: &mut Stri
         XmlOut::Fragment(_) => {}
     }
     Ok(())
+}
+
+/// A date in a date mention's form: `YYYY-MM-DD`, or that and `THH:mm:ssZ`, ASCII digits only
+/// (packages/doc/src/dates.ts, `isDateValue`).
+fn is_date_value(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let digits = |range: std::ops::Range<usize>| bytes[range].iter().all(u8::is_ascii_digit);
+    let date = bytes.len() >= 10
+        && digits(0..4)
+        && bytes[4] == b'-'
+        && digits(5..7)
+        && bytes[7] == b'-'
+        && digits(8..10);
+    match bytes.len() {
+        10 => date,
+        20 => {
+            date && bytes[10] == b'T'
+                && digits(11..13)
+                && bytes[13] == b':'
+                && digits(14..16)
+                && bytes[16] == b':'
+                && digits(17..19)
+                && bytes[19] == b'Z'
+        }
+        _ => false,
+    }
+}
+
+/// A date mention's text: its date, then ` → ` and its end when that is valid too; nothing when
+/// the date is missing or not in a date's form (the doc layer's `dateMentionText`).
+fn date_mention_text<T: ReadTxn>(txn: &T, element: &yrs::XmlElementRef) -> String {
+    let read = |name: &str| match element.get_attribute(txn, name) {
+        Some(Out::Any(Any::String(s))) if is_date_value(&s) => Some(s.to_string()),
+        _ => None,
+    };
+    match (read("date"), read("end")) {
+        (Some(date), Some(end)) => format!("{date} → {end}"),
+        (Some(date), None) => date,
+        _ => String::new(),
+    }
 }
 
 /// Plain text, one line per text body, for search.

@@ -12,14 +12,16 @@ import {
 import type * as Y from 'yjs';
 import { BlockSelection } from './blockSelection';
 import { Clipboard } from './clipboard';
+import { DateMentions, dateMentionView, type DateUi } from './dates';
 import { BlockDecorations, StableTyping } from './decorations';
 import { BlockHandle, type HandleUi } from './handle';
-import type { EditorHost } from './host';
+import type { EditorHost, OnHostChange } from './host';
 import { MarkdownShortcuts } from './inputRules';
 import { BlockKeymap } from './keymap';
 import { Mentions, pageMentionView } from './mention';
 import { SlashCommands, type SlashKeys } from './slash';
 import { bookmarkView, childPageView, codeBlockView, fileView, imageView } from './nodeviews/atoms';
+import { databaseViewView } from './nodeviews/database';
 import { textBodyView } from './nodeviews/textBody';
 import { Tables } from './tables';
 import { TableOfContents, tableOfContentsView } from './toc';
@@ -40,8 +42,8 @@ export interface BlockEditorOptions {
   label?: string;
 }
 
-/** What the overlays (menus, toolbars) hand to the editor's plugins. */
-export interface EditorUi extends HandleUi {
+/** What the overlays (menus, toolbars, the date picker) hand to the editor's plugins. */
+export interface EditorUi extends HandleUi, DateUi {
   slashKeys: SlashKeys | null;
   mentionKeys: SlashKeys | null;
 }
@@ -61,10 +63,22 @@ export interface BlockEditor {
 export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
   let host: EditorHost = options.host ?? {};
   const getHost = () => host;
+  // Node views that draw from the host (a date in the interface language, a database view's
+  // frame) are told when it is replaced: nothing else would draw them again.
+  const hostListeners = new Set<() => void>();
+  const onHostChange: OnHostChange = (listener) => {
+    hostListeners.add(listener);
+    return () => hostListeners.delete(listener);
+  };
   const stats = newStats();
   const contentErrors: Error[] = [];
   const bound = !!options.fragment && !options.readOnlyContent;
-  const ui: EditorUi = { slashKeys: null, mentionKeys: null, openBlockMenu: null };
+  const ui: EditorUi = {
+    slashKeys: null,
+    mentionKeys: null,
+    openBlockMenu: null,
+    openDatePicker: null,
+  };
 
   const views: Record<string, (host: () => EditorHost) => ReturnType<typeof textBodyView>> = {
     textBody: textBodyView,
@@ -74,7 +88,9 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     bookmark: bookmarkView,
     childPage: childPageView,
     tableOfContents: tableOfContentsView,
+    databaseView: (h) => databaseViewView(h, onHostChange),
     pageMention: pageMentionView,
+    dateMention: (h) => dateMentionView(h, () => ui, onHostChange),
   };
   const schema = schemaExtensions().map((extension) => {
     const view = views[extension.name];
@@ -109,6 +125,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       MarkdownShortcuts,
       SlashCommands.configure({ keys: () => ui.slashKeys }),
       Mentions.configure({ keys: () => ui.mentionKeys }),
+      DateMentions.configure({ ui: () => ui }),
       BlockSelection,
       Tables,
       TableOfContents,
@@ -147,7 +164,9 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     contentErrors,
     host: getHost,
     setHost(next) {
+      if (next === host) return;
       host = next;
+      for (const listener of [...hostListeners]) listener();
     },
     destroy() {
       editor.destroy();

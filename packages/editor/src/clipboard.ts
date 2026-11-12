@@ -42,7 +42,25 @@ function sliceAsDoc(slice: Slice, schema: Schema): DocJSON {
   return { type: 'doc', content: blocks };
 }
 
-function writeClipboard(view: EditorView, event: ClipboardEvent, slice: Slice) {
+/**
+ * The text of an inline leaf in copied plain text: a line break, a date as stored (its
+ * `leafText`), a page mention's title now.
+ */
+function leafText(host: () => EditorHost) {
+  return (node: PMNode): string => {
+    if (node.type.name === 'hardBreak') return '\n';
+    if (node.type.name === 'pageMention')
+      return host().pages?.title(String(node.attrs.pageId ?? '')) ?? '';
+    return node.type.spec.leafText?.(node) ?? '';
+  };
+}
+
+function writeClipboard(
+  view: EditorView,
+  event: ClipboardEvent,
+  slice: Slice,
+  host: () => EditorHost,
+) {
   const data = event.clipboardData!;
   const { schema } = view.state;
   const json = { format: FORMAT, version: 1, slice: slice.toJSON() };
@@ -57,7 +75,7 @@ function writeClipboard(view: EditorView, event: ClipboardEvent, slice: Slice) {
     'text/plain',
     blocks > 1
       ? toMarkdown(doc).trimEnd()
-      : slice.content.textBetween(0, slice.content.size, '\n', '\n'),
+      : slice.content.textBetween(0, slice.content.size, '\n', leafText(host)),
   );
 }
 
@@ -83,7 +101,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
             const doc = sliceAsDoc(slice, view.state.schema);
             return (doc.content?.length ?? 0) > 1
               ? toMarkdown(doc).trimEnd()
-              : slice.content.textBetween(0, slice.content.size, '\n', '\n');
+              : slice.content.textBetween(0, slice.content.size, '\n', leafText(host));
           },
           handleDOMEvents: {
             copy: (view, event) => {
@@ -91,7 +109,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
                 blockSelectionSlice(view.state) ??
                 (view.state.selection.empty ? null : view.state.selection.content());
               if (!slice || !event.clipboardData) return false;
-              writeClipboard(view, event, slice);
+              writeClipboard(view, event, slice, host);
               event.preventDefault();
               return true;
             },
@@ -100,7 +118,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
                 blockSelectionSlice(view.state) ??
                 (view.state.selection.empty ? null : view.state.selection.content());
               if (!slice || !event.clipboardData || !view.editable) return false;
-              writeClipboard(view, event, slice);
+              writeClipboard(view, event, slice, host);
               event.preventDefault();
               const blockSel = blockSelectionKey.getState(view.state);
               if (blockSel) {

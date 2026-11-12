@@ -20,6 +20,7 @@ export default defineConfig({
       input: {
         spike: resolve(import.meta.dirname, 'index.html'),
         app: resolve(import.meta.dirname, 'app.html'),
+        database: resolve(import.meta.dirname, 'database.html'),
       },
     },
   },

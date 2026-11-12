@@ -14,9 +14,11 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCloud, useOfflineMarks } from '../cloud/CloudUi';
+import { requestCsvImport, requestNewDatabase } from '../database/dialogs';
+import { pageGlyph } from '../database/make';
 import { navigate } from '../route';
 import { canEditPage, type WorkspaceSession } from '../session';
-import { RowMenu } from './RowMenu';
+import { PointMenu, RowMenu } from './RowMenu';
 import { dropTarget, dropZone, treeRows, type DropZone, type TreeRow } from './tree';
 
 export const ROW_HEIGHT = 28;
@@ -73,6 +75,12 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
   const [renaming, setRenaming] = useState<Id | null>(null);
   const [drop, setDrop] = useState<{ key: string; zone: DropZone } | null>(null);
   const [menu, setMenu] = useState<{ pageId: Id; x: number; y: number } | null>(null);
+  const [databaseMenu, setDatabaseMenu] = useState<{
+    sectionId: Id;
+    name: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const dragging = useRef<Id | null>(null);
 
   // Open the ancestors of the page on screen, so it shows in the tree.
@@ -130,6 +138,24 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     } catch (error) {
       onError(error);
     }
+  };
+
+  /** "New database": empty, or from a template (the dialog), where a page would go. */
+  const addDatabase = async (
+    sectionId: Id,
+    parentPageId: Id | null,
+    from: 'new' | 'csv' = 'new',
+  ) => {
+    const place = {
+      workspaceId,
+      sectionId,
+      parentPageId,
+      orderKey: session.keyFor(sectionId, parentPageId),
+    };
+    const made = await (from === 'csv' ? requestCsvImport(place) : requestNewDatabase(place));
+    if (!made) return;
+    if (parentPageId) toggle(parentPageId, true);
+    navigate({ kind: 'page', pageId: made.databaseId });
   };
 
   const onKeyDown = (event: KeyboardEvent, row: TreeRow, index: number) => {
@@ -199,9 +225,15 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     }
   };
 
-  /** A page goes inside another only if the account may edit that one (the server checks again). */
-  const mayHold = (parentPageId: Id | null) =>
-    !parentPageId || canEditPage(session.mirror.pages.get(parentPageId));
+  /**
+   * A page goes inside another only if the account may edit that one (the server checks again),
+   * and never inside a database (only its rows sit under it).
+   */
+  const mayHold = (parentPageId: Id | null) => {
+    if (!parentPageId) return true;
+    const parent = session.mirror.pages.get(parentPageId);
+    return canEditPage(parent) && parent?.kind !== 'database';
+  };
 
   const onDragOver = (event: DragEvent, row: TreeRow) => {
     if (!dragging.current) return;
@@ -261,6 +293,27 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
                 onDrop={(event) => onDrop(event, row)}
               >
                 <span className="cgw-tree-section-name">{row.section.name}</span>
+                <button
+                  type="button"
+                  className="cgw-tree-action"
+                  tabIndex={-1}
+                  aria-label={t('databases.newDatabaseIn', { name: row.section.name })}
+                  title={t('databases.newDatabaseIn', { name: row.section.name })}
+                  data-action="new-database"
+                  aria-haspopup="menu"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setDatabaseMenu({
+                      sectionId: row.section.id,
+                      name: row.section.name,
+                      x: rect.left,
+                      y: rect.bottom,
+                    });
+                  }}
+                >
+                  <span aria-hidden="true">{pageGlyph({ icon: null, kind: 'database' })}</span>
+                </button>
                 <button
                   type="button"
                   className="cgw-tree-action"
@@ -329,7 +382,7 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
                 }}
               />
               <span className="cgw-tree-icon" aria-hidden="true">
-                {page.icon ?? '📄'}
+                {pageGlyph(page)}
               </span>
               {renaming === page.id ? (
                 <RenameField
@@ -365,7 +418,7 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
                 >
                   ⋯
                 </button>
-                {editable && (
+                {editable && page.kind !== 'database' && (
                   <button
                     type="button"
                     className="cgw-tree-action"
@@ -396,8 +449,30 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
             const page = session.mirror.pages.get(menu.pageId);
             if (page) void addPage(page.sectionId, page.id);
           }}
+          onAddDatabase={(from) => {
+            const page = session.mirror.pages.get(menu.pageId);
+            if (page) void addDatabase(page.sectionId, page.id, from);
+          }}
           onClose={() => setMenu(null)}
           onError={onError}
+        />
+      )}
+      {databaseMenu && (
+        <PointMenu
+          x={databaseMenu.x}
+          y={databaseMenu.y}
+          label={t('databases.newDatabaseIn', { name: databaseMenu.name })}
+          onClose={() => setDatabaseMenu(null)}
+          items={[
+            {
+              label: t('databases.newDatabase'),
+              onSelect: () => void addDatabase(databaseMenu.sectionId, null),
+            },
+            {
+              label: t('databases.importCsv'),
+              onSelect: () => void addDatabase(databaseMenu.sectionId, null, 'csv'),
+            },
+          ]}
         />
       )}
     </div>

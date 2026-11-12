@@ -693,3 +693,75 @@ describe('the move notice, measured', () => {
       expect(ownMoved.filter((l) => l.told).length).toBeGreaterThanOrEqual(0.9 * ownMoved.length);
     }, 120_000);
 });
+
+describe('inside a page: the schema-version-3 nodes', () => {
+  const DATABASE = '01936f6e-0000-7000-8000-0000000000d1';
+  const [VIEW_A, VIEW_B] = [
+    '01936f6e-0000-7000-8000-0000000000da',
+    '01936f6e-0000-7000-8000-0000000000db',
+  ];
+  const { databaseView, dateMention } = build;
+
+  /** Sets attributes of the first body of a block, as the node views do. */
+  function setBody(device: Device, id: string, attrs: Record<string, unknown>) {
+    const editor = editorOf(device);
+    const body = blocks.firstBody(find(device, id)!)!;
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(body.pos, undefined, { ...body.node.attrs, ...attrs }),
+    );
+  }
+
+  it('two point one database view at different views: one wins everywhere, the block kept', async () => {
+    const [a, b] = await devices(docOf(paragraph('top'), databaseView(DATABASE, null)));
+    const x = idAt(a, 1);
+    setBody(a, x, { viewId: VIEW_A });
+    setBody(b, x, { viewId: VIEW_B });
+    settle([a, b]);
+    converged([a, b]);
+    const attrs = blocks.firstBody(find(a, x)!)!.node.attrs;
+    expect(attrs.databaseId).toBe(DATABASE);
+    expect([VIEW_A, VIEW_B]).toContain(attrs.viewId);
+    expect(list(a)).toHaveLength(2);
+  });
+
+  it('one deletes a database view while another changes it: deleted, the database untouched', async () => {
+    const [a, b] = await devices(docOf(paragraph('top'), databaseView(DATABASE, VIEW_A)));
+    const x = idAt(a, 1);
+    setBody(a, x, { viewId: VIEW_B });
+    editorOf(b).view.dispatch(blocks.deleteBlock(editorOf(b).state, find(b, x)!));
+    settle([a, b]);
+    expect(find(a, x)).toBeUndefined();
+    converged([a, b]);
+  });
+
+  it('dates put in one line at once both stand; a date changed while another types beside it', async () => {
+    const [a, b] = await devices(docOf(paragraph('Due ')));
+    const x = idAt(a, 0);
+    caret(a, x, 'end');
+    editorOf(a).view.dispatch(
+      editorOf(a).state.tr.replaceSelectionWith(
+        editorOf(a).schema.nodeFromJSON(dateMention('2026-12-01')),
+      ),
+    );
+    caret(b, x, 0);
+    editorOf(b).view.dispatch(
+      editorOf(b).state.tr.replaceSelectionWith(
+        editorOf(b).schema.nodeFromJSON(dateMention('2026-11-30')),
+      ),
+    );
+    settle([a, b]);
+    converged([a, b]);
+    expect(plainText(fragmentToJSON(a.page.fragment))).toBe('2026-11-30Due 2026-12-01');
+    // A changes the second date; B types after it.
+    const editor = editorOf(a);
+    let at = -1;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'dateMention' && node.attrs.date === '2026-12-01') at = pos;
+    });
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(at, undefined, { date: '2026-12-24' }));
+    type(b, x, 'end', ' at noon');
+    settle([a, b]);
+    converged([a, b]);
+    expect(plainText(fragmentToJSON(b.page.fragment))).toBe('2026-11-30Due 2026-12-24 at noon');
+  });
+});

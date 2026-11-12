@@ -1763,6 +1763,196 @@
           }
         }
       }
+    },
+    "/api/v1/databases/{databaseId}/rows": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "listDatabaseRows",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowsPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/databases/{databaseId}/query": {
+      "post": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "queryDatabase",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/databases/{databaseId}/import": {
+      "post": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "importDatabaseRows",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/databases/{databaseId}/export": {
+      "get": {
+        "tags": [
+          "Databases"
+        ],
+        "operationId": "exportDatabase",
+        "parameters": [
+          {
+            "name": "viewId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "today",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offsetMinutes",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1996,6 +2186,50 @@
           }
         }
       },
+      "DatabaseDto": {
+        "required": [
+          "id",
+          "workspaceId",
+          "properties",
+          "version",
+          "rowCount",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "rowCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "DeviceInfo": {
         "required": [
           "id",
@@ -2185,6 +2419,36 @@
                 "$ref": "#/components/schemas/MemberDto"
               }
             ]
+          },
+          "database": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DatabaseDto"
+              }
+            ]
+          },
+          "view": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ViewDto"
+              }
+            ]
+          },
+          "row": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RowDto"
+              }
+            ]
           }
         }
       },
@@ -2254,6 +2518,97 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "GroupCountDto": {
+        "required": [
+          "key",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "ImportProblemDto": {
+        "required": [
+          "line",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "line": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ImportRequestDto": {
+        "required": [
+          "csv",
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "csv": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "columns": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "header": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "ImportResponseDto": {
+        "required": [
+          "created",
+          "problems"
+        ],
+        "type": "object",
+        "properties": {
+          "created": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportProblemDto"
+            }
           }
         }
       },
@@ -3048,6 +3403,134 @@
           }
         }
       },
+      "QueryContextDto": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "offsetMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "me": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "people": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "QueryRequestDto": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "filter": { },
+          "sorts": { },
+          "group": { },
+          "groupKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "search": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "context": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryContextDto"
+              }
+            ]
+          },
+          "after": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "QueryResponseDto": {
+        "required": [
+          "rows",
+          "groups",
+          "total",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RowDto"
+            }
+          },
+          "groups": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GroupCountDto"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "RegisterRequest": {
         "required": [
           "email",
@@ -3197,6 +3680,218 @@
         "properties": {
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "RowDto": {
+        "required": [
+          "id",
+          "workspaceId",
+          "sectionId",
+          "parentPageId",
+          "orderKey",
+          "kind",
+          "title",
+          "icon",
+          "coverAssetId",
+          "isTemplate",
+          "templateOfPageId",
+          "version",
+          "createdAt",
+          "updatedAt",
+          "trashedAt",
+          "trashRootId",
+          "restricted",
+          "docHeadSeq",
+          "docEpoch",
+          "docSchemaVersion",
+          "access",
+          "databaseId",
+          "values",
+          "versions",
+          "computed",
+          "computedVersion",
+          "createdBy",
+          "updatedBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentPageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "coverAssetId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isTemplate": {
+            "type": "boolean"
+          },
+          "templateOfPageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trashedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "trashRootId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "restricted": {
+            "type": "boolean"
+          },
+          "docHeadSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "docEpoch": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "docSchemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "access": {
+            "type": "string"
+          },
+          "databaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "values": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "versions": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "computed": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "computedVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "updatedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "RowsPageDto": {
+        "required": [
+          "rows",
+          "next",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RowDto"
+            }
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -3480,7 +4175,9 @@
           "pages",
           "favourites",
           "visits",
-          "cursor"
+          "cursor",
+          "databases",
+          "views"
         ],
         "type": "object",
         "properties": {
@@ -3518,6 +4215,18 @@
               "string"
             ],
             "format": "int64"
+          },
+          "databases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatabaseDto"
+            }
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewDto"
+            }
           }
         }
       },
@@ -3638,6 +4347,58 @@
           },
           "api": {
             "type": "string"
+          }
+        }
+      },
+      "ViewDto": {
+        "required": [
+          "id",
+          "workspaceId",
+          "databaseId",
+          "name",
+          "type",
+          "orderKey",
+          "config",
+          "version",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "databaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -3869,6 +4630,9 @@
     },
     {
       "name": "History"
+    },
+    {
+      "name": "Databases"
     }
   ]
 }

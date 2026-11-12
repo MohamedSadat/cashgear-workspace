@@ -1,5 +1,6 @@
 // The page's menu in the top bar: favourite, share, history, export, template, available
-// offline, trash.
+// offline, trash. A database's page has no document (no history), and is not a template; a row
+// is part of its database: no favourite, sharing, template, export or pin of its own.
 import type { Id, PageRecord } from '@cgw/workspace';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,22 +40,26 @@ export function PageMenu({
   const { t } = useTranslation();
   const cloud = useCloud();
   // Only someone who may edit the page changes it (the server checks again).
-  const editable = canEditPage(page);
+  const editable = page.kind === 'row' ? session.canEdit(page.id) : canEditPage(page);
+  const row = page.kind === 'row';
+  const database = page.kind === 'database';
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const favourite =
     !!session.workspaceId && session.mirror.isFavourite(session.workspaceId, page.id);
   return (
     <>
-      <button
-        type="button"
-        className="cgw-icon-button cgw-topbar-button"
-        aria-pressed={favourite}
-        aria-label={t(favourite ? 'workspace.unfavourite' : 'workspace.favourite')}
-        title={t(favourite ? 'workspace.unfavourite' : 'workspace.favourite')}
-        onClick={() => void session.setFavourite(page.id, !favourite).catch(onError)}
-      >
-        {favourite ? '★' : '☆'}
-      </button>
+      {!row && (
+        <button
+          type="button"
+          className="cgw-icon-button cgw-topbar-button"
+          aria-pressed={favourite}
+          aria-label={t(favourite ? 'workspace.unfavourite' : 'workspace.favourite')}
+          title={t(favourite ? 'workspace.unfavourite' : 'workspace.favourite')}
+          onClick={() => void session.setFavourite(page.id, !favourite).catch(onError)}
+        >
+          {favourite ? '★' : '☆'}
+        </button>
+      )}
       <button
         type="button"
         className="cgw-icon-button cgw-topbar-button"
@@ -75,7 +80,7 @@ export function PageMenu({
           label={t('workspace.pageMenu')}
           onClose={() => setMenu(null)}
           items={[
-            ...(canShare
+            ...(canShare && !row
               ? [
                   {
                     label: t('share.open'),
@@ -84,17 +89,25 @@ export function PageMenu({
                   },
                 ]
               : []),
-            {
-              label: t('history.open'),
-              onSelect: () =>
-                pageEvents.dispatchEvent(new CustomEvent('history', { detail: page.id })),
-            },
-            {
-              label: t('exchange.exportPage'),
-              onSelect: () =>
-                pageEvents.dispatchEvent(new CustomEvent('export', { detail: page.id })),
-            },
-            ...(editable
+            ...(database
+              ? []
+              : [
+                  {
+                    label: t('history.open'),
+                    onSelect: () =>
+                      pageEvents.dispatchEvent(new CustomEvent('history', { detail: page.id })),
+                  },
+                ]),
+            ...(row
+              ? []
+              : [
+                  {
+                    label: t('exchange.exportPage'),
+                    onSelect: () =>
+                      pageEvents.dispatchEvent(new CustomEvent('export', { detail: page.id })),
+                  },
+                ]),
+            ...(editable && !row && !database
               ? [
                   {
                     label: t(page.isTemplate ? 'workspace.notTemplate' : 'workspace.makeTemplate'),
@@ -105,7 +118,7 @@ export function PageMenu({
                   },
                 ]
               : []),
-            ...offlineMenuItems(cloud, session, page.id, t),
+            ...(row ? [] : offlineMenuItems(cloud, session, page.id, t)),
             ...(editable
               ? [
                   {

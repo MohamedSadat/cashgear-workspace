@@ -3,8 +3,10 @@
 // target/store-fixtures, and sent the frames below over cgw-store-cli; then the same build answers a
 // fixed list of reads, and the answers are kept beside the store (`expected.json`). The tests open a
 // copy of each store with this build and check it answers every one of those reads the same way.
-//   node crates/cgw-store/tests/fixtures/make.mjs
-// Needs git and cargo (offline: the crates the workspace uses are in the local cache).
+//   node crates/cgw-store/tests/fixtures/make.mjs [3 ...]
+// With versions given, only those fixtures are made (the others are kept as they are: a store
+// written again differs in its bytes, the times the store itself writes). Needs git and cargo
+// (offline: the crates the workspace uses are in the local cache; `cargo fetch` first).
 import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -17,10 +19,14 @@ const work = join(root, 'target/store-fixtures');
 const exe = process.platform === 'win32' ? '.exe' : '';
 
 /** The releases whose stores are kept: the tag, and the store schema version it wrote. */
-const RELEASES = [
+const ALL = [
   { tag: 'v0.1.0', version: 1 },
   { tag: 'v0.2.0', version: 2 },
+  { tag: 'v0.3.0', version: 3 },
 ];
+const asked = process.argv.slice(2).map(Number);
+const RELEASES = asked.length ? ALL.filter((r) => asked.includes(r.version)) : ALL;
+if (!RELEASES.length) throw new Error(`No such release: ${process.argv.slice(2).join(' ')}`);
 
 // Frames: u32 LE header length, the JSON header, u32 LE blob count, each blob as u32 LE length
 // and bytes (crates/cgw-store/src/lib.rs).
@@ -257,6 +263,7 @@ function tree(ws, base) {
 /** The frames a release's webview sent: the writes, and the reads whose answers are kept. */
 function scenario(version) {
   const synced = version >= 2;
+  const offline = version >= 3;
   const ws = workspace(0x100, synced);
   const t = tree(ws, 0x100);
   const local = synced ? workspace(0x200, false) : null;
@@ -361,6 +368,39 @@ function scenario(version) {
     ...assets.map((a) => [{ op: 'putAsset', asset: a }, [[0x89, 0x50, 0x4e, 0x47]]]),
     [{ op: 'setPref', key: 'toggles', value: { [t.a.id]: true } }],
     [{ op: 'setPref', key: 'theme', value: 'dark' }],
+    // Version 3 (offline): pins, a log set aside (C's snapshot and an unsent update), a repair.
+    ...(offline
+      ? [
+          [
+            {
+              op: 'pin',
+              pin: { workspaceId: ws.id, pageId: t.a.id, subtree: true, pinnedAt: time(55) },
+            },
+          ],
+          [
+            {
+              op: 'pin',
+              pin: { workspaceId: local.id, pageId: lt.c.id, subtree: false, pinnedAt: time(56) },
+            },
+          ],
+          [{ op: 'appendDocUpdates', pageId: t.c.id, updateIds: [id(0x622)] }, [[0x0e]]],
+          [
+            {
+              op: 'setAsideDoc',
+              pageId: t.c.id,
+              reason: 'doc.epochMismatch',
+              id: id(0x701),
+              at: time(57),
+            },
+          ],
+          [
+            {
+              op: 'setRepairState',
+              state: { pageId: t.a.id, epoch: 0, checkedSeq: 2, at: time(58), repairs: 1 },
+            },
+          ],
+        ]
+      : []),
   ];
 
   const workspaces = [ws, ...(local ? [local] : [])];
@@ -394,13 +434,25 @@ function scenario(version) {
           { op: 'pendingAssets', limit: 100 },
         ]
       : []),
+    ...(offline
+      ? [
+          ...workspaces.flatMap((w) => [
+            { op: 'pins', workspaceId: w.id },
+            { op: 'heldPages', workspaceId: w.id },
+            { op: 'storageUsage', workspaceId: w.id },
+            { op: 'quarantine', workspaceId: w.id },
+          ]),
+          { op: 'quarantine', workspaceId: null },
+          ...pages.map((p) => ({ op: 'repairState', pageId: p.id })),
+        ]
+      : []),
   ];
   return {
     writes,
     reads,
     about: {
       version,
-      tag: RELEASES.find((r) => r.version === version).tag,
+      tag: ALL.find((r) => r.version === version).tag,
       workspaces: workspaces.map((w) => w.id),
       pages: pages.map((p) => p.id),
       // The page whose log has a snapshot and later updates, and the corrupt update kept aside.

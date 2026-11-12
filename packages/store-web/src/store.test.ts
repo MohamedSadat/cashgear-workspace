@@ -1,6 +1,15 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { uuidv7, type AssetRecord, type HistoryEntry, type Operation } from '@cgw/workspace';
+import {
+  STORE_SCHEMA_VERSION,
+  uuidv7,
+  type AssetRecord,
+  type HistoryEntry,
+  type Operation,
+  type PinRecord,
+  type QuarantineEntry,
+  type RepairState,
+} from '@cgw/workspace';
 import {
   describeLocalStore,
   op,
@@ -94,6 +103,32 @@ function fixture(synced: boolean) {
     { pageId: b.id, workspaceId: ws.id, title: 'beta', text: 'تقرير المبيعات' },
   ];
 
+  // Version 3 (offline): a pin, a set-aside log and a repair state.
+  const pin: PinRecord = {
+    workspaceId: ws.id,
+    pageId: b.id,
+    subtree: true,
+    pinnedAt: '2026-03-01T00:00:00.000Z',
+  };
+  const entry: QuarantineEntry = {
+    id: uuidv7(),
+    workspaceId: ws.id,
+    pageId: c.id,
+    title: 'Gamma',
+    reason: 'doc.epochMismatch',
+    at: '2026-03-02T00:00:00.000Z',
+    parts: [bytes(5, 5), bytes(6)],
+    status: 'pending',
+    recoveredPageId: null,
+  };
+  const repair: RepairState = {
+    pageId: a.id,
+    epoch: 1,
+    checkedSeq: 8,
+    at: '2026-03-03T00:00:00.000Z',
+    repairs: 0,
+  };
+
   /** Writes the rows as that version did, into a database its own upgrade made. */
   async function write(db: IDBDatabase, version: number) {
     const names = [
@@ -114,6 +149,7 @@ function fixture(synced: boolean) {
       'prefs',
       'meta',
       ...(synced ? ['syncCursors', 'docCursors', 'unsentPages'] : []),
+      ...(version >= 3 ? ['pins', 'quarantine', 'repairs'] : []),
     ];
     const tx = db.transaction(names, 'readwrite');
     const put = (name: string, value: unknown, key?: IDBValidKey) =>
@@ -141,12 +177,17 @@ function fixture(synced: boolean) {
       put('unsentPages', { pageId: a.id });
       put('unsentPages', { pageId: b.id });
     }
+    if (version >= 3) {
+      put('pins', pin);
+      put('quarantine', entry);
+      put('repairs', repair);
+    }
     await done(tx);
   }
 
   /** Everything the old store held, read through the store of this build. */
-  async function check(store: IndexedDbStore) {
-    expect(await store.schemaVersion()).toBe(3);
+  async function check(store: IndexedDbStore, version: number) {
+    expect(await store.schemaVersion()).toBe(STORE_SCHEMA_VERSION);
     const mirror = await store.readMirror(ws.id);
     expect(mirror.workspaces).toEqual([ws]);
     expect(mirror.sections).toEqual(expect.arrayContaining([section, other]));
@@ -172,10 +213,17 @@ function fixture(synced: boolean) {
     expect(await store.nextOutboxBatch(10, ws.id)).toEqual(outbox);
     expect((await store.search(ws.id, 'quarter', 10)).map((h) => h.pageId)).toEqual([a.id]);
     expect(await store.getPref('toggles')).toEqual({ [a.id]: true });
-    // The new collections are there and empty.
-    expect(await store.pins(ws.id)).toEqual([]);
-    expect(await store.quarantine(null)).toEqual([]);
-    expect(await store.repairState(a.id)).toBeNull();
+    // Schema 3's collections: what version 3 kept, or empty from an earlier one.
+    expect(await store.pins(ws.id)).toEqual(version >= 3 ? [pin] : []);
+    expect(await store.quarantine(null)).toEqual(version >= 3 ? [entry] : []);
+    expect(await store.repairState(a.id)).toEqual(version >= 3 ? repair : null);
+    // Schema 4's collections are there and empty; the pages stay pages.
+    expect(mirror.databases).toEqual([]);
+    expect(mirror.views).toEqual([]);
+    expect(mirror.pages.every((p) => p.kind === 'page')).toBe(true);
+    expect(await store.dbHolds(ws.id)).toEqual([]);
+    expect(await store.trashedRows(ws.id)).toEqual([]);
+    expect(await store.readRows(a.id)).toEqual([]);
     // A page with only a snapshot counts as held: the index over the old logs finds it.
     expect(await store.heldPages(ws.id)).toEqual([a.id, b.id, c.id].sort());
     const docBytes = 3 + 2 + updates.reduce((n, u) => n + u.data.byteLength, 0);
@@ -184,7 +232,7 @@ function fixture(synced: boolean) {
       docBytes,
       assetBytes: 3,
       historyBytes: 2,
-      quarantineBytes: 0,
+      quarantineBytes: version >= 3 ? 3 : 0,
     });
   }
 
@@ -193,7 +241,7 @@ function fixture(synced: boolean) {
     const db = await openDatabase(indexedDB, name, version, (d, oldVersion, tx) =>
       upgrade(d, oldVersion, tx, version),
     );
-    expect(db.objectStoreNames.contains('pins')).toBe(false);
+    expect(db.objectStoreNames.contains(version >= 3 ? 'rows' : 'pins')).toBe(false);
     await write(db, version);
     db.close();
   }
@@ -202,13 +250,13 @@ function fixture(synced: boolean) {
 }
 
 describe('IndexedDB store migration', () => {
-  it('opens a version-1 store at version 3 with all it held', async () => {
+  it('opens a version-1 store at version 4 with all it held', async () => {
     const name = `test-v1-${uuidv7()}`;
     const f = fixture(false);
     await f.build(name, 1);
 
     const store = await IndexedDbStore.open(indexedDB, name);
-    await f.check(store);
+    await f.check(store, 1);
     // The log goes on from where version 1 left it.
     expect(await store.appendDocUpdates(f.b.id, [{ updateId: uuidv7(), data: bytes(5) }])).toEqual([
       3,
@@ -229,20 +277,28 @@ describe('IndexedDB store migration', () => {
     await store.close();
 
     const db = await peek(name);
-    expect(db.version).toBe(3);
+    expect(db.version).toBe(4);
     expect([...db.objectStoreNames]).toEqual(
-      expect.arrayContaining(['pins', 'quarantine', 'repairs']),
+      expect.arrayContaining([
+        'pins',
+        'quarantine',
+        'repairs',
+        'databases',
+        'views',
+        'rows',
+        'dbHolds',
+      ]),
     );
     db.close();
   });
 
-  it('opens a version-2 store at version 3 with all it held, sync state included', async () => {
+  it('opens a version-2 store at version 4 with all it held, sync state included', async () => {
     const name = `test-v2-${uuidv7()}`;
     const f = fixture(true);
     await f.build(name, 2);
 
     const store = await IndexedDbStore.open(indexedDB, name);
-    await f.check(store);
+    await f.check(store, 2);
     expect(await store.syncCursor(f.ws.id)).toBe(42);
     expect(await store.docCursor(f.a.id)).toEqual({ headSeq: 8, epoch: 1 });
     expect(await store.docCursors(f.ws.id)).toEqual({ [f.a.id]: { headSeq: 8, epoch: 1 } });
@@ -263,42 +319,80 @@ describe('IndexedDB store migration', () => {
     await store.close();
   });
 
-  it('refuses a store a newer version wrote, and leaves it as it was', async () => {
-    // A database a version-4 build upgraded (with a step of its own), and its rows.
-    const name = `test-v4-${uuidv7()}`;
+  it('opens a version-3 store at version 4 with all it held, offline state included', async () => {
+    const name = `test-v3-${uuidv7()}`;
     const f = fixture(true);
-    const v4 = await openDatabase(indexedDB, name, 4, (db, oldVersion, tx) => {
-      upgrade(db, oldVersion, tx, 3);
+    await f.build(name, 3);
+
+    const store = await IndexedDbStore.open(indexedDB, name);
+    await f.check(store, 3);
+    expect(await store.syncCursor(f.ws.id)).toBe(42);
+    expect(await store.docCursors(f.ws.id)).toEqual({ [f.a.id]: { headSeq: 8, epoch: 1 } });
+    expect(await store.pendingAssets(10)).toEqual([f.asset]);
+    // What schema 4 adds works on what version 3 wrote: a database under one of its pages.
+    const db = {
+      ...pageRecord(f.ws.id, f.a.sectionId, f.a.id, 'Tasks', 'a9'),
+      kind: 'database' as const,
+    };
+    await store.applyLocalOps([
+      op('page.create', f.ws.id, db.id, { ...db, database: { properties: [] } }),
+    ]);
+    expect((await store.readMirror(f.ws.id)).databases.map((d) => d.id)).toEqual([db.id]);
+    expect((await store.dbHold(db.id))?.mode).toBe('full');
+    // And a page version 3 kept goes with everything of it, as before.
+    await store.applyRemote({ workspaceId: f.ws.id, deletePages: [f.b.id] });
+    expect(await store.pins(f.ws.id)).toEqual([]);
+    expect((await store.quarantine(f.ws.id)).map((e) => e.pageId).sort()).toEqual(
+      [f.b.id, f.c.id].sort(),
+    );
+    await store.close();
+
+    const peeked = await peek(name);
+    expect(peeked.version).toBe(4);
+    const rows = peeked.transaction('rows').objectStore('rows');
+    expect([...rows.indexNames].sort()).toEqual(['database', 'trashRoot', 'workspace']);
+    peeked.close();
+  });
+
+  it('refuses a store a newer version wrote, and leaves it as it was', async () => {
+    // A database a later build upgraded (with a step of its own), and its rows.
+    const newer = STORE_SCHEMA_VERSION + 1;
+    const name = `test-v${newer}-${uuidv7()}`;
+    const f = fixture(true);
+    const later = await openDatabase(indexedDB, name, newer, (db, oldVersion, tx) => {
+      upgrade(db, oldVersion, tx, STORE_SCHEMA_VERSION);
       db.createObjectStore('future');
     });
-    let tx = v4.transaction(['pages', 'meta', 'future'], 'readwrite');
+    let tx = later.transaction(['pages', 'meta', 'future'], 'readwrite');
     tx.objectStore('pages').put({ ...f.a, parentPageId: '' });
-    tx.objectStore('meta').put(4, 'schemaVersion');
+    tx.objectStore('meta').put(newer, 'schemaVersion');
     tx.objectStore('future').put('kept', 'x');
     await done(tx);
-    v4.close();
+    later.close();
     await expect(IndexedDbStore.open(indexedDB, name)).rejects.toThrow(/newer version/);
     const db = await peek(name);
-    expect(db.version).toBe(4);
+    expect(db.version).toBe(newer);
     tx = db.transaction(['pages', 'meta', 'future']);
     expect(await getAll(tx.objectStore('pages'))).toEqual([{ ...f.a, parentPageId: '' }]);
-    expect(await request(tx.objectStore('meta').get('schemaVersion'))).toBe(4);
+    expect(await request(tx.objectStore('meta').get('schemaVersion'))).toBe(newer);
     expect(await request(tx.objectStore('future').get('x'))).toBe('kept');
     db.close();
 
     // A store whose database is at this build's version but whose record says newer.
-    const other = `test-meta4-${uuidv7()}`;
-    const v3 = await openDatabase(indexedDB, other, 3, (d, oldVersion, t) =>
-      upgrade(d, oldVersion, t, 3),
+    const other = `test-meta${newer}-${uuidv7()}`;
+    const current = await openDatabase(indexedDB, other, STORE_SCHEMA_VERSION, (d, oldVersion, t) =>
+      upgrade(d, oldVersion, t, STORE_SCHEMA_VERSION),
     );
-    tx = v3.transaction(['meta'], 'readwrite');
-    tx.objectStore('meta').put(4, 'schemaVersion');
+    tx = current.transaction(['meta'], 'readwrite');
+    tx.objectStore('meta').put(newer, 'schemaVersion');
     await done(tx);
-    v3.close();
-    await expect(IndexedDbStore.open(indexedDB, other)).rejects.toThrow(/newer version \(4\)/);
+    current.close();
+    await expect(IndexedDbStore.open(indexedDB, other)).rejects.toThrow(
+      new RegExp(`newer version \\(${newer}\\)`),
+    );
     const again = await peek(other);
     expect(await request(again.transaction('meta').objectStore('meta').get('schemaVersion'))).toBe(
-      4,
+      newer,
     );
     again.close();
   });

@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@cashgear/ui": "github:MohamedSadat/CashGear.React.UI#ef1277e78c6151643043fe3327a7f0733307b873",
+    "@cgw/database": "workspace:*",
     "@cgw/doc": "workspace:*",
     "@cgw/editor": "workspace:*",
     "@cgw/shell": "workspace:*",

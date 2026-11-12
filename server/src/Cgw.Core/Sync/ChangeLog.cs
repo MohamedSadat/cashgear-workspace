@@ -79,6 +79,36 @@ public sealed class ChangeLog(CgwDb db, TimeProvider clock)
         });
     }
 
+    /// <summary>
+    /// A change for each of many pages at once (a database's rows moving, going to the trash or
+    /// for good), each with its page's version as it is now: one statement, however many rows.
+    /// Runs at once, in the transaction; tracked changes added before or after keep their places.
+    /// </summary>
+    public async Task AddPagesAsync(IReadOnlyCollection<Guid> pageIds, string kind, Guid? actor, CancellationToken ct = default)
+    {
+        if (workspace == Guid.Empty) throw new InvalidOperationException("Lock the workspace first.");
+        foreach (var chunk in pageIds.Chunk(20_000))
+        {
+            var ids = System.Text.Json.JsonSerializer.Serialize(chunk.Select(id => Convert.ToHexString(GuidBytes.ToBytes(id))));
+            var parameters = new object[]
+            {
+                new SqlParameter("@ws", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspace) },
+                new SqlParameter("@base", System.Data.SqlDbType.BigInt) { Value = next },
+                new SqlParameter("@kind", System.Data.SqlDbType.NVarChar, 20) { Value = kind },
+                new SqlParameter("@actor", System.Data.SqlDbType.Binary, 16) { Value = actor is { } a ? GuidBytes.ToBytes(a) : DBNull.Value },
+                new SqlParameter("@now", System.Data.SqlDbType.DateTimeOffset) { Value = clock.GetUtcNow() },
+                new SqlParameter("@ids", System.Data.SqlDbType.NVarChar, -1) { Value = ids },
+            };
+            var added = await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO [WorkspaceChanges] ([WorkspaceId], [Seq], [EntityType], [EntityId], [Kind], [Version], [ActorUserId], [UserId], [CreatedAt])
+                SELECT @ws, @base + ROW_NUMBER() OVER (ORDER BY CAST(j.[key] AS int)), N'page', p.[Id], @kind, p.[Version], @actor, NULL, @now
+                FROM OPENJSON(@ids) j
+                INNER JOIN [Pages] p ON p.[Id] = CONVERT(binary(16), j.[value], 2)
+                """, parameters, ct);
+            next += added;
+        }
+    }
+
     /// <summary>Moves the workspace's head to the last change added; call before committing.</summary>
     public async Task FlushAsync(CancellationToken ct = default)
     {

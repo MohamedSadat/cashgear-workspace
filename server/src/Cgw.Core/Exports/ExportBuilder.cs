@@ -5,21 +5,26 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Cgw.Core.Data;
+using Cgw.Core.Databases;
 using Cgw.Core.Documents;
 
 namespace Cgw.Core.Exports;
 
 /// <summary>
 /// The workspace zip, in the format the app's export writes (<c>packages/shell/src/exchange/exchange.ts</c>,
-/// FORMAT_VERSION 1): per page <c>Title.md</c> and <c>Title.json</c> (the ProseMirror JSON) in
-/// folders that follow the tree, siblings with the same name numbered; <c>assets/{id}/{name}</c>;
-/// and the manifest <c>cgw-export.json</c> of ids, written last. Pages in the trash are left
-/// out; the caller passes only what the requester may read.
+/// FORMAT_VERSION 2): per page <c>Title.md</c> and <c>Title.json</c> (the ProseMirror JSON) in
+/// folders that follow the tree, siblings with the same name numbered; a database's rows in its
+/// folder as child pages are, and beside its own files <c>Title.csv</c> (<c>rowsToCsv</c> of every
+/// row and every property not deleted, title first, in database order);
+/// <c>assets/{id}/{name}</c>; and the manifest <c>cgw-export.json</c> of ids, written last
+/// (version 2: <c>kind</c> on every page, a row's <c>databaseId</c> and <c>values</c>, and
+/// <c>databases</c> with their properties and views). Pages in the trash are left out, and rows
+/// whose database is; the caller passes only what the requester may read.
 /// </summary>
 public static class ExportBuilder
 {
     public const string Format = "cash-gear-workspace-export";
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
     public const string Manifest = "cgw-export.json";
 
     public static string Untitled(string? locale) => locale == "ar" ? "بدون عنوان" : "Untitled";
@@ -31,24 +36,36 @@ public static class ExportBuilder
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    /// <summary>A database the requester may read: its record, its views, and its rows' values by row id.</summary>
+    public sealed record Database(WorkspaceDatabase Record, IReadOnlyList<DatabaseView> Views, IReadOnlyDictionary<Guid, DatabaseRow> Rows);
+
     public sealed record Input(
         Workspace Workspace,
         IReadOnlyList<Section> Sections,
-        /// <summary>Every page the requester may read, trashed ones included (their titles name links).</summary>
+        /// <summary>Every page the requester may read, trashed ones included (their titles name links), rows too.</summary>
         IReadOnlyList<Page> Pages,
         IReadOnlyDictionary<Guid, Asset> Assets,
         Func<Page, Task<string>> Content,
         Func<Asset, Task<byte[]?>> Bytes,
         string Untitled,
-        DateTimeOffset Now);
+        DateTimeOffset Now,
+        /// <summary>The databases the requester may read, by page id.</summary>
+        IReadOnlyDictionary<Guid, Database>? Databases = null,
+        /// <summary>People's names by id, for the CSV files.</summary>
+        IReadOnlyDictionary<string, string>? People = null);
 
     public static async Task WriteAsync(Stream output, Input input, CancellationToken ct = default)
     {
         var sections = input.Sections.OrderBy(s => s.OrderKey, StringComparer.Ordinal).ThenBy(s => Id(s.Id), StringComparer.Ordinal).ToList();
         var sectionNames = sections.ToDictionary(s => s.Id, s => s.Name);
         var all = input.Pages.ToDictionary(p => p.Id);
+        var databases = input.Databases ?? new Dictionary<Guid, Database>();
         var live = input.Pages.Where(p => p.TrashedAt is null && p.DeletedAt is null && sectionNames.ContainsKey(p.SectionId)).ToList();
         var liveIds = live.Select(p => p.Id).ToHashSet();
+        // A row only with its database, and only with its values.
+        live = live.Where(p => p.Kind != PageKinds.Row
+            || (p.ParentPageId is { } d && liveIds.Contains(d) && databases.TryGetValue(d, out var holder) && holder.Rows.ContainsKey(p.Id))).ToList();
+        liveIds = live.Select(p => p.Id).ToHashSet();
         static IEnumerable<Page> Sorted(IEnumerable<Page> pages) => pages.OrderBy(p => p.OrderKey, StringComparer.Ordinal).ThenBy(p => Id(p.Id), StringComparer.Ordinal);
         var children = live.Where(p => p.ParentPageId is not null).ToLookup(p => p.ParentPageId!.Value);
         var tops = live.Where(p => p.ParentPageId is null).ToLookup(p => p.SectionId);
@@ -132,13 +149,26 @@ public static class ExportBuilder
                 w.WriteEndObject();
             }, ct);
             if (page.CoverAssetId is { } cover) AssetPath(cover);
+            // A database's rows as CSV, beside its own files.
+            if (page.Kind == PageKinds.Database && databases.TryGetValue(page.Id, out var held))
+                await WriteText(zip, $"{@base}.csv", DatabaseCsv(held, live, all, input), input.Now, ct);
+            DatabaseRow? values = null;
+            if (page.Kind == PageKinds.Row && page.ParentPageId is { } rowDatabase && databases.TryGetValue(rowDatabase, out var owner))
+                values = owner.Rows.GetValueOrDefault(page.Id);
             var inExport = page.ParentPageId is { } p && paths.ContainsKey(p);
             manifestPages.Add(w =>
             {
                 w.WriteStartObject();
                 w.WriteString("id", Id(page.Id));
+                w.WriteString("kind", page.Kind);
                 w.WriteString("sectionId", Id(page.SectionId));
                 Nullable(w, "parentPageId", inExport ? Id(page.ParentPageId!.Value) : null);
+                if (values is not null)
+                {
+                    w.WriteString("databaseId", Id(values.DatabaseId));
+                    w.WritePropertyName("values");
+                    RawJson(w, values.Values, "{}");
+                }
                 w.WriteString("orderKey", page.OrderKey);
                 w.WriteString("title", page.Title);
                 Nullable(w, "icon", page.Icon);
@@ -207,11 +237,66 @@ public static class ExportBuilder
             w.WriteStartArray("pages");
             foreach (var write in manifestPages) write(w);
             w.WriteEndArray();
+            w.WriteStartArray("databases");
+            foreach (var page in pages)
+            {
+                if (page.Kind != PageKinds.Database || !databases.TryGetValue(page.Id, out var database)) continue;
+                w.WriteStartObject();
+                w.WriteString("id", Id(page.Id));
+                w.WritePropertyName("properties");
+                RawJson(w, database.Record.Properties, "[]");
+                w.WriteStartArray("views");
+                foreach (var view in database.Views.OrderBy(v => v.OrderKey, StringComparer.Ordinal).ThenBy(v => Id(v.Id), StringComparer.Ordinal))
+                {
+                    w.WriteStartObject();
+                    w.WriteString("id", Id(view.Id));
+                    w.WriteString("workspaceId", Id(view.WorkspaceId));
+                    w.WriteString("databaseId", Id(view.DatabaseId));
+                    w.WriteString("name", view.Name);
+                    w.WriteString("type", view.Type);
+                    w.WriteString("orderKey", view.OrderKey);
+                    w.WritePropertyName("config");
+                    RawJson(w, view.Config, "{}");
+                    w.WriteNumber("version", view.Version);
+                    w.WriteString("createdAt", Iso(view.CreatedAt));
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteStartArray("assets");
             foreach (var write in manifestAssets) write(w);
             w.WriteEndArray();
             w.WriteEndObject();
         }, ct);
+    }
+
+    /// <summary>
+    /// A database's rows as the app's export writes them: <c>rowsToCsv</c> with no view (every
+    /// property not deleted, title first, in database order), its rows in their order, people,
+    /// related rows and files named.
+    /// </summary>
+    private static string DatabaseCsv(Database database, List<Page> live, Dictionary<Guid, Page> all, Input input)
+    {
+        var schema = Schema.Parse(database.Record.PageId, database.Record.Version, database.Record.Properties);
+        var rows = live.Where(p => p.Kind == PageKinds.Row && p.ParentPageId == database.Record.PageId && database.Rows.ContainsKey(p.Id))
+            .OrderBy(p => p.OrderKey, StringComparer.Ordinal).ThenBy(p => Id(p.Id), StringComparer.Ordinal)
+            .Select(p => RowStore.ToData(p, database.Rows[p.Id])).ToList();
+        var lookups = new CsvLookups
+        {
+            People = input.People ?? new Dictionary<string, string>(),
+            Rows = all.Values.Where(p => p.Kind == PageKinds.Row).ToDictionary(p => Id(p.Id), p => p.Title, StringComparer.Ordinal),
+            Files = input.Assets.Values.ToDictionary(a => Id(a.Id), a => a.FileName, StringComparer.Ordinal),
+        };
+        return Csv.WriteText(schema, null, rows, lookups);
+    }
+
+    /// <summary>A JSON column written as JSON (objects and arrays, never a string).</summary>
+    private static void RawJson(Utf8JsonWriter w, string? json, string fallback)
+    {
+        using var document = JsonDocument.Parse(string.IsNullOrEmpty(json) ? fallback : json);
+        document.RootElement.WriteTo(w);
     }
 
     /// <summary>Lower-case hyphenated text, as ids are everywhere outside SQL.</summary>

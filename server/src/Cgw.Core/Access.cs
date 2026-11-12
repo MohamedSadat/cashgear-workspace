@@ -36,8 +36,10 @@ public sealed class Access(CgwDb db)
     public async Task<string> PageLevelAsync(Member member, Guid pageId)
     {
         var page = await db.Pages.AsNoTracking().Where(p => p.Id == pageId && p.DeletedAt == null)
-            .Select(p => new { p.Id, p.SectionId }).FirstOrDefaultAsync();
+            .Select(p => new { p.Id, p.SectionId, p.Kind, p.ParentPageId }).FirstOrDefaultAsync();
         if (page is null) return Levels.None;
+        // A row's level is its database's: rows are never restricted, never walked (Phase 4).
+        if (page.Kind == PageKinds.Row) return page.ParentPageId is { } database ? await PageLevelAsync(member, database) : Levels.None;
         var section = await db.Sections.AsNoTracking().Where(s => s.Id == page.SectionId)
             .Select(s => new { s.Visibility, s.OwnerUserId }).FirstOrDefaultAsync();
         if (section is null) return Levels.None;
@@ -92,16 +94,33 @@ public sealed class Access(CgwDb db)
         if (members.Count == 0 || pageIds.Count == 0) return result;
         var pages = new List<(Guid Id, string Visibility, Guid? Owner)>();
         var chains = new List<(Guid Page, Guid Ancestor, bool Restricted, int Depth)>();
-        foreach (var chunk in Chunked.Of(pageIds))
+        var rowPages = new List<(Guid Row, Guid Database)>();
+        async Task ReadAsync(IEnumerable<Guid> ids)
         {
-            pages.AddRange((await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id) && p.DeletedAt == null)
-                    .Join(db.Sections, p => p.SectionId, s => s.Id, (p, s) => new { p.Id, s.Visibility, s.OwnerUserId })
-                    .ToListAsync(ct))
-                .Select(p => (p.Id, p.Visibility, p.OwnerUserId)));
-            chains.AddRange((await db.PageAncestors.AsNoTracking().Where(a => chunk.Contains(a.PageId))
-                    .Join(db.Pages, a => a.AncestorPageId, p => p.Id, (a, p) => new { a.PageId, p.Id, p.Restricted, a.Depth })
-                    .ToListAsync(ct))
-                .Select(c => (c.PageId, c.Id, c.Restricted, c.Depth)));
+            foreach (var chunk in Chunked.Of(ids))
+            {
+                foreach (var p in await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id) && p.DeletedAt == null)
+                             .Join(db.Sections, p => p.SectionId, s => s.Id, (p, s) => new { p.Id, p.Kind, p.ParentPageId, s.Visibility, s.OwnerUserId })
+                             .ToListAsync(ct))
+                {
+                    if (p.Kind == PageKinds.Row)
+                    {
+                        if (p.ParentPageId is { } database) rowPages.Add((p.Id, database));
+                    }
+                    else pages.Add((p.Id, p.Visibility, p.OwnerUserId));
+                }
+                chains.AddRange((await db.PageAncestors.AsNoTracking().Where(a => chunk.Contains(a.PageId))
+                        .Join(db.Pages, a => a.AncestorPageId, p => p.Id, (a, p) => new { a.PageId, p.Id, p.Restricted, a.Depth })
+                        .ToListAsync(ct))
+                    .Select(c => (c.PageId, c.Id, c.Restricted, c.Depth)));
+            }
+        }
+        await ReadAsync(pageIds);
+        // Rows take their database's level: their databases are read too, only when rows were asked about.
+        if (rowPages.Count > 0)
+        {
+            var known = pages.Select(p => p.Id).ToHashSet();
+            await ReadAsync(rowPages.Select(r => r.Database).Where(id => !known.Contains(id)).Distinct().ToList());
         }
         var people = members.Select(m => m.UserId).ToList();
         var rows = new List<PagePermission>();
@@ -130,8 +149,18 @@ public sealed class Access(CgwDb db)
                 result[(page.Id, member.UserId)] = level ?? Default(member);
             }
         }
+        foreach (var (row, database) in rowPages)
+            foreach (var member in members)
+                result[(row, member.UserId)] = result.GetValueOrDefault((database, member.UserId), Levels.None);
         return result;
     }
+
+    /// <summary>
+    /// A page's level from <see cref="AllLevelsAsync"/>'s answer, which holds pages and databases:
+    /// a row's is its database's.
+    /// </summary>
+    public static string LevelIn(IReadOnlyDictionary<Guid, string> levels, Page page) =>
+        levels.GetValueOrDefault(page.Kind == PageKinds.Row && page.ParentPageId is { } database ? database : page.Id, Levels.None);
 
     private static string Default(Member member) => member.IsGuest ? Levels.None : Levels.Edit;
 
@@ -150,12 +179,14 @@ public sealed class Access(CgwDb db)
     }
 
     /// <summary>
-    /// Every page of the workspace with the caller's level: for the change feed, the tree and
-    /// search, where one page at a time would be one query per row.
+    /// Every page and database of the workspace with the caller's level: for the change feed, the
+    /// tree and search, where one page at a time would be one query per row. Rows are not in it
+    /// (their level is their database's, <see cref="LevelIn"/>), so a database's rows cost nothing
+    /// here (the filtered index <c>IX_Pages_Tree</c>).
     /// </summary>
     public async Task<Dictionary<Guid, string>> AllLevelsAsync(Member member)
     {
-        var pages = await db.Pages.AsNoTracking().Where(p => p.DeletedAt == null)
+        var pages = await db.Pages.AsNoTracking().Where(p => p.Kind != PageKinds.Row && p.DeletedAt == null)
             .Select(p => new { p.Id, p.ParentPageId, p.SectionId, p.Restricted }).ToListAsync();
         var sections = await db.Sections.AsNoTracking().ToDictionaryAsync(s => s.Id, s => (s.Visibility, s.OwnerUserId));
         var rows = (await db.PagePermissions.AsNoTracking()

@@ -49,6 +49,8 @@ public sealed class PagePurgeJob(DocStates states, BlobStore blob, TimeProvider 
             await db.Favourites.Where(f => f.PageId == pageId).ExecuteDeleteAsync(ct);
             await db.PageVisits.Where(v => v.PageId == pageId).ExecuteDeleteAsync(ct);
             await db.PageAncestors.Where(a => a.PageId == pageId || a.AncestorPageId == pageId).ExecuteDeleteAsync(ct);
+            // A row's record stays until now (emptied, so the query cache saw it go).
+            await db.DatabaseRows.Where(r => r.PageId == pageId).ExecuteDeleteAsync(ct);
             var now = clock.GetUtcNow();
             await db.Pages.Where(p => p.Id == pageId).ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.PurgedAt, now)
@@ -106,6 +108,9 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.Favourites.ExecuteDeleteAsync(ct);
         await db.PageVisits.ExecuteDeleteAsync(ct);
         await db.PageAncestors.ExecuteDeleteAsync(ct);
+        await db.DatabaseRows.ExecuteDeleteAsync(ct);
+        await db.DatabaseViews.ExecuteDeleteAsync(ct);
+        await db.Databases.ExecuteDeleteAsync(ct);
         await db.Pages.ExecuteDeleteAsync(ct);
         await db.Sections.ExecuteDeleteAsync(ct);
         await db.Assets.ExecuteDeleteAsync(ct);

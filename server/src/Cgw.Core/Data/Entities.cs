@@ -110,6 +110,17 @@ public sealed class Section : ITenantOwned
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>
+/// <c>Pages.Kind</c>: a page; a database (a page drawn as its views; only rows sit under it); a
+/// row of a database (never in the tree, its level its database's).
+/// </summary>
+public static class PageKinds
+{
+    public const string Page = "page";
+    public const string Database = "database";
+    public const string Row = "row";
+}
+
 public sealed class Page : ITenantOwned
 {
     public Guid Id { get; set; }
@@ -360,6 +371,62 @@ public sealed class WorkspaceChange : ITenantOwned
     /// <summary>For per-user rows (favourites, a grant to one person); null means everyone.</summary>
     public Guid? UserId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A workspace database (DATA_MODEL.md, Databases): a page of kind <c>database</c> and its
+/// properties. The JSON columns hold what packages/workspace/src/db/types.ts defines.
+/// </summary>
+public sealed class WorkspaceDatabase : ITenantOwned
+{
+    /// <summary>The database's page.</summary>
+    public Guid PageId { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>JSON: the <c>PropertyDef</c>s in display order, trashed ones included.</summary>
+    public string Properties { get; set; } = "[]";
+    /// <summary>Rises on every change to the properties.</summary>
+    public long Version { get; set; } = 1;
+    /// <summary>Rows not trashed and not templates.</summary>
+    public long RowCount { get; set; }
+    /// <summary>Rises on every write to one of its rows; each row keeps the value it was last written at (<see cref="DatabaseRow.Seq"/>).</summary>
+    public long RowsVersion { get; set; }
+    /// <summary>Some rows' computed values are older than <see cref="Version"/>: the worker recomputes them.</summary>
+    public bool ComputePending { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class DatabaseView : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid DatabaseId { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary><c>table</c>, <c>board</c>, <c>list</c>, <c>calendar</c> or <c>gallery</c>.</summary>
+    public string Type { get; set; } = "table";
+    public string OrderKey { get; set; } = "";
+    /// <summary>JSON: the <c>ViewConfig</c>.</summary>
+    public string Config { get; set; } = "{}";
+    public long Version { get; set; } = 1;
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>A row of a database: a page of kind <c>row</c> and its values.</summary>
+public sealed class DatabaseRow : ITenantOwned
+{
+    public Guid PageId { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid DatabaseId { get; set; }
+    /// <summary>JSON: stored values by property id; an empty value is absent.</summary>
+    public string Values { get; set; } = "{}";
+    /// <summary>JSON: per property id, the version of its value (the last write to reach the server wins).</summary>
+    public string PropertyVersions { get; set; } = "{}";
+    /// <summary>JSON: formula and rollup results by property id.</summary>
+    public string Computed { get; set; } = "{}";
+    /// <summary>The database version <see cref="Computed"/> was made for; null until made.</summary>
+    public long? ComputedVersion { get; set; }
+    /// <summary>The database's <see cref="WorkspaceDatabase.RowsVersion"/> when this row was last written: the query cache reads rows newer than it holds.</summary>
+    public long Seq { get; set; }
 }
 
 public sealed class AppliedOp : ITenantOwned

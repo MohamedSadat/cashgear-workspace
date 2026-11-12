@@ -31,9 +31,18 @@ describe('catalogues', () => {
       'editor.bookmarkInvalid',
       'history.note',
       'search.shortcut',
+      'databases.importCsv',
+      'databases.importCsvInside',
     ]);
     for (const [key, text] of arabic) {
       if (allowed.has(key) || key.startsWith('keywords.')) continue;
+      // The database views' section keeps its own package's rule: Arabic text, which may name a
+      // key (Enter, Alt), a file format (CSV) or a formula (`prop("Name")`) in Latin letters.
+      if (key.startsWith('database.')) {
+        const words = text.replace(/\{\{\w+\}\}|prop\("[^"]*"\)/g, '');
+        if (/\p{L}/u.test(words)) expect(/[؀-ۿ]/.test(words), `${key}: ${text}`).toBe(true);
+        continue;
+      }
       expect(/[A-Za-z]/.test(text.replace(/\{\{\w+\}\}/g, '')), `${key}: ${text}`).toBe(false);
     }
   });

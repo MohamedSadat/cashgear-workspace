@@ -1,6 +1,7 @@
 // The convergence simulator in CI (sim.ts): three clients, real Yjs documents, random tree
-// operations, partitions, loss, duplication and reordering; everyone converges on the server's
-// tree and documents, and nothing the server acknowledged is lost.
+// operations and database edits, partitions, loss, duplication and reordering; everyone
+// converges on the server's tree, documents, database, views and rows, and nothing the server
+// acknowledged is lost.
 //
 // A small size by default (a few seconds); larger with SIM_STEPS (rounds per seed), SIM_SEEDS
 // (how many seeds) and SIM_SEED (the first seed), for example
@@ -53,6 +54,7 @@ describe('convergence simulator', () => {
       console.info(
         `sim seed=${seed} steps=${STEPS} pages=${report.pages} updates=${report.updates} ops=${report.ops} ` +
           `acked=${report.acked} edits=${report.edits} treeOps=${report.treeOps} ` +
+          `dbOps=${report.dbOps} rows=${report.rows} ` +
           `lostRequests=${report.faults.lostRequests} lostAnswers=${report.faults.lostAnswers} ` +
           `duplicates=${report.faults.duplicates} partitioned=${report.faults.partitioned} ` +
           `settle=${report.settleRounds} ${ms}ms`,

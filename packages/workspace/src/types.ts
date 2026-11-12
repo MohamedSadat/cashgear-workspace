@@ -2,6 +2,14 @@
 // Phase 1: `Operation` is the shape Phase 2 sends to the server, and `LocalStore` is what both
 // local stores implement and the conformance suite checks.
 import type { Id } from './ids';
+import type {
+  CellValue,
+  DatabaseRecord,
+  PropertyDef,
+  PropertyId,
+  Value,
+  ViewRecord,
+} from './db/types';
 
 export type { Id };
 
@@ -37,7 +45,12 @@ export interface SectionRecord {
   createdAt: string;
 }
 
-export type PageKind = 'page';
+/**
+ * `database`: a page that is a database (Phase 4), drawn as its views; it may sit anywhere a page
+ * may, and only rows may sit under it. `row`: a row of a database, a page whose parent is its
+ * database; rows are kept as `RowRecord`s, never in the tree or the sidebar.
+ */
+export type PageKind = 'page' | 'database' | 'row';
 
 export interface PageRecord {
   id: Id;
@@ -70,6 +83,43 @@ export interface PageRecord {
 }
 
 export type AccessLevel = 'full' | 'edit' | 'comment' | 'view' | 'none';
+
+/**
+ * A row of a database (Phase 4): its page (title, icon, cover, order among the rows, trash, its
+ * document's head) and its values. Kept in the stores' `rows` collection, not `pages`; `getPage`
+ * and the planner's `page()` still find it. A row's access is its database's.
+ */
+export interface RowRecord extends Omit<PageRecord, 'kind'> {
+  kind: 'row';
+  databaseId: Id;
+  /** Stored values by property id; an empty value is absent. */
+  values: Record<PropertyId, Value>;
+  /** Per property, the server's version of its value: the last write to reach it wins. */
+  versions: Record<PropertyId, number>;
+  /** Formula and rollup results as the server made them, for filtering where inputs are not held. */
+  computed: Record<PropertyId, CellValue>;
+  /** The database version `computed` was made for; null until the server has made it. */
+  computedVersion: number | null;
+  /** Who made the row and who last changed it (created by, last edited by); null when unknown. */
+  createdBy: Id | null;
+  updatedBy: Id | null;
+}
+
+/** A database whose rows this device keeps (store schema 4). */
+export interface DbHold {
+  databaseId: Id;
+  workspaceId: Id;
+  /**
+   * `full`: every row is kept and the database is queried on this device (at most
+   * `LOCAL_ROW_LIMIT` rows); `partial`: the rows the server's queries returned, kept as a cache.
+   */
+  mode: 'full' | 'partial';
+  /** A full hold whose rows have all been fetched once; the feed keeps them fresh after that. */
+  complete: boolean;
+  /** Where the rows fetch goes on (the last row id fetched) while not complete. */
+  after: Id | null;
+  heldAt: string;
+}
 
 export interface FavouriteRecord {
   workspaceId: Id;
@@ -109,14 +159,19 @@ export type Operation =
   | Op<'section.create', SectionRecord>
   | Op<'section.update', Partial<Pick<SectionRecord, 'name' | 'orderKey'>>>
   | Op<'section.delete', Record<string, never>>
-  | Op<'page.create', PageRecord>
+  | Op<'page.create', PageCreate>
   | Op<'page.update', PageUpdate>
   | Op<'page.move', PageMove>
   | Op<'page.trash', Record<string, never>>
   | Op<'page.restore', Record<string, never>>
   | Op<'page.delete', Record<string, never>>
   | Op<'favourite.set', { favourite: boolean; orderKey: string | null }>
-  | Op<'visit.record', { at: string }>;
+  | Op<'visit.record', { at: string }>
+  // Phase 4: databases. `entityId` is the database's page id, the view's id, the row's page id.
+  | Op<'db.update', DbUpdate>
+  | Op<'view.upsert', ViewRecord>
+  | Op<'view.delete', Record<string, never>>
+  | Op<'row.update', RowUpdate>;
 
 export type OperationType = Operation['type'];
 
@@ -143,6 +198,32 @@ export interface PageMove {
   orderKey: string;
 }
 
+/**
+ * A page made: kind `database` carries its first properties (a title property is added if it has
+ * none); kind `row` has its database as parent and carries its first values.
+ */
+export type PageCreate = PageRecord & {
+  database?: { properties: PropertyDef[] };
+  row?: { values: Record<PropertyId, Value> };
+};
+
+/**
+ * A change to a database's properties, merged per property: each def replaces the property with
+ * its id or adds it; `order`, when given, is the new order of the ids it names, the rest keeping
+ * their places after them. Deleting a property sets its `trashedAt`; a type change converts every
+ * row's value by the conversion table (db/convert.ts) on the server and on every held row here; a
+ * relation with a `reversePropertyId` the target database does not have adds it there too.
+ */
+export interface DbUpdate {
+  properties?: PropertyDef[];
+  order?: PropertyId[];
+}
+
+/** Values set on one row, merged per property; null clears one. Last to reach the server wins. */
+export interface RowUpdate {
+  values: Record<PropertyId, Value | null>;
+}
+
 export interface OpResult {
   opId: Id;
   status: 'applied' | 'rejected';
@@ -157,9 +238,17 @@ export interface OpResult {
   notice?: string;
 }
 
-export type EntityType = 'workspace' | 'section' | 'page' | 'favourite' | 'visit';
+export type EntityType =
+  'workspace' | 'section' | 'page' | 'favourite' | 'visit' | 'database' | 'view' | 'row';
 export type EntityRecord =
-  WorkspaceRecord | SectionRecord | PageRecord | FavouriteRecord | VisitRecord;
+  | WorkspaceRecord
+  | SectionRecord
+  | PageRecord
+  | FavouriteRecord
+  | VisitRecord
+  | DatabaseRecord
+  | ViewRecord
+  | RowRecord;
 
 /** Why an operation was refused; the codes are the server's (SYNC_DESIGN.md). */
 export type OpErrorCode =
@@ -260,8 +349,20 @@ export interface RemoteBatch {
   /**
    * The batch is a whole tree (root null) or one subtree: pages of the workspace (under root) it
    * does not hold are removed, and with root null its sections too, unless they wait in the outbox.
+   * Rows are never removed by a replace (a tree holds none); databases and views of the workspace
+   * it does not hold are, with root null, as sections are.
    */
   replace?: { root: Id | null };
+  // Phase 4. Database and view records travel like pages: the tree holds every one the account
+  // may see, the feed each change. Rows are written only for a database this device holds (a
+  // `DbHold`, or one this batch sets); deletes always apply.
+  databases?: DatabaseRecord[];
+  views?: ViewRecord[];
+  rows?: RowRecord[];
+  deleteViews?: Id[];
+  deleteRows?: Id[];
+  /** Holds to write (a fetch of rows moving on, a hold made complete). */
+  holds?: DbHold[];
 }
 
 export interface HistoryEntry {
@@ -349,10 +450,14 @@ export interface StorageUsage {
 export interface MirrorSnapshot {
   workspaces: WorkspaceRecord[];
   sections: SectionRecord[];
+  /** Pages and databases; never rows. */
   pages: PageRecord[];
   favourites: FavouriteRecord[];
   visits: VisitRecord[];
   assets: AssetRecord[];
+  /** Phase 4: every database and view record of the workspace(s). */
+  databases: DatabaseRecord[];
+  views: ViewRecord[];
 }
 
 /**
@@ -462,6 +567,21 @@ export interface LocalStore {
   repairState(pageId: Id): Promise<RepairState | null>;
   setRepairState(state: RepairState): Promise<void>;
 
+  // Databases (store schema 4). Database and view records come with `readMirror`; rows do not.
+  /**
+   * Every row this device holds of the database, trashed rows and templates included. Removing a
+   * database page removes its database record, views, rows (each as a removed page: document,
+   * history, search entry, pin, repair state, and unsent edits set aside by the rule above) and
+   * its hold. A database made on this device is held `full` and `complete` from its creation.
+   */
+  readRows(databaseId: Id): Promise<RowRecord[]>;
+  /** Rows of the workspace that are their own trash root, for the trash. */
+  trashedRows(workspaceId: Id): Promise<RowRecord[]>;
+  dbHold(databaseId: Id): Promise<DbHold | null>;
+  dbHolds(workspaceId: Id): Promise<DbHold[]>;
+  /** Starts (or replaces) a hold; nothing is fetched by the store itself. */
+  holdDatabase(hold: DbHold): Promise<void>;
+
   // Housekeeping
   /** Removes for good every page of the workspace trashed before `before`, with its document. */
   purgeTrash(workspaceId: Id, before: string): Promise<Id[]>;
@@ -470,4 +590,4 @@ export interface LocalStore {
 }
 
 /** The store schema version this build reads and writes (SYNC_DESIGN.md, local migration). */
-export const STORE_SCHEMA_VERSION = 3;
+export const STORE_SCHEMA_VERSION = 4;

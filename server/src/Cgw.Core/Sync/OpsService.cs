@@ -2,6 +2,7 @@ using System.Data;
 using System.Text.Json;
 using Cgw.Core.Assets;
 using Cgw.Core.Data;
+using Cgw.Core.Databases;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core.Sync;
@@ -22,7 +23,7 @@ public sealed class OpFailure(string code, string title) : Exception(title)
 /// The tree never changes who may see a page behind anyone's back: a page that leaves the page
 /// deciding its access keeps that access as its own rows, and the feed says to fetch the subtree.
 /// </summary>
-public sealed class OpsService(CgwDb db, Access access, AssetService assets, ChangeLog changes, Audit audit, TimeProvider clock)
+public sealed class OpsService(CgwDb db, Access access, AssetService assets, ChangeLog changes, Audit audit, DatabaseOps databases, TimeProvider clock)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -53,7 +54,7 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
     private static bool DependsOn(OperationDto op, HashSet<Guid> rejected)
     {
         if (rejected.Count == 0 || op.Payload.ValueKind != JsonValueKind.Object) return false;
-        foreach (var name in new[] { "parentPageId", "sectionId" })
+        foreach (var name in new[] { "parentPageId", "sectionId", "databaseId" })
             if (op.Payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 && Guid.TryParse(value.GetString(), out var id) && rejected.Contains(id))
                 return true;
@@ -70,6 +71,7 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
         {
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
             await changes.LockAsync(member.WorkspaceId, ct);
+            databases.Reset();
             var seen = await db.AppliedOps.AsNoTracking().FirstOrDefaultAsync(a => a.OpId == op.OpId, ct);
             if (seen is not null)
             {
@@ -80,14 +82,20 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             try
             {
                 result = await ApplyTypeAsync(member, actor, op, ct);
+                // The database rules' writes: rows computed again, stamped, in the feed.
+                await databases.FlushAsync(ct);
                 await db.SaveChangesAsync(ct);
                 await changes.FlushAsync(ct);
+                // Answers that carry a row or a database are made after the flush (computed values, counts).
+                result = await AnswerAsync(member, op, result, ct);
             }
             catch (OpFailure failure)
             {
                 await tx.RollbackAsync(ct);
                 db.ChangeTracker.Clear();
-                result = Rejected(op, failure.Code, failure.Message) with { EntityType = EntityTypeOf(op), Entity = await CurrentAsync(member, op) };
+                databases.Reset();
+                var (type, entity) = await CurrentAsync(member, op);
+                result = Rejected(op, failure.Code, failure.Message) with { EntityType = type, Entity = entity };
                 // Kept, so a repeat of the same operation gets the same answer.
                 db.AppliedOps.Add(new AppliedOp { OpId = op.OpId, WorkspaceId = member.WorkspaceId, UserId = member.UserId, Result = JsonSerializer.Serialize(result, Json), CreatedAt = clock.GetUtcNow() });
                 await db.SaveChangesAsync(ct);
@@ -100,41 +108,83 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
         });
     }
 
-    private static string? EntityTypeOf(OperationDto op) => op.Type.Split('.')[0] switch
-    {
-        "workspace" => "workspace",
-        "section" => "section",
-        "page" => "page",
-        "favourite" => "favourite",
-        "visit" => "visit",
-        _ => null,
-    };
-
     /// <summary>The entity as the caller may see it now, sent with a refusal so the client can put it right.</summary>
-    private async Task<EntityDto?> CurrentAsync(Member member, OperationDto op)
+    private async Task<(string? Type, EntityDto? Entity)> CurrentAsync(Member member, OperationDto op)
     {
-        switch (EntityTypeOf(op))
+        switch (op.Type.Split('.')[0])
         {
             case "page":
+            case "row":
             {
                 var page = await db.Pages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == op.EntityId && p.DeletedAt == null);
-                if (page is null) return null;
+                var isRow = page?.Kind == PageKinds.Row || op.Type == "row.update"
+                    || (op.Type == "page.create" && Text(op.Payload, "kind") == PageKinds.Row);
+                if (page is null) return (isRow ? "row" : "page", null);
                 var level = await access.PageLevelAsync(member, page.Id);
-                return level == Levels.None ? null : new EntityDto(Page: PageDto.From(page, level));
+                if (level == Levels.None) return (isRow ? "row" : "page", null);
+                if (page.Kind != PageKinds.Row) return ("page", new EntityDto(Page: PageDto.From(page, level)));
+                var row = await db.DatabaseRows.AsNoTracking().FirstOrDefaultAsync(r => r.PageId == page.Id);
+                return ("row", row is null ? null : new EntityDto(Row: RowDto.From(page, row, level)));
+            }
+            case "db":
+            {
+                var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == op.EntityId);
+                if (record is null || await access.PageLevelAsync(member, record.PageId) == Levels.None) return ("database", null);
+                return ("database", new EntityDto(Database: DatabaseDto.From(record)));
+            }
+            case "view":
+            {
+                var view = await db.DatabaseViews.AsNoTracking().FirstOrDefaultAsync(v => v.Id == op.EntityId);
+                if (view is null || await access.PageLevelAsync(member, view.DatabaseId) == Levels.None) return ("view", null);
+                return ("view", new EntityDto(View: ViewDto.From(view)));
             }
             case "section":
             {
                 var section = await db.Sections.AsNoTracking().FirstOrDefaultAsync(s => s.Id == op.EntityId);
-                return section is null || !Access.SeesSection(member, section) ? null : new EntityDto(Section: SectionDto.From(section));
+                return ("section", section is null || !Access.SeesSection(member, section) ? null : new EntityDto(Section: SectionDto.From(section)));
             }
             case "workspace":
             {
                 var workspace = await db.Workspaces.AsNoTracking().FirstOrDefaultAsync(w => w.Id == member.WorkspaceId);
-                return workspace is null ? null : new EntityDto(Workspace: WorkspaceDto.From(workspace, member.Role));
+                return ("workspace", workspace is null ? null : new EntityDto(Workspace: WorkspaceDto.From(workspace, member.Role)));
             }
+            case "favourite":
+                return ("favourite", null);
+            case "visit":
+                return ("visit", null);
             default:
-                return null;
+                return (null, null);
         }
+    }
+
+    /// <summary>Stands for the entity of an answer made after the database rules have written (<see cref="AnswerAsync"/>).</summary>
+    private static readonly EntityDto Pending = new();
+
+    /// <summary>
+    /// An applied answer naming a row or a database, made after the database rules have written:
+    /// rows carry their computed values, databases their counts; a database page's create carries
+    /// its database record beside its page.
+    /// </summary>
+    private async Task<OpResultDto> AnswerAsync(Member member, OperationDto op, OpResultDto result, CancellationToken ct)
+    {
+        if (result.Status != "applied") return result;
+        if (ReferenceEquals(result.Entity, Pending))
+        {
+            if (result.EntityType == "row")
+            {
+                var page = await db.Pages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == op.EntityId && p.DeletedAt == null, ct);
+                var row = page is null ? null : await databases.RowDtoAsync(member, page, ct);
+                return result with { Entity = row is null ? null : new EntityDto(Row: row) };
+            }
+            var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == op.EntityId, ct);
+            return result with { Entity = record is null ? null : new EntityDto(Database: DatabaseDto.From(record)) };
+        }
+        if (op.Type == "page.create" && result.Entity?.Page is { Kind: PageKinds.Database } created)
+        {
+            var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == created.Id, ct);
+            return result with { Entity = result.Entity with { Database = record is null ? null : DatabaseDto.From(record) } };
+        }
+        return result;
     }
 
     // ------------------------------------------------------------------------------------------
@@ -207,9 +257,12 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             case "page.update":
             {
                 var page = await PageFor(member, op.EntityId, Levels.Edit, ct);
-                if (page.TrashedAt is not null) throw new OpFailure("page.trashed", "The page is in the trash");
+                if (await ReadsTrashedAsync(page, ct)) throw new OpFailure("page.trashed", "The page is in the trash");
+                var counted = Counts(page);
+                var titleChanged = false;
                 if (Str(payload, "title", out var title))
                 {
+                    titleChanged = page.Title != Title(title);
                     page.Title = Title(title);
                     page.SearchTitle = TextNormaliser.Normalise(page.Title);
                 }
@@ -221,6 +274,12 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                 page.Version++;
                 page.UpdatedAt = now;
                 page.UpdatedBy = member.UserId;
+                if (page.Kind == PageKinds.Row)
+                {
+                    // A row's page is one of its cells (the title) and its count (a template is not counted).
+                    await databases.TouchRowAsync(member, page, (Counts(page) ? 1 : 0) - (counted ? 1 : 0), titleChanged, false, ct);
+                    return Applied(op, "row", Pending);
+                }
                 changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
                 return await AppliedPage(member, op, page);
             }
@@ -230,9 +289,21 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             {
                 var page = await PageFor(member, op.EntityId, Levels.Edit, ct);
                 CheckBase(page, op);
-                if (page.TrashedAt is not null) throw new OpFailure("page.trashed", "The page is in the trash");
+                if (await ReadsTrashedAsync(page, ct)) throw new OpFailure("page.trashed", "The page is in the trash");
+                if (page.Kind == PageKinds.Row)
+                {
+                    // A row is its own trash root; its database stays.
+                    var counted = Counts(page);
+                    page.TrashedAt = now;
+                    page.TrashRootId = page.Id;
+                    page.TrashedBy = member.UserId;
+                    page.Version++;
+                    await databases.TouchRowAsync(member, page, counted ? -1 : 0, false, true, ct);
+                    return Applied(op, "row", Pending);
+                }
                 // The subtree goes as one unit; pages already trashed on their own keep their root.
-                foreach (var record in await SubtreeAsync(page.Id, ct))
+                var subtree = await SubtreeAsync(page.Id, ct);
+                foreach (var record in subtree)
                 {
                     if (record.TrashedAt is not null) continue;
                     record.TrashedAt = now;
@@ -241,6 +312,8 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                     record.Version++;
                     changes.Add("page", record.Id, "upsert", record.Version, member.UserId);
                 }
+                // And the rows of its databases with it (the subtree rule; rows are not in the closure table).
+                await DatabaseTree.TrashAsync(db, changes, subtree, page.Id, member.UserId, now, ct);
                 return await AppliedPage(member, op, page);
             }
             case "page.restore":
@@ -248,14 +321,15 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             case "page.delete":
             {
                 var page = await PageFor(member, op.EntityId, Levels.Full, ct);
-                if (page.TrashedAt is null) throw new OpFailure("page.notTrashed", "Pages are deleted for good only from the trash");
+                if (!await ReadsTrashedAsync(page, ct)) throw new OpFailure("page.notTrashed", "Pages are deleted for good only from the trash");
                 var subtree = await SubtreeAsync(page.Id, ct);
                 var ids = subtree.Select(p => p.Id).ToList();
-                // For good means every page of it, so it needs full access to every page of it.
+                // For good means every page of it, so it needs full access to every page of it
+                // (a database's rows have its level: the database is among them).
                 await NeedFullOnAllAsync(member, ids, "Deleting for good needs full access to every page under this one");
                 await PageDeletion.TombstoneAsync(db, changes, subtree, member.UserId, now, ct);
                 audit.Add(actor, "page.delete", member.WorkspaceId, "page", page.Id, new { pages = ids.Count });
-                return Applied(op, "page", null);
+                return Applied(op, page.Kind == PageKinds.Row ? "row" : "page", null);
             }
             case "favourite.set":
             {
@@ -285,9 +359,60 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                 changes.Add("visit", page.Id, "upsert", 1, member.UserId, member.UserId);
                 return Applied(op, "visit", new EntityDto(Visit: new VisitDto(member.WorkspaceId, page.Id, at)));
             }
+            case "db.update":
+            {
+                var page = await LiveDatabaseAsync(member, op.EntityId, ct);
+                await databases.UpdateDatabaseAsync(member, page, payload, ct);
+                return Applied(op, "database", Pending);
+            }
+            case "view.upsert":
+            {
+                if (!Guid.TryParse(Text(payload, "id"), out var id) || id != op.EntityId) throw new OpFailure("invalid", "Id mismatch");
+                if (!Guid.TryParse(Text(payload, "workspaceId"), out var ws) || ws != member.WorkspaceId) throw new OpFailure("invalid", "Id mismatch");
+                if (!Guid.TryParse(Text(payload, "databaseId"), out var databaseId)) throw new OpFailure("invalid", "A view names its database");
+                var page = await LiveDatabaseAsync(member, databaseId, ct);
+                var record = await databases.DatabaseAsync(page.Id, ct) ?? throw new OpFailure("not.found", "Database not found");
+                var view = await databases.UpsertViewAsync(member, id, payload, record, ct);
+                return Applied(op, "view", new EntityDto(View: ViewDto.From(view)));
+            }
+            case "view.delete":
+            {
+                var view = await db.DatabaseViews.FirstOrDefaultAsync(v => v.Id == op.EntityId, ct) ?? throw new OpFailure("not.found", "View not found");
+                await LiveDatabaseAsync(member, view.DatabaseId, ct);
+                databases.DeleteView(member, view);
+                return Applied(op, "view", null);
+            }
+            case "row.update":
+            {
+                var page = await PageFor(member, op.EntityId, Levels.Edit, ct);
+                if (page.Kind != PageKinds.Row) throw new OpFailure("invalid", "Not a row");
+                if (await ReadsTrashedAsync(page, ct)) throw new OpFailure("page.trashed", "The row is in the trash");
+                await databases.UpdateRowAsync(member, page, payload, ct);
+                return Applied(op, "row", Pending);
+            }
             default:
                 throw new OpFailure("invalid", $"Unknown operation {op.Type}");
         }
+    }
+
+    /// <summary>A database page the caller may edit, not in the trash, for an operation on the database or its views.</summary>
+    private async Task<Page> LiveDatabaseAsync(Member member, Guid id, CancellationToken ct)
+    {
+        var page = await PageFor(member, id, Levels.Edit, ct);
+        if (page.Kind != PageKinds.Database) throw new OpFailure("invalid", "Not a database");
+        if (page.TrashedAt is not null) throw new OpFailure("page.trashed", "The database is in the trash");
+        return page;
+    }
+
+    /// <summary>A row counts towards its database's <c>rowCount</c> while it is neither trashed nor a template.</summary>
+    private static bool Counts(Page page) => page.TrashedAt is null && !page.IsTemplate;
+
+    /// <summary>A row reads as trashed when it or its database page is (ops.ts <c>readsTrashed</c>).</summary>
+    private async Task<bool> ReadsTrashedAsync(Page page, CancellationToken ct)
+    {
+        if (page.TrashedAt is not null) return true;
+        if (page.Kind != PageKinds.Row || page.ParentPageId is not { } database) return false;
+        return await db.Pages.AnyAsync(p => p.Id == database && p.TrashedAt != null, ct);
     }
 
     private async Task<OpResultDto> CreatePageAsync(Member member, OperationDto op, DateTimeOffset now, CancellationToken ct)
@@ -296,9 +421,12 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
         if (!Guid.TryParse(Text(p, "id"), out var id) || id != op.EntityId) throw new OpFailure("invalid", "Id mismatch");
         if (!Guid.TryParse(Text(p, "workspaceId"), out var ws) || ws != member.WorkspaceId) throw new OpFailure("invalid", "Id mismatch");
         if (await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).AnyAsync(x => x.Id == id, ct)) throw new OpFailure("invalid", "Page exists");
+        var kind = Text(p, "kind") ?? PageKinds.Page;
+        if (kind is not (PageKinds.Page or PageKinds.Database or PageKinds.Row)) throw new OpFailure("invalid", $"Not a page kind: {kind}");
         if (!Guid.TryParse(Text(p, "sectionId"), out var sectionId)) throw new OpFailure("invalid", "No section");
         var section = await db.Sections.FirstOrDefaultAsync(s => s.Id == sectionId, ct) ?? throw new OpFailure("not.found", "Section not found");
         if (!Access.SeesSection(member, section)) throw new OpFailure("not.found", "Section not found");
+        if (kind == PageKinds.Row) return await CreateRowAsync(member, op, section, now, ct);
         var parentId = OptionalId(p, "parentPageId");
         string? notice = null;
         Page? parent = null;
@@ -310,6 +438,9 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             // The parent's level first: nothing else is said of a page the caller may not see.
             if (parent is not null) await NeedLevelAsync(member, parent.Id, Levels.Edit);
             if (parent is not null && parent.SectionId != section.Id) throw new OpFailure("tree.section", "The parent is in another section");
+            // Only rows sit under a database, and nothing under a row (contract section 1).
+            if (parent is not null && parent.Kind != PageKinds.Page)
+                throw new OpFailure("invalid", parent.Kind == PageKinds.Row ? "Nothing sits under a row" : "Only rows sit under a database");
             if (parent is null || parent.TrashedAt is not null)
             {
                 // SYNC_DESIGN.md, Metadata: made at the top of its section, and the user is told.
@@ -326,15 +457,31 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
         var orderKey = Key(p);
         if (notice is not null) orderKey = OrderKeys.Between(await LastTopKeyAsync(section.Id, null, ct), null);
         orderKey = await FreeKeyAsync(section.Id, parent?.Id, orderKey, null, ct);
+        var page = NewPage(member, p, id, section.Id, parent?.Id, orderKey, kind, cover, now);
+        db.Pages.Add(page);
+        // Not under the parent it was made for: it keeps that parent's access, never the section's
+        // default. With no trace of the parent, only its maker (and admins) may see it.
+        var kept = fellBack && section.Visibility != "private";
+        if (kept) await KeepAccessAsync(member, page, await AccessToKeepAsync(member, accessFrom), now, ct);
+        await db.SaveChangesAsync(ct);
+        await AddClosureAsync(page.Id, parent?.Id, ct);
+        changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
+        if (kept) changes.Add("access", page.Id, "grant", page.Version, member.UserId);
+        if (kind == PageKinds.Database) await databases.CreateDatabaseAsync(member, page, p, ct);
+        return (await AppliedPage(member, op, page)) with { Notice = notice };
+    }
+
+    private Page NewPage(Member member, JsonElement p, Guid id, Guid sectionId, Guid? parentId, string orderKey, string kind, Guid? cover, DateTimeOffset now)
+    {
         var title = Title(Text(p, "title") ?? "");
-        var page = new Page
+        return new Page
         {
             Id = id,
             WorkspaceId = member.WorkspaceId,
-            SectionId = section.Id,
-            ParentPageId = parent?.Id,
+            SectionId = sectionId,
+            ParentPageId = parentId,
             OrderKey = orderKey,
-            Kind = "page",
+            Kind = kind,
             Title = title,
             SearchTitle = TextNormaliser.Normalise(title),
             Icon = Icon(p),
@@ -347,28 +494,67 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             CreatedAt = p.TryGetProperty("createdAt", out var c) && c.TryGetDateTimeOffset(out var created) && created <= now.AddMinutes(5) ? created : now,
             UpdatedAt = now,
         };
+    }
+
+    /// <summary>
+    /// A row is made in its database (same section, edit on the database), never in the closure
+    /// table: its level is its database's. A row made offline in a database another device has
+    /// since put in the trash goes to the trash with it, so nothing typed is lost.
+    /// </summary>
+    private async Task<OpResultDto> CreateRowAsync(Member member, OperationDto op, Section section, DateTimeOffset now, CancellationToken ct)
+    {
+        var p = op.Payload;
+        if (OptionalId(p, "parentPageId") is not { } databaseId) throw new OpFailure("invalid", "A row is made in its database");
+        var parent = await db.Pages.FirstOrDefaultAsync(x => x.Id == databaseId && x.DeletedAt == null, ct) ?? throw new OpFailure("not.found", "Database not found");
+        await NeedLevelAsync(member, parent.Id, Levels.Edit);
+        if (parent.Kind != PageKinds.Database) throw new OpFailure("invalid", "A row is made in its database");
+        if (parent.SectionId != section.Id) throw new OpFailure("tree.section", "The database is in another section");
+        var database = await databases.DatabaseAsync(parent.Id, ct) ?? throw new OpFailure("not.found", "Database not found");
+        var cover = await CoverAsync(member, p, null, ct);
+        var orderKey = await FreeRowKeyAsync(parent, Key(p), null, ct);
+        var page = NewPage(member, p, op.EntityId, section.Id, parent.Id, orderKey, PageKinds.Row, cover, now);
+        if (parent.TrashedAt is not null)
+        {
+            page.TrashedAt = parent.TrashedAt;
+            page.TrashRootId = parent.TrashRootId;
+            page.TrashedBy = member.UserId;
+        }
         db.Pages.Add(page);
-        // Not under the parent it was made for: it keeps that parent's access, never the section's
-        // default. With no trace of the parent, only its maker (and admins) may see it.
-        var kept = fellBack && section.Visibility != "private";
-        if (kept) await KeepAccessAsync(member, page, await AccessToKeepAsync(member, accessFrom), now, ct);
-        await db.SaveChangesAsync(ct);
-        await AddClosureAsync(page.Id, parent?.Id, ct);
-        changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
-        if (kept) changes.Add("access", page.Id, "grant", page.Version, member.UserId);
-        return (await AppliedPage(member, op, page)) with { Notice = notice };
+        await databases.CreateRowAsync(member, page, database, p, ct);
+        return Applied(op, "row", Pending);
+    }
+
+    /// <summary>A row's order key among its database's rows: equal keys from two devices get a new one (rows are many: only the neighbours are read).</summary>
+    private async Task<string> FreeRowKeyAsync(Page database, string key, Guid? except, CancellationToken ct)
+    {
+        var siblings = db.Pages.Where(x => x.SectionId == database.SectionId && x.ParentPageId == database.Id && x.DeletedAt == null && x.Id != except);
+        if (!await siblings.AnyAsync(x => x.OrderKey == key, ct)) return key;
+        var next = await siblings.Where(x => string.Compare(x.OrderKey, key) > 0).OrderBy(x => x.OrderKey).Select(x => x.OrderKey).FirstOrDefaultAsync(ct);
+        return OrderKeys.Between(key, next);
     }
 
     private async Task<OpResultDto> MovePageAsync(Member member, OperationDto op, DateTimeOffset now, CancellationToken ct)
     {
         var page = await PageFor(member, op.EntityId, Levels.Edit, ct);
         CheckBase(page, op);
-        if (page.TrashedAt is not null) throw new OpFailure("page.trashed", "The page is in the trash");
+        if (await ReadsTrashedAsync(page, ct)) throw new OpFailure("page.trashed", "The page is in the trash");
         var p = op.Payload;
         if (!Guid.TryParse(Text(p, "sectionId"), out var sectionId)) throw new OpFailure("invalid", "No section");
+        var parentId = OptionalId(p, "parentPageId");
+        if (page.Kind == PageKinds.Row)
+        {
+            // A row never leaves its database: a move only reorders it among the rows.
+            if (sectionId != page.SectionId || parentId != page.ParentPageId) throw new OpFailure("invalid", "A row moves only among its database's rows");
+            var database = await db.Pages.AsNoTracking().FirstAsync(x => x.Id == page.ParentPageId, ct);
+            page.OrderKey = await FreeRowKeyAsync(database, Key(p), page.Id, ct);
+            page.Version++;
+            page.UpdatedAt = now;
+            page.UpdatedBy = member.UserId;
+            await databases.TouchRowAsync(member, page, 0, false, false, ct);
+            return Applied(op, "row", Pending);
+        }
         var section = await db.Sections.FirstOrDefaultAsync(s => s.Id == sectionId, ct) ?? throw new OpFailure("not.found", "Section not found");
         if (!Access.SeesSection(member, section)) throw new OpFailure("not.found", "Section not found");
-        var parentId = OptionalId(p, "parentPageId");
         if (parentId is { } pid)
         {
             var parent = await db.Pages.FirstOrDefaultAsync(x => x.Id == pid && x.DeletedAt == null, ct) ?? throw new OpFailure("not.found", "Parent page not found");
@@ -376,6 +562,8 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             await NeedLevelAsync(member, pid, Levels.Edit);
             if (parent.TrashedAt is not null) throw new OpFailure("page.trashed", "The parent is in the trash");
             if (parent.SectionId != section.Id) throw new OpFailure("tree.section", "The parent is in another section");
+            if (parent.Kind != PageKinds.Page)
+                throw new OpFailure("invalid", parent.Kind == PageKinds.Row ? "Nothing sits under a row" : "Only rows sit under a database");
             // No cycles: the new parent may not be the page or anything under it.
             if (pid == page.Id || await db.PageAncestors.AnyAsync(a => a.PageId == pid && a.AncestorPageId == page.Id, ct))
                 throw new OpFailure(Codes.TreeCycle, "A page cannot move under itself");
@@ -419,6 +607,8 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             }
         await db.SaveChangesAsync(ct);
         if (parentChanged) await MoveClosureAsync(page.Id, parentId, ct);
+        // A database's rows are in its section: they move with it.
+        if (sectionChanged) await DatabaseTree.MoveAsync(db, changes, subtree, section.Id, member.UserId, now, ct);
         // Clients fetch the subtree again whenever who sees it may have changed, or pages moved with it.
         if (crossing || kept is not null || ((parentChanged || sectionChanged) && subtree.Count > 1))
             changes.Add("access", page.Id, crossing && section.Visibility == "private" ? "revoke" : "grant", page.Version, member.UserId);
@@ -429,6 +619,17 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
     {
         var page = await PageFor(member, op.EntityId, Levels.Edit, ct);
         if (page.TrashRootId != page.Id) throw new OpFailure("page.notTrashed", "The page is not in the trash");
+        var now = clock.GetUtcNow();
+        if (page.Kind == PageKinds.Row)
+        {
+            // Back into its database, where it was.
+            page.TrashedAt = null;
+            page.TrashRootId = null;
+            page.TrashedBy = null;
+            page.Version++;
+            await databases.TouchRowAsync(member, page, Counts(page) ? 1 : 0, false, true, ct);
+            return Applied(op, "row", Pending);
+        }
         var parent = page.ParentPageId is { } pid ? await db.Pages.FirstOrDefaultAsync(x => x.Id == pid && x.DeletedAt == null, ct) : null;
         var moved = false;
         List<AccessRow>? kept = null;
@@ -446,9 +647,10 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
         page.TrashRootId = null;
         page.TrashedBy = null;
         page.Version++;
-        if (kept is not null) await KeepAccessAsync(member, page, kept, clock.GetUtcNow(), ct);
+        if (kept is not null) await KeepAccessAsync(member, page, kept, now, ct);
         changes.Add("page", page.Id, "upsert", page.Version, member.UserId);
-        foreach (var record in (await SubtreeAsync(page.Id, ct)).Where(x => x.Id != page.Id && x.TrashRootId == page.Id))
+        var subtree = await SubtreeAsync(page.Id, ct);
+        foreach (var record in subtree.Where(x => x.Id != page.Id && x.TrashRootId == page.Id))
         {
             record.TrashedAt = null;
             record.TrashRootId = null;
@@ -457,6 +659,8 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             changes.Add("page", record.Id, "upsert", record.Version, member.UserId);
         }
         await db.SaveChangesAsync(ct);
+        // The rows that went to the trash with it come back with it.
+        await DatabaseTree.RestoreAsync(db, changes, subtree, page.Id, member.UserId, now, ct);
         if (moved)
         {
             await MoveClosureAsync(page.Id, null, ct);
@@ -676,5 +880,9 @@ public static class PageDeletion
             await db.PageVisits.Where(v => chunk.Contains(v.PageId)).ExecuteDeleteAsync(ct);
             await db.PageAncestors.Where(a => chunk.Contains(a.PageId)).ExecuteDeleteAsync(ct);
         }
+        // Rows are not in the closure table: a row deleted on its own, and every row of a database
+        // deleted with its page (Phase 4 contracts, section 1).
+        await DatabaseTree.DeleteRowsAsync(db, changes, subtree, actor, now, ct);
+        await DatabaseTree.DeleteDatabasesAsync(db, changes, subtree, actor, now, ct);
     }
 }

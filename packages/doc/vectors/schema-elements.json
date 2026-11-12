@@ -29,5 +29,23 @@
     "tableOfContents",
     "tableRow",
     "textBody"
+  ],
+  "3": [
+    "block",
+    "bookmark",
+    "childPage",
+    "codeBlock",
+    "databaseView",
+    "dateMention",
+    "divider",
+    "file",
+    "hardBreak",
+    "image",
+    "pageMention",
+    "table",
+    "tableCell",
+    "tableOfContents",
+    "tableRow",
+    "textBody"
   ]
 }

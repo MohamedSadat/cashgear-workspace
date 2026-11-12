@@ -1,0 +1,1282 @@
+[
+  {
+    "kind": "parse",
+    "name": "CRLF",
+    "text": "a,b,c\r\n1,2,3\r\n",
+    "expected": [
+      ["a", "b", "c"],
+      ["1", "2", "3"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "LF, no last line break",
+    "text": "a,b\n1,2",
+    "expected": [
+      ["a", "b"],
+      ["1", "2"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "a BOM is dropped",
+    "text": "\ufeffa,b\n1,2",
+    "expected": [
+      ["a", "b"],
+      ["1", "2"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "quoted separators, quotes and line breaks",
+    "text": "\"x, y\",\"say \"\"hi\"\"\",\"line1\nline2\"\n1,2,3",
+    "expected": [
+      ["x, y", "say \"hi\"", "line1\nline2"],
+      ["1", "2", "3"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "semicolons",
+    "text": "a;b;c\n1;2;3",
+    "expected": [
+      ["a", "b", "c"],
+      ["1", "2", "3"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "tabs",
+    "text": "a\tb\n1\t2",
+    "expected": [
+      ["a", "b"],
+      ["1", "2"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "a tie goes to the comma",
+    "text": "a,b;c\n",
+    "expected": [["a", "b;c"]]
+  },
+  {
+    "kind": "parse",
+    "name": "separators in quotes do not count",
+    "text": "\"a;b;c\",d\n1,2",
+    "expected": [
+      ["a;b;c", "d"],
+      ["1", "2"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "the most common separator wins",
+    "text": "a;b;c,d\n",
+    "expected": [["a", "b", "c,d"]]
+  },
+  {
+    "kind": "parse",
+    "name": "only the first record counts",
+    "text": "a\tb\tc\n1,2,3",
+    "expected": [["a", "b", "c"], ["1,2,3"]]
+  },
+  {
+    "kind": "parse",
+    "name": "empty lines are skipped",
+    "text": "a,b\n\n1,2\n\n",
+    "expected": [
+      ["a", "b"],
+      ["1", "2"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "a lone CR ends a record",
+    "text": "a,b\r1,2\r",
+    "expected": [
+      ["a", "b"],
+      ["1", "2"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "empty fields",
+    "text": "a,,c\n,,\n",
+    "expected": [
+      ["a", "", "c"],
+      ["", "", ""]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "a trailing separator",
+    "text": "a,b,\n",
+    "expected": [["a", "b", ""]]
+  },
+  {
+    "kind": "parse",
+    "name": "ragged records stay ragged",
+    "text": "a,b,c\n1\n1,2,3,4",
+    "expected": [["a", "b", "c"], ["1"], ["1", "2", "3", "4"]]
+  },
+  {
+    "kind": "parse",
+    "name": "a quote inside a field is a character",
+    "text": "ab\"c,d",
+    "expected": [["ab\"c", "d"]]
+  },
+  {
+    "kind": "parse",
+    "name": "text after a closing quote is kept",
+    "text": "\"ab\"c,d",
+    "expected": [["abc", "d"]]
+  },
+  {
+    "kind": "parse",
+    "name": "an unclosed quote runs to the end",
+    "text": "\"abc\nd,e",
+    "expected": [["abc\nd,e"]]
+  },
+  {
+    "kind": "parse",
+    "name": "a quoted empty field is a record",
+    "text": "\"\"\n",
+    "expected": [[""]]
+  },
+  {
+    "kind": "parse",
+    "name": "CRLF inside quotes is kept",
+    "text": "\"a\r\nb\",c\r\n",
+    "expected": [["a\r\nb", "c"]]
+  },
+  {
+    "kind": "parse",
+    "name": "no separator at all",
+    "text": "one\ntwo",
+    "expected": [["one"], ["two"]]
+  },
+  {
+    "kind": "parse",
+    "name": "Arabic",
+    "text": "الاسم,المبلغ\nأحمد,١٢",
+    "expected": [
+      ["الاسم", "المبلغ"],
+      ["أحمد", "١٢"]
+    ]
+  },
+  {
+    "kind": "parse",
+    "name": "nothing",
+    "text": "",
+    "expected": []
+  },
+  {
+    "kind": "parse",
+    "name": "only a BOM",
+    "text": "\ufeff",
+    "expected": []
+  },
+  {
+    "kind": "infer",
+    "name": "every inferred type",
+    "header": ["Name", "Amount", "Done", "Due", "Site", "Mail", "Stage", "Notes", "Empty"],
+    "rows": [
+      ["Alpha", "10", "yes", "2026-03-01", "https://a.example", "a@b.co", "Open", "x", ""],
+      ["Beta", "1,234.5", "no", "2026-03-02", "https://b.example", "c@d.co", "Open", "y", ""],
+      ["Gamma", "-3", "true", "2026-03-03 10:00", "http://c.example", "e@f.co", "Closed", "z", ""],
+      ["Delta", "٤", "0", "2026-03-04", "HTTPS://D.EXAMPLE", "g@h.co", "Closed", "w", "  "]
+    ],
+    "expected": [
+      {
+        "name": "Name",
+        "type": "title"
+      },
+      {
+        "name": "Amount",
+        "type": "number"
+      },
+      {
+        "name": "Done",
+        "type": "checkbox"
+      },
+      {
+        "name": "Due",
+        "type": "date",
+        "includeTime": true
+      },
+      {
+        "name": "Site",
+        "type": "url"
+      },
+      {
+        "name": "Mail",
+        "type": "email"
+      },
+      {
+        "name": "Stage",
+        "type": "select",
+        "options": ["Open", "Closed"]
+      },
+      {
+        "name": "Notes",
+        "type": "text"
+      },
+      {
+        "name": "Empty",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "kind": "infer",
+    "name": "a select needs each value used twice on average",
+    "header": ["N", "S"],
+    "rows": [
+      ["a", "red"],
+      ["b", "blue"],
+      ["c", "red"]
+    ],
+    "expected": [
+      {
+        "name": "N",
+        "type": "title"
+      },
+      {
+        "name": "S",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "kind": "infer",
+    "name": "ones and zeros are numbers",
+    "header": ["N", "Flag"],
+    "rows": [
+      ["a", "1"],
+      ["b", "0"],
+      ["c", "1"]
+    ],
+    "expected": [
+      {
+        "name": "N",
+        "type": "title"
+      },
+      {
+        "name": "Flag",
+        "type": "number"
+      }
+    ]
+  },
+  {
+    "kind": "infer",
+    "name": "dates without times, and spans",
+    "header": ["N", "When"],
+    "rows": [
+      ["a", "2026-01-01"],
+      ["b", "2026-01-01 → 2026-01-05"]
+    ],
+    "expected": [
+      {
+        "name": "N",
+        "type": "title"
+      },
+      {
+        "name": "When",
+        "type": "date",
+        "includeTime": false
+      }
+    ]
+  },
+  {
+    "kind": "infer",
+    "name": "columns past the header and with no name",
+    "header": ["", "  "],
+    "rows": [["a", "b", "3"]],
+    "expected": [
+      {
+        "name": "Name",
+        "type": "title"
+      },
+      {
+        "name": "Column 2",
+        "type": "text"
+      },
+      {
+        "name": "Column 3",
+        "type": "number"
+      }
+    ]
+  },
+  {
+    "kind": "infer",
+    "name": "export's guard taken off header and option names, not off other types",
+    "header": ["Name", "'=Total", "Kind", "Note"],
+    "rows": [
+      ["a", "1", "'-x", "'-5"],
+      ["b", "2", "'-x", "'-6"],
+      ["c", "3", "'-x", "'-7"]
+    ],
+    "expected": [
+      {
+        "name": "Name",
+        "type": "title"
+      },
+      {
+        "name": "=Total",
+        "type": "number"
+      },
+      {
+        "name": "Kind",
+        "type": "select",
+        "options": ["-x"]
+      },
+      {
+        "name": "Note",
+        "type": "text"
+      }
+    ]
+  },
+  {
+    "kind": "infer",
+    "name": "a url with a space is text; Arabic options",
+    "header": ["N", "Site", "الحالة"],
+    "rows": [
+      ["a", "https://a b", "جديد"],
+      ["b", "https://c", "جديد"]
+    ],
+    "expected": [
+      {
+        "name": "N",
+        "type": "title"
+      },
+      {
+        "name": "Site",
+        "type": "text"
+      },
+      {
+        "name": "الحالة",
+        "type": "select",
+        "options": ["جديد"]
+      }
+    ]
+  },
+  {
+    "kind": "textToValue",
+    "name": "title keeps the text",
+    "def": {
+      "id": "title",
+      "name": "Name",
+      "type": "title"
+    },
+    "text": "  Name  ",
+    "expected": "  Name  "
+  },
+  {
+    "kind": "textToValue",
+    "name": "text, empty",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "",
+    "expected": null
+  },
+  {
+    "kind": "textToValue",
+    "name": "number with thousands",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "text": "1,234",
+    "expected": 1234
+  },
+  {
+    "kind": "textToValue",
+    "name": "number that does not read",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "text": "twelve",
+    "expected": null
+  },
+  {
+    "kind": "textToValue",
+    "name": "checkbox",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "text": "Yes",
+    "expected": true
+  },
+  {
+    "kind": "textToValue",
+    "name": "checkbox false",
+    "def": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "text": "false",
+    "expected": null
+  },
+  {
+    "kind": "textToValue",
+    "name": "date span as exported",
+    "def": {
+      "id": "pDate001",
+      "name": "Due",
+      "type": "date",
+      "date": {
+        "includeTime": false
+      }
+    },
+    "text": "2026-03-01 → 2026-03-02",
+    "expected": {
+      "start": "2026-03-01",
+      "end": "2026-03-02"
+    }
+  },
+  {
+    "kind": "textToValue",
+    "name": "select by name",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "text": "Done",
+    "expected": "optDone1"
+  },
+  {
+    "kind": "textToValue",
+    "name": "select with no such option",
+    "def": {
+      "id": "pSel0001",
+      "name": "Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optTodo1",
+          "name": "To do",
+          "colour": "gray"
+        },
+        {
+          "id": "optDone1",
+          "name": "Done",
+          "colour": "green"
+        },
+        {
+          "id": "optLate1",
+          "name": "متأخر",
+          "colour": "red"
+        },
+        {
+          "id": "optFive1",
+          "name": "5",
+          "colour": "default"
+        }
+      ]
+    },
+    "text": "Missing",
+    "expected": null
+  },
+  {
+    "kind": "textToValue",
+    "name": "multi-select names",
+    "def": {
+      "id": "pMul0001",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "tagRed01",
+          "name": "Red",
+          "colour": "red"
+        },
+        {
+          "id": "tagBlue1",
+          "name": "Blue",
+          "colour": "blue"
+        },
+        {
+          "id": "tagAr001",
+          "name": "أحمر",
+          "colour": "red"
+        }
+      ]
+    },
+    "text": "Red, Blue",
+    "expected": ["tagRed01", "tagBlue1"]
+  },
+  {
+    "kind": "textToValue",
+    "name": "person from a name is nothing",
+    "def": {
+      "id": "pPer0001",
+      "name": "Owner",
+      "type": "person"
+    },
+    "text": "Alice",
+    "expected": null
+  },
+  {
+    "kind": "textToValue",
+    "name": "url trimmed",
+    "def": {
+      "id": "pUrl0001",
+      "name": "Link",
+      "type": "url"
+    },
+    "text": " https://x.example ",
+    "expected": "https://x.example"
+  },
+  {
+    "kind": "textToValue",
+    "name": "email",
+    "def": {
+      "id": "pEml0001",
+      "name": "Email",
+      "type": "email"
+    },
+    "text": "a@b.co",
+    "expected": "a@b.co"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded formula loses its quote",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'=SUM(A1)",
+    "expected": "=SUM(A1)"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded minus",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'-dash",
+    "expected": "-dash"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded plus",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'+1 555",
+    "expected": "+1 555"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded at sign",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'@user",
+    "expected": "@user"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded tab",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'\tTabbed",
+    "expected": "\tTabbed"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded carriage return",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'\rCR",
+    "expected": "\rCR"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a guarded run of quotes loses one",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "''=x",
+    "expected": "'=x"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a quote before safe text stays",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "'hello",
+    "expected": "'hello"
+  },
+  {
+    "kind": "textToValue",
+    "name": "an unguarded formula stays as written",
+    "def": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "text": "=raw",
+    "expected": "=raw"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a title loses its guard",
+    "def": {
+      "id": "title",
+      "name": "Name",
+      "type": "title"
+    },
+    "text": "'+1 555",
+    "expected": "+1 555"
+  },
+  {
+    "kind": "textToValue",
+    "name": "a url loses its guard",
+    "def": {
+      "id": "pUrl0001",
+      "name": "Link",
+      "type": "url"
+    },
+    "text": "'=x",
+    "expected": "=x"
+  },
+  {
+    "kind": "textToValue",
+    "name": "an option name loses its guard",
+    "def": {
+      "id": "pRsk0001",
+      "name": "=Stage",
+      "type": "select",
+      "options": [
+        {
+          "id": "optMinus",
+          "name": "-minus",
+          "colour": "default"
+        },
+        {
+          "id": "optEqual",
+          "name": "=opt",
+          "colour": "default"
+        }
+      ]
+    },
+    "text": "'-minus",
+    "expected": "optMinus"
+  },
+  {
+    "kind": "textToValue",
+    "name": "multi-select names lose their guard",
+    "def": {
+      "id": "pRsk0002",
+      "name": "Tags",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "optMinus",
+          "name": "-minus",
+          "colour": "default"
+        },
+        {
+          "id": "optEqual",
+          "name": "=opt",
+          "colour": "default"
+        }
+      ]
+    },
+    "text": "'-minus, =opt",
+    "expected": ["optMinus", "optEqual"]
+  },
+  {
+    "kind": "textToValue",
+    "name": "a number is never unguarded",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "text": "'-5",
+    "expected": null
+  },
+  {
+    "kind": "textToValue",
+    "name": "a negative number",
+    "def": {
+      "id": "pNum0001",
+      "name": "Amount",
+      "type": "number",
+      "number": {
+        "format": "number",
+        "decimals": null
+      }
+    },
+    "text": "-5",
+    "expected": -5
+  },
+  {
+    "kind": "export",
+    "name": "shown properties in view order, canonical values, quoting",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pChk0001",
+          "name": "Done?",
+          "type": "checkbox"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pMul0001",
+          "name": "Tags",
+          "type": "multiSelect",
+          "options": [
+            {
+              "id": "tagRed01",
+              "name": "Red",
+              "colour": "red"
+            },
+            {
+              "id": "tagBlue1",
+              "name": "Blue",
+              "colour": "blue"
+            },
+            {
+              "id": "tagAr001",
+              "name": "أحمر",
+              "colour": "red"
+            }
+          ]
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pFor0001",
+          "name": "Score",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          }
+        },
+        {
+          "id": "pOld0001",
+          "name": "Old",
+          "type": "text",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "view": {
+      "config": {
+        "properties": {
+          "order": ["pNum0001", "pText001"],
+          "hidden": ["pFil0001"],
+          "widths": {}
+        }
+      }
+    },
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000001",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "Report, Q1",
+        "orderKey": "a1",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pText001": "He said \"hi\"",
+          "pNum0001": 1234.5,
+          "pDate001": {
+            "start": "2026-03-01",
+            "end": "2026-03-03"
+          },
+          "pChk0001": true,
+          "pSel0001": "optDone1",
+          "pMul0001": ["tagRed01", "tagBlue1"],
+          "pPer0001": [
+            "01900000-0000-7000-8000-0000000000a1",
+            "01900000-0000-7000-8000-0000000000b0"
+          ],
+          "pFil0001": ["asset-1"],
+          "pRel0001": ["01900000-0000-7000-8000-000000000090"],
+          "pOld0001": "hidden"
+        },
+        "computed": {
+          "pFor0001": 9
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000002",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "تقرير",
+        "orderKey": "a2",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pText001": "line1\nline2",
+          "pNum0001": 1e21,
+          "pSel0001": "optGone1",
+          "pPer0001": ["01900000-0000-7000-8000-0000000000c5"],
+          "pRel0001": ["01900000-0000-7000-8000-000000000091"]
+        },
+        "computed": {
+          "pFor0001": {
+            "error": "formula.type"
+          }
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000003",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "Template",
+        "orderKey": "a3",
+        "isTemplate": true,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000004",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "Trashed",
+        "orderKey": "a4",
+        "isTemplate": false,
+        "trashedAt": "2026-02-01T00:00:00.000Z",
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {}
+      }
+    ],
+    "lookups": {
+      "people": {
+        "01900000-0000-7000-8000-0000000000a1": "Alice",
+        "01900000-0000-7000-8000-0000000000b0": "Bob Smith"
+      },
+      "rows": {
+        "01900000-0000-7000-8000-000000000090": "Project \"X\""
+      },
+      "files": {
+        "asset-1": "plan.pdf"
+      }
+    },
+    "expected": "\ufeffName,Amount,Notes,Due,Done?,Stage,Tags,Owner,Projects,Created,Score\r\n\"Report, Q1\",1234.5,\"He said \"\"hi\"\"\",2026-03-01 → 2026-03-03,true,Done,\"Red, Blue\",\"Alice, Bob Smith\",\"Project \"\"X\"\"\",2026-01-01T09:00:00Z,9\r\nتقرير,1e+21,\"line1\nline2\",,false,,,01900000-0000-7000-8000-0000000000c5,01900000-0000-7000-8000-000000000091,2026-01-01T09:00:00Z,\r\n"
+  },
+  {
+    "kind": "export",
+    "name": "every property in database order, files by name",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pPrice01",
+          "name": "Price, \"USD\"",
+          "type": "number"
+        }
+      ],
+      "version": 1
+    },
+    "view": {
+      "config": {
+        "properties": {
+          "order": [],
+          "hidden": [],
+          "widths": {}
+        }
+      }
+    },
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000001",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "A",
+        "orderKey": "a1",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pFil0001": ["asset-1", "asset-2"],
+          "pPrice01": 0.5
+        },
+        "computed": {}
+      }
+    ],
+    "lookups": {
+      "people": {
+        "01900000-0000-7000-8000-0000000000a1": "Alice",
+        "01900000-0000-7000-8000-0000000000b0": "Bob Smith"
+      },
+      "rows": {
+        "01900000-0000-7000-8000-000000000090": "Project \"X\""
+      },
+      "files": {
+        "asset-1": "plan.pdf"
+      }
+    },
+    "expected": "\ufeffName,Attachments,\"Price, \"\"USD\"\"\"\r\nA,\"plan.pdf, asset-2\",0.5\r\n"
+  },
+  {
+    "kind": "export",
+    "name": "no rows: the header only; the title first even if hidden",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        }
+      ],
+      "version": 1
+    },
+    "view": {
+      "config": {
+        "properties": {
+          "order": ["pText001"],
+          "hidden": ["title"],
+          "widths": {}
+        }
+      }
+    },
+    "rows": [],
+    "lookups": {},
+    "expected": "\ufeffName,Notes\r\n"
+  },
+  {
+    "kind": "export",
+    "name": "CSV injection: risky text guarded with a quote, numbers never",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pNum0001",
+          "name": "Amount",
+          "type": "number",
+          "number": {
+            "format": "number",
+            "decimals": null
+          }
+        },
+        {
+          "id": "pRsk0001",
+          "name": "=Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optMinus",
+              "name": "-minus",
+              "colour": "default"
+            },
+            {
+              "id": "optEqual",
+              "name": "=opt",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pPer0001",
+          "name": "Owner",
+          "type": "person"
+        },
+        {
+          "id": "pRel0001",
+          "name": "Projects",
+          "type": "relation",
+          "relation": {
+            "databaseId": "01900000-0000-7000-8000-000000000002",
+            "reversePropertyId": "pRev0001"
+          }
+        },
+        {
+          "id": "pFil0001",
+          "name": "Attachments",
+          "type": "files"
+        },
+        {
+          "id": "pFor0001",
+          "name": "Score",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          }
+        },
+        {
+          "id": "pFor0002",
+          "name": "Delta",
+          "type": "formula",
+          "formula": {
+            "expression": "1"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "view": {
+      "config": {
+        "properties": {
+          "order": [],
+          "hidden": [],
+          "widths": {}
+        }
+      }
+    },
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000001",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "=SUM(A1)",
+        "orderKey": "a1",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pText001": "+1 555",
+          "pNum0001": -5,
+          "pRsk0001": "optMinus",
+          "pPer0001": ["01900000-0000-7000-8000-0000000000a1"],
+          "pRel0001": ["01900000-0000-7000-8000-000000000090"],
+          "pFil0001": ["asset-1"]
+        },
+        "computed": {
+          "pFor0001": "@x",
+          "pFor0002": -3
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000002",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "'=already",
+        "orderKey": "a2",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pText001": "\tTabbed",
+          "pNum0001": 5,
+          "pRsk0001": "optEqual"
+        },
+        "computed": {
+          "pFor0001": "safe",
+          "pFor0002": 2
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000003",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "plain",
+        "orderKey": "a3",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pText001": "\rCR"
+        },
+        "computed": {
+          "pFor0001": "-1",
+          "pFor0002": -0.5
+        }
+      }
+    ],
+    "lookups": {
+      "people": {
+        "01900000-0000-7000-8000-0000000000a1": "@alice"
+      },
+      "rows": {
+        "01900000-0000-7000-8000-000000000090": "-proj"
+      },
+      "files": {
+        "asset-1": "=file.xlsx"
+      }
+    },
+    "expected": "\ufeffName,Notes,Amount,'=Stage,Owner,Projects,Attachments,Score,Delta\r\n'=SUM(A1),'+1 555,-5,'-minus,'@alice,'-proj,'=file.xlsx,'@x,-3\r\n''=already,'\tTabbed,5,'=opt,,,,safe,2\r\nplain,\"'\rCR\",,,,,,'-1,-0.5\r\n"
+  }
+]

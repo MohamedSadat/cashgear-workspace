@@ -18,6 +18,11 @@ export const migrations: Record<number, Migration> = {
   1: (doc) => {
     doc.getMap(META).set('schemaVersion', 2);
   },
+  // 2 -> 3: version 3 adds the `databaseView` body and the `dateMention` inline atom. No content
+  // changes, as above: a version-2 build opens the page read-only rather than meet either.
+  2: (doc) => {
+    doc.getMap(META).set('schemaVersion', 3);
+  },
 };
 
 export interface MigrationResult {

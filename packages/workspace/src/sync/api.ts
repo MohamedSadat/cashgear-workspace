@@ -1,11 +1,21 @@
 // What the sync engine needs from the server (SYNC_DESIGN.md, Cloud sync), as plain records.
 // `http.ts` implements it over @cgw/api; tests implement it in memory (testing/fakeServer.ts).
+import type {
+  DatabaseRecord,
+  FilterGroup,
+  GroupCount,
+  GroupRule,
+  QueryContext,
+  SortRule,
+  ViewRecord,
+} from '../db/types';
 import type { Id } from '../ids';
 import type {
   FavouriteRecord,
   Operation,
   OpResult,
   PageRecord,
+  RowRecord,
   SectionRecord,
   VisitRecord,
   WorkspaceRecord,
@@ -56,7 +66,30 @@ export type ServerChange =
     }
   | { seq: number; entityType: 'member'; entityId: Id; kind: 'upsert' | 'delete'; entity: null }
   /** A grant or revoke naming the root of what changed: the client refetches it (scoped resync). */
-  | { seq: number; entityType: 'access'; entityId: Id; kind: 'grant' | 'revoke'; entity: null };
+  | { seq: number; entityType: 'access'; entityId: Id; kind: 'grant' | 'revoke'; entity: null }
+  // Phase 4. A database's delete comes with its page's, which removes it with all it holds.
+  | {
+      seq: number;
+      entityType: 'database';
+      entityId: Id;
+      kind: 'upsert' | 'delete';
+      entity: DatabaseRecord | null;
+    }
+  | {
+      seq: number;
+      entityType: 'view';
+      entityId: Id;
+      kind: 'upsert' | 'delete';
+      entity: ViewRecord | null;
+    }
+  /** Every change to a row (its values, title, trash, order, its document's head). */
+  | {
+      seq: number;
+      entityType: 'row';
+      entityId: Id;
+      kind: 'upsert' | 'delete';
+      entity: RowRecord | null;
+    };
 
 export interface ChangesPage {
   changes: ServerChange[];
@@ -67,10 +100,51 @@ export interface ChangesPage {
 export interface ServerTree {
   workspace: WorkspaceRecord;
   sections: SectionRecord[];
+  /** Pages and databases' pages; never rows. */
   pages: PageRecord[];
   favourites: FavouriteRecord[];
   visits: VisitRecord[];
   cursor: number;
+  /** Phase 4: the databases (and their views) whose page is in `pages`. */
+  databases: DatabaseRecord[];
+  views: ViewRecord[];
+}
+
+/** A page of a database's rows by row id, trashed rows and templates included (a full fetch). */
+export interface RowsPage {
+  rows: RowRecord[];
+  /** The next `after`, or null when every row has come. */
+  next: Id | null;
+  /** Every row of the database. */
+  total: number;
+}
+
+/**
+ * The server's query of a database (contract section 4): the view's filter, sorts and group unless
+ * given here; templates and trashed rows left out.
+ */
+export interface QueryRequest {
+  viewId?: Id | null;
+  filter?: FilterGroup | null;
+  sorts?: SortRule[];
+  group?: GroupRule | null;
+  /** Pages within one group of a grouped query. */
+  groupKey?: string | null;
+  search?: string;
+  context: QueryContext;
+  /** The `next` of the previous page (opaque), or null for the first. */
+  after?: string | null;
+  /** 1 to 500; 100 when absent. */
+  limit?: number;
+}
+
+export interface QueryAnswer {
+  rows: RowRecord[];
+  /** Every group's count over the filtered rows; null when the query has no group. */
+  groups: GroupCount[] | null;
+  /** The filtered count (in the group, with `groupKey`). */
+  total: number;
+  next: string | null;
 }
 
 export interface DocPushRequest {
@@ -155,6 +229,10 @@ export interface SyncApi {
   putBytes(url: string, headers: Record<string, string>, bytes: Uint8Array): Promise<void>;
   completeAsset(assetId: Id): Promise<void>;
   assetUrl(assetId: Id): Promise<string>;
+  // Phase 4: databases
+  /** A database's rows after `after` (by row id), at most `limit` (1 to 1,000). */
+  rows(databaseId: Id, after: Id | null, limit: number): Promise<RowsPage>;
+  query(databaseId: Id, request: QueryRequest): Promise<QueryAnswer>;
 }
 
 /** The server answered with a problem (status and stable code). */

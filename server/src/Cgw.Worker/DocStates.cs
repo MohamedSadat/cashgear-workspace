@@ -18,6 +18,9 @@ public static class Schema
         [1] = ["block", "bookmark", "childPage", "codeBlock", "divider", "file", "hardBreak", "image", "pageMention", "table", "tableCell", "tableRow", "textBody"],
         // Version 1's and the table of contents (an atom body with no attributes).
         [2] = ["block", "bookmark", "childPage", "codeBlock", "divider", "file", "hardBreak", "image", "pageMention", "table", "tableCell", "tableOfContents", "tableRow", "textBody"],
+        // Version 2's, a database view (an atom body: databaseId, viewId) and a date mention (an
+        // inline atom: date, end) (Phase 4).
+        [3] = ["block", "bookmark", "childPage", "codeBlock", "databaseView", "dateMention", "divider", "file", "hardBreak", "image", "pageMention", "table", "tableCell", "tableOfContents", "tableRow", "textBody"],
     };
 
     /// <summary>The highest version this worker knows: a document may rise to it, never past it.</summary>

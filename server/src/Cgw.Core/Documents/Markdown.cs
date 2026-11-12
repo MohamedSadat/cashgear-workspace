@@ -137,8 +137,10 @@ public static partial class Markdown
             case "table":
                 return Table(body, context, indent);
             // Schema version 2: the page's own headings, drawn by the app; nothing of its own to
-            // write (the document layer's writer agrees).
+            // write (the document layer's writer agrees). Version 3's database view writes nothing
+            // either: a database's rows are pages of their own.
             case "tableOfContents":
+            case "databaseView":
                 return "";
             default:
                 return "";
@@ -156,8 +158,25 @@ public static partial class Markdown
             else if (type == "hardBreak") output.Append('\n');
             else if (type == "pageMention")
                 output.Append(context.PageTitle?.Invoke(Js.String(Js.Prop(Js.Prop(node, "attrs"), "pageId"), "")) ?? "");
+            else if (type == "dateMention") output.Append(DateMentionText(Js.Prop(node, "attrs")));
         }
         return output.ToString();
+    }
+
+    [GeneratedRegex(@"^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?\z")]
+    private static partial Regex DateValuePattern();
+
+    /// <summary>
+    /// Schema version 3's date mention (<c>dateMentionText</c> in packages/doc/src/dates.ts): its
+    /// date as stored, then <c> → </c> and its end when it has a valid one; nothing when the date
+    /// is missing or not a date's form.
+    /// </summary>
+    private static string DateMentionText(JsonElement? attrs)
+    {
+        static string? Date(JsonElement? value) =>
+            value is { ValueKind: JsonValueKind.String } v && v.GetString() is { } s && DateValuePattern().IsMatch(s) ? s : null;
+        if (Date(Js.Prop(attrs, "date")) is not { } date) return "";
+        return Date(Js.Prop(attrs, "end")) is { } end ? $"{date} → {end}" : date;
     }
 
     private static string Inline(IReadOnlyList<JsonElement> nodes, TextContext context, string indent)
@@ -179,6 +198,12 @@ public static partial class Markdown
                 var blockId = Js.Prop(attrs, "blockId");
                 var href = context.PageHref?.Invoke(id, blockId is { ValueKind: JsonValueKind.String } b ? b.GetString() : null);
                 output.Append(!string.IsNullOrEmpty(href) ? $"[{EscapeInline(title)}]({href})" : EscapeInline(title));
+                continue;
+            }
+            if (type == "dateMention")
+            {
+                // Digits, '-', 'T', ':', 'Z', a space and an arrow: nothing Markdown reads as syntax.
+                output.Append(DateMentionText(Js.Prop(node, "attrs")));
                 continue;
             }
             if (type != "text") continue;

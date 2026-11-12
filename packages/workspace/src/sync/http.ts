@@ -10,13 +10,26 @@ import {
   type ApiClient,
   type Schemas,
 } from '@cgw/api';
+import type {
+  CellValue,
+  DatabaseRecord,
+  GroupCount,
+  PropertyDef,
+  PropertyId,
+  Value,
+  ViewConfig,
+  ViewRecord,
+  ViewType,
+} from '../db/types';
 import type { Id } from '../ids';
 import type {
   EntityRecord,
   EntityType,
   FavouriteRecord,
   OpResult,
+  PageKind,
   PageRecord,
+  RowRecord,
   SectionRecord,
   VisitRecord,
   WorkspaceRecord,
@@ -27,6 +40,8 @@ import {
   type Account,
   type ChangesPage,
   type DocPull,
+  type QueryAnswer,
+  type RowsPage,
   type ServerChange,
   type ServerTree,
   type SyncApi,
@@ -134,9 +149,20 @@ interface Phase3Routes {
   ): Answer<RepairAnswer>;
 }
 
+/**
+ * Phase 4's records (contract section 4), from the generated schema: their JSON fields
+ * (properties, a view's config, a row's values, versions and computed results) arrive as objects
+ * the schema types as `unknown`, read here as the contract's shapes.
+ */
+type DatabaseDto = Schemas['DatabaseDto'];
+type ViewDto = Schemas['ViewDto'];
+type RowDto = Schemas['RowDto'];
+
 type Page = Schemas['PageDto'];
 type Workspace = Schemas['WorkspaceDto'];
 type Entity = Schemas['EntityDto'];
+
+const KINDS: readonly PageKind[] = ['page', 'database', 'row'];
 
 export const pageRecord = (p: Page): PageRecord => ({
   id: p.id,
@@ -144,7 +170,8 @@ export const pageRecord = (p: Page): PageRecord => ({
   sectionId: p.sectionId,
   parentPageId: p.parentPageId ?? null,
   orderKey: p.orderKey,
-  kind: 'page',
+  // A kind this build does not know is drawn as a page (never dropped).
+  kind: KINDS.includes(p.kind as PageKind) ? (p.kind as PageKind) : 'page',
   title: p.title,
   icon: p.icon ?? null,
   coverAssetId: p.coverAssetId ?? null,
@@ -195,11 +222,52 @@ const visitRecord = (v: Schemas['VisitDto']): VisitRecord => ({
   lastVisitedAt: v.lastVisitedAt,
 });
 
+export const databaseRecord = (d: DatabaseDto): DatabaseRecord => ({
+  id: d.id,
+  workspaceId: d.workspaceId,
+  properties: (d.properties as PropertyDef[] | null) ?? [],
+  version: num(d.version),
+  rowCount: num(d.rowCount),
+  createdAt: d.createdAt,
+});
+
+const VIEW_TYPES: readonly ViewType[] = ['table', 'board', 'list', 'calendar', 'gallery'];
+
+export const viewRecord = (v: ViewDto): ViewRecord => ({
+  id: v.id,
+  workspaceId: v.workspaceId,
+  databaseId: v.databaseId,
+  name: v.name,
+  // A type this build does not know is drawn as a table (never dropped).
+  type: VIEW_TYPES.includes(v.type as ViewType) ? (v.type as ViewType) : 'table',
+  orderKey: v.orderKey,
+  config: v.config as ViewConfig,
+  version: num(v.version),
+  createdAt: v.createdAt,
+});
+
+export const rowRecord = (r: RowDto): RowRecord => ({
+  ...pageRecord(r),
+  kind: 'row',
+  databaseId: r.databaseId,
+  values: (r.values as Record<PropertyId, Value> | null) ?? {},
+  versions: Object.fromEntries(
+    Object.entries((r.versions as Record<PropertyId, number | string> | null) ?? {}).map(
+      ([k, v]) => [k, num(v)],
+    ),
+  ),
+  computed: (r.computed as Record<PropertyId, CellValue> | null) ?? {},
+  computedVersion: r.computedVersion === null ? null : num(r.computedVersion),
+  createdBy: r.createdBy ?? null,
+  updatedBy: r.updatedBy ?? null,
+});
+
 function entityRecord(
   type: string | null | undefined,
-  entity: Entity | null | undefined,
+  dto: Entity | null | undefined,
 ): EntityRecord | null {
-  if (!entity) return null;
+  if (!dto) return null;
+  const entity = dto;
   switch (type) {
     case 'workspace':
       return entity.workspace ? workspaceRecord(entity.workspace) : null;
@@ -211,10 +279,19 @@ function entityRecord(
       return entity.favourite ? favouriteRecord(entity.favourite) : null;
     case 'visit':
       return entity.visit ? visitRecord(entity.visit) : null;
+    case 'database':
+      return entity.database ? databaseRecord(entity.database) : null;
+    case 'view':
+      return entity.view ? viewRecord(entity.view) : null;
+    case 'row':
+      return entity.row ? rowRecord(entity.row) : null;
     default:
       return null;
   }
 }
+
+const groupCounts = (groups: Schemas['QueryResponseDto']['groups']): GroupCount[] | null =>
+  groups ? groups.map((g) => ({ key: g.key, count: num(g.count) })) : null;
 
 export function httpSyncApi(api: ApiClient): SyncApi {
   const phase3 = api as unknown as Phase3Routes;
@@ -298,6 +375,33 @@ export function httpSyncApi(api: ApiClient): SyncApi {
         favourites: tree.favourites.map(favouriteRecord),
         visits: tree.visits.map(visitRecord),
         cursor: num(tree.cursor),
+        // An older server's tree has neither.
+        databases: ((tree.databases as DatabaseDto[] | undefined) ?? []).map(databaseRecord),
+        views: ((tree.views as ViewDto[] | undefined) ?? []).map(viewRecord),
+      };
+    },
+
+    async rows(databaseId, after, limit): Promise<RowsPage> {
+      const page = await call(() =>
+        api.GET('/api/v1/databases/{databaseId}/rows', {
+          params: { path: { databaseId }, query: after ? { after, limit } : { limit } },
+        }),
+      );
+      return { rows: page.rows.map(rowRecord), next: page.next ?? null, total: num(page.total) };
+    },
+
+    async query(databaseId, request): Promise<QueryAnswer> {
+      const answer = await call(() =>
+        api.POST('/api/v1/databases/{databaseId}/query', {
+          params: { path: { databaseId } },
+          body: request,
+        }),
+      );
+      return {
+        rows: answer.rows.map(rowRecord),
+        groups: groupCounts(answer.groups),
+        total: num(answer.total),
+        next: answer.next ?? null,
       };
     },
 

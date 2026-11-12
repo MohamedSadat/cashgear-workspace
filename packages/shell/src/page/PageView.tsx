@@ -3,34 +3,88 @@ import {
   BlockEditorView,
   EditorOverlays,
   type BlockEditor,
+  type DatabaseMountOptions,
   type EditorHost,
   type EditorStrings,
 } from '@cgw/editor';
-import type { PageRecord } from '@cgw/workspace';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { unreachable } from '../cloud/cloud';
 import { useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
+import { useDatabaseHost } from '../database/context';
+import { canAsk, requestDatabasePick, requestNewDatabase } from '../database/dialogs';
+import type { ShellDatabaseHost } from '../database/host';
+import { emptyRowsOps, newDatabaseOps } from '../database/make';
+import { mountDatabase } from '../database/mount';
 import { formatShortcut } from '../shortcuts';
 import {
   NewerDocumentError,
   NotOnDeviceError,
-  canEditPage,
+  isRowRecord,
+  type AnyPage,
   type WorkspaceSession,
 } from '../session';
 import { registerBlockCommands, slashItems } from './blockCommands';
-import { editorHost, ToggleState } from './editorHost';
+import { assetsOf, editorHost, ToggleState } from './editorHost';
 import { exportAndSave } from '../exchange/DataPanel';
 import { HistoryDialog } from './HistoryDialog';
 import { PageHeader } from './PageHeader';
 import { pageEvents, takeHistoryRequest } from './PageMenu';
+import { TitleField } from './TitleField';
 import { usePageDoc } from './usePageDoc';
+
+// A row's properties above its body: the database views' chunk, loaded with the first row.
+const RowProperties = lazy(() =>
+  import('@cgw/database').then((m) => ({ default: m.RowProperties })),
+);
 
 export interface PageViewProps {
   session: WorkspaceSession;
-  page: PageRecord;
+  /** A page, or a row (its properties are drawn above its body). */
+  page: AnyPage;
   onEditor?: (editor: BlockEditor | null, doc: PageDocument | null) => void;
+}
+
+/** Empty rows an inline database starts with when it is made empty. */
+const INLINE_ROWS = 3;
+
+/**
+ * An inline database ("Database" in the slash menu): its page under this page, chosen in the
+ * template dialog (empty, or from a template); an empty one starts with three empty rows. Null
+ * when cancelled or refused (the person has been told why).
+ */
+async function createInlineDatabase(
+  session: WorkspaceSession,
+  host: ShellDatabaseHost,
+  page: AnyPage,
+  names: { title: string; table: string },
+) {
+  const place = {
+    workspaceId: page.workspaceId,
+    sectionId: page.sectionId,
+    parentPageId: page.id,
+    orderKey: session.keyFor(page.sectionId, page.id),
+  };
+  try {
+    if (!canAsk()) {
+      const made = newDatabaseOps(place, names, { rows: INLINE_ROWS });
+      await host.apply(made.ops);
+      return { databaseId: made.databaseId, viewId: made.viewId };
+    }
+    const made = await requestNewDatabase(place);
+    if (!made) return null;
+    if (!session.mirror.rowsOf(made.databaseId).length)
+      await host.apply(
+        emptyRowsOps(
+          { id: made.databaseId, workspaceId: place.workspaceId, sectionId: place.sectionId },
+          INLINE_ROWS,
+        ),
+      );
+    return made;
+  } catch {
+    return null;
+  }
 }
 
 /** One page: its title (a field on the page record, D6) and its document in the editor. */
@@ -98,12 +152,17 @@ function readOnlyJSON(json: DocJSON, strings: { block: string; inline: string })
 }
 
 /** The editor's host for a page: its assets, links, child pages, slash menu and strings. */
-function usePageHost(session: WorkspaceSession, page: PageRecord): EditorHost {
-  const { t } = useTranslation();
+function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
+  const { t, i18n } = useTranslation();
   const services = useShell();
   const { platform } = services;
+  const databases = useDatabaseHost();
   const strings = t('editor', { returnObjects: true }) as unknown as EditorStrings;
   const toggles = useMemo(() => new ToggleState(session, page.id), [session, page.id]);
+  const language = i18n.language;
+  // Nothing sits under a row: a row's body holds no sub-page and no inline database (a linked
+  // view of a database is fine).
+  const row = page.kind === 'row';
   return useMemo(
     () => ({
       ...editorHost({
@@ -112,8 +171,9 @@ function usePageHost(session: WorkspaceSession, page: PageRecord): EditorHost {
         strings,
         toggles,
         openExternal: (url) => void platform.openExternal(url),
-        saveAsset: () => {},
+        assets: assetsOf(session, (name, bytes, type) => platform.saveFile(name, bytes, type)),
         createChildPage: async () => {
+          if (row) return null;
           const child = await session.createPage({
             sectionId: page.sectionId,
             parentPageId: page.id,
@@ -121,6 +181,23 @@ function usePageHost(session: WorkspaceSession, page: PageRecord): EditorHost {
           return child.id;
         },
       }),
+      locale: language,
+      databases: databases
+        ? {
+            mount: (element: HTMLElement, options: DatabaseMountOptions) =>
+              mountDatabase(element, options, { host: databases, i18n }),
+            ...(row
+              ? {}
+              : {
+                  create: () =>
+                    createInlineDatabase(session, databases, page, {
+                      title: t('database.templates.titleProperty'),
+                      table: t('database.viewType.table'),
+                    }),
+                }),
+            pick: requestDatabasePick,
+          }
+        : undefined,
       slash: {
         list: (query: string) => slashItems(services, t, query),
         run: (id: string) => void services.commands.run(id, { services, toggleSidebar: () => {} }),
@@ -133,7 +210,19 @@ function usePageHost(session: WorkspaceSession, page: PageRecord): EditorHost {
         ),
     }),
     // Strings change with the language; the rest with the page.
-    [session, page.id, page.sectionId, strings, toggles, platform, services, t],
+    [
+      session,
+      page.id,
+      page.sectionId,
+      row,
+      strings,
+      toggles,
+      platform,
+      services,
+      t,
+      language,
+      databases,
+    ],
   );
 }
 
@@ -142,7 +231,7 @@ function usePageHost(session: WorkspaceSession, page: PageRecord): EditorHost {
  * JSON, read-only, with the banner asking to update. Nothing is stored or pushed (the engine holds
  * such pages back). Offline, it says the page is not on this device yet.
  */
-function NewerPage({ session, page }: { session: WorkspaceSession; page: PageRecord }) {
+function NewerPage({ session, page }: { session: WorkspaceSession; page: AnyPage }) {
   const { t } = useTranslation();
   const cloud = useCloud();
   const host = usePageHost(session, page);
@@ -213,7 +302,8 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   // The account may only view (or comment on) the page: shown, never edited; it follows the page's
   // access in the mirror (a resync also opens the document again, session.reloadMirror). The
   // server is still the check.
-  const viewOnly = !canEditPage(page);
+  const viewOnly = !session.canEdit(page.id);
+  const databases = useDatabaseHost();
   const readOnly = newer || viewOnly;
   // A notice's "Open the page history" may have come before the page was on screen.
   const [history, setHistory] = useState(false);
@@ -296,6 +386,11 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
           editor.commands.focus('start');
         }}
       />
+      {isRowRecord(page) && databases && (
+        <Suspense fallback={<div className="cgw-row-props-loading" />}>
+          <RowProperties host={databases} rowId={page.id} editable={!readOnly} />
+        </Suspense>
+      )}
       <BlockEditorView
         fragment={readOnly ? undefined : doc.fragment}
         readOnlyContent={readOnlyContent}
@@ -325,88 +420,5 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         />
       )}
     </article>
-  );
-}
-
-/** The page title, edited in place; saved as a page.update after a short pause. */
-function TitleField({
-  session,
-  page,
-  readOnly,
-  onEnter,
-}: {
-  session: WorkspaceSession;
-  page: PageRecord;
-  readOnly: boolean;
-  onEnter: () => void;
-}) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(page.title);
-  const pending = useRef<number | null>(null);
-  const editing = useRef(false);
-  const field = useRef<HTMLTextAreaElement>(null);
-
-  // A page just made, from the sidebar's button, its row menu or a key, starts in its title.
-  useEffect(() => {
-    if (session.takeFresh(page.id)) field.current?.focus();
-  }, [session, page.id]);
-
-  useEffect(() => {
-    if (!editing.current) setDraft(page.title);
-  }, [page.title]);
-
-  const commit = (value: string): Promise<void> | undefined => {
-    if (pending.current !== null) clearTimeout(pending.current);
-    pending.current = null;
-    if (value !== page.title) return session.updatePage(page.id, { title: value });
-  };
-
-  // Leaving the page with a title still waiting to be saved saves it now; so does the session's
-  // flush (the page hiding, the window closing, an upload), which waits for it to be stored.
-  const latest = useRef({ draft, commit });
-  latest.current = { draft, commit };
-  useEffect(
-    () => () => {
-      if (pending.current !== null) void latest.current.commit(latest.current.draft);
-    },
-    [],
-  );
-  useEffect(
-    () =>
-      session.onFlush(() =>
-        pending.current !== null ? latest.current.commit(latest.current.draft) : undefined,
-      ),
-    [session],
-  );
-
-  return (
-    <textarea
-      ref={field}
-      className="cgw-title"
-      rows={1}
-      dir="auto"
-      value={draft}
-      readOnly={readOnly}
-      placeholder={t('page.untitled')}
-      aria-label={t('page.title')}
-      onFocus={() => (editing.current = true)}
-      onBlur={() => {
-        editing.current = false;
-        void commit(draft);
-      }}
-      onChange={(event) => {
-        const value = event.target.value.replace(/\n/g, ' ');
-        setDraft(value);
-        if (pending.current !== null) clearTimeout(pending.current);
-        pending.current = window.setTimeout(() => void commit(value), 400);
-      }}
-      onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-          event.preventDefault();
-          void commit(draft);
-          onEnter();
-        }
-      }}
-    />
   );
 }

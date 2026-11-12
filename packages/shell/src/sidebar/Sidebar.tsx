@@ -5,6 +5,7 @@ import { useCloud, useOfflineMarks, useRecoveredRevision } from '../cloud/CloudU
 import { Dialog } from '../Dialog';
 import { navigate, routeHash } from '../route';
 import type { WorkspaceSession } from '../session';
+import { pageGlyph } from '../database/make';
 import { PageTree } from './PageTree';
 import { PointMenu } from './RowMenu';
 
@@ -33,7 +34,7 @@ function PageLink({
       aria-current={active ? 'page' : undefined}
       title={unavailable ? t('offline.notAvailable') : undefined}
     >
-      <span aria-hidden="true">{page.icon ?? '📄'}</span>
+      <span aria-hidden="true">{pageGlyph(page)}</span>
       <span className="cgw-tree-title" dir="auto">
         {page.title || t('page.untitled')}
       </span>
@@ -162,7 +163,7 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
           label={t('workspace.newFromTemplate')}
           onClose={() => setTemplates(null)}
           items={templateList.map((template) => ({
-            label: `${template.icon ?? '📄'} ${template.title || t('page.untitled')}`,
+            label: `${pageGlyph(template)} ${template.title || t('page.untitled')}`,
             onSelect: () =>
               void session
                 .newFromTemplate(template.id)

@@ -1,12 +1,21 @@
 // What the sync engine's tests share: accounts, a device (a store and an engine over the fake
 // server), a local workspace to upload, a virtual clock for the loop's timers, and the tree as the
-// server shows it to an account (to compare a device's mirror with).
+// server shows it to an account (to compare a device's mirror with). Phase 4: a database to make
+// (its properties, a view, rows), and rows as a device holds them and as the server has them.
 import { newOp } from '../build';
+import type { PropertyDef, PropertyId, Value, ViewRecord } from '../db/types';
 import { uuidv7, type Id } from '../ids';
 import { MemoryStore } from '../memory';
 import type { Account, DocCodec, SyncApi } from '../sync/api';
 import { SyncEngine, type SyncEvent, type SyncOptions } from '../sync/engine';
-import type { LocalStore, PageRecord, SectionRecord, WorkspaceRecord } from '../types';
+import type {
+  LocalStore,
+  PageCreate,
+  PageRecord,
+  RowRecord,
+  SectionRecord,
+  WorkspaceRecord,
+} from '../types';
 import { fakeCodec, type FakeServer } from './fakeServer';
 
 export const ALICE: Account = {
@@ -164,6 +173,157 @@ export async function serverShape(server: FakeServer, account: Account, workspac
   } finally {
     server.offline = offline;
   }
+}
+
+// Databases ---------------------------------------------------------------------------------------
+
+/** Property ids of the tasks database (8 characters of base 62). */
+export const PROP = {
+  notes: 'Notes001',
+  count: 'Count001',
+  stage: 'Stage001',
+  done: 'Done0001',
+  /** A relation to rows of the same database, kept in step with `back`. */
+  link: 'Link0001',
+  back: 'Back0001',
+} as const;
+
+export const STAGE = { open: 'Open0001', shut: 'Shut0001' } as const;
+
+/** The tasks database's properties (the title is added by the planner). */
+export const TASK_PROPS: PropertyDef[] = [
+  { id: PROP.notes, name: 'Notes', type: 'text' },
+  { id: PROP.count, name: 'Count', type: 'number', number: { format: 'number', decimals: null } },
+  {
+    id: PROP.stage,
+    name: 'Stage',
+    type: 'select',
+    options: [
+      { id: STAGE.open, name: 'Open', colour: 'blue' },
+      { id: STAGE.shut, name: 'Closed', colour: 'green' },
+    ],
+  },
+  { id: PROP.done, name: 'Done', type: 'checkbox' },
+];
+
+/** The self-relation added to a tasks database (and its reverse, which the planner adds). */
+export const linkDef = (databaseId: Id): PropertyDef => ({
+  id: PROP.link,
+  name: 'Blocks',
+  type: 'relation',
+  relation: { databaseId, reversePropertyId: PROP.back },
+});
+
+export function tableView(workspaceId: Id, databaseId: Id, name = 'Table', orderKey = 'a0') {
+  const view: ViewRecord = {
+    id: uuidv7(),
+    workspaceId,
+    databaseId,
+    name,
+    type: 'table',
+    orderKey,
+    config: {
+      filter: null,
+      sorts: [],
+      group: null,
+      properties: { order: [], hidden: [], widths: {} },
+    },
+    version: 1,
+    createdAt: now(),
+  };
+  return view;
+}
+
+/** A row as `page.create` makes one, with its first values. */
+export function rowCreate(
+  ws: Id,
+  section: Id,
+  databaseId: Id,
+  title: string,
+  values: Record<PropertyId, Value> = {},
+  orderKey = 'a0',
+): PageCreate {
+  return { ...pageRecord(ws, section, title, databaseId, orderKey), kind: 'row', row: { values } };
+}
+
+/**
+ * A tasks database made on a device (in its outbox, as made offline): its page under `parent`, a
+ * table view, the self-relation, and a row for each title given (in order).
+ */
+export async function makeDatabase(
+  store: LocalStore,
+  ws: Id,
+  section: Id,
+  parent: Id | null,
+  titles: string[] = ['One', 'Two', 'Three'],
+  title = 'Tasks',
+) {
+  const page = { ...pageRecord(ws, section, title, parent, 'a8'), kind: 'database' as const };
+  const view = tableView(ws, page.id);
+  const rows = titles.map((t, i) =>
+    rowCreate(ws, section, page.id, t, { [PROP.count]: i + 1 }, `a${i}`),
+  );
+  await store.applyLocalOps([
+    newOp('page.create', ws, page.id, { ...page, database: { properties: TASK_PROPS } }),
+    newOp('db.update', ws, page.id, { properties: [linkDef(page.id)] }),
+    newOp('view.upsert', ws, view.id, view),
+    ...rows.map((r) => newOp('page.create', ws, r.id, r)),
+  ]);
+  return { db: page, view, rows };
+}
+
+/** What a row comparison looks at: its place, title, trash, values and versions. */
+export const rowShape = (rows: RowRecord[]) =>
+  Object.fromEntries(
+    [...rows]
+      .sort((x, y) => (x.id < y.id ? -1 : 1))
+      .map((r) => [
+        r.id,
+        {
+          title: r.title,
+          orderKey: r.orderKey,
+          trashed: r.trashedAt !== null,
+          trashRootId: r.trashRootId,
+          isTemplate: r.isTemplate,
+          values: r.values,
+          versions: r.versions,
+          version: r.version,
+        },
+      ]),
+  );
+
+/** The rows a device holds of a database. */
+export async function heldRows(store: LocalStore, databaseId: Id) {
+  return rowShape(await store.readRows(databaseId));
+}
+
+/** The rows the server has of a database (every one, as `rows` gives them). */
+export async function serverRows(server: FakeServer, account: Account, databaseId: Id) {
+  const offline = server.offline;
+  server.offline = false;
+  try {
+    const api = server.api(account);
+    const rows: RowRecord[] = [];
+    let after: Id | null = null;
+    for (;;) {
+      const page = await api.rows(databaseId, after, 1000);
+      rows.push(...page.rows);
+      if (!page.next) break;
+      after = page.next;
+    }
+    return rowShape(rows);
+  } finally {
+    server.offline = offline;
+  }
+}
+
+/** One row as the server has it. */
+export function serverRow(server: FakeServer, rowId: Id): RowRecord | undefined {
+  for (const space of server.spaces.values()) {
+    const row = space.mirror.rowRecords.get(rowId);
+    if (row) return row;
+  }
+  return undefined;
 }
 
 /** Timers on a clock the test moves: what the loop schedules runs only when the test says. */

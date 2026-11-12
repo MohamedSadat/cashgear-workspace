@@ -105,4 +105,154 @@ describe('http sync api', () => {
     await sync.repairDoc(PAGE, { epoch: 2, clientSchemaVersion: 1, update: null });
     expect(seen[1].body).toEqual({ epoch: 2, clientSchemaVersion: 1, update: null });
   });
+
+  // Phase 4 (contract section 4): JSON fields come as objects; 64-bit numbers may come as text.
+  const DB = '0193a1b2-c3d4-7e5f-8a9b-0000000000db';
+  const WS = '0193a1b2-c3d4-7e5f-8a9b-0000000000a0';
+  const page = {
+    id: PAGE,
+    workspaceId: WS,
+    sectionId: WS,
+    parentPageId: DB,
+    orderKey: 'a0',
+    kind: 'row',
+    title: 'One',
+    icon: null,
+    coverAssetId: null,
+    isTemplate: false,
+    templateOfPageId: null,
+    version: '3',
+    createdAt: '2026-11-12T10:00:00Z',
+    updatedAt: '2026-11-12T10:00:00Z',
+    trashedAt: null,
+    trashRootId: null,
+    access: 'edit',
+    restricted: false,
+    docHeadSeq: '2',
+    docEpoch: 0,
+    docSchemaVersion: 3,
+  };
+  const row = {
+    ...page,
+    databaseId: DB,
+    values: { Count001: 4, Tags0001: ['a', 'b'] },
+    versions: { Count001: '2' },
+    computed: { Form0001: { error: 'formula.cycle' } },
+    computedVersion: '5',
+    createdBy: null,
+    updatedBy: WS,
+  };
+  const database = {
+    id: DB,
+    workspaceId: WS,
+    properties: [{ id: 'title', name: 'Name', type: 'title' }],
+    version: '7',
+    rowCount: '1',
+    createdAt: '2026-11-12T10:00:00Z',
+  };
+
+  it("reads a database's rows by id, and the rows as records", async () => {
+    const { sync, seen } = server(() => json(200, { rows: [row], next: PAGE, total: '1200' }));
+    const answer = await sync.rows(DB, null, 1000);
+    expect(answer).toEqual({
+      rows: [
+        {
+          ...page,
+          kind: 'row',
+          version: 3,
+          docHeadSeq: 2,
+          databaseId: DB,
+          values: row.values,
+          versions: { Count001: 2 },
+          computed: row.computed,
+          computedVersion: 5,
+          createdBy: null,
+          updatedBy: WS,
+        },
+      ],
+      next: PAGE,
+      total: 1200,
+    });
+    expect(seen[0]).toMatchObject({
+      method: 'GET',
+      url: `https://api.test/api/v1/databases/${DB}/rows?limit=1000`,
+    });
+    await sync.rows(DB, PAGE, 10);
+    expect(seen[1].url).toBe(`https://api.test/api/v1/databases/${DB}/rows?after=${PAGE}&limit=10`);
+  });
+
+  it("sends a database's query, and reads its rows, groups and cursor", async () => {
+    const { sync, seen } = server(() =>
+      json(200, { rows: [row], groups: [{ key: '', count: '3' }], total: 3, next: 'opaque' }),
+    );
+    const request = {
+      viewId: PAGE,
+      search: 'one',
+      context: { today: '2026-11-12', offsetMinutes: 60, me: null },
+      after: null,
+      limit: 50,
+    };
+    const answer = await sync.query(DB, request);
+    expect(answer).toMatchObject({ groups: [{ key: '', count: 3 }], total: 3, next: 'opaque' });
+    expect(answer.rows[0]).toMatchObject({ kind: 'row', databaseId: DB, computedVersion: 5 });
+    expect(seen[0]).toMatchObject({
+      method: 'POST',
+      url: `https://api.test/api/v1/databases/${DB}/query`,
+      body: request,
+    });
+  });
+
+  it('reads databases and views in the tree, and database, view and row changes in the feed', async () => {
+    const view = {
+      id: PAGE,
+      workspaceId: WS,
+      databaseId: DB,
+      name: 'Board',
+      type: 'board',
+      orderKey: 'a0',
+      config: { filter: null, sorts: [], group: { propertyId: 'Stage001' } },
+      version: '2',
+      createdAt: '2026-11-12T10:00:00Z',
+    };
+    const workspace = {
+      id: WS,
+      name: 'W',
+      icon: null,
+      createdAt: '2026-11-12T10:00:00Z',
+      version: 1,
+      deletedAt: null,
+      role: 'owner',
+    };
+    let answer: unknown = {
+      workspace,
+      sections: [],
+      pages: [{ ...page, id: DB, kind: 'database', parentPageId: null }],
+      favourites: [],
+      visits: [],
+      cursor: 9,
+      databases: [database],
+      views: [view],
+    };
+    const { sync } = server(() => json(200, answer));
+    const tree = await sync.tree(WS, null);
+    expect(tree.pages[0].kind).toBe('database');
+    expect(tree.databases).toEqual([{ ...database, version: 7, rowCount: 1 }]);
+    expect(tree.views).toEqual([{ ...view, version: 2 }]);
+    answer = {
+      cursor: 12,
+      more: false,
+      changes: [
+        { seq: 10, entityType: 'database', entityId: DB, kind: 'upsert', entity: { database } },
+        { seq: 11, entityType: 'view', entityId: PAGE, kind: 'delete', entity: null },
+        { seq: 12, entityType: 'row', entityId: PAGE, kind: 'upsert', entity: { row } },
+      ],
+    };
+    const feed = await sync.changes(WS, 9, 500);
+    expect(feed.changes.map((c) => [c.entityType, c.kind, c.entity && 'id' in c.entity])).toEqual([
+      ['database', 'upsert', true],
+      ['view', 'delete', null],
+      ['row', 'upsert', true],
+    ]);
+    expect(feed.changes[2].entity).toMatchObject({ kind: 'row', values: row.values });
+  });
 });

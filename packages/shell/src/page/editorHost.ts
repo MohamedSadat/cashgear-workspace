@@ -127,13 +127,41 @@ export function pickFiles(accept: string[]): Promise<File[]> {
   });
 }
 
+/**
+ * Files as the editor and the database views use them (`EditorHost.assets`, `DatabaseHost.assets`
+ * have the same shape): URLs from the local store or the server, the records from the mirror, new
+ * files kept locally, and "open" saving the file where the person chooses.
+ */
+export function assetsOf(
+  session: WorkspaceSession,
+  saveFile: (name: string, bytes: Uint8Array, type: string) => Promise<void>,
+): NonNullable<EditorHost['assets']> {
+  return {
+    url: (assetId) => assetUrl(session, assetId),
+    info: (assetId): AssetInfo | undefined => session.mirror.assets.get(assetId),
+    store: (file) => storeAsset(session, file),
+    pick: pickFiles,
+    open: (assetId) => {
+      void (async () => {
+        const record = session.mirror.assets.get(assetId);
+        const bytes =
+          (await session.store.getAssetBytes(assetId)) ??
+          (await session.remoteAssets?.(assetId)) ??
+          null;
+        if (!record || !bytes) return;
+        await saveFile(record.fileName, bytes, record.contentType || 'application/octet-stream');
+      })().catch((error: unknown) => console.warn('The file could not be saved:', error));
+    },
+  };
+}
+
 export interface HostDeps {
   session: WorkspaceSession;
   pageId: Id;
   strings: EditorStrings;
   toggles: ToggleState;
   openExternal: (url: string) => void;
-  saveAsset: (assetId: Id) => void;
+  assets: NonNullable<EditorHost['assets']>;
   createChildPage: () => Promise<Id | null>;
 }
 
@@ -154,13 +182,7 @@ export function editorHost(deps: HostDeps): EditorHost {
         imageUrl,
       };
     },
-    assets: {
-      url: (assetId) => assetUrl(session, assetId),
-      info: (assetId): AssetInfo | undefined => session.mirror.assets.get(assetId),
-      store: (file) => storeAsset(session, file),
-      pick: pickFiles,
-      open: deps.saveAsset,
-    },
+    assets: deps.assets,
     pages: {
       title: (pageId) => session.mirror.pages.get(pageId)?.title,
       icon: (pageId) => session.mirror.pages.get(pageId)?.icon,

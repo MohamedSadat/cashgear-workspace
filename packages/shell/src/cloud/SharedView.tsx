@@ -66,7 +66,7 @@ export function SharedView({
   token: string;
   pageId: string | null;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [tree, setTree] = useState<{ page: SharedPage; pages: SharedPage[] } | null>(null);
   const [content, setContent] = useState<{ id: string; json: DocJSON } | null>(null);
   const [failed, setFailed] = useState(false);
@@ -74,6 +74,7 @@ export function SharedView({
   // Images of the shared pages, by the link's own signed URLs; titles of linked pages if shared.
   const host: EditorHost = {
     strings: t('editor', { returnObjects: true }) as unknown as EditorStrings,
+    locale: i18n.language,
     openExternal: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
     assets: {
       url: async (assetId) => {
@@ -88,6 +89,17 @@ export function SharedView({
       store: async () => null,
       pick: async () => [],
       open: () => undefined,
+    },
+    // A database block: no shared route for databases in Phase 4, so it says where it is shown.
+    databases: {
+      mount: (element) => {
+        const note = document.createElement('p');
+        note.className = 'cgw-db-shared-note';
+        note.setAttribute('role', 'note');
+        note.textContent = t('databases.sharedPlaceholder');
+        element.appendChild(note);
+        return () => note.remove();
+      },
     },
     pages: {
       title: (id) => tree?.pages.find((p) => p.id === id)?.title,
