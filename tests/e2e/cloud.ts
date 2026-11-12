@@ -30,9 +30,13 @@ export async function mailTo(address: string, containing?: string): Promise<stri
       // The folder appears with the first mail.
     }
     for (const file of files) {
-      const text = readFileSync(join(MAIL, file), 'utf8')
-        .replace(/=\r?\n/g, '')
-        .replace(/=3D/g, '=');
+      let raw: string;
+      try {
+        raw = readFileSync(join(MAIL, file), 'utf8');
+      } catch {
+        continue; // Still being written (EBUSY on Windows): read on the next round.
+      }
+      const text = raw.replace(/=\r?\n/g, '').replace(/=3D/g, '=');
       if (
         text.toLowerCase().includes(address.toLowerCase()) &&
         (!containing || text.includes(containing))

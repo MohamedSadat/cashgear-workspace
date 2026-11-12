@@ -22,6 +22,13 @@ public sealed class InfraTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task The_favicon_a_browser_asks_for_on_the_sign_in_pages_is_no_error()
+    {
+        // A 404 there is logged in the browser's console on every sign-in.
+        Assert.Equal(HttpStatusCode.NoContent, (await server.Anonymous().GetAsync("/favicon.ico")).StatusCode);
+    }
+
+    [Fact]
     public async Task Errors_are_problems_with_a_code_and_the_correlation_id()
     {
         var client = server.Anonymous();

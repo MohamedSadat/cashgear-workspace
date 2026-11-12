@@ -231,6 +231,9 @@ public static class ApiServices
         app.MapAccountPages();
         app.MapConnect();
         api.MapCgwModules();
+        // Browsers ask for it on the sign-in pages; nothing to give, and a 404 would be logged.
+        app.MapGet("/favicon.ico", () => TypedResults.NoContent())
+            .AllowAnonymous().RequireRateLimiting(RateLimits.Anonymous).ExcludeFromDescription();
         return app;
     }
 }

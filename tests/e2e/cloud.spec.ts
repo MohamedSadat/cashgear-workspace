@@ -119,7 +119,11 @@ test('an invited member sees the workspace; signing out keeps the pages on the d
   // Signing out: this device keeps what it has; the status says so.
   await second.goto('/#/settings');
   await second.getByRole('button', { name: 'Sign out' }).click();
-  await expect(second.getByRole('button', { name: 'Sign in to sync' })).toBeVisible();
+  await expect(
+    second
+      .getByRole('navigation', { name: 'Sidebar' })
+      .getByRole('button', { name: 'Sign in to sync' }),
+  ).toBeVisible();
   await second.goto('/');
   await expect(second.getByRole('treeitem', { name: /Getting started/ })).toBeVisible();
   await other.close();

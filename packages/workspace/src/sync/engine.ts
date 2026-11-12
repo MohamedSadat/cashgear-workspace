@@ -331,11 +331,7 @@ export class SyncEngine {
     for (;;) {
       // A page whose creation has not reached the server yet waits for it: its push would be 404.
       // (Made between this pass's push of the outbox and now; the next pass sends both.)
-      const creating = new Set(
-        (await this.store.nextOutboxBatch(OUTBOX_ALL, workspace.id))
-          .filter((op) => op.type === 'page.create')
-          .map((op) => op.entityId),
-      );
+      const creating = await this.creating(workspace.id);
       const unsent = (await this.store.unsentDocUpdates(200)).filter(
         (doc) => !this.held.has(doc.pageId) && !creating.has(doc.pageId),
       );
@@ -525,15 +521,31 @@ export class SyncEngine {
   async pullPage(pageId: Id): Promise<void> {
     const page = await this.store.getPage(pageId);
     if (!page || !this.account) return;
-    const workspace = (await this.store.readMirror(page.workspaceId)).workspaces[0];
-    if (!workspace || workspace.localOnly) return;
+    // Before the first pass knows the workspace syncs, or while the page's creation is still on
+    // its way: the server has nothing to give yet (and a 404 would be logged). A pass pulls it.
+    if (!this.mine.has(page.workspaceId) || (await this.creating(page.workspaceId)).has(pageId)) {
+      this.wanted.add(pageId);
+      this.kick();
+      return;
+    }
     await this.pullDoc(page);
+  }
+
+  /** Pages made here whose `page.create` still waits in the outbox: not on the server yet. */
+  private async creating(workspaceId: Id): Promise<Set<Id>> {
+    return new Set(
+      (await this.store.nextOutboxBatch(OUTBOX_ALL, workspaceId))
+        .filter((op) => op.type === 'page.create')
+        .map((op) => op.entityId),
+    );
   }
 
   private async pullDocs(workspace: WorkspaceRecord) {
     const heads = await this.store.docCursors(workspace.id);
     const mirror = await this.store.readMirror(workspace.id);
+    const creating = await this.creating(workspace.id);
     for (const page of mirror.pages) {
+      if (creating.has(page.id)) continue;
       const held = heads[page.id];
       if (
         this.wanted.has(page.id) ||

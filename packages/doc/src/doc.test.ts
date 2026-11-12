@@ -232,9 +232,11 @@ describe('page document', () => {
     vi.useFakeTimers();
     const store = new MemoryStore();
     const pageId = uuidv7();
+    // A new page, as createPage makes it: its first update carries the meta.
+    await store.appendDocUpdates(pageId, [{ updateId: uuidv7(), data: newDocumentUpdate(pageId) }]);
     const page = await PageDocument.open(pageId, store);
     await vi.advanceTimersByTimeAsync(600);
-    const writes = await store.docLogLength(pageId); // the meta stamp of a new page
+    const writes = await store.docLogLength(pageId);
     const text = new Y.XmlText();
     page.fragment.insert(0, [text]);
     const states: string[] = [];
@@ -251,6 +253,15 @@ describe('page document', () => {
     expect(reopened.fragment.toString()).toBe(page.fragment.toString());
     expect(reopened.doc.getMap(META).get('schemaVersion')).toBe(SCHEMA_VERSION);
     expect(reopened.doc.getMap(META).get('pageId')).toBe(pageId);
+  });
+
+  it('writes nothing on opening a page this device holds nothing of (it comes with its pull)', async () => {
+    vi.useFakeTimers();
+    const store = new MemoryStore();
+    const pageId = uuidv7();
+    await PageDocument.open(pageId, store);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await store.docLogLength(pageId)).toBe(0);
   });
 
   it('keeps an unsaved batch and retries when a write fails', async () => {

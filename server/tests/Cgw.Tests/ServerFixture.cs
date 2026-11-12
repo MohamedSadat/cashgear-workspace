@@ -105,6 +105,9 @@ public sealed class ServerFixture : IAsyncLifetime
         worker.Logging.SetMinimumLevel(LogLevel.Warning);
         worker.Services.AddCgwCore(worker.Configuration);
         worker.Services.AddCgwWorker(worker.Configuration);
+        // A stand-in for a malware scanner (the hook ARCHITECTURE.md's Upload safety names): it
+        // refuses files named for the test that checks a refusal is quarantined.
+        worker.Services.AddSingleton<Cgw.Worker.Jobs.IAssetScanner, RefusingScanner>();
         Worker = worker.Build().Services;
     }
 
@@ -330,3 +333,12 @@ public sealed class ServerFixture : IAsyncLifetime
 }
 
 public sealed record Account(HttpClient Client, string Email, string Password, Guid Id);
+
+/// <summary>Refuses assets whose file name starts with <see cref="Refused"/>; passes the rest.</summary>
+public sealed class RefusingScanner : Cgw.Worker.Jobs.IAssetScanner
+{
+    public const string Refused = "infected-";
+
+    public Task<bool> CleanAsync(Cgw.Core.Data.Asset asset, byte[] head, CancellationToken ct) =>
+        Task.FromResult(!asset.FileName.StartsWith(Refused, StringComparison.Ordinal));
+}

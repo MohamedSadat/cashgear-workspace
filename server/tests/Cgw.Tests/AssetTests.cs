@@ -100,6 +100,21 @@ public sealed class AssetTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task A_file_the_scan_refuses_is_quarantined_and_never_served()
+    {
+        var ws = await Ws.Create(server);
+        var id = await Upload(ws, Png, "image/png", RefusingScanner.Refused + "picture.png");
+        await server.RunJob<AssetCheckJob>();
+        var asset = await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/assets/{id}");
+        Assert.Equal("quarantined", asset.GetProperty("status").GetString());
+        Assert.Equal(HttpStatusCode.NotFound, (await ws.Client.GetAsync($"/api/v1/assets/{id}/url")).StatusCode);
+        // The same bytes under another name pass: the scan, not the type check, refused it.
+        var clean = await Upload(ws, Png, "image/png");
+        await server.RunJob<AssetCheckJob>();
+        Assert.Equal(HttpStatusCode.OK, (await ws.Client.GetAsync($"/api/v1/assets/{clean}/url")).StatusCode);
+    }
+
+    [Fact]
     public async Task Others_read_an_asset_only_through_a_page_they_can_read()
     {
         var ws = await Ws.Create(server);

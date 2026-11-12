@@ -184,7 +184,10 @@ export class PageDocument {
       report,
       options,
     );
-    if (!page.readOnly) stampMeta(doc, pageId);
+    // A page this device holds nothing of comes from the server, meta and all, with its pull:
+    // stamping it here would be a write of its own (refused for someone who may only read it).
+    // A new page's first update carries its meta already.
+    if (!page.readOnly && (stored.snapshot || stored.updates.length)) stampMeta(doc, pageId);
     return page;
   }
 
