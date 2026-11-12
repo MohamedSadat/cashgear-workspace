@@ -106,7 +106,7 @@ public sealed class AssetTests(ServerFixture server)
         var id = await Upload(ws, Png, "image/png");
         await server.RunJob<AssetCheckJob>();
         var member = await server.NewAccount();
-        await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/members", new { email = member.Email, role = "member" });
+        await Kit.Join(server, ws, "member", member);
         var outsider = await server.NewAccount();
         Assert.Equal(HttpStatusCode.NotFound, (await outsider.Client.GetAsync($"/api/v1/assets/{id}/url")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await member.Client.GetAsync($"/api/v1/assets/{id}/url")).StatusCode);

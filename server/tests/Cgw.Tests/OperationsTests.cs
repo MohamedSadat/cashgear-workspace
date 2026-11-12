@@ -234,14 +234,15 @@ public sealed class OperationsTests(ServerFixture server)
         var held = await Ws.Create(server, leaving);
         await Kit.Join(server, held, "member", colleague);
 
-        // The only owner of a workspace with other members must hand it over first.
-        var refused = await leaving.Client.DeleteAsync("/api/v1/account");
-        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
-        Assert.Equal("conflict", await Kit.Code(refused));
+        // The only owner of a workspace with other members must hand it over first; the page says so.
+        var refused = await ServerFixture.OpenAndSubmit(leaving.Client, "/account/delete", "/account/delete", ("Password", leaving.Password));
+        Assert.Equal(HttpStatusCode.OK, refused.StatusCode);
+        Assert.Contains($"only owner of workspace {held.Id}", await refused.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.OK, (await leaving.Client.PatchAsJsonAsync($"/api/v1/workspaces/{held.Id}/members/{colleague.Id}", new { role = "owner" })).StatusCode);
         var other = server.Anonymous();
         await ServerFixture.SignIn(other, leaving.Email, leaving.Password);
-        Assert.Equal(HttpStatusCode.NoContent, (await leaving.Client.DeleteAsync("/api/v1/account")).StatusCode);
+        var deleted = await ServerFixture.OpenAndSubmit(leaving.Client, "/account/delete", "/account/delete", ("Password", leaving.Password));
+        Assert.Contains("Your account is deleted", await deleted.Content.ReadAsStringAsync());
 
         // Every session is over, and the address no longer signs in.
         Assert.Equal(HttpStatusCode.Unauthorized, (await leaving.Client.GetAsync("/api/v1/account/me")).StatusCode);

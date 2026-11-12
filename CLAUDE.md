@@ -230,3 +230,11 @@ Added as they are found, grouped by phase.
 - `SqlQueryRaw` rows read `binary(16)` ids as `byte[]` (`GuidBytes.FromBytes`).
 - The server stack runs the API and worker from a copy of their build output
   (`.cgw-dev/run`, `test-results/server/run`), so a build while it runs is not blocked.
+- ASP.NET Core antiforgery with `SecurePolicy=Always` refuses plain http: the dev stack sets
+  `Api__AllowHttp` (refused in Production). In-process tests run on https and never see it.
+- The antiforgery header wins over the form field: a "no token" test removes the client's
+  default `X-CSRF-TOKEN`. `HtmlEncoder.Default` writes Arabic as entities; compare encoded text.
+- `MemoryConfigurationSource` throws on a duplicate key. PowerShell unrolls a one-element array
+  of arrays.
+- Azurite saves its metadata every 5 s and not when killed on Windows: wait out a save before
+  copying its folder (the restore drill).

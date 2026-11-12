@@ -25,13 +25,16 @@ test('signs in through the browser, syncs a workspace, and a browser sees its pa
   expect(authorize).toMatch(/^http:\/\/127\.0\.0\.1:5280\/connect\/authorize\?/);
   expect(authorize).toContain('code_challenge_method=S256');
 
-  // The system browser: signs in on the API's page and is sent to the app's loopback listener.
+  // The system browser: signs in on the API's page, confirms the desktop's sign-in, and is sent
+  // to the app's loopback listener.
   const browser = await chromium.launch({ channel: 'chrome' });
   const tab = await browser.newPage();
   await tab.goto(authorize);
   await tab.getByLabel('Email').fill(account.email);
   await tab.getByLabel('Password').fill(account.password);
   await tab.getByRole('button', { name: 'Sign in' }).click();
+  await expect(tab.getByText(`as ${account.email}?`)).toBeVisible();
+  await tab.getByRole('button', { name: 'Continue' }).click();
   await tab.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback/);
   await expect(tab.locator('body')).toContainText(/close/i);
 

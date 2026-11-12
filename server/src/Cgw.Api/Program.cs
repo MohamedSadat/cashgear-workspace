@@ -42,6 +42,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<WorkerHealth>("worker", tags: ["ready"]);
 
 var app = builder.Build();
+await StartupTasks.MigrateIfAskedAsync(app.Services, app.Configuration);
 
 app.UseCorrelation();
 app.UseCgwExceptions();

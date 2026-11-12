@@ -20,12 +20,23 @@ public static class Kit
     /// <summary>"Hello" (client 1001), and " world" typed after it (client 1002).</summary>
     public static byte[] Update(string name) => Fixtures.Value[name].Bytes;
 
+    /// <summary>Someone joins as people do: invited by the workspace's owner, accepting from the mail.</summary>
     public static async Task<Account> Join(ServerFixture server, Ws ws, string role, Account? account = null)
     {
         account ??= await server.NewAccount();
-        var added = await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/members", new { email = account.Email, role });
-        Assert.Equal(HttpStatusCode.OK, added.StatusCode);
+        var before = server.MailFiles();
+        var invited = await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/invites", new { email = account.Email, role });
+        Assert.Equal(HttpStatusCode.OK, invited.StatusCode);
+        var accepted = await account.Client.PostAsync($"/api/v1/invites/{await InviteToken(server, account.Email, before)}/accept", null);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
         return account;
+    }
+
+    /// <summary>The token in an invitation mailed after <paramref name="before"/>.</summary>
+    public static async Task<string> InviteToken(ServerFixture server, string email, HashSet<string> before)
+    {
+        var mail = (await server.NewMailTo(email, "/#/invite/", before)).Replace("=\r\n", "");
+        return System.Text.RegularExpressions.Regex.Match(mail, "#/invite/([A-Za-z0-9_-]+)").Groups[1].Value;
     }
 
     public static async Task Register(HttpClient client, Guid workspace, params long[] ids)
@@ -118,4 +129,14 @@ public static class Kit
 public sealed class ShiftedClock(TimeSpan by) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + by;
+}
+
+/// <summary>A clock a test moves on.</summary>
+public sealed class MovableClock : TimeProvider
+{
+    private long ticks;
+
+    public void Advance(TimeSpan by) => Interlocked.Add(ref ticks, by.Ticks);
+
+    public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + TimeSpan.FromTicks(Interlocked.Read(ref ticks));
 }

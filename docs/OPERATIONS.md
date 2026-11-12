@@ -97,10 +97,17 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `OpenIddict__SigningCertificateThumbprint`, `OpenIddict__EncryptionCertificateThumbprint` | Certificates in `LocalMachine\My`; the API refuses to issue tokens without them in production |
 | `DataProtection__Dpapi` | `true`: the cookie and token keys (kept in the database) are encrypted with the machine's DPAPI |
 | `Smtp__Host`, `__Port`, `__User`, `__Password`, `__From` | Mail (Q8); `Smtp__PickupDirectory` writes mail to a folder instead, for development and tests only |
-| `RateLimits__anonymous`, `__signin`, `__user`, `__push`, `__search`, `__preview` | Requests per minute (DECISIONS.md, defaults); leave unset in production |
+| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview` | Requests per minute (DECISIONS.md, defaults); leave unset in production |
+| `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
 | `Logging__Format` | `json` for structured logs with the correlation id in every line |
+| `Logging__LogLevel__Microsoft.AspNetCore` | `Warning` (`install.ps1` sets it), so ASP.NET Core's request lines, which hold the query string, are not logged |
 | `Ydoc__Library` | The worker's `cgw_ydoc.dll`, if not beside the worker |
 | `AZURE_*` | The identity for Blob Storage when the host has no managed identity (DefaultAzureCredential) |
+| `Api__AllowHttp`, `OpenIddict__EphemeralKeys`, `Api__PublicUrlFromRequest` | Development shortcuts: plain http (cookies not Secure), signing keys made at start, mail links from the request. The API refuses to start in Production with any of them, or without `Web__Origins`, an https `Api__PublicUrl` and `DataProtection__Dpapi=true`; the rehearsal sets the first two on Staging |
+
+Confirmation links last 24 hours and password reset links one hour, and both carry their token in
+the query string: besides the log level above, `install.ps1` leaves the query string (`UriQuery`)
+out of the site's IIS log fields. Keep both if the logging is changed.
 
 ## Updating
 

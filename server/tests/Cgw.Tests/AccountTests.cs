@@ -34,7 +34,7 @@ public sealed class AccountTests(ServerFixture server)
         var client = server.Anonymous();
         var email = $"cookie-{Guid.NewGuid():N}@example.test";
         await client.PostAsJsonAsync("/api/v1/account/register", new { email, password = "long enough password", displayName = "C" });
-        await client.GetAsync(ServerFixture.Link(await server.MailTo(email), "/account/confirm"));
+        await ServerFixture.OpenAndSubmit(client, ServerFixture.Link(await server.MailTo(email), "/account/confirm"), "/account/confirm");
         var response = await ServerFixture.SignIn(client, email, "long enough password");
         var cookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("cgw_session=", StringComparison.Ordinal)).ToLowerInvariant();
         Assert.Contains("httponly", cookie);
@@ -84,14 +84,22 @@ public sealed class AccountTests(ServerFixture server)
         Assert.Equal("request.invalid", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
     }
 
+    public const string Generic = "The email or password is not right. Repeated wrong tries pause signing in for 15 minutes.";
+
     [Fact]
-    public async Task Five_wrong_passwords_lock_the_account()
+    public async Task Five_wrong_passwords_lock_the_account_and_the_answer_is_the_generic_one()
     {
         var account = await server.NewAccount();
         var client = server.Anonymous();
         for (var i = 0; i < 5; i++) await ServerFixture.SignIn(client, account.Email, "wrong password " + i);
         var locked = await ServerFixture.SignIn(client, account.Email, account.Password);
-        Assert.Contains("Too many tries", await locked.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, locked.StatusCode);
+        // The same words as a wrong password, or an address with no account at all.
+        var page = await locked.Content.ReadAsStringAsync();
+        Assert.Contains(Generic, page);
+        Assert.DoesNotContain("Too many tries", page);
+        var nobody = await (await ServerFixture.SignIn(server.Anonymous(), $"nobody-{Guid.NewGuid():N}@example.test", "any long password")).Content.ReadAsStringAsync();
+        Assert.Contains(Generic, nobody);
         await using var db = server.NewDb();
         Assert.True(await db.AuditLog.IgnoreQueryFilters().AnyAsync(a => a.ActorUserId == account.Id && a.Action == "signin.lockedOut"));
     }
@@ -148,14 +156,21 @@ public sealed class AccountTests(ServerFixture server)
         return (verifier, challenge);
     }
 
-    /// <summary>The desktop's flow, with the test as the system browser and the loopback listener.</summary>
+    public static string AuthorizeUrl(string challenge, int port = 54321, string state = "s", string extra = "") =>
+        $"/connect/authorize?client_id=cgw-desktop&response_type=code&scope=offline_access%20workspace&redirect_uri={Uri.EscapeDataString($"http://127.0.0.1:{port}/callback")}&code_challenge={challenge}&code_challenge_method=S256&state={state}&device_name=Test%20desktop{extra}";
+
+    /// <summary>
+    /// The desktop's flow, with the test as the system browser and the loopback listener: the
+    /// signed-in browser is asked to confirm, presses Continue, and is sent on with a code.
+    /// </summary>
     public static async Task<(string Access, string Refresh)> DesktopSignIn(Account account, int port = 54321)
     {
         var (verifier, challenge) = Pkce();
         var redirect = $"http://127.0.0.1:{port}/callback";
         var state = Guid.NewGuid().ToString("N");
-        var authorize = await account.Client.GetAsync(
-            $"/connect/authorize?client_id=cgw-desktop&response_type=code&scope=offline_access%20workspace&redirect_uri={Uri.EscapeDataString(redirect)}&code_challenge={challenge}&code_challenge_method=S256&state={state}&device_name=Test%20desktop");
+        var consent = await account.Client.GetAsync(AuthorizeUrl(challenge, port, state));
+        Assert.Equal(HttpStatusCode.OK, consent.StatusCode);
+        var authorize = await ServerFixture.Submit(account.Client, await consent.Content.ReadAsStringAsync(), "/connect/authorize", ("cgw_consent", "accept"));
         Assert.Equal(HttpStatusCode.Redirect, authorize.StatusCode);
         var location = authorize.Headers.Location!;
         Assert.StartsWith(redirect, location.ToString());
@@ -173,6 +188,14 @@ public sealed class AccountTests(ServerFixture server)
         Assert.True(token.IsSuccessStatusCode, body.ToString());
         return (body.GetProperty("access_token").GetString()!, body.GetProperty("refresh_token").GetString()!);
     }
+
+    public static async Task<HttpResponseMessage> Refresh(HttpClient client, string refresh) =>
+        await client.PostAsync("/connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = "cgw-desktop",
+            ["refresh_token"] = refresh,
+        }));
 
     [Fact]
     public async Task The_desktop_signs_in_with_pkce_on_any_loopback_port_and_refreshes()
@@ -217,25 +240,39 @@ public sealed class AccountTests(ServerFixture server)
             var response = await account.Client.GetAsync(
                 $"/connect/authorize?client_id=cgw-desktop&response_type=code&scope=offline_access&redirect_uri={Uri.EscapeDataString(redirect)}&code_challenge={challenge}&code_challenge_method=S256");
             Assert.NotEqual(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.DoesNotContain("cgw_consent", await response.Content.ReadAsStringAsync());
         }
-        // No PKCE, no code.
+        // No PKCE, no code (and no page to confirm one).
         var plain = await account.Client.GetAsync("/connect/authorize?client_id=cgw-desktop&response_type=code&scope=offline_access&redirect_uri=http%3A%2F%2F127.0.0.1%3A5000%2Fcallback");
         Assert.NotEqual(HttpStatusCode.Redirect, plain.StatusCode);
+        Assert.DoesNotContain("cgw_consent", await plain.Content.ReadAsStringAsync());
     }
 
     [Fact]
-    public async Task Authorise_without_a_session_goes_to_the_sign_in_page_and_back()
+    public async Task Authorise_without_a_session_goes_to_the_sign_in_page_and_back_to_the_question()
     {
+        var account = await server.NewAccount();
         var (_, challenge) = Pkce();
         var client = server.Anonymous();
-        var response = await client.GetAsync($"/connect/authorize?client_id=cgw-desktop&response_type=code&scope=offline_access&redirect_uri=http%3A%2F%2F127.0.0.1%3A5000%2Fcallback&code_challenge={challenge}&code_challenge_method=S256&ui_locales=ar");
+        var response = await client.GetAsync(AuthorizeUrl(challenge, 5000, extra: "&ui_locales=ar"));
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var location = response.Headers.Location!.ToString();
         Assert.StartsWith("/account/signin?lang=ar&returnUrl=%2Fconnect%2Fauthorize", location);
         var page = await (await client.GetAsync(location)).Content.ReadAsStringAsync();
         Assert.Contains("dir=\"rtl\"", page);
         Assert.Matches(new Regex("name=\"ReturnUrl\" value=\"/connect/authorize"), page);
+
+        // Signed in, the browser comes back to the question, in Arabic; no device yet.
+        var returnUrl = WebUtility.HtmlDecode(Regex.Match(page, "name=\"ReturnUrl\" value=\"([^\"]+)\"").Groups[1].Value);
+        var signedIn = await ServerFixture.SignIn(client, account.Email, account.Password, returnUrl);
+        Assert.Equal(HttpStatusCode.Redirect, signedIn.StatusCode);
+        Assert.StartsWith("/connect/authorize?", signedIn.Headers.Location!.ToString());
+        var question = await client.GetAsync(signedIn.Headers.Location);
+        Assert.Equal(HttpStatusCode.OK, question.StatusCode);
+        var html = await question.Content.ReadAsStringAsync();
+        Assert.Contains("dir=\"rtl\"", html);
+        Assert.Contains("name=\"cgw_consent\" value=\"accept\"", html);
         await using var db = server.NewDb();
-        Assert.True(await db.Devices.AnyAsync());
+        Assert.False(await db.Devices.AnyAsync(d => d.UserId == account.Id && d.Platform == "desktop"));
     }
 }

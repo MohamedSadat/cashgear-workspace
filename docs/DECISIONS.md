@@ -597,6 +597,23 @@ M2.1 and M2.2, the server and accounts:
 | Links in mails | Built from `Api__PublicUrl`, required in production | A link built from the Host header can be pointed elsewhere by whoever sent the request |
 | Rate limits | Per minute: anonymous routes 120 per IP, sign-in 20 per IP, 1,200 per user, pushes 600, search 240, previews 60; set by `RateLimits__*` (a load test raises them) | |
 
+After the separate review of M2.2 (2026-11-12; what changed from the rows above):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Confirming a desktop sign-in | A signed-in browser at `/connect/authorize` sees "Sign in the Cash Gear Workspace desktop app on this computer as {email}?" and the code is issued only on that form's POST (antiforgery); Cancel answers `access_denied`; `prompt=none` gets `consent_required` | Without it, any link could have a signed-in browser hand a code to a listener of the sender's (RFC 8252, 8.6) |
+| Lockout and tokens | The token endpoint no longer refuses a locked-out account: lockout slows password guessing and signs nobody out | Five wrong passwords, by anyone, signed every desktop of the account out |
+| Answers that could tell an address has an account | Sign-up checks the name, email and password before looking the address up; an unconfirmed account hears "confirm your email" only with the right password (a wrong one counts towards lockout); a locked account hears the generic answer, which says for everyone that repeated wrong tries pause signing in for 15 minutes; every failed sign-in costs one password check; account mail is queued and sent off the request | "Answers never say whether an address has an account" holds for timing too |
+| Joining a workspace | Only by invitation: `POST /workspaces/{id}/members` is gone; an invite answers the same whether the address has an account or not | Adding by address told whether it had an account, and put people in workspaces without asking them |
+| Confirmation and reset links | Opening a confirmation link shows a Confirm button (a POST); "forgot" also mails unconfirmed accounts and a reset confirms the address; reset links last 1 hour (confirmation 24); neither mail carries a display name someone else chose | A mail scanner opening a link confirms nothing; an address someone signed up first can be taken back |
+| Mail | One account mail per address every 2 minutes (`Mail__CooldownSeconds`); invites are not throttled (their token would be lost) | No mail floods from the API's domain |
+| The device claim | Kept across Identity's security-stamp refresh (`OnRefreshingPrincipal` copies the claims the sign-in added) | Web sessions ended a minute after sign-in |
+| `/connect/logout` | POST with antiforgery, rate-limited, signs the device out | A GET could sign anyone out from another site, and left the device signed in |
+| Cookies | `__Host-cgw_session` and `__Host-cgw_xsrf` outside development; plain names over http on 127.0.0.1 | A sibling host of the same site cannot plant either |
+| Development shortcuts | Explicit settings (`Api__AllowHttp`, `OpenIddict__EphemeralKeys`, `Api__PublicUrlFromRequest`), refused in Production, which also refuses to start without `Web__Origins`, an https `Api__PublicUrl` and DPAPI; certificates past their date are refused at start | Nothing fails open because an environment name or a setting is missing |
+| Rate limits | `/connect/token` has its own bucket (120 a minute per IP); `/connect/revoke` and logout are limited | Desktops behind one address no longer share the sign-in forms' 20 |
+| Deleting an account | On the API's own page, after the password again (`/account/delete`); the JSON route is gone. The app's settings link there | A stolen session alone cannot delete an account; passwords stay on the API's pages |
+
 M2.3 to M2.5, metadata sync, documents and assets:
 
 | Choice | Default | Reason |

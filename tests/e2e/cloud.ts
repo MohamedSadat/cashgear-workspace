@@ -64,7 +64,18 @@ export async function newAccount(name = 'Tester'): Promise<TestAccount> {
     await mailTo(email),
     new RegExp(`${API.replace(/[.:/]/g, '\\$&')}/account/confirm[^\\s"<>]+`),
   );
-  expect((await fetch(confirm)).ok).toBe(true);
+  // The link's page asks before it confirms (a mail scanner opening it confirms nothing); this
+  // posts what its button would.
+  const url = new URL(confirm);
+  const confirmed = await fetch(`${API}/api/v1/account/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userId: url.searchParams.get('userId'),
+      code: url.searchParams.get('code'),
+    }),
+  });
+  expect(confirmed.status).toBe(204);
   return { email, password, name };
 }
 

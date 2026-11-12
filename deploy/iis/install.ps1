@@ -66,6 +66,9 @@ $environment = [ordered]@{
   Smtp__User = $SmtpUser
   Smtp__From = $SmtpFrom
   Logging__Format = 'json'
+  # ASP.NET Core's own request lines name the path and query string: confirmation and reset
+  # links carry their token there. Warnings and errors still come through.
+  'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
 }
 # The SMTP password comes from this session's environment, never from a parameter or a file.
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
@@ -102,6 +105,10 @@ if (-not (Test-Path "IIS:\Sites\$SiteName")) {
 } else {
   Set-ItemProperty "IIS:\Sites\$SiteName" -Name physicalPath -Value (Join-Path $Root 'api')
 }
+# The site's W3C log keeps IIS's default fields except the query string (UriQuery), for the
+# same reason: a token in a mailed link must not land in a log file.
+Set-ItemProperty "IIS:\Sites\$SiteName" -Name logFile.logExtFileFlags `
+  -Value 'Date,Time,ClientIP,UserName,ServerIP,Method,UriStem,HttpStatus,Win32Status,TimeTaken,ServerPort,UserAgent,Referer,HttpSubStatus'
 
 # 4. The worker as a service, with its environment in the service's own registry key.
 $exe = Join-Path $Root 'worker\Cgw.Worker.exe'

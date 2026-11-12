@@ -239,6 +239,11 @@ body {
   --button-color: var(--cg-page-bg);
 }
 
+/* The shell's own primary buttons (account, sharing, history), likewise. */
+[data-cg-theme='dark'] .cgw-button.is-primary {
+  color: var(--cg-page-bg);
+}
+
 /* Phase 2: account, sync and sharing */
 .cgw-sync-status {
   font-size: 0.8125rem;

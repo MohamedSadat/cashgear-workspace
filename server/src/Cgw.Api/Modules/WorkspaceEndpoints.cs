@@ -3,7 +3,6 @@ using Cgw.Api.Identity;
 using Cgw.Api.Infrastructure;
 using Cgw.Core;
 using Cgw.Core.Data;
-using Cgw.Core.Mail;
 using Cgw.Core.Sync;
 using Cgw.Core.Workspaces;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -12,7 +11,6 @@ using Microsoft.EntityFrameworkCore;
 namespace Cgw.Api.Modules;
 
 public sealed record WorkspaceUpdate(string? Name, string? Icon);
-public sealed record AddMember(string Email, string Role);
 public sealed record RoleUpdate(string Role);
 public sealed record NewInvite(string Email, string Role);
 
@@ -99,13 +97,8 @@ public static class WorkspaceEndpoints
         one.MapGet("/members", async (WorkspaceService service) => TypedResults.Ok(await service.MembersAsync()))
             .WithName("listMembers");
 
-        one.MapPost("/members", async Task<Results<Ok<MemberDto>, ProblemHttpResult>> (AddMember body, WorkspaceService service, HttpContext http) =>
-            {
-                var result = await service.AddMemberAsync(http.Member(), http.Actor(), body.Email ?? "", body.Role ?? "");
-                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
-            })
-            .WithName("addMember");
-
+        // Someone joins only through an invitation they accept (POST /invites): an answer that
+        // depended on whether the address has an account would tell any admin who has one.
         one.MapPatch("/members/{userId:guid}", async Task<Results<Ok<MemberDto>, ProblemHttpResult>> (Guid userId, RoleUpdate body, WorkspaceService service, HttpContext http) =>
             {
                 var result = await service.SetRoleAsync(http.Member(), http.Actor(), userId, body.Role ?? "");
@@ -117,7 +110,8 @@ public static class WorkspaceEndpoints
                 Answer(await service.RemoveMemberAsync(http.Member(), http.Actor(), userId), _ => TypedResults.NoContent()))
             .WithName("removeMember");
 
-        one.MapPost("/invites", async Task<Results<Ok<InviteDto>, ProblemHttpResult>> (NewInvite body, WorkspaceService service, AccountService account, Mailer mailer, CgwDb db, HttpContext http) =>
+        // The same answer whether or not the address has an account; the mail goes after it.
+        one.MapPost("/invites", async Task<Results<Ok<InviteDto>, ProblemHttpResult>> (NewInvite body, WorkspaceService service, AccountService account, MailQueue mail, CgwDb db, HttpContext http) =>
             {
                 var member = http.Member();
                 var result = await service.InviteAsync(member, http.Actor(), body.Email ?? "", body.Role ?? "");
@@ -125,7 +119,7 @@ public static class WorkspaceEndpoints
                 var inviter = await db.Users.AsNoTracking().FirstAsync(u => u.Id == member.UserId);
                 var workspace = await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == member.WorkspaceId);
                 var link = $"{account.AppUrl()}/#/invite/{result.Value!.Token}";
-                await mailer.SendAsync(Mails.Invite(inviter.Locale, result.Value.Invite.Email, inviter.DisplayName, workspace.Name, link));
+                mail.Enqueue("invite", Mails.Invite(inviter.Locale, result.Value.Invite.Email, inviter.DisplayName, workspace.Name, link));
                 return TypedResults.Ok(result.Value.Invite);
             })
             .WithName("createInvite");

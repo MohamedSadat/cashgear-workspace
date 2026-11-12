@@ -125,7 +125,7 @@ public sealed class DocTests(ServerFixture server)
     {
         var ws = await Ws.Create(server);
         var peer = await server.NewAccount();
-        await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/members", new { email = peer.Email, role = "member" });
+        await Kit.Join(server, ws, "member", peer);
         foreach (var fixture in Fixtures.Value.Values.Where(f => f.Name != "page"))
         {
             var page = await NewPage(ws, 1001, 1002);
@@ -299,7 +299,7 @@ public sealed class DocTests(ServerFixture server)
         Assert.Equal(8, ids.Distinct().Count());
         Assert.All(ids, id => Assert.InRange(id, 1, uint.MaxValue));
         var other = await server.NewAccount();
-        await page.Ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{page.Ws.Id}/members", new { email = other.Email, role = "member" });
+        await Kit.Join(server, page.Ws, "member", other);
         var taken = await other.Client.PostAsJsonAsync($"/api/v1/workspaces/{page.Ws.Id}/yjs-clients", new { register = new[] { 5_000_001L, 5_000_002L } });
         var body = await taken.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal([5_000_001L], body.GetProperty("refused").EnumerateArray().Select(i => i.GetInt64()));

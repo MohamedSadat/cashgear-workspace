@@ -73,15 +73,8 @@ public static class AccountEndpoints
             })
             .WithName("getSession").AllowAnonymous().RequireRateLimiting(RateLimits.User);
 
-        // Deleting the account (DATA_MODEL.md, Data export and deletion); this session ends with it.
-        account.MapDelete("", async Task<Results<NoContent, ProblemHttpResult>> (AccountDeletion deletion, AccountService service, HttpContext http) =>
-            {
-                var result = await deletion.DeleteAsync(http.User.UserId()!.Value, http.Actor());
-                if (!result.Ok) return Problems.From(result.Failure!);
-                await service.SignOutAsync(http);
-                return TypedResults.NoContent();
-            })
-            .WithName("deleteAccount").RequireAuthorization().RequireRateLimiting(RateLimits.SignIn);
+        // Deleting the account is not an API call: it asks for the password again, on the
+        // account page /account/delete (AccountPages), which the app opens.
 
         account.MapPatch("/me", async Task<Results<NoContent, ProblemHttpResult>> (MeUpdate body, AccountService service, CgwDb db, HttpContext http) =>
             {

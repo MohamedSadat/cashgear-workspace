@@ -110,13 +110,17 @@ public static class Users
 
 /// <summary>
 /// The ASP.NET Core rate limiter (ARCHITECTURE.md, Rate limiting): per IP on anonymous routes,
-/// per user on the rest, tighter on sign-in, ticket redemption, push and search. Limits per minute
-/// are in configuration (<c>RateLimits__*</c>) so a load test can raise them.
+/// per user on the rest, tighter on sign-in, ticket redemption, push and search. The desktop's
+/// token requests (<c>/connect/token</c>, and <c>/connect/revoke</c>, which OpenIddict answers
+/// before routing, through the global limiter) have a bucket of their own, so an office behind one
+/// address refreshing its tokens does not use up the sign-in forms'. Limits per minute are in
+/// configuration (<c>RateLimits__*</c>) so a load test can raise them.
 /// </summary>
 public static class RateLimits
 {
     public const string Anonymous = "anonymous";
     public const string SignIn = "signin";
+    public const string Token = "token";
     public const string User = "user";
     public const string Push = "push";
     public const string Search = "search";
@@ -148,6 +152,11 @@ public static class RateLimits
             };
             options.AddPolicy(Anonymous, c => Window("anon:" + Ip(c), Limit(Anonymous, 120)));
             options.AddPolicy(SignIn, c => Window("signin:" + Ip(c), Limit(SignIn, 20)));
+            options.AddPolicy(Token, c => Window("token:" + Ip(c), Limit(Token, 120)));
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(c =>
+                c.Request.Path.StartsWithSegments("/connect/revoke")
+                    ? Window("revoke:" + Ip(c), Limit(Token, 120))
+                    : RateLimitPartition.GetNoLimiter(""));
             options.AddPolicy(User, c => Window("user:" + Who(c), Limit(User, 1200)));
             options.AddPolicy(Push, c => Window("push:" + Who(c), Limit(Push, 600)));
             options.AddPolicy(Search, c => Window("search:" + Who(c), Limit(Search, 240)));

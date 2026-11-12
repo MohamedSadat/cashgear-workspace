@@ -307,7 +307,7 @@ Conventions:
 | Client | Flow | Credential at rest |
 | --- | --- | --- |
 | Web app | Sign in on the API's own pages; `Secure`, `HttpOnly`, `SameSite=Lax` cookie; antiforgery token on writes | Cookie only. Nothing in `localStorage` |
-| Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager), never in the webview; access token in memory |
+| Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The API's page asks the signed-in person to confirm the desktop's sign-in ("as {email}?") and issues the code only on that form's POST, so a link cannot sign a desktop in silently. The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager), never in the webview; access token in memory |
 | Sheet (opening a workbook) | One-time launch ticket → file session | In memory |
 | ERP blocks | One-time ticket from the ERP → ERP session | In memory |
 

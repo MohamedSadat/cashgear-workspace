@@ -209,19 +209,6 @@
         }
       }
     },
-    "/api/v1/account": {
-      "delete": {
-        "tags": [
-          "Account"
-        ],
-        "operationId": "deleteAccount",
-        "responses": {
-          "204": {
-            "description": "No Content"
-          }
-        }
-      }
-    },
     "/api/v1/account/antiforgery": {
       "get": {
         "tags": [
@@ -472,45 +459,6 @@
                   "items": {
                     "$ref": "#/components/schemas/MemberDto"
                   }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Workspaces"
-        ],
-        "operationId": "addMember",
-        "parameters": [
-          {
-            "name": "workspaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddMember"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MemberDto"
                 }
               }
             }
@@ -1759,21 +1707,6 @@
   },
   "components": {
     "schemas": {
-      "AddMember": {
-        "required": [
-          "email",
-          "role"
-        ],
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string"
-          }
-        }
-      },
       "AssetDto": {
         "required": [
           "id",

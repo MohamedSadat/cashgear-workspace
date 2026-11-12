@@ -56,7 +56,10 @@ public sealed class ServerFixture : IAsyncLifetime
         ["Web:Origins:1"] = "http://tauri.localhost",
         ["Web:AppUrl"] = "http://localhost:5273",
         ["Api:PublicUrl"] = "https://localhost",
+        // Tests mail one address several times a minute; the cooldown has a test of its own.
+        ["Mail:CooldownSeconds"] = "0",
         ["RateLimits:signin"] = "100000",
+        ["RateLimits:token"] = "100000",
         ["RateLimits:user"] = "100000",
         ["RateLimits:push"] = "100000",
         ["RateLimits:search"] = "100000",
@@ -150,12 +153,70 @@ public sealed class ServerFixture : IAsyncLifetime
                 break;
     }
 
-    public HttpClient Anonymous() => Api.CreateClient(new WebApplicationFactoryClientOptions
+    public HttpClient Anonymous() => ClientOf(Api);
+
+    /// <summary>A browser-like client (cookies, no redirects followed) on this API or a variant of it.</summary>
+    public static HttpClient ClientOf(WebApplicationFactory<Program> factory) => factory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
         HandleCookies = true,
         AllowAutoRedirect = false,
     });
+
+    /// <summary>
+    /// The API with some settings or services changed, on the same database and keys (a cookie or
+    /// token from one is good in the other). Disposed with the fixture.
+    /// </summary>
+    public WebApplicationFactory<Program> Variant(Action<IWebHostBuilder> configure) => Api.WithWebHostBuilder(configure);
+
+    /// <summary>The fields of a page's form (by its action): the hidden ones, HTML-decoded.</summary>
+    public static List<KeyValuePair<string, string>> FormFields(string html, string action)
+    {
+        var form = Regex.Match(html, $"""<form method="post" action="{Regex.Escape(action)}">(.*?)</form>""", RegexOptions.Singleline);
+        if (!form.Success) throw new InvalidOperationException($"No form for {action} in the page.");
+        return Regex.Matches(form.Groups[1].Value, """<input type="hidden" name="([^"]*)" value="([^"]*)">""")
+            .Select(m => KeyValuePair.Create(WebUtility.HtmlDecode(m.Groups[1].Value), WebUtility.HtmlDecode(m.Groups[2].Value)))
+            .ToList();
+    }
+
+    /// <summary>Submits a page's form as a browser does: its hidden fields and the ones typed or pressed.</summary>
+    public static async Task<HttpResponseMessage> Submit(HttpClient client, string html, string action, params (string Name, string Value)[] typed)
+    {
+        var fields = FormFields(html, action);
+        fields.AddRange(typed.Select(t => KeyValuePair.Create(t.Name, t.Value)));
+        return await client.PostAsync(action, new FormUrlEncodedContent(fields));
+    }
+
+    /// <summary>Opens a page and submits its form.</summary>
+    public static async Task<HttpResponseMessage> OpenAndSubmit(HttpClient client, string url, string action, params (string Name, string Value)[] typed)
+    {
+        var page = await client.GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        return await Submit(client, await page.Content.ReadAsStringAsync(), action, typed);
+    }
+
+    /// <summary>The mail files to an address so far, to tell a new mail from an old one.</summary>
+    public HashSet<string> MailFiles() => Directory.Exists(MailDir) ? Directory.GetFiles(MailDir, "*.eml").ToHashSet() : [];
+
+    /// <summary>A mail to an address that was not among <paramref name="before"/>, waiting for the queue to send it.</summary>
+    public async Task<string> NewMailTo(string address, string containing, HashSet<string> before)
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            var found = MailFiles().Except(before).OrderByDescending(f => f).Select(Read)
+                .FirstOrDefault(m => m.Contains(address, StringComparison.OrdinalIgnoreCase) && m.Replace("=\r\n", "").Contains(containing));
+            if (found is not null) return found;
+            await Task.Delay(100);
+        }
+        throw new InvalidOperationException($"No new mail to {address}.");
+    }
+
+    /// <summary>How many mails to an address hold a text (after the queue has had a moment).</summary>
+    public async Task<int> CountMailTo(string address, string containing)
+    {
+        await Task.Delay(1500);
+        return MailFiles().Select(Read).Count(m => m.Contains(address, StringComparison.OrdinalIgnoreCase) && m.Replace("=\r\n", "").Contains(containing));
+    }
 
     /// <summary>The newest mail to an address, waiting a moment for it.</summary>
     public async Task<string> MailTo(string address, string? containing = null)
@@ -208,8 +269,8 @@ public sealed class ServerFixture : IAsyncLifetime
         var register = await client.PostAsJsonAsync("/api/v1/account/register", new { email, password, displayName = name ?? $"User {n}", locale = "en" });
         Assert.Equal(HttpStatusCode.Accepted, register.StatusCode);
         var link = Link(await MailTo(email), "/account/confirm");
-        var confirmed = await client.GetAsync(link);
-        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        var confirmed = await OpenAndSubmit(client, link, "/account/confirm");
+        Assert.Contains("Your email is confirmed", await confirmed.Content.ReadAsStringAsync());
         await SignIn(client, email, password);
         var me = await client.GetFromJsonAsync<JsonElement>("/api/v1/account/me");
         return new Account(client, email, password, me.GetProperty("id").GetGuid());

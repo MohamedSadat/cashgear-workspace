@@ -126,6 +126,11 @@ async function deploy(label, database, blobPort, apiPort) {
     Api__PublicUrl: `http://127.0.0.1:${apiPort}`,
     Web__AppUrl: 'http://127.0.0.1:4273',
     Web__Origins__0: 'http://127.0.0.1:4273',
+    // Staging takes no development shortcut unless told: here plain http on 127.0.0.1 (for
+    // OpenIddict and the cookies), and keys made at start in place of the certificate store
+    // (both refused in Production).
+    Api__AllowHttp: 'true',
+    OpenIddict__EphemeralKeys: 'true',
     Logging__LogLevel__Default: 'Warning',
   };
   const api = start(
@@ -288,7 +293,12 @@ try {
     email,
     /http:\/\/127\.0\.0\.1:5290\/account\/confirm[^\s"<>]+/,
   );
-  if (!(await fetch(confirm)).ok) throw new Error('Confirmation failed');
+  // Opening the link only shows a Confirm button; the API's own confirm call does what it does.
+  const link = new URL(confirm);
+  await client.json('/api/v1/account/confirm', {
+    userId: link.searchParams.get('userId'),
+    code: link.searchParams.get('code'),
+  });
   await client.signIn(email, password);
   step('signed up, confirmed by mail, signed in on the API page');
 
@@ -425,8 +435,11 @@ try {
   sql('master', `BACKUP DATABASE [cgw_rehearsal] TO DISK = N'${backup}' WITH COPY_ONLY, INIT`);
   kill(first.worker);
   kill(first.api);
+  // Azurite writes its metadata every 5 s and not when it is killed (on Windows a kill is no
+  // signal it can catch): nothing writes now, so wait out one save before stopping it.
+  await new Promise((r) => setTimeout(r, 7000));
   kill(first.azurite);
-  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((r) => setTimeout(r, 1000));
   cpSync(first.blobDir, join(work, 'blob-b'), { recursive: true });
   const files = sql('master', `SET NOCOUNT ON; RESTORE FILELISTONLY FROM DISK = N'${backup}'`)
     .split('\n')

@@ -275,7 +275,7 @@ public sealed class SyncTests(ServerFixture server)
         var ws = await Ws.Create(server);
         await ws.NewPage("Team page");
         var guest = await server.NewAccount();
-        Assert.Equal(HttpStatusCode.OK, (await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/members", new { email = guest.Email, role = "guest" })).StatusCode);
+        await Kit.Join(server, ws, "guest", guest);
         Assert.Empty((await ws.Tree(guest.Client)).GetProperty("pages").EnumerateArray());
         var id = Guid.CreateVersion7();
         var refused = await ws.Push(guest.Client, ws.Op("page.create", id, Ws.Page(id, ws.Id, ws.Shared, null, "a0")));
@@ -295,7 +295,6 @@ public sealed class SyncTests(ServerFixture server)
             (HttpMethod.Patch, $"/api/v1/workspaces/{ws.Id}", new { name = "x" }),
             (HttpMethod.Delete, $"/api/v1/workspaces/{ws.Id}", null),
             (HttpMethod.Get, $"/api/v1/workspaces/{ws.Id}/members", null),
-            (HttpMethod.Post, $"/api/v1/workspaces/{ws.Id}/members", new { email = outsider.Email, role = "member" }),
             (HttpMethod.Get, $"/api/v1/workspaces/{ws.Id}/invites", null),
             (HttpMethod.Post, $"/api/v1/workspaces/{ws.Id}/invites", new { email = "x@example.test", role = "member" }),
             (HttpMethod.Post, $"/api/v1/workspaces/{ws.Id}/ops", new { ops = new[] { ws.Op("page.update", page.GetProperty("id").GetGuid(), new { title = "x" }) } }),
@@ -315,7 +314,7 @@ public sealed class SyncTests(ServerFixture server)
     {
         var ws = await Ws.Create(server);
         var member = await server.NewAccount();
-        await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/members", new { email = member.Email, role = "member" });
+        await Kit.Join(server, ws, "member", member);
         var cursor = (await ws.Tree(member.Client)).GetProperty("cursor").GetInt64();
         Assert.Equal(HttpStatusCode.NoContent, (await ws.Client.DeleteAsync($"/api/v1/workspaces/{ws.Id}/members/{member.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await member.Client.GetAsync($"/api/v1/workspaces/{ws.Id}/changes?after={cursor}")).StatusCode);

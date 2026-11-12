@@ -163,6 +163,8 @@ const env = {
   Blob__ConnectionString: blob,
   Smtp__PickupDirectory: mail,
   Api__PublicUrl: `http://127.0.0.1:${port}`,
+  // Plain http on 127.0.0.1: OpenIddict answers it, and the cookies are Secure on https only.
+  Api__AllowHttp: 'true',
   Web__AppUrl: web,
   Ydoc__Library: ydoc,
   Logging__LogLevel__Default: 'Warning',

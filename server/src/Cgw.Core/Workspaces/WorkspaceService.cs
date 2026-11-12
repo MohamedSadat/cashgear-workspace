@@ -96,17 +96,8 @@ public sealed class WorkspaceService(CgwDb db, ChangeLog changes, Audit audit, T
         .ThenBy(m => m.UserId)
         .ToList();
 
-    /// <summary>Adds someone who already has an account, at once (an admin's action).</summary>
-    public async Task<Result<MemberDto>> AddMemberAsync(Member admin, Actor actor, string email, string role, CancellationToken ct = default)
-    {
-        if (!admin.IsAdmin) return Failure.Denied("Only an owner or admin adds members");
-        if (role is not (Roles.Admin or Roles.Member or Roles.Guest)) return Failure.Invalid("The role is admin, member or guest");
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.NormalizedEmail == email.Trim().ToUpperInvariant() && u.DeletedAt == null && u.EmailConfirmed, ct);
-        if (user is null) return Failure.NotFound("No account has that email; send an invite instead");
-        if (await db.WorkspaceMembers.AnyAsync(m => m.UserId == user.Id, ct)) return Failure.Conflict(Codes.Conflict, "Already a member");
-        await JoinAsync(admin.WorkspaceId, user.Id, role, actor, ct);
-        return new MemberDto(user.Id, user.DisplayName, user.Email!, role);
-    }
+    // There is no direct add: someone joins by accepting an invitation sent to their address, so
+    // nothing an admin does tells them whether an address has an account.
 
     private async Task JoinAsync(Guid workspaceId, Guid userId, string role, Actor actor, CancellationToken ct)
     {
