@@ -69,7 +69,7 @@ Fixed by spike S1 (DECISIONS.md, 2026-11-11: Phase 0 results).
 | `table` | `body` | `tableRow*` | |
 | `tableRow` | | `tableCell*` | |
 | `tableCell` | | `inline*` | all |
-| `divider`, `image`, `file`, `bookmark`, `childPage`, `sheetEmbed`, `erpView`, `databaseView` | `body` | none (atom) | |
+| `divider`, `image`, `file`, `bookmark`, `childPage`, `tableOfContents` (v2), `sheetEmbed`, `erpView`, `databaseView` | `body` | none (atom) | |
 | `text`, `hardBreak`, `pageMention`, `userMention`, `dateMention` | `inline` | | |
 
 Schema rules that hold forever (D3):
@@ -106,6 +106,7 @@ Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
 | Table | `table` → `tableRow*` → `tableCell*` | `headerRow`, `headerColumn`, per-cell `colspan`, `rowspan`, `colwidth`, `dir` | Cells hold inline content | Yes |
 | Bookmark | `bookmark` | `url` | No | Yes (URL only; preview in Phase 2) |
 | Child page | `childPage` | `pageId` | No | Yes |
+| Table of contents | `tableOfContents` | none | No | Phase 3 (schema version 2): drawn as the page's headings, each a link to its block; Markdown and plain text write nothing for it |
 | Embedded spreadsheet | `sheetEmbed` | `workbookId`, `sheet`, `range`, `chartId`, `height` | No | Phase 5 |
 | Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize` | No | Phase 5 |
 | Database view | `databaseView` | `databaseId`, `viewId` | No | Phase 4 |
@@ -151,6 +152,7 @@ it. Plugin blocks are described in `INTEGRATIONS.md`.
 | --- | --- | --- |
 | `Y.XmlFragment` | `content` | The ProseMirror document above |
 | `Y.Map` | `meta` | `schemaVersion` (integer), `epoch` (integer), `pageId` |
+| `Y.Map` | `moves` | Phase 3: block id → `{ at, parent }`, written in the same update as a local move (drag, keyboard move, indent, outdent), so a moved block is recognisable and a device whose edit the move removed is told (`doc.moveConflict`). For history only; never pruned yet. Old clients keep it, as Yjs keeps root types it does not read; the worker validates only `content` |
 
 - The server's page record holds the authoritative `schemaVersion` and `epoch`. The copies in
   `meta` let an offline client check before it binds the editor.
@@ -169,6 +171,19 @@ it. Plugin blocks are described in `INTEGRATIONS.md`.
   `SYNC_DESIGN.md`).
 - Every migration ships with a fixture document from the old version and a test that the result
   loads in the oldest supported client build that knows the new version.
+
+As built in Phase 3: version 2 adds `tableOfContents`. `packages/doc/src/migrations.ts` holds one
+step per version; `PageDocument.open` runs every step from the document's version to the build's
+in one Yjs transaction (origin `MIGRATE`) when the page opens with edit rights and the device holds
+content for it, before anything else; a reader writes nothing. Step 1 → 2 only raises
+`meta.schemaVersion`. The edit is saved and pushed like any other; the worker, seeing a document
+whose version rises to no more than the pushing client's and its own, validates it against the new
+version's elements and raises the page's `DocSchemaVersion` in the same transaction, after which
+older clients get 426 and open the page read-only. Fixture: `packages/doc/fixtures/doc-v1.json`
+(every version-1 body, text kind and mark). A page pulled to a version newer than the build while
+it is open saves what was typed, writes nothing more, and turns read-only; the read-only view shows
+every node the build does not know as a placeholder where it was, with whatever it held that the
+build can draw, and never drops it.
 
 ## Relational records
 
@@ -368,8 +383,19 @@ Both local stores hold the same logical data, behind the `LocalStore` interface.
 | `cursors` | The change-feed cursor per workspace (`syncCursors`); the server head sequence and epoch this device holds per page (`docCursors`) |
 | `assets` | Asset metadata (with `uploaded` once the server holds the bytes), cached bytes, and uploads not yet sent |
 | `searchIndex` | Desktop: an FTS5 table. Browser: rebuilt in memory from `pages` and cached text |
-| `prefs` | Theme, language, sidebar state, toggle state, pinned-offline pages |
-| `meta` | The store's own schema version: 2 from Phase 2 (IndexedDB upgrades additively; SQLite copies its file to `workspace.v1.db` first) |
+| `prefs` | Theme, language, sidebar state, toggle state, the Yjs client-id pool, the signed-in account (no credential: id, email, name, device id), so the app starts signed in while offline |
+| `pins` (Phase 3) | Pages kept on this device for offline use: one record per pin, with `subtree` when the pages under it (later ones included) are kept too |
+| `quarantine` (Phase 3) | Logs set aside so nothing typed is lost: the page's snapshot and every update, its title, the reason (`doc.epochMismatch`, `page.gone`, `access.denied`, `page.removed`) and whether it became a recovered page. Entries outlive their page and workspace |
+| `repairs` (Phase 3) | Per page, the last state-hash check: epoch, the head it matched at, repairs made there |
+| `corrupt` | Updates that did not decode or that the server refused, kept for support |
+| `meta` | The store's own schema version: 3 from Phase 3. IndexedDB upgrades additively; SQLite copies its file first (`workspace.v1.db` before schema 2, `workspace.v2.db` before schema 3), then migrates in one transaction |
+
+Schema 3's IndexedDB object stores are `pins` (key `pageId`, index `workspace`), `quarantine`
+(key `id`, index `workspace`) and `repairs` (key `pageId`), and `docLogs` gains an index
+`covers`; SQLite's tables are `pins`, `quarantine` with `quarantine_parts`, and `repairs`.
+Migrations are tested from stores of every earlier version: the SQLite fixtures
+(`crates/cgw-store/tests/fixtures/v1`, `v2`) are stores written by the v0.1.0 and v0.2.0 code
+itself (`make.mjs` builds that code from its tag and drives it).
 
 A workspace made while signed out starts as local-only: the same collections, with nothing in
 `outbox` ever sent. Uploading it (Phase 2) keeps its id and every record's: the workspace is made

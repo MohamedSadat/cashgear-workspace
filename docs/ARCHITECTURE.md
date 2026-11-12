@@ -273,7 +273,7 @@ One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
 | Process | Does | Never |
 | --- | --- | --- |
 | API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing | Loads a Yjs library |
-| Worker | Compaction, snapshots, validation of updates, derived JSON and text, backlinks, asset reference counting and clean-up, retention, exports | Serves requests |
+| Worker | Compaction, snapshots, validation of updates (on a loop of its own), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports | Serves requests |
 
 Modules, each with its own folder, services and tests: Identity, Workspaces, Pages, Documents,
 Assets, Search, Sharing, Sync, Audit, and later Databases, Workbooks, ErpLinks, Realtime, Ai.
@@ -307,7 +307,7 @@ Conventions:
 | Client | Flow | Credential at rest |
 | --- | --- | --- |
 | Web app | Sign in on the API's own pages; `Secure`, `HttpOnly`, `SameSite=Lax` cookie; antiforgery token on writes | Cookie only. Nothing in `localStorage` |
-| Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The API's page asks the signed-in person to confirm the desktop's sign-in ("as {email}?") and issues the code only on that form's POST, so a link cannot sign a desktop in silently. The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager), never in the webview; access token in memory |
+| Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The API's page asks the signed-in person to confirm the desktop's sign-in ("as {email}?") and issues the code only on that form's POST, so a link cannot sign a desktop in silently. The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager; the login keychain on macOS), never in the webview; access token in memory |
 | Sheet (opening a workbook) | One-time launch ticket → file session | In memory |
 | ERP blocks | One-time ticket from the ERP → ERP session | In memory |
 
@@ -360,6 +360,18 @@ Paint does not wait for storage, and storage does not wait for the network.
    them; the editor updates in place.
 6. A page this device does not hold: steps 2 to 4 wait for the pull, with a skeleton shown.
 
+### Starting offline (Phase 3)
+
+1. The web app's service worker serves the build's own files (never anything from another origin:
+   the API, signed URLs); the desktop app's are in the bundle.
+2. The local store opens and the mirror draws the tree; the account this device last signed in
+   with comes from the store's prefs, so the app is signed in and says "Offline, N changes
+   waiting".
+3. Pages this device holds (opened before, or pinned) open from the store; any other says it is
+   not on this device yet and opens by itself when the network returns.
+4. The sync loop backs off; the network returning, focus, or a timer that fires late (the machine
+   slept) runs a pass at once.
+
 ### Creating a page offline
 
 1. The client makes a page id and an order key, applies `page.create` to the mirror and the
@@ -406,7 +418,7 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Embedded content | Sandboxed iframes from an allow-list of origins; bookmarks are static cards, with previews fetched by the server |
 | Link previews | Server-side fetch behind an SSRF guard: public addresses only, no redirects to private ranges, size and time limits |
 | Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the Sheet origin; `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and, later, linked ERP origins. No COEP. On the web it is made from the build's API address (`apps/web/vite.config.ts`): `vite preview` sends it, so e2e runs under it, and the build writes it into `staticwebapp.config.json` with `nosniff`, a referrer policy and `frame-ancestors 'none'`; the desktop's is in `tauri.conf.json`. The API's own sign-in pages send a CSP of their own (no script at all; forms only to itself, the web app and the loopback listener) |
-| Tauri | Minimal capabilities; typed commands only; no command takes SQL, a path outside the app's data directory, or a URL to fetch; `frame-src` as on the web |
+| Tauri | Minimal capabilities; typed commands only; no command takes SQL, a path outside the app's data directory, or a URL to fetch; `frame-src` as on the web. The macOS acceptance run drives the app through a test-only bridge (cargo feature `e2e-bridge`): `build.rs` refuses it in a release build and the release check fails a binary that holds it |
 | Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption, push and search |
 | Audit | Append-only log of sign-ins, member and role changes, sharing changes, exports, restores, permanent deletions, ERP link changes, with a correlation id |
 | Token storage | Web: cookie only. Desktop: OS keychain. ERP and file sessions: memory only. Tickets and sessions are stored hashed on the server |

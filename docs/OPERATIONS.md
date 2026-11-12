@@ -45,7 +45,8 @@ API's host and no token is in JavaScript (Q5).
 3. **Blob Storage.** In the ERP storage account's region (Q11): a storage account with public
    access disabled, a container `workspace` (private), soft delete for blobs and containers on
    (30 days or more), blob versioning on. CORS on the Blob service for the web app's origin and
-   the desktop's (`https://workspace.cashgearerp.com`, `http://tauri.localhost`): methods `GET`,
+   the desktop's on each system (`https://workspace.cashgearerp.com`, `http://tauri.localhost` on
+   Windows, `tauri://localhost` on macOS): methods `GET`,
    `HEAD`, `PUT`, headers `*`, exposed headers `*`. Give the host's identity (a managed identity
    on an Azure VM, or a service principal whose `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and
    certificate are in the machine's environment) the roles **Storage Blob Data Contributor** and
@@ -116,6 +117,13 @@ first; the site and the worker stop for the copy (about a minute). Clients keep 
 in the meantime and push what waited when the API answers again. A migration is never edited
 once released; a change ships as a new one.
 
+Version 0.3.0's migrations add the Phase 3 columns and indexes (`Phase3Offline`) and turn on
+`READ_COMMITTED_SNAPSHOT` (`ReadCommittedSnapshot`, `ALTER DATABASE ... WITH ROLLBACK
+IMMEDIATE`, outside a transaction): the migration's login needs `ALTER` on the database, and the
+transactions open on the old version are rolled back once (the clients retry them). Azure SQL
+has the setting on already. To undo it, `ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT OFF`;
+the change feed's ordering does not depend on it.
+
 ## Backups and the restore drill
 
 - **SQL Server.** Full backups daily, differential every 6 hours, log backups every 15 minutes,
@@ -142,6 +150,8 @@ once released; a change ships as a new one.
 | Failed sign-ins and lockouts | `AuditLog` `signin.fail`, `signin.lockedOut` | Many from one IP: block it at the edge |
 | Rate limits | 429 answers with `limit.rate` in the logs | A client in a loop |
 | Storage used | `Workspaces.StorageUsedBytes` (Q10: recorded, not enforced) | — |
+| Retention | `JobStates` for `feedRetention` and `trashRetention` (every 10 minutes); `AuditLog` `page.purgedByRetention` | The change feed keeps 90 days and the trash 60 (DECISIONS.md, Phase 3); a device away longer than 90 days takes the whole tree when it returns (`410 feed.expired`) |
+| Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its
 session and revokes its tokens at once. Workspace and account deletion are in the app; deleted

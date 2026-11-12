@@ -67,6 +67,18 @@ interface LocalStore {
   getPref<T>(key: string): Promise<T | undefined>;
   setPref(key: string, value: unknown): Promise<void>;
 
+  // Offline (store schema 3, Phase 3)
+  pin(pin: PinRecord): Promise<void>;                     // a page, or a page and its subtree
+  unpin(pageId: Id): Promise<void>;
+  pins(workspaceId: Id): Promise<PinRecord[]>;
+  heldPages(workspaceId: Id): Promise<Id[]>;              // documents this device holds
+  storageUsage(workspaceId: Id): Promise<StorageUsage>;
+  setAsideDoc(pageId: Id, reason: string): Promise<QuarantineEntry | null>;
+  quarantine(workspaceId: Id | null): Promise<QuarantineEntry[]>;
+  settleQuarantine(id: Id, status: 'recovered' | 'dismissed', recoveredPageId?: Id | null): Promise<void>;
+  repairState(pageId: Id): Promise<RepairState | null>;
+  setRepairState(state: RepairState): Promise<void>;
+
   // Housekeeping
   purgeTrash(workspaceId: Id, before: string): Promise<Id[]>;
   schemaVersion(): Promise<number>;
@@ -74,7 +86,8 @@ interface LocalStore {
 }
 ```
 
-As built in Phase 1 and extended in Phase 2 (`packages/workspace/src/types.ts`, store schema 2).
+As built in Phase 1 and extended in Phases 2 and 3 (`packages/workspace/src/types.ts`, store
+schema 3).
 Both stores run the same operation planner (`planOps`), which holds the tree rules: IndexedDB
 inside its own transaction, the desktop against its in-memory mirror before it sends the plan to
 SQLite as one transaction. What the server says is planned by shared code too (`remote.ts`):
@@ -83,9 +96,18 @@ a tree. In both, an entity with operations still in the outbox keeps its local s
 server has answered them; deletes always apply. A compaction in a synced workspace keeps the
 updates the server does not hold yet, so they are still pushed.
 
-Rules for both implementations, checked by one conformance suite run against each:
+Rules for both implementations, checked by one conformance suite run against each (51 cases on
+memory, IndexedDB and SQLite in Phase 3):
 
 - Every method is one atomic transaction.
+- **Nothing unsent is dropped by the server's word.** When what the server says (`applyRemote`,
+  `settleOps`, a lost workspace) removes a page of a synced workspace whose log holds an unsent
+  update, the page's log (snapshot, then every update) is set aside first, in the same
+  transaction, as a pending quarantine entry with reason `page.removed`; the shell turns it into
+  a recovered page. A person's own permanent delete and the trash purge drop as before.
+  `setAsideDoc` is the same step on the engine's word: it copies the log and takes the unsent
+  updates out of it, and does nothing when nothing is unsent.
+- Removing a page also removes its pin and repair state; quarantine entries outlive their page.
 - `applyLocalOp` changes the mirror and adds to the outbox together, or does neither.
 - Bytes cross the Tauri boundary as raw binary, never base64 in JSON.
 - The store never runs SQL or a query given by the webview.
@@ -97,7 +119,12 @@ Rules for both implementations, checked by one conformance suite run against eac
 - The store records its own schema version. On start the app compares it with the version it was
   built for.
 - Older store: migrations run in order, inside a transaction, after a copy of the store is made
-  (desktop: the SQLite file; browser: not possible, so migrations there must be additive).
+  (desktop: the SQLite file; browser: not possible, so migrations there must be additive). As
+  built: SQLite checkpoints its WAL, copies the file to `workspace.v{n}.db` (synced, then renamed
+  into place), then runs every step from version n to 3 in one transaction; a migration that
+  fails leaves the file as it was, and the next start tries again. IndexedDB's upgrade
+  transaction only adds object stores and indexes. Both are tested from stores of every earlier
+  version (for SQLite, files written by the released v0.1.0 and v0.2.0 code).
 - **Newer store than the app** (the user installed an older build): the app refuses to open the
   store and asks the user to update. It never wipes, because the outbox may hold unsynced work.
 
@@ -155,8 +182,11 @@ The server, in one transaction per request:
 4. Checks size and rate limits (413, 429).
 5. Drops any update whose `updateId` it has already stored, answering with the sequence it gave
    the first time.
-6. Locks the page row, assigns the next sequence numbers, inserts the rows, and moves the page's
-   head sequence.
+6. Takes the page's sequence lock, assigns the next sequence numbers, inserts the rows, and moves
+   the page's head sequence. (As built in Phase 3 the lock is an application lock named for the
+   page, `docseq:{pageId}`, held to the commit, rather than the page row: every writer of the
+   sequence takes it, so numbers stay gap-free and commit in order, and the row is free for the
+   worker. The database reads with `READ_COMMITTED_SNAPSHOT`, so readers never wait on writers.)
 
 The server does not decode updates on this path. The rows are stored as pending; the worker
 validates them in sequence order (see "What the server checks") and moves the page's validated
@@ -195,6 +225,32 @@ GET /api/v1/pages/{pageId}/doc?after=1040
 **Repair.** If a client suspects it is missing something (a checksum of the state vector differs
 from the one the worker publishes with each snapshot), it sends its full state and pulls from
 `after=0`. This is the only use of state vectors.
+
+As built in Phase 3: the worker stores a state hash with the page whenever it moves the validated
+head (and after a hard restore), and the API serves it without decoding anything:
+
+```
+GET  /api/v1/pages/{pageId}/doc/state-hash   200 { "epoch": 3, "upToSeq": 1042, "hash": "…" | null }
+POST /api/v1/pages/{pageId}/doc/repair        { "epoch": 3, "clientSchemaVersion": 2, "update": { "updateId", "data" } | null }
+                                              200 { "ack": { "updateId", "seq" } | null, "pull": <GET /doc?after=0> }
+```
+
+- The hash is the same in TypeScript and Rust (shared vectors made by Yjs,
+  `packages/doc/vectors/state-hash-vectors.json`): SHA-256, in lower-case hex, of
+  `v1;sv=<client>:<clock>,…;ds=<client>:<start>-<end>,…`, the state vector sorted by client
+  (clocks of 0 left out) and the delete set sorted by client and start, touching ranges merged,
+  ends exclusive. The delete set is in it because an update that only deletes moves no clock.
+- A client checks a page when it opens it (once a session), after a pinned page is refreshed with
+  others' edits, and when the document layer finds updates still pending after its retry; only
+  when the page has nothing unsent and its cursor equals the server's `{ epoch, upToSeq }`. A
+  mismatch sends the whole local state as one update (a reader sends none) and applies the pull
+  from the start. At most one repair per page, epoch and head; if the hashes still differ the user
+  is told (`doc.repairFailed`) and it is not retried until a check matches. Equal hashes, or a
+  repair that worked (`doc.repaired`), are recorded in the store's `repairs`.
+- The worker judges every pushed update by what it adds to the page's state (a diff against its
+  state vector) before checking whose Yjs client ids it writes as, so a repair re-sending other
+  people's structs is not taken for a forgery, and one adding structs under someone else's id
+  still is.
 
 Payloads are JSON with base64 in Phase 2. A binary framing is an optimisation for Phase 6, when
 update frequency rises.
@@ -259,7 +315,9 @@ GET /api/v1/workspaces/{workspaceId}/changes?after={cursor}&limit=500
   names the root and the client removes it locally (after quarantining unsent edits; see
   conflicts). A plain version cursor cannot express either.
 - A client whose cursor is older than the feed's retention (90 days) does a full resync of the
-  mirror. Its outbox is kept and replayed.
+  mirror. Its outbox is kept and replayed. As built: the worker deletes changes older than 90 days
+  and records the highest sequence it removed (`Workspaces.ChangesPrunedSeq`); a pull with an
+  older `after` gets `410 feed.expired`, and the client takes the whole tree with its cursor.
 
 ### The sync loop
 
@@ -283,6 +341,39 @@ The status says "syncing" from the moment a local change waits (not only once a 
 Failures back off exponentially with jitter, capped at 5 minutes. A 401 pauses the loop until the
 user signs in again; nothing is discarded. A refused move, trash, restore or delete fetches that
 subtree again from the server (a scoped resync), so its pages show the server's state.
+
+**As built in Phase 3** (`engine.ts`; the convergence simulator found the two tree rules last in
+this list):
+
+- One pass, per synced workspace: push the outbox; push unsent document updates in batches; pull
+  the feed to its end; reconcile the tree if a subtree operation was answered; pull held pages
+  whose head or epoch moved, and a bounded number of pinned pages not held yet; up to four
+  state-hash checks; upload assets. Passes come every 1.5 s, 100 ms after a pass that left work,
+  50 ms when a change came during one.
+- **Backoff** after a failure: `min(5 min, 1 s × 2^(n−1)) × (0.5 + random)`, never shorter than the
+  server's `Retry-After` (sent on every 429 and 503), even when the network returning or the
+  window's focus kicks a pass. A local change does not cut a backoff short.
+- **Sleep:** timers are chains of at most 15 s; one that fires more than 90 s late means the
+  machine slept or the clock jumped, and a pass runs at once with the backoff reset.
+- **Signed in while offline:** the account (id, email, name, device id; no credential) is kept in
+  the store's prefs. With no network at start the app uses it, says "Offline, N changes waiting",
+  and syncs when the server answers. A 401 pauses with the count still shown ("Sign in to sync N
+  changes"); a sign-out forgets the account, not the data.
+- **Long outboxes:** document pushes go in batches of at most 200 updates and 4 MB (an update over
+  1 MB alone, which the server refuses with 413 and only it is set aside); each batch's answers
+  are stored before the next request, so a failure loses nothing answered and nothing restarts
+  from zero. 1,000 updates across 50 pages go in 56 requests.
+- **Feed past retention:** `410 feed.expired` takes the whole tree with its cursor (`replace:
+  { root: null }`; records with operations waiting keep their local state) and the outbox is
+  replayed as usual.
+- **Scoped resync, widened:** when the server's subtree leaves out a page this device holds under
+  the root (moved away on the server, the device not told yet), the engine takes the whole tree
+  instead, so a page that still exists is never removed with its edits set aside.
+- **Reconcile after subtree operations:** the local planner applies a trash or move to the
+  subtree as this device saw it, the server to the subtree as it is. After any answered subtree
+  operation the engine looks for a tree the server never holds (a trashed page without its trash
+  root above it, a live page under a trashed parent, a page in another section than its parent)
+  and takes the whole tree if it finds one.
 
 Before a page's updates are pushed, the Yjs client ids they write as are registered to the user
 (Q9): a session writes as an id from the pool the server issued to the device, so registering is
@@ -322,6 +413,12 @@ again.
 
 - A page is available offline when the device holds its document. Opening a page caches it. A
   user can pin a page or a subtree; pinned pages are fetched in the background and kept fresh.
+  As built: a pin is a page, or a page with every live page under it, pages added later included
+  (no "whole workspace" pin). Each pass fetches at most 24 pinned pages not held, four at a time,
+  and the next pass follows in 100 ms while some remain, so a 500-page subtree is held in about 21
+  short passes and typing never waits on it. Held pages stay fresh as every held page does (their
+  head moves in the feed). Unpinning keeps what is held. Settings shows the pins, what is still
+  to fetch, and the storage this device uses.
 - The metadata mirror covers the whole workspace, so the tree, breadcrumbs and title search work
   offline for every page, cached or not. An uncached page says so when opened offline.
 - Pages can be created offline: ids are made on the client, so the page, its document and its
@@ -337,11 +434,11 @@ again.
 | --- | --- | --- |
 | Two people type in the same block | Both insertions stand, interleaved by Yjs's rules | No |
 | One edits a block, another deletes it | The block is deleted; the edit goes with it. Version history has it | Yes, by design |
-| One edits a block while another moves it (or indents it) | A move is delete and insert in Yjs, so the edit is lost | Yes. Named limit. Measured in spike S1 |
+| One edits a block while another moves it (or indents it) | A move is delete and insert in Yjs, so the edit is lost; the device that typed it is told, and pointed to the page's history (`doc.moveConflict`, `editLost`) | Yes. Named limit. Measured in spike S1 |
 | One edits a block while another merges it into the block above | The merged block is deleted and its text copied, so the edit is lost | Yes. Named limit. Measured in S1 |
 | One edits a block while another moves a different block | Both stand, with the id-aware binding (Q18); the stock binding can rebuild the untouched neighbour and lose the edit | No, with the patch |
 | One types while another turns the block into another text kind | Both stand: the kind is an attribute | No |
-| Two people move the same block | Two copies. The id plugin repairs the duplicate id; the content appears twice | Duplicates, visible to users |
+| Two people move the same block | Two copies. The id plugin repairs the duplicate id; the content appears twice; both are told (`doc.moveConflict`, `movedTwice`) | Duplicates, visible to users |
 | Two people split the same paragraph | Each split copies the tail into a new block, so the shared tail appears twice | Duplicates, visible to users (S1) |
 | Two people merge the same block | Valid, because the schema uses `*` only | Can lose an edit made in the merged block |
 | One formats, another types in the same range | Both stand | No |
@@ -349,7 +446,19 @@ again.
 
 The "yes" and "duplicates" rows are properties of Yjs, not bugs to fix later. They matter mostly
 for long offline sessions. The mitigations are version history, and a move intent recorded by the
-id plugin so a moved block is at least recognisable. Under spike S1's harshest test (three clients,
+id plugin so a moved block is at least recognisable.
+
+As built in Phase 3: a local move writes its intent into the document's `moves` map in the same
+update (`DATA_MODEL.md`, The Yjs document). The notice rule is causal, not timed: a remote change
+that deletes this device's own content (by its Yjs client id) without having seen it deleted a
+block it did not know held that content; if the block lives on under its id, it was moved and the
+edit went with the old copy (`editLost`). A block deleted or merged away is not a move and gets no
+notice; nor does a body replaced by "turn into" code. Measured on S1-style runs (three devices,
+offline spells, `packages/editor/src/conflicts.test.ts`): 151 of 155 typed words lost to a move
+were told to the device that typed them, none of 181 lost to deletes; the losses came a median of
+88 steps after the typing, so an "edited in the last few seconds" window would have missed most.
+A move that arrives while the page is closed is replayed on open without the check, and gets no
+notice. Every row of the table above is a scripted test with real editors. Under spike S1's harshest test (three clients,
 long offline spells, a quarter of all edits structural) about a third of typed text that raced a
 structural edit of the same block was lost this way; every loss was one of these rows.
 
@@ -390,14 +499,32 @@ Client clocks are never compared. "Last" always means the order the server recei
 
 The epoch rises when the server replaces a document's history rather than adding to it: a hard
 restore, a schema migration that cannot be a forward edit, or a corruption repair. As built in
-Phase 2: unsent updates go to the store's corrupt area, the page's log is replaced by an empty
-update marked sent, the page is pulled from the start, and the user is told; the recovered page
-below is Phase 3 (M3.3).
+Phase 3: the page's log is set aside (`setAsideDoc`, reason `doc.epochMismatch`) when it holds
+unsent edits, the log is replaced by an empty update marked sent, the page is pulled from the
+start of the new epoch, and the set-aside log becomes a recovered page (below). The same happens
+when a pull, not a push, is the first to see the new epoch.
 
 - A push with the old epoch gets 409 `doc.epochMismatch`.
 - The client quarantines its unsent updates as a recovered page (the old state plus its edits),
   discards its copy of the document, and pulls the new epoch from `after=0`.
 - The user is told, with a link to the recovered page.
+
+**Recovered pages** (as built in Phase 3). A pending quarantine entry, whatever set it aside (an
+epoch change, a 403 or 410 on a push, a page removed by the server's word with unsent edits),
+becomes a page "Recovered: {title}" at the top of the account's private section of its workspace
+(or of the open workspace's if that one is gone): the entry's parts are merged into a fresh
+document, read as ProseMirror JSON, and written as the first update of the new page, block ids
+kept, so the content is recognisable beside the original. The entry is then marked recovered with
+the new page's id; the engine asks again after every pass while entries are pending, and making
+one is idempotent. A "Recovered" list beside the trash shows every entry with its reason, time,
+original title and a link; entries can be dismissed.
+
+| Set aside because | Reason | The device then |
+| --- | --- | --- |
+| The epoch changed (push 409, or a pull in a new epoch) | `doc.epochMismatch` | Resets the page's log and pulls the new epoch |
+| Edit access went (push 403) | `access.denied` | Resets the page and pulls it again; if read access went too (404), the feed's revoke removes it |
+| The page was deleted for good (push 410) | `page.gone` | The feed's delete removes the page |
+| The server's word removed a page with unsent edits | `page.removed` | Nothing more: the store set it aside in the same transaction |
 
 An ordinary "restore this version" does not bump the epoch; it is a forward edit (below).
 
@@ -446,9 +573,9 @@ rest.
 | --- | --- | --- |
 | The caller may edit this page | Web process, every push | 403 |
 | Epoch and client schema version | Web process | 409, 426 |
-| Size of one update (1 MB), of one request (4 MB), and updates per minute per user and per page | Web process | 413, 429 |
+| Size of one update (1 MB), of one request (4 MB), and updates per minute per user and per page | Web process | 413, 429 (with `Retry-After`, as every 429 and 503 has) |
 | The update decodes as a Yjs update | Worker, before it is served (Q20) | Refused: never served; the pusher's next pull lists it, and its device keeps it aside |
-| Every struct in the update belongs to a Yjs client id registered to the pushing user | Worker, before it is served | Refused, and an audit entry (`doc.forgedClient`) |
+| Every struct the update adds to the page's state belongs to a Yjs client id registered to the pushing user (structs the server already holds, as in a repair, are not judged) | Worker, before it is served | Refused, and an audit entry (`doc.forgedClient`) |
 | The resulting document fits the schema: only the schema version's elements, block ids of 12 base-62 characters, attributes that are plain values, link schemes from the allow-list; `meta.pageId` stays the page's and `meta.schemaVersion` no higher than the page's | Worker, before it is served | Refused. Attributes the schema does not know are not judged: clients keep them (Q18) and draw them inert (S7) |
 | Document size (10 MB of state) | Worker, before it is served | The update that would pass it is refused |
 

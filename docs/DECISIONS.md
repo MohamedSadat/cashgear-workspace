@@ -690,3 +690,45 @@ The client side (shell, desktop sign-in, the server stack for development):
 | What "pin for offline" covers | A page, or a page and its subtree. Pages added later under a pinned subtree are fetched too; pinned pages are refreshed in the background, and the storage they use is shown. Pages a person opens are cached anyway; there is no "whole workspace" pin |
 | macOS signing, notarisation and proof | A universal app built on GitHub's macOS runner, signed with a Developer ID certificate and notarised from repository secrets you add; until they exist it is ad-hoc signed and the release notes say Gatekeeper will warn. The runner installs it and drives it through a test-only bridge that is compiled into test builds only, never a release: start, offline edits, a new page, the keychain, the deep link, the update. Sign-in and sync on macOS run against your deployed API with a CI test account once it is up; until then that step is yours, like Phase 2's "Deployed" |
 | Items Phase 2 left open | Two taken on. The worker's lock waits are fixed in M3.2, and a new budget is gated: an edit reaches other people's pulls within 5 s at p95 with 200 people typing (26 to 65 s at the end of Phase 2). The server's workspace export gets a button in Settings for owners and admins, beside the local export. Not taken: tying files to the page they were uploaded for; the risk stays accepted as recorded on 2026-11-12 (Phase 2, after the M2.6 review) |
+
+### Defaults picked (say if any should change)
+
+M3.2, the robust sync loop and the worker's lag:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Reads on the server | The database runs with `READ_COMMITTED_SNAPSHOT ON` (migration `ReadCommittedSnapshot`; `OFF` undoes it). Writers that check and then write still do so under the lock they always took: the workspace row's, or a page's sequence lock | Readers waiting on writers' locks were the largest wait under the 200-person load test (1,961 s in a run). The change feed's guarantee holds: changes are numbered and committed in order under the workspace lock, so what has committed is always a prefix |
+| Numbering a page's updates | A push takes the page's sequence lock (`sp_getapplock docseq:{page}`) to the end of its transaction instead of holding the page row; every writer of `DocSeq` takes it (push, hard restore) | Numbers stay gap-free and commit in order (D15, S8) while the worker's head update no longer queues behind four typists' pushes |
+| Validation | Decided with nothing locked, a workspace's pages together, then written in one short transaction per workspace; access is checked again under the lock only if an access, member or workspace change committed since it was read; validation runs on a loop of its own, 8 workspaces at a time | An edit reaches other people's pulls at p95 2.2 s with 200 people typing (59 s before, measured the same way); gated at 5 s in `bench/phase2.mjs` |
+| What a pushed update is judged by | What it adds over the worker's state (`diff` against its state vector): only new structs must be written as the pusher's Yjs client ids | A repair re-sends the device's whole state, other people's structs included, and must not be taken for a forgery; one adding structs under someone else's id still is |
+| Retry-After | The rate limiter's lease; until the next minute for the per-page push limit; 60 s for any other 429 and 30 s for a 503 | The client waits at least that long, whatever kicks it |
+| Retention jobs | Change feed: rows older than 90 days, 2,000 a transaction, every 10 minutes, with `Workspaces.ChangesPrunedSeq`; an older cursor gets 410 `feed.expired`. Trash: roots in the trash for 60 days, deleted for good through the same path as a person's delete, audited `page.purgedByRetention` | The plan's 90 days; the answer's 60 |
+| Index for pinned-page refresh | None: the feed carries each page's `docHeadSeq`, and a refresh pulls by the primary key | The plan's index has no query to serve |
+| Backoff and sleep | `min(5 min, 1 s × 2^(n−1)) × (0.5 + random)`, at least `Retry-After`; timers in chains of at most 15 s, and one that fires more than 90 s late runs a pass at once with the backoff reset | A laptop that slept syncs as it wakes, not minutes later |
+| Pushing a long outbox | At most 200 updates and 4 MB a request, an update over 1 MB alone; each batch answered and stored before the next | The server's limits; a failure loses nothing answered and restarts nothing |
+| Pinned pages | At most 24 fetched a pass, 4 at a time, the next pass 100 ms later while some remain | 500 pages in about 21 short passes, well inside the 2 minutes, without long store transactions |
+| Repair | Checked on open (once a session), after a pinned page is refreshed with others' edits, and when the document layer finds updates still pending; at most four checks a pass; one repair per page, epoch and head, then the user is told | A repair that does not help must not loop |
+| Scoped resync and subtree operations | A scoped resync that would remove a page the server moved away takes the whole tree instead; after any answered subtree operation, a tree the server could never hold is fetched whole | Both found by the convergence simulator; each loses no edit and costs one tree fetch when it happens |
+
+M3.1 and M3.3, offline availability and conflicts:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The signed-in account offline | Kept in the local store's prefs (`sync:account`: id, email, name, device id; no credential), so the app starts signed in with no network; a sign-out forgets it | "Offline, N changes waiting" from the first paint |
+| Nothing unsent dropped by the server's word | A remote plan that removes a page with unsent updates sets its log aside first, in the same transaction (`page.removed`) | Deletes always applied in Phase 2, and an edit made offline went with them |
+| Quarantine ids and times | Minted in TypeScript in every store; the desktop sends them to Rust | One order everywhere; the SQLite crate needs no UUID or clock |
+| SQLite migration fixtures | Stores written by the released code: `crates/cgw-store/tests/fixtures/make.mjs` builds `cgw-store` from the v0.1.0 and v0.2.0 tags and drives it with the frames those releases sent | "Fixtures from every earlier version", from the real thing (about 356 kB of `.db` files) |
+| IndexedDB schema 3 | Additive: `pins`, `quarantine`, `repairs`, and an index `covers` on `docLogs` so held pages are found without reading snapshots; storage used counts held assets by their records' size | The browser cannot copy a store before migrating it |
+| The move notice | Causal, not timed: a remote change that deletes this device's own content without having seen it, in a block that lives on under its id, was a move that took an edit (`editLost`); a block moved here and elsewhere at once that now shows twice (`movedTwice`) | Measured: 151 of 155 words lost to moves were told to their typist and none of 181 lost to deletes; most losses came long after the typing, so a time window would miss them |
+| The duplicate-id repair (D4, refined) | Written to Yjs in place on the element, not through ProseMirror | Through the id-aware binding a changed id is a new element, so two devices repairing one duplicate at once each made a copy, one more per round |
+| Document schema version 2 | Adds `tableOfContents`; pages migrate on the first open with edit rights (a reader writes nothing); the worker raises a page's version one update at a time, never past the pushing app's version or its own | The plan's rehearsal of a real migration, on a block worth having |
+
+M3.6, macOS:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The Mac app | Universal (Apple silicon and Intel), macOS 13 or later, hardened runtime, `.app` and DMG; `tauri.macos.conf.json` over the shared configuration, the same CSP and scheme | One download for every Mac Tauri 2 supports |
+| Signing and notarisation | `scripts/macos-build.mjs`: Developer ID from `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`; notarised and stapled with the App Store Connect key `APPLE_API_ISSUER`, `APPLE_API_KEY_ID`, `APPLE_API_KEY` (written to the runner's temp folder for the build and deleted after); ad-hoc otherwise, and the release notes say Gatekeeper will warn | The answer: secrets you add later |
+| The test-only bridge | Cargo feature `e2e-bridge`, off by default: JSON lines on 127.0.0.1 with a token, three commands (eval, title, quit). Refused by `build.rs` when `CGW_RELEASE_BUILD` is set (both release workflows set it), and the release check fails if the binary holds any of its names | WKWebView has no CDP; the bridge must never ship |
+| Updates on the Mac | `latest.json` gains `darwin-aarch64` and `darwin-x86_64`, both the universal update; the draft release waits for the Windows and the Mac jobs | One feed for both systems |
+| Device name on the Mac | `scutil --get ComputerName` | An app started from the Dock has no host name in its environment |
