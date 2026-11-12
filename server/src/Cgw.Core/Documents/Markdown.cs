@@ -136,6 +136,10 @@ public static partial class Markdown
             }
             case "table":
                 return Table(body, context, indent);
+            // Schema version 2: the page's own headings, drawn by the app; nothing of its own to
+            // write (the document layer's writer agrees).
+            case "tableOfContents":
+                return "";
             default:
                 return "";
         }

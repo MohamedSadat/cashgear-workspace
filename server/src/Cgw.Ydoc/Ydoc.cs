@@ -59,6 +59,9 @@ internal static class Native
 
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     public static extern int cgw_validate(CgwSlice state, CgwSlice update, CgwSlice policy, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_state_hash(CgwSlice update, out CgwBuffer output);
 }
 
 public sealed class YdocException(int status, string message) : Exception($"cgw-ydoc status {status}: {message}")
@@ -184,6 +187,13 @@ public static class Yjs
     public static string ToText(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_to_text, update));
 
     public static string Meta(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_meta, update));
+
+    /// <summary>
+    /// The state hash of the document the update makes (Phase 3 contracts, section 2): lowercase hex
+    /// SHA-256 of <c>v1;sv=...;ds=...</c>, the same as the doc layer's <c>stateHash</c>, so a device
+    /// can tell it holds what the server holds without sending it.
+    /// </summary>
+    public static string StateHash(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_state_hash, update));
 
     public static (IReadOnlyList<ClientRange> Ranges, IReadOnlyList<ulong> Deletes) ClientRanges(ReadOnlySpan<byte> update)
     {

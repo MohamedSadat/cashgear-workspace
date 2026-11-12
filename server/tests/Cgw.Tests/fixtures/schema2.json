@@ -1,0 +1,26 @@
+[
+  {
+    "name": "migrate",
+    "client": 1001,
+    "data": "AQTpBwyo6QcAAX0Ch+kHAgMFYmxvY2sHAOkHDQMPdGFibGVPZkNvbnRlbnRzKADpBw0CaWQBdwxUYzFUYzJUYzNUYzQB6QcBAAE=",
+    "why": "the migration to version 2: meta.schemaVersion set to 2 and a table of contents added, in one transaction"
+  },
+  {
+    "name": "tocOnly",
+    "client": 1001,
+    "data": "AQPpBwyH6QcCAwVibG9jawcA6QcMAw90YWJsZU9mQ29udGVudHMoAOkHDAJpZAF3DFRjMVRjMlRjM1RjNAA=",
+    "why": "a table of contents in a document still at version 1: an element version 1 lacks"
+  },
+  {
+    "name": "claimsV3",
+    "client": 1001,
+    "data": "AQHpBwyo6QcAAX0DAekHAQAB",
+    "why": "a document claiming version 3, newer than the worker knows"
+  },
+  {
+    "name": "afterMigration",
+    "client": 1002,
+    "data": "AQHqBwCE6QcJBiBhZ2FpbgHpBwEAAQ==",
+    "why": "typing on the migrated page"
+  }
+]

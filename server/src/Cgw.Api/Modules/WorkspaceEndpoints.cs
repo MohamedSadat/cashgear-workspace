@@ -143,8 +143,12 @@ public static class WorkspaceEndpoints
             })
             .WithName("pushOps");
 
-        one.MapGet("/changes", async (long? after, int? limit, FeedService feed, HttpContext http) =>
-                TypedResults.Ok(await feed.ChangesAsync(http.Member(), after ?? 0, limit ?? FeedService.DefaultLimit)))
+        // 410 feed.expired when the cursor is older than the feed keeps: fetch the tree again.
+        one.MapGet("/changes", async Task<Results<Ok<ChangesDto>, ProblemHttpResult>> (long? after, int? limit, FeedService feed, HttpContext http) =>
+            {
+                var result = await feed.ChangesAsync(http.Member(), after ?? 0, limit ?? FeedService.DefaultLimit);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
             .WithName("listChanges");
 
         one.MapGet("/tree", async (Guid? root, FeedService feed, HttpContext http) =>

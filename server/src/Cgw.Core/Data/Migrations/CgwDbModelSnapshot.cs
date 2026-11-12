@@ -344,6 +344,14 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<long>("DocSeq")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("DocStateHash")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("DocStateHashSeq")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Icon")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
@@ -415,6 +423,16 @@ namespace Cgw.Core.Data.Migrations
 
                     b.HasIndex("DeletedAt")
                         .HasFilter("[DeletedAt] IS NOT NULL AND [PurgedAt] IS NULL");
+
+                    b.HasIndex("DocHeadSeq")
+                        .HasFilter("[DocStateHash] IS NULL AND [DeletedAt] IS NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("DocHeadSeq"), new[] { "WorkspaceId", "DocStateHashSeq" });
+
+                    b.HasIndex("TrashedAt")
+                        .HasFilter("[TrashedAt] IS NOT NULL AND [DeletedAt] IS NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TrashedAt"), new[] { "WorkspaceId", "TrashRootId" });
 
                     b.HasIndex("WorkspaceId", "TrashedAt");
 
@@ -594,6 +612,9 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<long>("Seq")
                         .HasColumnType("bigint");
+
+                    b.Property<int>("ClientSchemaVersion")
+                        .HasColumnType("int");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset(3)");
@@ -897,6 +918,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<long>("ChangeSeq")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("ChangesPrunedSeq")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset(3)");
 
@@ -968,6 +992,8 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("WorkspaceId", "Seq");
+
+                    b.HasIndex("CreatedAt");
 
                     b.ToTable("WorkspaceChanges");
                 });

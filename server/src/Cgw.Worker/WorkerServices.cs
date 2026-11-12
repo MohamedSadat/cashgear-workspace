@@ -13,6 +13,8 @@ public interface IJob
     TimeSpan Interval { get; }
     /// <summary>Does what is due; returns whether there may be more right away.</summary>
     Task<bool> RunAsync(IServiceProvider services, CancellationToken ct);
+    /// <summary>Runs on a loop of its own, so no other job's long pass delays it.</summary>
+    bool OwnLoop => false;
 }
 
 public static class WorkerServices
@@ -26,6 +28,7 @@ public static class WorkerServices
         services.AddSingleton<IJob, ValidateJob>();
         services.AddSingleton<IJob, CompactJob>();
         services.AddSingleton<IJob, DeriveJob>();
+        services.AddSingleton<IJob, StateHashJob>();
         services.AddSingleton<IAssetScanner, NoScanner>();
         services.AddSingleton<IJob, AssetCheckJob>();
         services.AddSingleton<IJob, AssetCleanupJob>();
@@ -35,22 +38,36 @@ public static class WorkerServices
         services.AddSingleton<IJob, ExportJob>();
         services.AddSingleton<IJob, PagePurgeJob>();
         services.AddSingleton<IJob, WorkspacePurgeJob>();
+        services.AddSingleton<IJob, FeedRetentionJob>();
+        services.AddSingleton<IJob, TrashRetentionJob>();
         services.AddSingleton<IJob, ReconcileJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }
 }
 
-/// <summary>Runs each job on its interval, records its last run, and never lets one failure stop the others.</summary>
+/// <summary>
+/// Runs each job on its interval, records its last run, and never lets one failure stop the others.
+/// The jobs share one loop, except those that ask for their own (validation: an edit reaches others
+/// only once it has passed, so a long derive, history or export pass must not hold it back).
+/// </summary>
 public sealed class JobLoop(IServiceProvider services, IEnumerable<IJob> jobs, ILogger<JobLoop> logger, TimeProvider clock) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         logger.LogInformation("Worker started with cgw-ydoc {Version}", Yjs.Version());
-        var due = jobs.ToDictionary(j => j.Name, _ => DateTimeOffset.MinValue);
+        var all = jobs.ToList();
+        var loops = all.Where(j => j.OwnLoop).Select(j => Task.Run(() => LoopAsync([j], ct), ct)).ToList();
+        loops.Add(LoopAsync(all.Where(j => !j.OwnLoop).ToList(), ct));
+        await Task.WhenAll(loops);
+    }
+
+    private async Task LoopAsync(IReadOnlyList<IJob> list, CancellationToken ct)
+    {
+        var due = list.ToDictionary(j => j.Name, _ => DateTimeOffset.MinValue);
         while (!ct.IsCancellationRequested)
         {
-            foreach (var job in jobs)
+            foreach (var job in list)
             {
                 if (clock.GetUtcNow() < due[job.Name]) continue;
                 var more = await RunOnceAsync(services, job, logger, clock, ct);

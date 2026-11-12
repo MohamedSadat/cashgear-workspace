@@ -125,11 +125,16 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasIndex(x => new { x.WorkspaceId, x.TrashedAt });
             // The purge job's queue: pages deleted for good and not yet purged.
             e.HasIndex(x => x.DeletedAt).HasFilter("[DeletedAt] IS NOT NULL AND [PurgedAt] IS NULL");
+            // The trash retention job's queue: trash roots by when they went in, in every workspace.
+            e.HasIndex(x => x.TrashedAt).HasFilter("[TrashedAt] IS NOT NULL AND [DeletedAt] IS NULL").IncludeProperties(x => new { x.WorkspaceId, x.TrashRootId });
+            // The state hash job's queue: pages with a head and no hash for it.
+            e.HasIndex(x => x.DocHeadSeq).HasFilter("[DocStateHash] IS NULL AND [DeletedAt] IS NULL").IncludeProperties(x => new { x.WorkspaceId, x.DocStateHashSeq });
             e.Property(x => x.OrderKey).HasMaxLength(200).UseCollation(BinaryCollation);
             e.Property(x => x.Kind).HasMaxLength(20);
             e.Property(x => x.Title).HasMaxLength(1000);
             e.Property(x => x.SearchTitle).HasMaxLength(1000);
             e.Property(x => x.Icon).HasMaxLength(64);
+            e.Property(x => x.DocStateHash).HasMaxLength(64).IsUnicode(false);
         });
         b.Entity<PageAncestor>(e =>
         {
@@ -213,6 +218,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         b.Entity<WorkspaceChange>(e =>
         {
             e.HasKey(x => new { x.WorkspaceId, x.Seq });
+            // The retention job's queue: the oldest changes first.
+            e.HasIndex(x => x.CreatedAt);
             e.Property(x => x.EntityType).HasMaxLength(20);
             e.Property(x => x.Kind).HasMaxLength(20);
         });

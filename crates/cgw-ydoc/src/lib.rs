@@ -367,8 +367,69 @@ pub fn meta_json(update: &[u8]) -> Result<String> {
     Ok(Value::Object(out).to_string())
 }
 
+/// The canonical text of what a document holds (Phase 3 contracts, section 2), the same in the doc
+/// layer's `stateHash`: `v1;sv=<client>:<clock>,...;ds=<client>:<start>-<end>,...`, the state
+/// vector by client (clock 0 left out), the delete set by client then start, neighbouring and
+/// overlapping ranges merged, `end` exclusive. It is a property of the state, not of the bytes: the
+/// same with garbage collected or kept, merged or not, in any order.
+pub fn state_text(update: &[u8]) -> Result<String> {
+    let parsed = decode(update)?;
+    let doc = Doc::with_options(Options {
+        skip_gc: false,
+        ..Options::default()
+    });
+    let mut txn = doc.transact_mut();
+    txn.apply_update(parsed)
+        .map_err(|e| YdocError::Apply(e.to_string()))?;
+    let snapshot = txn.snapshot();
+    let mut vector: Vec<(u64, u32)> = snapshot
+        .state_map
+        .iter()
+        .map(|(client, clock)| (client.get(), *clock))
+        .filter(|(_, clock)| *clock > 0)
+        .collect();
+    vector.sort_unstable();
+    let clocks: std::collections::HashMap<u64, u32> = vector.iter().copied().collect();
+    let mut deletes: Vec<(u64, u32, u32)> = Vec::new();
+    for (client, ranges) in snapshot.delete_set.iter() {
+        let client = client.get();
+        // Only what is integrated: past a gap Yjs holds structs as pending, not in the document.
+        let limit = clocks.get(&client).copied().unwrap_or(0);
+        for range in ranges.iter() {
+            let end = range.end.min(limit);
+            if end > range.start {
+                deletes.push((client, range.start, end));
+            }
+        }
+    }
+    deletes.sort_unstable();
+    let mut merged: Vec<(u64, u32, u32)> = Vec::with_capacity(deletes.len());
+    for (client, start, end) in deletes {
+        match merged.last_mut() {
+            Some(last) if last.0 == client && start <= last.2 => last.2 = last.2.max(end),
+            _ => merged.push((client, start, end)),
+        }
+    }
+    let sv: Vec<String> = vector.iter().map(|(c, k)| format!("{c}:{k}")).collect();
+    let ds: Vec<String> = merged
+        .iter()
+        .map(|(c, s, e)| format!("{c}:{s}-{e}"))
+        .collect();
+    Ok(format!("v1;sv={};ds={}", sv.join(","), ds.join(",")))
+}
+
+/// Lowercase hex SHA-256 of [`state_text`]: what the worker stores for a page's validated head and
+/// a device compares with its own before asking for a repair.
+pub fn state_hash(update: &[u8]) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(state_text(update)?.as_bytes());
+    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 #[cfg(test)]
 mod hostile_tests;
+#[cfg(test)]
+mod state_hash_tests;
 #[cfg(test)]
 mod tests;
 

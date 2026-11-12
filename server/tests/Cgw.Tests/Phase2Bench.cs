@@ -641,6 +641,7 @@ public sealed class Phase2Bench(ServerFixture server)
         public ConcurrentQueue<double> Runs { get; } = new();
         public string Name => job.Name;
         public TimeSpan Interval => job.Interval;
+        public bool OwnLoop => job.OwnLoop;
 
         public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
         {
@@ -778,6 +779,50 @@ public sealed class Phase2Bench(ServerFixture server)
                 }
             }
         });
+        // The process the API, the worker and the 200 people share: how busy it is, and how long work
+        // queued to the thread pool waits to start (every await of the worker's resumes there). On a
+        // thread of its own, so a busy pool does not delay the sampling itself.
+        // And SQL Server: a trivial query's round trip, and its process's CPU when it runs here.
+        var poolWaits = new ConcurrentBag<double>();
+        var pending = new List<double>();
+        var cpu = new List<double>();
+        var sqlPing = new List<double>();
+        var sqlCpu = new List<double>();
+        var probe = new Thread(() =>
+        {
+            var process = Process.GetCurrentProcess();
+            var sql = Process.GetProcessesByName("sqlservr").FirstOrDefault();
+            var lastCpu = process.TotalProcessorTime;
+            var lastSqlCpu = sql?.TotalProcessorTime ?? TimeSpan.Zero;
+            var lastAt = Stopwatch.GetTimestamp();
+            using var connection = new SqlConnection(server.SqlConnection);
+            connection.Open();
+            using var ping = new SqlCommand("SELECT 1", connection);
+            while (!sampling.IsCancellationRequested)
+            {
+                var queued = Stopwatch.GetTimestamp();
+                ThreadPool.UnsafeQueueUserWorkItem(_ => poolWaits.Add(Ms(queued)), null);
+                lock (pending) pending.Add(ThreadPool.PendingWorkItemCount);
+                var pinged = Stopwatch.GetTimestamp();
+                ping.ExecuteScalar();
+                sqlPing.Add(Ms(pinged));
+                Thread.Sleep(250);
+                process.Refresh();
+                var nowCpu = process.TotalProcessorTime;
+                var elapsed = Stopwatch.GetElapsedTime(lastAt).TotalMilliseconds;
+                lock (cpu) cpu.Add(Math.Round(100 * (nowCpu - lastCpu).TotalMilliseconds / (elapsed * Environment.ProcessorCount), 1));
+                if (sql is not null)
+                {
+                    sql.Refresh();
+                    var nowSql = sql.TotalProcessorTime;
+                    // In cores, as SQL Server's edition may cap how many it uses.
+                    sqlCpu.Add(Math.Round((nowSql - lastSqlCpu).TotalMilliseconds / elapsed, 2));
+                    lastSqlCpu = nowSql;
+                }
+                (lastCpu, lastAt) = (nowCpu, Stopwatch.GetTimestamp());
+            }
+        }) { IsBackground = true };
+        probe.Start();
         var monitor = Task.Run(async () =>
         {
             await Task.WhenAny(run.AllPushed.Task, Task.Delay(deadline));
@@ -806,6 +851,7 @@ public sealed class Phase2Bench(ServerFixture server)
         {
             sampling.Cancel();
             await sampler;
+            probe.Join();
             await loop.StopAsync(CancellationToken.None);
         }
 
@@ -910,6 +956,13 @@ public sealed class Phase2Bench(ServerFixture server)
             ["validatedAfterAck"] = Stats(validation),
             ["seenAfterValidated"] = Stats(afterValidation),
             ["workerBacklog"] = Stats(backlog),
+            // The shared process: its CPU (% of all cores), work waiting for the thread pool, and how
+            // long a queued item waited to start.
+            ["processCpuPct"] = Stats(cpu),
+            ["threadPoolPending"] = Stats(pending),
+            ["threadPoolWaitMs"] = Stats(poolWaits.ToList()),
+            ["sqlPingMs"] = Stats(sqlPing),
+            ["sqlServerCores"] = Stats(sqlCpu),
             ["latency"] = latency,
             ["caughtUp"] = typists.Count(t => t.Finished),
         };

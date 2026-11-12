@@ -29,8 +29,12 @@ public sealed class AssetCheckJob(BlobStore blob, IAssetScanner scanner, TimePro
     public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
     {
         var db = services.GetRequiredService<CgwDb>();
-        var pending = await db.Assets.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => a.Status == AssetStatus.Pending)
-            .OrderBy(a => a.CreatedAt).Take(20).ToListAsync(ct);
+        // The newest and the oldest: tickets never used (no blob yet) wait a day before they are
+        // dropped, and twenty of them first in line held every new upload back for that day.
+        var queue = db.Assets.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => a.Status == AssetStatus.Pending);
+        var pending = (await queue.OrderByDescending(a => a.CreatedAt).Take(10).ToListAsync(ct))
+            .Concat(await queue.OrderBy(a => a.CreatedAt).Take(10).ToListAsync(ct))
+            .DistinctBy(a => a.Id).ToList();
         var done = 0;
         foreach (var asset in pending)
         {

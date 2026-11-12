@@ -1,4 +1,5 @@
 using Cgw.Core.Data;
+using Cgw.Core.Sync;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core;
@@ -58,6 +59,78 @@ public sealed class Access(CgwDb db)
             if (decided is not null) return decided;
         }
         return Default(member);
+    }
+
+    /// <summary>
+    /// Which of each page's pushers may edit it now (the worker, for every page it validates), in a
+    /// few queries however many pages and people there are. The same rules as <see cref="PageLevelAsync"/>.
+    /// </summary>
+    public async Task<Dictionary<Guid, HashSet<Guid>>> EditorsAsync(Guid workspaceId, IReadOnlyDictionary<Guid, HashSet<Guid>> pushers, CancellationToken ct = default)
+    {
+        var users = pushers.Values.SelectMany(u => u).ToHashSet();
+        var members = new List<Member>();
+        foreach (var chunk in Chunked.Of(users))
+            members.AddRange((await db.WorkspaceMembers.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+                    .Where(m => m.WorkspaceId == workspaceId && chunk.Contains(m.UserId))
+                    .Join(db.Workspaces.Where(w => w.DeletedAt == null), m => m.WorkspaceId, w => w.Id, (m, _) => m)
+                    .ToListAsync(ct))
+                .Select(m => new Member(m.WorkspaceId, m.UserId, m.Role)));
+        var levels = await LevelsAsync(members, pushers.Keys.ToList(), ct);
+        return pushers.ToDictionary(p => p.Key, p => members
+            .Where(m => p.Value.Contains(m.UserId) && Levels.AtLeast(levels.GetValueOrDefault((p.Key, m.UserId), Levels.None), Levels.Edit))
+            .Select(m => m.UserId).ToHashSet());
+    }
+
+    /// <summary>One person's level on each of these pages, in four queries: the feed's pages.</summary>
+    public async Task<Dictionary<Guid, string>> LevelsAsync(Member member, IReadOnlyCollection<Guid> pageIds, CancellationToken ct = default) =>
+        (await LevelsAsync([member], pageIds, ct)).ToDictionary(l => l.Key.Page, l => l.Value);
+
+    /// <summary>Each person's level on each page (<c>none</c> when it is not visible), as <see cref="PageLevelAsync"/> decides it.</summary>
+    private async Task<Dictionary<(Guid Page, Guid User), string>> LevelsAsync(IReadOnlyList<Member> members, IReadOnlyCollection<Guid> pageIds, CancellationToken ct)
+    {
+        var result = new Dictionary<(Guid, Guid), string>();
+        if (members.Count == 0 || pageIds.Count == 0) return result;
+        var pages = new List<(Guid Id, string Visibility, Guid? Owner)>();
+        var chains = new List<(Guid Page, Guid Ancestor, bool Restricted, int Depth)>();
+        foreach (var chunk in Chunked.Of(pageIds))
+        {
+            pages.AddRange((await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id) && p.DeletedAt == null)
+                    .Join(db.Sections, p => p.SectionId, s => s.Id, (p, s) => new { p.Id, s.Visibility, s.OwnerUserId })
+                    .ToListAsync(ct))
+                .Select(p => (p.Id, p.Visibility, p.OwnerUserId)));
+            chains.AddRange((await db.PageAncestors.AsNoTracking().Where(a => chunk.Contains(a.PageId))
+                    .Join(db.Pages, a => a.AncestorPageId, p => p.Id, (a, p) => new { a.PageId, p.Id, p.Restricted, a.Depth })
+                    .ToListAsync(ct))
+                .Select(c => (c.PageId, c.Id, c.Restricted, c.Depth)));
+        }
+        var people = members.Select(m => m.UserId).ToList();
+        var rows = new List<PagePermission>();
+        foreach (var chunk in Chunked.Of(chains.Select(c => c.Ancestor).Distinct()))
+            rows.AddRange(await db.PagePermissions.AsNoTracking()
+                .Where(r => chunk.Contains(r.PageId)
+                    && ((r.PrincipalType == "user" && people.Contains(r.PrincipalId)) || r.PrincipalType == "workspace"))
+                .ToListAsync(ct));
+        var byPage = rows.ToLookup(r => r.PageId);
+        var chainOf = chains.ToLookup(c => c.Page);
+        foreach (var page in pages)
+        {
+            var chain = chainOf[page.Id].OrderBy(c => c.Depth).ToList();
+            foreach (var member in members)
+            {
+                string? level;
+                if (page.Visibility == "private") level = page.Owner == member.UserId ? Levels.Full : Levels.None;
+                else if (member.IsAdmin) level = Levels.Full;
+                else
+                {
+                    level = null;
+                    foreach (var link in chain)
+                        if ((level = Decide(member, link.Restricted, byPage[link.Ancestor])) is not null)
+                            break;
+                }
+                result[(page.Id, member.UserId)] = level ?? Default(member);
+            }
+        }
+        return result;
     }
 
     private static string Default(Member member) => member.IsGuest ? Levels.None : Levels.Edit;

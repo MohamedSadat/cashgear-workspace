@@ -16,6 +16,8 @@ public static class Codes
     public const string DocEpochMismatch = "doc.epochMismatch";
     public const string ClientTooOld = "client.tooOld";
     public const string PageGone = "page.gone";
+    /// <summary>The change feed no longer holds what came after the cursor: fetch the tree again.</summary>
+    public const string FeedExpired = "feed.expired";
     public const string LimitSize = "limit.size";
     public const string LimitRate = "limit.rate";
     public const string AssetTypeNotAllowed = "asset.typeNotAllowed";
@@ -27,7 +29,7 @@ public static class Codes
     public static readonly IReadOnlyList<string> All =
     [
         AuthRequired, AccessDenied, NotFound, VersionConflict, TreeCycle, TreeParentMissing,
-        TreeSection, DocEpochMismatch, ClientTooOld, PageGone, LimitSize, LimitRate,
+        TreeSection, DocEpochMismatch, ClientTooOld, PageGone, FeedExpired, LimitSize, LimitRate,
         AssetTypeNotAllowed, RequestInvalid, Conflict, ServerError,
     ];
 }
@@ -35,6 +37,9 @@ public static class Codes
 /// <summary>An expected failure: a code, an HTTP status and a short English title.</summary>
 public sealed record Failure(string Code, int Status, string Title)
 {
+    /// <summary>For a 429 or 503: when to ask again (the <c>Retry-After</c> header).</summary>
+    public TimeSpan? RetryAfter { get; init; }
+
     public static Failure NotFound(string what = "Not found") => new(Codes.NotFound, 404, what);
     public static Failure Denied(string why = "Access denied") => new(Codes.AccessDenied, 403, why);
     public static Failure Invalid(string why) => new(Codes.RequestInvalid, 400, why);

@@ -49,7 +49,7 @@ public static class DocEndpoints
                 var access = http.PageAccess();
                 if (!Levels.AtLeast(access.Level, Levels.Edit)) return Problems.From(Failure.Denied("This page is read-only for you"));
                 var result = await docs.PushAsync(access.Member, access.Page, body, http.User.DeviceId());
-                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!, http);
             })
             .WithName("pushDocUpdates").RequireRateLimiting(RateLimits.Push)
             // 4 MB of updates as base64, and the rest of the body.
@@ -61,6 +61,21 @@ public static class DocEndpoints
                 return TypedResults.Ok(await docs.PullAsync(access.Member, access.Page, after ?? 0));
             })
             .WithName("pullDoc").RequireRateLimiting(RateLimits.User);
+
+        // The repair check (Phase 3 contracts, section 2): read access, as a pull.
+        page.MapGet("/doc/state-hash", (HttpContext http) => TypedResults.Ok(DocService.StateHash(http.PageAccess().Page)))
+            .WithName("getDocStateHash").RequireRateLimiting(RateLimits.User);
+
+        // The device's full state in (to edit; checked as a push), the page from the start out.
+        page.MapPost("/doc/repair", async Task<Results<Ok<RepairResponse>, ProblemHttpResult>> (RepairRequest body, DocService docs, HttpContext http) =>
+            {
+                var access = http.PageAccess();
+                var result = await docs.RepairAsync(access.Member, access.Page, Levels.AtLeast(access.Level, Levels.Edit), body, http.User.DeviceId());
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!, http);
+            })
+            .WithName("repairDoc").RequireRateLimiting(RateLimits.Push)
+            // A 1 MB update as base64, and the rest of the body.
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(2 * 1024 * 1024));
 
         page.MapGet("/doc/json", async Task<Results<Ok<DocJsonResponse>, ProblemHttpResult>> (DocService docs, HttpContext http) =>
             {

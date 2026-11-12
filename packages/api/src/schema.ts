@@ -273,6 +273,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pages/{pageId}/doc/repair': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['repairDoc'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pages/{pageId}/doc/state-hash': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getDocStateHash'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pages/{pageId}/doc/updates': {
     parameters: {
       query?: never;
@@ -1003,6 +1035,17 @@ export interface components {
       password: string;
       returnUrl: null | string;
     };
+    RepairRequest: {
+      /** Format: int32 */
+      clientSchemaVersion: number | string;
+      /** Format: int32 */
+      epoch: number | string;
+      update: null | components['schemas']['DocUpdateIn'];
+    };
+    RepairResponse: {
+      ack: null | components['schemas']['DocAck'];
+      pull: components['schemas']['PullResponse'];
+    };
     ResetRequest: {
       code: string;
       password: string;
@@ -1082,6 +1125,13 @@ export interface components {
       /** Format: int64 */
       upToSeq: number | string;
       url: string;
+    };
+    StateHashResponse: {
+      /** Format: int32 */
+      epoch: number | string;
+      hash: null | string;
+      /** Format: int64 */
+      upToSeq: number | string;
     };
     TreeDto: {
       /** Format: int64 */
@@ -1556,6 +1606,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['DocJsonResponse'];
+        };
+      };
+    };
+  };
+  repairDoc: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RepairRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RepairResponse'];
+        };
+      };
+    };
+  };
+  getDocStateHash: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StateHashResponse'];
         };
       };
     };

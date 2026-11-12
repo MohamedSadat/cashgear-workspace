@@ -1,6 +1,7 @@
 using Cgw.Core;
 using Cgw.Core.Blob;
 using Cgw.Core.Data;
+using Cgw.Core.Documents;
 using Cgw.Core.History;
 using Cgw.Core.Sync;
 using Cgw.Ydoc;
@@ -253,6 +254,8 @@ public sealed class HardRestoreJob(DocStates states, BlobStore blob, ILogger<Har
                 await tx.RollbackAsync(ct);
                 return;
             }
+            // The page's sequence lock, as pushes take it, then its row.
+            await PageLocks.SequenceAsync(db, command.PageId, ct);
             await db.Pages.Where(p => p.Id == command.PageId).ExecuteUpdateAsync(s => s.SetProperty(p => p.DocSeq, p => p.DocSeq), ct);
             var page = await db.Pages.FirstAsync(p => p.Id == command.PageId, ct);
             if (page.DeletedAt is not null)
@@ -310,6 +313,9 @@ public sealed class HardRestoreJob(DocStates states, BlobStore blob, ILogger<Har
             page.DocEpoch = epoch;
             page.DocSeq = head;
             page.DocHeadSeq = head;
+            // The repair check's hash, of the new epoch's state.
+            page.DocStateHash = ValidateJob.Hash(newState);
+            page.DocStateHashSeq = head;
             page.Version++;
             page.UpdatedAt = now;
             page.UpdatedBy = command.RequestedBy;

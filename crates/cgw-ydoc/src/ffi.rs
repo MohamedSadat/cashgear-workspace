@@ -188,6 +188,17 @@ pub unsafe extern "C" fn cgw_meta(update: CgwSlice, out: *mut CgwBuffer) -> i32 
     })
 }
 
+/// The state hash of the document the update makes, as 64 lowercase hex characters, UTF-8.
+///
+/// # Safety
+/// As [`cgw_merge`], for one slice.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_state_hash(update: CgwSlice, out: *mut CgwBuffer) -> i32 {
+    run(out, || {
+        crate::state_hash(borrow(&update)?).map(String::into_bytes)
+    })
+}
+
 /// The library's version, for the worker's log. Never fails.
 #[no_mangle]
 pub extern "C" fn cgw_version(out: *mut CgwBuffer) -> i32 {

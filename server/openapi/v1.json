@@ -872,6 +872,78 @@
         }
       }
     },
+    "/api/v1/pages/{pageId}/doc/state-hash": {
+      "get": {
+        "tags": [
+          "Documents"
+        ],
+        "operationId": "getDocStateHash",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateHashResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pages/{pageId}/doc/repair": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "operationId": "repairDoc",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepairResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/pages/{pageId}/doc/json": {
       "get": {
         "tags": [
@@ -3009,6 +3081,64 @@
           }
         }
       },
+      "RepairRequest": {
+        "required": [
+          "epoch",
+          "clientSchemaVersion",
+          "update"
+        ],
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "clientSchemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "update": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocUpdateIn"
+              }
+            ]
+          }
+        }
+      },
+      "RepairResponse": {
+        "required": [
+          "ack",
+          "pull"
+        ],
+        "type": "object",
+        "properties": {
+          "ack": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DocAck"
+              }
+            ]
+          },
+          "pull": {
+            "$ref": "#/components/schemas/PullResponse"
+          }
+        }
+      },
       "ResetRequest": {
         "required": [
           "userId",
@@ -3308,6 +3438,38 @@
           },
           "url": {
             "type": "string"
+          }
+        }
+      },
+      "StateHashResponse": {
+        "required": [
+          "epoch",
+          "upToSeq",
+          "hash"
+        ],
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "upToSeq": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "hash": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

@@ -64,6 +64,9 @@ const BUDGETS = {
   firstSync1000Ms: { max: 5000, unit: 'ms', slack: 500 },
   loadMissed: { max: 0, unit: '', slack: 0 },
   loadErrorRatePct: { max: 0.1, unit: '%', slack: 0.05 },
+  // An edit reaches the page's other readers within 5 s at p95 with 200 people typing (DECISIONS.md,
+  // 2026-11-12: Phase 3); 26 to 65 s at the end of Phase 2.
+  loadVisibleP95: { max: 5000, unit: 'ms', slack: 1000 },
 };
 
 const percentile = (values, p) => {
@@ -486,6 +489,7 @@ const figures = {
   firstSync1000Ms: out.firstSync?.median,
   loadMissed: s?.load ? s.load.missed + s.load.missingInState + s.load.textsWrong : undefined,
   loadErrorRatePct: s?.load?.errorRatePct,
+  loadVisibleP95: s?.load?.visibleToOthers?.p95,
 };
 // Compared with the last run on main only on the same processor (runners differ; phase1.mjs).
 const last = readJson(previousFile);
@@ -526,7 +530,7 @@ if (s) {
     );
   if (s.load?.visibleToOthers)
     log(
-      `Not budgeted: an edit reached the page's other readers in p50 ${s.load.visibleToOthers.p50} ms, p95 ${s.load.visibleToOthers.p95} ms; the worker validated it in p95 ${s.load.validatedAfterAck?.p95} ms.`,
+      `An edit reached the page's other readers in p50 ${s.load.visibleToOthers.p50} ms, p95 ${s.load.visibleToOthers.p95} ms; the worker validated it in p95 ${s.load.validatedAfterAck?.p95} ms.`,
     );
   if (!s.testsPassed) log('The server benchmark tests failed: see their output above.');
 }

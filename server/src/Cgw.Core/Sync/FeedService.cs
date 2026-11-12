@@ -13,10 +13,20 @@ public sealed class FeedService(CgwDb db, Access access)
     public const int DefaultLimit = 500;
     public const int MaxLimit = 1000;
 
-    public async Task<ChangesDto> ChangesAsync(Member member, long after, int limit, CancellationToken ct = default)
+    public async Task<Result<ChangesDto>> ChangesAsync(Member member, long after, int limit, CancellationToken ct = default)
     {
         limit = Math.Clamp(limit, 1, MaxLimit);
+        after = Math.Max(0, after);
         var rows = await db.WorkspaceChanges.AsNoTracking().Where(c => c.Seq > after).OrderBy(c => c.Seq).Take(limit + 1).ToListAsync(ct);
+        // Changes past the feed's 90 days are gone (FeedRetentionJob): a cursor before the last one
+        // removed would skip what it never saw, so it is told to fetch the tree again. Read after the
+        // rows, so a removal that committed meanwhile is seen; the next change being there is proof
+        // enough (sequences have no gaps but these).
+        if (rows.Count == 0 || rows[0].Seq != after + 1)
+        {
+            var pruned = await db.Workspaces.AsNoTracking().Where(w => w.Id == member.WorkspaceId).Select(w => w.ChangesPrunedSeq).FirstAsync(ct);
+            if (after < pruned) return new Failure(Codes.FeedExpired, 410, "The change feed no longer goes back that far: fetch the tree again");
+        }
         var more = rows.Count > limit;
         if (more) rows.RemoveAt(rows.Count - 1);
         var cursor = rows.Count > 0 ? rows[^1].Seq : after;
@@ -32,12 +42,14 @@ public sealed class FeedService(CgwDb db, Access access)
         foreach (var chunk in Chunked.Of(pageIds))
             foreach (var page in await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id)).ToListAsync(ct))
                 pages[page.Id] = page;
-        var levels = pageIds.Count > 50 ? await access.AllLevelsAsync(member) : null;
-        async Task<string> Level(Guid id) => levels is not null ? levels.GetValueOrDefault(id, Levels.None) : await access.PageLevelAsync(member, id);
+        // Every page's level at once: a few queries, not a few per page (the feed is polled often).
+        var all = pageIds.Count > 50 ? await access.AllLevelsAsync(member) : null;
+        var levels = all ?? await access.LevelsAsync(member, pageIds, ct);
+        string Level(Guid id) => levels.GetValueOrDefault(id, Levels.None);
 
         var sectionIds = latest.Where(r => r.EntityType == "section").Select(r => r.EntityId).ToList();
         var sections = await db.Sections.AsNoTracking().Where(s => sectionIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);
-        var guestSections = member.IsGuest && sectionIds.Count > 0 ? await GuestSectionsAsync(levels ?? await access.AllLevelsAsync(member), ct) : null;
+        var guestSections = member.IsGuest && sectionIds.Count > 0 ? await GuestSectionsAsync(all ?? await access.AllLevelsAsync(member), ct) : null;
         var favourites = await db.Favourites.AsNoTracking().Where(f => f.UserId == member.UserId && pageIds.Contains(f.PageId)).ToDictionaryAsync(f => f.PageId, ct);
         var visits = await db.PageVisits.AsNoTracking().Where(v => v.UserId == member.UserId && pageIds.Contains(v.PageId)).ToDictionaryAsync(v => v.PageId, ct);
 
@@ -49,7 +61,7 @@ public sealed class FeedService(CgwDb db, Access access)
                 case "page":
                 {
                     var page = pages.GetValueOrDefault(row.EntityId);
-                    var level = page is null || page.DeletedAt is not null ? Levels.None : await Level(page.Id);
+                    var level = page is null || page.DeletedAt is not null ? Levels.None : Level(page.Id);
                     changes.Add(level == Levels.None
                         ? new ChangeDto(row.Seq, "page", row.EntityId, "delete", null)
                         : new ChangeDto(row.Seq, "page", row.EntityId, "upsert", new EntityDto(Page: PageDto.From(page!, level))));

@@ -125,6 +125,11 @@ public sealed class HistoryTests(ServerFixture server)
         Assert.Empty(pull.GetProperty("updates").EnumerateArray());
         var snapshot = await Blob.GetByteArrayAsync(pull.GetProperty("snapshot").GetProperty("url").GetString());
         Assert.Equal("Hello", Text(snapshot));
+        // The repair check's hash is the new epoch's, at the new head.
+        var hash = await member.Client.GetFromJsonAsync<JsonElement>($"/api/v1/pages/{page}/doc/state-hash");
+        Assert.Equal(1, hash.GetProperty("epoch").GetInt32());
+        Assert.Equal(pull.GetProperty("headSeq").GetInt64(), hash.GetProperty("upToSeq").GetInt64());
+        Assert.Equal(Yjs.StateHash(snapshot), hash.GetProperty("hash").GetString());
         Assert.Contains((await ws.Changes(cursor, member.Client)).GetProperty("changes").EnumerateArray(),
             c => c.GetProperty("entityType").GetString() == "page" && c.GetProperty("entity").GetProperty("page").GetProperty("docEpoch").GetInt32() == 1);
 

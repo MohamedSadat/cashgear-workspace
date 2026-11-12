@@ -253,21 +253,7 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                 var ids = subtree.Select(p => p.Id).ToList();
                 // For good means every page of it, so it needs full access to every page of it.
                 await NeedFullOnAllAsync(member, ids, "Deleting for good needs full access to every page under this one");
-                foreach (var record in subtree)
-                {
-                    // A tombstone: the title goes now; the document goes with the worker's purge.
-                    record.DeletedAt = now;
-                    record.Title = "";
-                    record.SearchTitle = "";
-                    record.Version++;
-                    changes.Add("page", record.Id, "delete", record.Version, member.UserId);
-                }
-                foreach (var chunk in Chunked.Of(ids))
-                {
-                    await db.Favourites.Where(f => chunk.Contains(f.PageId)).ExecuteDeleteAsync(ct);
-                    await db.PageVisits.Where(v => chunk.Contains(v.PageId)).ExecuteDeleteAsync(ct);
-                    await db.PageAncestors.Where(a => chunk.Contains(a.PageId)).ExecuteDeleteAsync(ct);
-                }
+                await PageDeletion.TombstoneAsync(db, changes, subtree, member.UserId, now, ct);
                 audit.Add(actor, "page.delete", member.WorkspaceId, "page", page.Id, new { pages = ids.Count });
                 return Applied(op, "page", null);
             }
@@ -560,15 +546,7 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             throw new OpFailure(Codes.VersionConflict, $"{op.Type} on version {baseVersion}, now {page.Version}");
     }
 
-    private async Task<List<Page>> SubtreeAsync(Guid pageId, CancellationToken ct)
-    {
-        var ids = await db.PageAncestors.Where(a => a.AncestorPageId == pageId).Select(a => a.PageId).ToListAsync(ct);
-        if (!ids.Contains(pageId)) ids.Add(pageId);
-        var pages = new List<Page>();
-        foreach (var chunk in Chunked.Of(ids))
-            pages.AddRange(await db.Pages.Where(p => chunk.Contains(p.Id) && p.DeletedAt == null).ToListAsync(ct));
-        return pages;
-    }
+    private Task<List<Page>> SubtreeAsync(Guid pageId, CancellationToken ct) => PageDeletion.SubtreeAsync(db, pageId, ct);
 
     private async Task AddClosureAsync(Guid pageId, Guid? parentId, CancellationToken ct)
     {
@@ -657,5 +635,46 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
     {
         var icon = Text(payload, "icon");
         return icon is null ? null : icon.Length <= 64 ? icon : throw new OpFailure("invalid", "The icon is too long");
+    }
+}
+
+/// <summary>
+/// Deleting pages for good (DATA_MODEL.md, Tree rules: only from the trash, by a person or when
+/// the trash's 60 days end), the same way either way.
+/// </summary>
+public static class PageDeletion
+{
+    /// <summary>The page and every page under it not deleted already, tracked.</summary>
+    public static async Task<List<Page>> SubtreeAsync(CgwDb db, Guid pageId, CancellationToken ct)
+    {
+        var ids = await db.PageAncestors.Where(a => a.AncestorPageId == pageId).Select(a => a.PageId).ToListAsync(ct);
+        if (!ids.Contains(pageId)) ids.Add(pageId);
+        var pages = new List<Page>();
+        foreach (var chunk in Chunked.Of(ids))
+            pages.AddRange(await db.Pages.Where(p => chunk.Contains(p.Id) && p.DeletedAt == null).ToListAsync(ct));
+        return pages;
+    }
+
+    /// <summary>
+    /// Each page a tombstone (the title goes now; the document, versions and files go with the
+    /// worker's purge), a feed <c>delete</c> for each, and its place in the tree, favourites and
+    /// visits gone. Call under the workspace's lock; the caller writes its audit entry.
+    /// </summary>
+    public static async Task TombstoneAsync(CgwDb db, ChangeLog changes, List<Page> subtree, Guid? actor, DateTimeOffset now, CancellationToken ct)
+    {
+        foreach (var record in subtree)
+        {
+            record.DeletedAt = now;
+            record.Title = "";
+            record.SearchTitle = "";
+            record.Version++;
+            changes.Add("page", record.Id, "delete", record.Version, actor);
+        }
+        foreach (var chunk in Chunked.Of(subtree.Select(p => p.Id)))
+        {
+            await db.Favourites.Where(f => chunk.Contains(f.PageId)).ExecuteDeleteAsync(ct);
+            await db.PageVisits.Where(v => chunk.Contains(v.PageId)).ExecuteDeleteAsync(ct);
+            await db.PageAncestors.Where(a => chunk.Contains(a.PageId)).ExecuteDeleteAsync(ct);
+        }
     }
 }

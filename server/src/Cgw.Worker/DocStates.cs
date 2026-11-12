@@ -16,7 +16,12 @@ public static class Schema
     public static readonly IReadOnlyDictionary<int, string[]> Elements = new Dictionary<int, string[]>
     {
         [1] = ["block", "bookmark", "childPage", "codeBlock", "divider", "file", "hardBreak", "image", "pageMention", "table", "tableCell", "tableRow", "textBody"],
+        // Version 1's and the table of contents (an atom body with no attributes).
+        [2] = ["block", "bookmark", "childPage", "codeBlock", "divider", "file", "hardBreak", "image", "pageMention", "table", "tableCell", "tableOfContents", "tableRow", "textBody"],
     };
+
+    /// <summary>The highest version this worker knows: a document may rise to it, never past it.</summary>
+    public static int Latest { get; } = Elements.Keys.Max();
 
     /// <summary>A version this worker does not know allows nothing new: its updates wait for a newer worker.</summary>
     public static string[]? For(int version) => Elements.TryGetValue(version, out var list) ? list : null;
@@ -35,39 +40,48 @@ public sealed class DocStates(BlobStore blob)
     public static readonly byte[] Empty = [0, 0];
 
     /// <summary>
-    /// The page's validated state, up to its head or, with <paramref name="upTo"/>, up to that
+    /// The page's validated state, up to its head or, with <paramref name=upTo/>, up to that
     /// sequence (a version as it was named). Rows a compaction has since removed are in its snapshot,
-    /// so a state up to an earlier point is built from the latest compaction at or before it.
+    /// so a state up to an earlier point is built from the latest compaction at or before it. A
+    /// compaction that commits while the rows are read has removed some of them: the read starts
+    /// again from its snapshot (the jobs run on more than one loop).
     /// </summary>
     public async Task<byte[]> LoadAsync(CgwDb db, Page page, CancellationToken ct, long? upTo = null)
     {
         var head = upTo is { } point ? Math.Min(point, page.DocHeadSeq) : page.DocHeadSeq;
         if (cache.TryGetValue(page.Id, out var hit) && hit.Epoch == page.DocEpoch && hit.Head == head) return hit.State;
-        var parts = new List<byte[]>();
         var compactions = db.PageDocSnapshots.AsNoTracking()
             .Where(s => s.PageId == page.Id && s.Kind == SnapshotKinds.Compaction && s.Epoch == page.DocEpoch && s.Status == "ready");
-        var snapshot = await compactions.Where(s => s.UpToSeq <= head).OrderByDescending(s => s.UpToSeq).FirstOrDefaultAsync(ct)
-            // Only a later compaction is left (its rows are gone): the nearest state there is.
-            ?? await compactions.OrderBy(s => s.UpToSeq).FirstOrDefaultAsync(ct);
-        long from = 0;
-        if (snapshot is not null)
+        for (var attempt = 1; ; attempt++)
         {
-            var bytes = await blob.GetAsync(snapshot.BlobKey, ct)
-                ?? throw new InvalidOperationException($"Snapshot {snapshot.Id} of page {page.Id} has no blob: run the reconcile job");
-            parts.Add(bytes);
-            from = snapshot.UpToSeq;
+            var known = await compactions.OrderBy(s => s.UpToSeq).Select(s => new { s.Id, s.UpToSeq, s.BlobKey }).ToListAsync(ct);
+            var snapshot = known.LastOrDefault(s => s.UpToSeq <= head)
+                // Only a later compaction is left (its rows are gone): the nearest state there is.
+                ?? known.FirstOrDefault();
+            var parts = new List<byte[]>();
+            long from = 0;
+            if (snapshot is not null)
+            {
+                var bytes = await blob.GetAsync(snapshot.BlobKey, ct);
+                // A compaction since replaced it and deleted its blob: from the new one.
+                if (bytes is null && attempt < 5 && await compactions.AnyAsync(s => s.UpToSeq > snapshot.UpToSeq, ct)) continue;
+                parts.Add(bytes ?? throw new InvalidOperationException($"Snapshot {snapshot.Id} of page {page.Id} has no blob: run the reconcile job"));
+                from = snapshot.UpToSeq;
+            }
+            parts.AddRange(await db.PageDocUpdates.AsNoTracking()
+                .Where(u => u.PageId == page.Id && u.Seq > from && u.Seq <= head && u.Status == UpdateStatus.Valid)
+                .OrderBy(u => u.Seq).Select(u => u.Data).ToListAsync(ct));
+            var newest = await compactions.MaxAsync(s => (long?)s.UpToSeq, ct) ?? 0;
+            if (newest != (known.Count > 0 ? known[^1].UpToSeq : 0) && attempt < 5) continue;
+            var state = parts.Count switch
+            {
+                0 => Empty,
+                1 => parts[0],
+                _ => Yjs.Merge(parts),
+            };
+            if (head == page.DocHeadSeq) Put(page.Id, page.DocEpoch, head, state);
+            return state;
         }
-        parts.AddRange(await db.PageDocUpdates.AsNoTracking()
-            .Where(u => u.PageId == page.Id && u.Seq > from && u.Seq <= head && u.Status == UpdateStatus.Valid)
-            .OrderBy(u => u.Seq).Select(u => u.Data).ToListAsync(ct));
-        var state = parts.Count switch
-        {
-            0 => Empty,
-            1 => parts[0],
-            _ => Yjs.Merge(parts),
-        };
-        if (head == page.DocHeadSeq) Put(page.Id, page.DocEpoch, head, state);
-        return state;
     }
 
     public void Put(Guid pageId, int epoch, long head, byte[] state)

@@ -55,6 +55,18 @@ public sealed class MarkdownTests(ServerFixture server)
         Assert.Equal("## Two\n\n> 3 Three\n", Markdown.Write(doc.RootElement));
     }
 
+    [Fact]
+    public void A_table_of_contents_writes_nothing_of_its_own()
+    {
+        // Schema version 2's node: the app draws the page's headings; the Markdown has them already.
+        using var doc = JsonDocument.Parse("""
+            {"type":"doc","content":[{"type":"block","attrs":{"id":"aaaaaaaaaaaa"},"content":[{"type":"tableOfContents"}]},
+              {"type":"block","attrs":{"id":"bbbbbbbbbbbb"},"content":[
+              {"type":"textBody","attrs":{"kind":"heading","level":1},"content":[{"type":"text","text":"Plans"}]}]}]}
+            """);
+        Assert.Equal("# Plans\n", Markdown.Write(doc.RootElement));
+    }
+
     [Theory]
     [InlineData("Report: Q3/Q4 *draft*", "Report Q3 Q4 draft")]
     [InlineData("  ..hidden..  ", "hidden")]

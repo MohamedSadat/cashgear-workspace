@@ -115,7 +115,8 @@ public static class ApiServices
             o.Cookie.HttpOnly = true;
             o.Cookie.SecurePolicy = secure;
             o.Cookie.SameSite = SameSiteMode.Lax;
-            o.ExpireTimeSpan = TimeSpan.FromDays(14);
+            // The longest offline window (DECISIONS.md, Phase 3): a device may sync after 30 days away.
+            o.ExpireTimeSpan = TimeSpan.FromDays(30);
             o.SlidingExpiration = true;
             o.LoginPath = "/account/signin";
             o.Events = new CookieAuthenticationEvents
@@ -358,9 +359,24 @@ internal sealed class StartupTasks(IServiceProvider services, IConfiguration con
             },
             Requirements = { Requirements.Features.ProofKeyForCodeExchange },
         };
-        var existing = await applications.FindByClientIdAsync(ApiServices.DesktopClientId, ct);
-        if (existing is null) await applications.CreateAsync(descriptor, ct);
-        else await applications.UpdateAsync(existing, descriptor, ct);
+        // Several instances starting together (a farm, or the tests' variants) may write it at
+        // once: the one that loses reads it again and writes on top.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                // Read afresh each time: the context would hand back the stale copy it tracks.
+                db.ChangeTracker.Clear();
+                var existing = await applications.FindByClientIdAsync(ApiServices.DesktopClientId, ct);
+                if (existing is null) await applications.CreateAsync(descriptor, ct);
+                else await applications.UpdateAsync(existing, descriptor, ct);
+                break;
+            }
+            catch (Exception e) when (attempt < 5 && e is OpenIddictExceptions.ConcurrencyException or Microsoft.EntityFrameworkCore.DbUpdateException)
+            {
+                await Task.Delay(50 * attempt, ct);
+            }
+        }
 
         // The signing and encryption keys are read now, so a missing or expired certificate stops
         // the start rather than the first sign-in.

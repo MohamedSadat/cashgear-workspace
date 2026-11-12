@@ -50,6 +50,8 @@ public sealed class Workspace
     public Guid OwnerUserId { get; set; }
     /// <summary>The head of the change feed.</summary>
     public long ChangeSeq { get; set; }
+    /// <summary>The highest change the retention job removed: a cursor below it must fetch the tree again.</summary>
+    public long ChangesPrunedSeq { get; set; }
     public long Version { get; set; } = 1;
     /// <summary>Recorded and shown, not enforced (Q10).</summary>
     public long? StorageQuotaBytes { get; set; }
@@ -131,6 +133,9 @@ public sealed class Page : ITenantOwned
     public long DocHeadSeq { get; set; }
     public int DocSchemaVersion { get; set; } = 1;
     public int DocEpoch { get; set; }
+    /// <summary>The state hash of the validated state at <see cref="DocStateHashSeq"/> (the repair check).</summary>
+    public string? DocStateHash { get; set; }
+    public long DocStateHashSeq { get; set; }
     /// <summary>Access comes from this page's own list, not from its ancestors.</summary>
     public bool Restricted { get; set; }
     public Guid CreatedBy { get; set; }
@@ -190,6 +195,8 @@ public sealed class PageDocUpdate : ITenantOwned
     public Guid UserId { get; set; }
     public Guid? DeviceId { get; set; }
     public byte[] Data { get; set; } = [];
+    /// <summary>The schema version the pushing app knows: how far this update may raise the page's.</summary>
+    public int ClientSchemaVersion { get; set; } = 1;
     /// <summary>Pending until the worker validates it (Q20).</summary>
     public byte Status { get; set; }
     public string? Problem { get; set; }

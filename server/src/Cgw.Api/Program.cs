@@ -45,6 +45,7 @@ var app = builder.Build();
 await StartupTasks.MigrateIfAskedAsync(app.Services, app.Configuration);
 
 app.UseCorrelation();
+app.UseRetryAfter();
 app.UseCgwExceptions();
 app.UseStatusCodePages();
 if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing")) app.UseHsts();

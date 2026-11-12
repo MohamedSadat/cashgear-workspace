@@ -26,6 +26,21 @@ public sealed class ChangeLog(CgwDb db, TimeProvider clock)
 
     public long Head => next;
 
+    /// <summary>
+    /// Whether anything that can change who may do what in the workspace (an access list, a move
+    /// that changes a page's access, a member joining, leaving or changing role, the workspace
+    /// going) committed after change <paramref name="seq"/>: each writes an <c>access</c>,
+    /// <c>member</c> or <c>workspace</c> change under this lock. Call after <see cref="LockAsync"/>,
+    /// so nothing of the kind can still be on its way.
+    /// </summary>
+    public Task<bool> AccessChangedSinceAsync(long seq, CancellationToken ct = default)
+    {
+        if (workspace == Guid.Empty) throw new InvalidOperationException("Lock the workspace first.");
+        var id = workspace;
+        return db.WorkspaceChanges.IgnoreQueryFilters([CgwDb.Tenant]).AnyAsync(c => c.WorkspaceId == id && c.Seq > seq
+            && (c.EntityType == "access" || c.EntityType == "member" || c.EntityType == "workspace"), ct);
+    }
+
     public void Add(string entityType, Guid entityId, string kind, long version, Guid? actor, Guid? userId = null)
     {
         if (workspace == Guid.Empty) throw new InvalidOperationException("Lock the workspace first.");

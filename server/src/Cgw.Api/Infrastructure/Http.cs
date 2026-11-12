@@ -49,6 +49,39 @@ public static class Problems
 
     public static ProblemHttpResult Of(string code, int status, string title) => From(new Failure(code, status, title));
 
+    /// <summary>A problem for this request, with <c>Retry-After</c> when the failure says when to ask again.</summary>
+    public static ProblemHttpResult From(Failure failure, HttpContext http)
+    {
+        if (failure.RetryAfter is { } wait) http.Response.Headers.RetryAfter = Seconds(wait);
+        return From(failure);
+    }
+
+    /// <summary>Whole seconds, at least one, as <c>Retry-After</c> gives them.</summary>
+    public static string Seconds(TimeSpan wait) =>
+        Math.Max(1, (long)Math.Ceiling(wait.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>When to ask again after a 429 or a 503 that did not say (Phase 3 contracts: on every one).</summary>
+    public static readonly TimeSpan BusyRetry = TimeSpan.FromSeconds(60);
+    public static readonly TimeSpan DownRetry = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Every 429 and every 503 carries <c>Retry-After</c> in seconds: the rate limiter's and the
+    /// push limit's say when their window opens; any other (a health check that fails) gets a default,
+    /// so a client's backoff always has a floor to keep to.
+    /// </summary>
+    public static IApplicationBuilder UseRetryAfter(this IApplicationBuilder app) =>
+        app.Use(async (context, next) =>
+        {
+            context.Response.OnStarting(() =>
+            {
+                var response = context.Response;
+                if (response.StatusCode is 429 or 503 && !response.Headers.ContainsKey("Retry-After"))
+                    response.Headers.RetryAfter = Seconds(response.StatusCode == 429 ? BusyRetry : DownRetry);
+                return Task.CompletedTask;
+            });
+            await next();
+        });
+
     public static string CodeFor(int status) => status switch
     {
         400 => Codes.RequestInvalid,
@@ -145,7 +178,8 @@ public static class RateLimits
             options.RejectionStatusCode = 429;
             options.OnRejected = async (context, ct) =>
             {
-                context.HttpContext.Response.Headers.RetryAfter = "60";
+                context.HttpContext.Response.Headers.RetryAfter = Problems.Seconds(
+                    context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var wait) ? wait : Problems.BusyRetry);
                 await TypedResults.Problem(statusCode: 429, title: "Too many requests",
                         extensions: new Dictionary<string, object?> { ["code"] = Codes.LimitRate, ["correlationId"] = context.HttpContext.TraceIdentifier })
                     .ExecuteAsync(context.HttpContext);
