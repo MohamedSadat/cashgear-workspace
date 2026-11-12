@@ -23,6 +23,7 @@ Two models, kept apart on purpose:
 | Workspace change sequence | 64-bit integer, per workspace | The server | The change feed's cursor |
 | Yjs client id | 32-bit unsigned integer | A pool the server issues to a device; random while local-only | One per editing session, as Yjs requires. Registered to a user so pushed updates can be checked (Q9 in `DECISIONS.md`) |
 | Order key | Fractional-index string, base 62 | The client | Binary collation; siblings sort by (order key, id) |
+| Database property, select option (Phase 4) | 8 characters of base 62 | The client; options a type change or an import makes are derived from a hash (Databases) | Unique within their database or property; the title property's id is `title` |
 
 Rules for stable ids:
 
@@ -69,8 +70,8 @@ Fixed by spike S1 (DECISIONS.md, 2026-11-11: Phase 0 results).
 | `table` | `body` | `tableRow*` | |
 | `tableRow` | | `tableCell*` | |
 | `tableCell` | | `inline*` | all |
-| `divider`, `image`, `file`, `bookmark`, `childPage`, `tableOfContents` (v2), `sheetEmbed`, `erpView`, `databaseView` | `body` | none (atom) | |
-| `text`, `hardBreak`, `pageMention`, `userMention`, `dateMention` | `inline` | | |
+| `divider`, `image`, `file`, `bookmark`, `childPage`, `tableOfContents` (v2), `databaseView` (v3), `sheetEmbed`, `erpView` | `body` | none (atom) | |
+| `text`, `hardBreak`, `pageMention`, `userMention`, `dateMention` (v3) | `inline` | | |
 
 Schema rules that hold forever (D3):
 
@@ -109,7 +110,7 @@ Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
 | Table of contents | `tableOfContents` | none | No | Phase 3 (schema version 2): drawn as the page's headings, each a link to its block; Markdown and plain text write nothing for it |
 | Embedded spreadsheet | `sheetEmbed` | `workbookId`, `sheet`, `range`, `chartId`, `height` | No | Phase 5 |
 | Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize` | No | Phase 5 |
-| Database view | `databaseView` | `databaseId`, `viewId` | No | Phase 4 |
+| Database view | `databaseView` | `databaseId`, `viewId` (null: the database's first view) | No | Phase 4 (schema version 3): an inline database or a linked view, drawn by the host lazily near the viewport; deleting the block never deletes the database; Markdown and plain text write nothing for it |
 
 Notes:
 
@@ -137,7 +138,7 @@ Notes:
 | Inline atom | `hardBreak` | none |
 | Inline atom | `pageMention` | `pageId`, optional `blockId` |
 | Inline atom | `userMention` | `userId` (Phase 6) |
-| Inline atom | `dateMention` | `date` (Phase 4) |
+| Inline atom | `dateMention` | `date`, `end` (Phase 4, schema version 3): `YYYY-MM-DD` or a UTC instant, both default null; drawn in the interface language; text and Markdown write the date (and ` → end`) |
 
 ### Future blocks
 
@@ -185,6 +186,10 @@ it is open saves what was typed, writes nothing more, and turns read-only; the r
 every node the build does not know as a placeholder where it was, with whatever it held that the
 build can draw, and never drops it.
 
+As built in Phase 4: version 3 adds `databaseView` and `dateMention`; step 2 → 3 only raises
+`meta.schemaVersion`, by the same path. Fixture: `packages/doc/fixtures/doc-v2.json`; a build that
+knows only version 2 opens a version-3 page read-only with both new nodes as placeholders, kept.
+
 ## Relational records
 
 Column lists give the fields that matter to the design, not final DDL. Every table has
@@ -211,7 +216,7 @@ workspace (a test fails if a table with `WorkspaceId` lacks it).
 | --- | --- | --- |
 | `Sections` | `Id`, `WorkspaceId`, `Name`, `OrderKey`, `Visibility`, `OwnerUserId`, `Version` | `Visibility` is `workspace` or `private` |
 | `Pages` | `Id`, `WorkspaceId`, `SectionId`, `ParentPageId` (null at the top of a section), `OrderKey`, `Kind`, `Title`, `SearchTitle`, `Icon`, `CoverAssetId`, `Version`, `DocSeq`, `DocHeadSeq`, `DocSchemaVersion`, `DocEpoch`, `Restricted`, `TemplateOfPageId`, `IsTemplate`, `CreatedBy`, `UpdatedBy`, `UpdatedAt`, `TrashedAt`, `TrashedBy`, `TrashRootId`, `DeletedAt` | `Kind` is `page`, `database` or `row`. `Version` rises on every metadata change. `DocSeq` is the last document sequence given out, `DocHeadSeq` the validated head pulls serve up to (Q20). `SearchTitle` is the normalised title. A page deleted for good stays as a tombstone (`DeletedAt`, no title) so a push gets 410; the worker purges its document |
-| `PageAncestors` | (`PageId`, `AncestorPageId`), `Depth` | A closure table, kept by the server in the same transaction as a move. Gives "all descendants" and "all ancestors" in one indexed read, for permissions, trash and breadcrumbs |
+| `PageAncestors` | (`PageId`, `AncestorPageId`), `Depth` | A closure table, kept by the server in the same transaction as a move. Gives "all descendants" and "all ancestors" in one indexed read, for permissions, trash and breadcrumbs. Rows of databases are not in it (Databases) |
 | `Favourites` | (`UserId`, `PageId`), `OrderKey` | Per user |
 | `PageVisits` | (`UserId`, `PageId`), `LastVisitedAt` | Recent pages, capped per user |
 
@@ -299,40 +304,119 @@ while its person is still a member. The worker refuses a pushed update whose aut
 edit the page when it decides, so a revoke cannot be outrun by a push.
 
 Granularity stops at the page (D8). Field names in `PagePermissions` leave room for groups as a
-`PrincipalType` later.
+`PrincipalType` later. A database's rows take its access: a row has no access list, no share link
+and no `Restricted` of its own (Phase 4).
 
 ### Databases (Phase 4)
 
+A database is a page of kind `database`; a row is a page of kind `row` whose parent is its
+database. The shapes are `packages/workspace/src/db/types.ts` and `RowRecord` in
+`packages/workspace/src/types.ts`; the rules run in TypeScript (`packages/workspace/src/db/`) and
+in C# (`server/src/Cgw.Core/Databases/`), held together by the shared vectors
+`packages/workspace/vectors/db-{convert,query,formula,compute,csv}-vectors.json`.
+
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `Databases` | `PageId` (the database is a page of kind `database`), `Properties` (JSON), `Version` | Each property: `id`, `name`, `type`, `options` |
-| `DatabaseViews` | `Id`, `DatabaseId`, `Name`, `Type`, `OrderKey`, `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`; `Config` holds filter, sorts, grouping, visible properties, widths |
-| `DatabaseRows` | `PageId` (the row is a page of kind `row`), `DatabaseId`, `Values` (JSON by property id), `PropertyVersions` (JSON by property id), `Computed` (JSON), `ComputedVersion` | The row's title is the page title. Its body is the page's Yjs document, created on first open |
+| `Databases` | `PageId` (its page, kind `database`), `WorkspaceId`, `Properties` (JSON array, in display order, deleted ones included), `Version`, `RowCount`, `RowsVersion`, `ComputePending`, `CreatedAt`, `UpdatedAt` | Exactly one property of type `title`, id `title`: the row's page title. `Version` rises on every change to the properties; `RowsVersion` on any write to its rows (the query cache's check). `RowCount` counts rows not trashed and not templates |
+| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`; `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap |
+| `DatabaseRows` | `PageId` (its page, kind `row`), `WorkspaceId`, `DatabaseId`, `Values` (JSON by property id), `PropertyVersions` (JSON by property id), `Computed` (JSON), `ComputedVersion`, `Seq` | The row's title, icon, cover, order key, trash and document are its page's. `Seq` is the `RowsVersion` it was last written at. Indexes (`DatabaseId`, `PageId`), (`DatabaseId`, `Seq`) |
 
-Property types and how each value is stored:
+A database page sits anywhere a page may; only rows sit under it, and nothing sits under a row.
+A full-page database is in the sidebar; an inline one is a child of the page holding its
+`databaseView` block. A database page has no document of its own. Rows are not in `PageAncestors`:
+a row's access is its database's (it cannot be restricted, given an access list or a share link),
+a row only reorders among its database's rows, and moving, trashing, restoring or deleting a
+database reaches its rows through `DatabaseRows`, set-based. Trashing a row makes it its own trash
+root; on a device a row also reads as trashed while its database page is. A row with `IsTemplate`
+is a row template: never in a view, a query, `RowCount` or an export.
+
+Property ids and option ids are 8 characters of base 62, unique within their database or property
+(`title` is the title property's). Property ids, not names, are stored everywhere, formulas
+included (`prop("Ab12Cd34")`), so a rename touches one record.
+
+Property types and how each value is stored (an empty value is absent, never `''` or `[]`):
 
 | Type | Stored as |
 | --- | --- |
-| Text | String (plain; rich text in a cell is not planned) |
-| Number | Decimal as a string, plus a display format on the property |
-| Date | ISO date or date-time, optional end, optional time zone |
-| Checkbox | Boolean |
-| Select, Status | Option id |
+| Title | The row page's title (not in `Values`) |
+| Text, URL, email, phone | String (plain; URL, email and phone draw as safe links) |
+| Number | A JSON number (an IEEE double, as both evaluators use), with a display format on the property |
+| Date | `{ start, end? }`: `YYYY-MM-DD`, or a UTC instant `YYYY-MM-DDTHH:mm:ssZ` |
+| Checkbox | `true` (unchecked is no value) |
+| Select, status | Option id (status options carry a group: to do, in progress, complete) |
 | Multi-select | Array of option ids |
 | Person | Array of user ids |
-| URL | String, same scheme allow-list as links |
 | Files | Array of asset ids |
-| Relation | Array of row page ids in the target database; the reverse side is a second property kept in step by the server |
-| Formula | Not stored in `Values`; the result is in `Computed` |
-| Rollup | Not stored in `Values`; the result is in `Computed` |
+| Relation | Array of row ids of the related database, at most 1,000 (a longer one keeps its first 1,000); kept in step with the reverse property there |
+| Formula, rollup | Not stored: the result is in `Computed` |
+| Created time, created by, last edited time, last edited by | Not stored: the row page's `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy` |
 
-Rules:
+Rules (both sides, in the vectors):
 
-- Two edits to different properties of one row both stand. Two edits to the same property: the
-  last to reach the server wins, and the property's version rises.
-- Filtering, sorting and grouping run on the server for large databases and on the local mirror
-  for small ones, with the same rules and shared test vectors.
-- Property ids, not names, are stored everywhere, so a rename touches one record.
+- **Per-property last writer wins.** `row.update` and `db.update` merge per property; two edits to
+  different properties of one row both stand; to the same property, the last to reach the server
+  wins and that property's version rises. A row's page version, `UpdatedAt` and `UpdatedBy` move on
+  every row write.
+- **Coercion.** Every value written is coerced to its property's current type, on the client and
+  on the server: an offline edit made before a type change lands converted; what cannot be coerced
+  is cleared.
+- **Type changes** convert every row's value by the table below (rows in id order); select options a
+  conversion needs are made with ids derived from SHA-256 of `databaseId NUL propertyId NUL name`, so
+  every device and the server make the same ones. The title never changes type.
+- **Deleting a property** sets its `trashedAt`: its values stay, it is hidden, computes nothing, and
+  filters, sorts and groups on it are ignored; restoring it brings everything back. **Deleting an
+  option** removes it from the property; values that hold its id stay and read as empty. Neither
+  rewrites a row.
+- **Relations** are two-way: adding a relation with a reverse property the target lacks adds it
+  there (edit on both); setting row A's relation to add B and remove C edits B's and C's reverse
+  values in the same transaction. Values keep only ids of live rows of the related database. A
+  relation that no longer pairs with its reverse (changed to another type, or pointed elsewhere)
+  leaves the reverse one-way, with its values.
+- **Formulas and rollups** are computed per row (rollups first, then formulas in dependency order; a
+  cycle is `formula.cycle` for every property in it), by the server into `Computed` with
+  `ComputedVersion` (the database version they were made for): in the transaction that changes a
+  row (and rows relating to it, up to 1,000, else the database is marked `ComputePending`), for every
+  row inline after a formula or rollup change up to 5,000 rows, else by the worker's recompute job.
+  A device shows and filters by its own result when it holds the inputs, else by the server's. The
+  language has no volatile functions (now, today), so a cached result never goes stale by itself.
+- **Filtering, sorting and grouping** run on the device for a database it holds in full (at most
+  5,000 rows, `LOCAL_ROW_LIMIT`) and on the server otherwise, by the same rules: text by
+  `normaliseText`, ordinal order; dates by calendar date in the asker's offset; empty values last in
+  both directions; ties by order key, then id; options by their position; a condition on a deleted
+  or unknown property is ignored. The server evaluates queries in memory over the database's rows,
+  cached per database and `RowsVersion` (decided by measurement in M4.3: 270 ms p95 at 50,000 rows
+  with a filter and a sort, against a 300 ms budget).
+
+A value is first read as what it holds by its old type, then written as the new type:
+
+| New type ← old | text | number | date | checked | options | ids |
+| --- | --- | --- | --- | --- | --- | --- |
+| text, title | as is | `String(n)` | start, or `start → end` | `true` | names joined `, ` | nothing |
+| url, email, phone | trimmed | `String(n)` | as text | `true` | names joined `, ` | nothing |
+| number | parsed (1) | as is | nothing | 1 | its one name parsed | nothing |
+| date | parsed (2) | nothing | as is | nothing | its one name parsed | nothing |
+| checkbox | a word (3) | n ≠ 0 | nothing | as is | its one name as a word | nothing |
+| select, status | the option named so | the option named `String(n)` | the option named the date | the option named `true` | the same id, else the same name | nothing |
+| multi-select | each comma-separated part | as select | as select | as select | each: same id, else same name | nothing |
+| person, files, relation | nothing | nothing | nothing | nothing | nothing | ids of the same kind stay |
+| formula, rollup, created and edited time and by | nothing: they store no value | | | | | |
+
+The old types read as: title, text, url, email, phone: text; number: number; date and created or
+edited time: date; checkbox: checked; select, status, multi-select: options (known ids, in order);
+person, created or edited by: people; files: files; relation: rows; formula and rollup: their result
+(a list as text joined by `, `). (1) Trimmed; Arabic-Indic and Persian digits read as 0 to 9, `٫` as
+the point, `٬` and commas between groups of three as thousands separators; no currency, percent or
+spaces. (2) ISO dates only, with an optional time and offset, spans as `a → b`. (3) `true yes y 1 on
+checked x ✓ ✔ نعم` and `false no n 0 off unchecked لا`. Option names match exactly after trimming.
+
+CSV (`db/csv.ts`): import parses RFC 4180 (a BOM dropped; the separator whichever of comma,
+semicolon and tab is most common in the first line), makes a new database's properties by inference
+(the first column is the title; number, checkbox, date, url, email, select, else text) or maps
+columns to existing properties, and reads each cell as the text conversion does; at most 50,000
+rows and 20 MB. Export writes UTF-8 with a BOM and CRLF, the view's shown properties in order, values
+in canonical form (options, people, related rows and files by name). A text cell starting with `=`,
+`+`, `-`, `@`, a tab or a carriage return is written with a leading `'`, and import takes exactly
+one such `'` off, so a spreadsheet never runs a cell as a formula and a round trip changes nothing.
 
 ### Workbooks (Phase 5)
 
@@ -387,15 +471,26 @@ Both local stores hold the same logical data, behind the `LocalStore` interface.
 | `pins` (Phase 3) | Pages kept on this device for offline use: one record per pin, with `subtree` when the pages under it (later ones included) are kept too |
 | `quarantine` (Phase 3) | Logs set aside so nothing typed is lost: the page's snapshot and every update, its title, the reason (`doc.epochMismatch`, `page.gone`, `access.denied`, `page.removed`) and whether it became a recovered page. Entries outlive their page and workspace |
 | `repairs` (Phase 3) | Per page, the last state-hash check: epoch, the head it matched at, repairs made there |
+| `databases`, `views` (Phase 4) | Every database and view record of the workspace the account may see, as the tree and the feed give them; `readMirror` returns them with the pages |
+| `rows` (Phase 4) | Rows of databases this device holds (`RowRecord`: the row's page and its values); never in `readMirror`, read per database (`readRows`); `getPage` finds them |
+| `dbHolds` (Phase 4) | Databases whose rows this device keeps: `full` (every row; queried on the device, at most 5,000 rows) or `partial` (the rows the server's queries returned, as a cache), `complete` once a full fetch has run to its end, `after` where it goes on |
 | `corrupt` | Updates that did not decode or that the server refused, kept for support |
-| `meta` | The store's own schema version: 3 from Phase 3. IndexedDB upgrades additively; SQLite copies its file first (`workspace.v1.db` before schema 2, `workspace.v2.db` before schema 3), then migrates in one transaction |
+| `meta` | The store's own schema version: 4 from Phase 4. IndexedDB upgrades additively; SQLite copies its file first (`workspace.v1.db` before schema 2, `workspace.v2.db` before schema 3, `workspace.v3.db` before schema 4), then migrates in one transaction |
 
 Schema 3's IndexedDB object stores are `pins` (key `pageId`, index `workspace`), `quarantine`
 (key `id`, index `workspace`) and `repairs` (key `pageId`), and `docLogs` gains an index
 `covers`; SQLite's tables are `pins`, `quarantine` with `quarantine_parts`, and `repairs`.
+Schema 4's IndexedDB object stores are `databases` (index `workspace`), `views` (indexes
+`workspace`, `database`), `rows` (indexes `database`, `workspace`, `trashRoot`) and `dbHolds` (key
+`databaseId`, index `workspace`); SQLite's tables are `databases`, `db_views`, `db_rows` and
+`db_holds` (`rows` is an SQL keyword). Removing a database page removes its record, views, hold and
+rows, each row as a removed page (document, history, search entry, pin, repair state, unsent edits
+set aside when it is the server's word). A database made on the device is held in full from its
+creation. Rows count as pages for documents (held pages, storage, unsent updates, compaction).
+
 Migrations are tested from stores of every earlier version: the SQLite fixtures
-(`crates/cgw-store/tests/fixtures/v1`, `v2`) are stores written by the v0.1.0 and v0.2.0 code
-itself (`make.mjs` builds that code from its tag and drives it).
+(`crates/cgw-store/tests/fixtures/v1`, `v2`, `v3`) are stores written by the v0.1.0, v0.2.0 and
+v0.3.0 code itself (`make.mjs` builds that code from its tag and drives it).
 
 A workspace made while signed out starts as local-only: the same collections, with nothing in
 `outbox` ever sent. Uploading it (Phase 2) keeps its id and every record's: the workspace is made
@@ -407,6 +502,15 @@ workspace's records as creates. A workspace made while signed in is uploaded at 
 - A workspace exports as a zip: one Markdown file and one JSON file per page in folders that
   follow the tree, an `assets` folder, and a manifest of ids. Available from the first milestone,
   because a browser may evict local storage.
+- From Phase 4 the manifest (`cgw-export.json`) is version 2, written alike by the app and the
+  server: every page entry has its `kind`; a row's entry also has `databaseId` and its `values` as
+  stored, and its files sit in its database's folder as a child page's do; `databases` lists each
+  database's `{ id, properties, views }` (views in order-key order). Each database's folder also
+  holds `<title>.csv` (every property not deleted, title first; trashed rows and templates left
+  out), for people. Import reads the JSON, never the CSV, accepts versions 1 and 2 from either
+  side, and makes new ids for pages, rows, databases, views and assets while keeping property and
+  option ids; relations, rollups and formulas, and rows' relation values, are set once every
+  database and row exists. A device exports what it holds; the server exports every row.
 - Deleting a workspace marks it deleted, removes access at once, and purges rows and blobs after
   30 days (the worker's `purgeWorkspaces` job). Its audit rows stay: the log is append-only.
 - Deleting a page for good (from the trash) leaves a tombstone row; the worker purges its

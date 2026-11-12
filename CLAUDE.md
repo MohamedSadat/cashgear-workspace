@@ -57,25 +57,26 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | --- | --- |
 | `apps/web` (`@cgw/web`) | Vite + React entry: picks the platform (web or Tauri) and mounts the shell; the service worker (`sw/service-worker.js`, built by a plugin in `vite.config.ts`, registered in production web builds only) so the web app starts offline |
 | `packages/shell` (`@cgw/shell`) | App frame (sidebar, top bar, hash routing by page id), i18next catalogues (`en`, `ar`), theme controller, command registry, `event.code` shortcuts, the `WorkspacePlatform` interface |
-| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` (store schema 3: pins, quarantine, repair state) and its conformance suite (`@cgw/workspace/testing`, with an in-memory server for sync tests and `syncHarness.ts`), the operation planner with the tree rules, the remote planners (`remote.ts`), the sync engine (`sync/`: the offline loop, batching, resync, repair, pins, set-aside and recover), order keys, UUIDv7, the metadata mirror, search normalisation; shared test vectors in `vectors/`. No React, DOM or ProseMirror |
-| `packages/doc` (`@cgw/doc`) | The block schema (version 2: `tableOfContents`) and its migrations (`migrations.ts`, fixture in `fixtures/`), block-id plugin, the move intent (`moves.ts`), the Yjs seam over the patched `@tiptap/y-tiptap`, `PageDocument` (open, autosave, compaction, history, events), the state hash, recovered content, the read-only view, plain text and Markdown out, Markdown in, content builders; `src/sync-sim/` is the three-client convergence simulator |
-| `packages/editor` (`@cgw/editor`) | The Tiptap editor over a `Y.Doc`: block commands, keymap, input rules, slash menu, bubble toolbar, block handle and drag, block selection, clipboard, tables, plain DOM node views; given an `EditorHost`, never touches storage |
+| `packages/workspace` (`@cgw/workspace`) | Records, `Operation`, `LocalStore` (store schema 4: pins, quarantine, repair state; databases, views, rows, holds) and its conformance suite (`@cgw/workspace/testing`, with an in-memory server for sync tests and `syncHarness.ts`), the operation planner with the tree rules, the remote planners (`remote.ts`), the sync engine (`sync/`: the offline loop, batching, resync, repair, pins, set-aside and recover), order keys, UUIDv7, the metadata mirror, search normalisation; the database rules in `db/` (types, coercion, the conversion table, `queryRows`, the formula language, rollups, `computeRow`, relations, CSV; `db/plan.ts` the planner's database rules); shared test vectors in `vectors/` (`db-*-vectors.json` held to the C# port). No React, DOM or ProseMirror |
+| `packages/database` (`@cgw/database`) | The database views over a `DatabaseHost` (`src/host.ts`, which the shell implements): `DatabaseView` (view tabs, toolbar, filter, sort, group and property editors), the virtualised table, board, list, calendar, gallery (`src/views/`), cells and pickers, `RowProperties`, templates, CSV import and export dialogs, its own catalogue (`src/i18n/`); `@cgw/database/testing` has an in-memory host. Never saves, loads or calls the network (lint) |
+| `packages/doc` (`@cgw/doc`) | The block schema (version 2: `tableOfContents`; version 3: `databaseView`, `dateMention`) and its migrations (`migrations.ts`, fixture in `fixtures/`), block-id plugin, the move intent (`moves.ts`), the Yjs seam over the patched `@tiptap/y-tiptap`, `PageDocument` (open, autosave, compaction, history, events), the state hash, recovered content, the read-only view, plain text and Markdown out, Markdown in, content builders; `src/sync-sim/` is the three-client convergence simulator |
+| `packages/editor` (`@cgw/editor`) | The Tiptap editor over a `Y.Doc`: block commands, keymap, input rules, slash menu, bubble toolbar, block handle and drag, block selection, clipboard, tables, plain DOM node views, the database block (a frame `EditorHost.databases` mounts into) and dates in the "@" menu; given an `EditorHost`, never touches storage |
 | `patches/` | The Q18 patch on `@tiptap/y-tiptap` 3.3.0 (`pnpm patch`), made by `scripts/y-tiptap-patch.mjs` |
 | `scripts/eslint` | Workspace's own lint rules: `cgw/no-untranslated-text` |
 | `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json`, the Mac's bundle in `tauri.macos.conf.json`; the test-only bridge (`src/bridge.rs`, feature `e2e-bridge`, refused in release builds) |
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup; the Mac's build, acceptance run and checks (`macos-*.mjs`); the state-hash vectors' generator |
 | `tests/e2e` | Playwright specs (Chrome and Edge) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
-| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 3, upgraded additively); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
+| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 4, upgraded additively); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
 | `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
-| `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; a copy of the file before each migration (`workspace.v{n}.db`); `cgw-store-cli` for tests; `tests/fixtures/v1`, `v2`: stores written by the released code (`make.mjs`) |
+| `crates/cgw-store` | SQLite store (rusqlite bundled, WAL, FTS5): a fixed set of typed requests in a binary frame, never SQL from the webview; asset files beside the database; a copy of the file before each migration (`workspace.v{n}.db`); `cgw-store-cli` for tests; `tests/fixtures/v1`, `v2`, `v3`: stores written by the released code (`make.mjs [versions]`) |
 | `crates/cgw-native` | Desktop helpers without Tauri: `cashgear-workspace://` links read into the app's routes, file names made safe, the desktop's sign-in (PKCE, the loopback listener, token exchange and refresh) and the keychain (Windows Credential Manager, the macOS login keychain) |
 | `crates/cgw-ydoc` | Yjs functions over `yrs` for the server worker (merge, diff, compact, JSON, text, client ranges, validate, the state hash), with a C ABI for .NET; build the DLL with `--profile ffi` |
-| `server/` | .NET 10 solution `Cgw.Server.slnx`. `Cgw.Core`: EF Core data (`CgwDb`, the tenant filter, migrations), blob storage with signed URLs, mail, audit. `Cgw.Api`: the API process (ProblemDetails with codes, correlation ids, rate limits, health, Identity, OpenIddict, the sign-in pages, the feature modules). `Cgw.Ydoc`: `cgw-ydoc` by P/Invoke, worker only. `Cgw.Worker`: the jobs. `tests/Cgw.Tests`: xUnit v3 on SQL Server and Azurite. `openapi/v1.json` is written by the build |
+| `server/` | .NET 10 solution `Cgw.Server.slnx`. `Cgw.Core`: EF Core data (`CgwDb`, the tenant filter, migrations), blob storage with signed URLs, mail, audit, the Databases module (`Databases/`: the C# port of the database rules, the operations, the in-memory query engine, CSV import and export). `Cgw.Api`: the API process (ProblemDetails with codes, correlation ids, rate limits, health, Identity, OpenIddict, the sign-in pages, the feature modules). `Cgw.Ydoc`: `cgw-ydoc` by P/Invoke, worker only. `Cgw.Worker`: the jobs. `tests/Cgw.Tests`: xUnit v3 on SQL Server and Azurite. `openapi/v1.json` is written by the build |
 | `packages/shell/src/cloud` | The connection to the API: `cloud.ts` (the typed client, the sync engine wired to the session, account, sharing, versions, search, previews, remote assets), `CloudUi.tsx` (sign-in, devices, sync status, upload, members and invites, the offline menu items), `offline.ts` and `OfflineSettings.tsx` (pins, held pages, storage), `recovery.ts` (recovered pages), `ShareDialog.tsx`, `SharedView.tsx` (a page by link); beside it `notices.ts` (every notice code's text and link) and `RecoveredView.tsx` |
 | `deploy/iis` | `install.ps1`: the API on IIS and the worker as a service, from the deploy package (docs/OPERATIONS.md) |
 | `packages/api` (`@cgw/api`) | The API client: `schema.ts` generated from `server/openapi/v1.json`, openapi-fetch, cookie with antiforgery header (web) or bearer (desktop) |
-| `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison. `app.html`: the whole app over a seeded 10,000-page store, for `bench/phase1.mjs` |
+| `bench/editor` (`@cgw/bench-editor`) | Phase 0's harnesses on the product packages: S1 fuzz, S2 gate, S3 corpus, browser checklist, budgets, hostile content; S1's rejected schema variants kept for comparison. `app.html`: the whole app over a seeded 10,000-page store, for `bench/phase1.mjs`. `database.html`: the database views over an in-memory host and up to 50,000 generated rows (the URL picks rows, language, theme, view) |
 | `bench/ydoc-dotnet`, `bench/sequence-dotnet` | .NET 10 harnesses: `cgw-ydoc` by P/Invoke (S3); 50 writers on SQL Server (S8) |
 | `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP |
 | `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
@@ -127,6 +128,8 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `SIM_SEEDS=60 SIM_STEPS=200 pnpm exec vitest run packages/doc/src/sync-sim` | The convergence simulator at size (CI runs 4 seeds of 40 rounds); `SIM_SEED` replays one |
 | `node scripts/macos-build.mjs` / `node scripts/macos-acceptance.mjs` | On a Mac (the `macos.yml` runner): the universal app, signed when the `APPLE_*` variables are set; the acceptance run through the test-only bridge (`bench/results/macos-acceptance.json`) |
 | `S1_OPS=10000 S1_SEEDS=3 S1_COMPARE=1 pnpm exec vitest run bench/editor/src/s1-fuzz.test.ts` | The full S1 fuzz, with the rejected configurations for comparison |
+| `DB_VECTORS_WRITE=1 pnpm exec vitest run packages/workspace/src/db/vectors.test.ts` | Rewrites `packages/workspace/vectors/db-*.json` from the hand-written cases in `db/vectors/*.cases.ts` (then Prettier on them); the server's `DatabaseVectorTests` read the same files |
+| `PHASE4_BENCH=1 dotnet test -c Release --solution server/Cgw.Server.slnx -- --filter-class Cgw.Tests.Phase4Bench` | The server's database budgets at 50,000 rows (`PHASE4_ROWS`, `PHASE4_QUERY_RUNS`), to `bench/results/phase4-server.json` |
 
 ## Related repos on this machine
 
@@ -285,3 +288,56 @@ Added as they are found, grouped by phase.
   once; the web kill tests end the whole tree (`--kill tree`), as a crash of the browser does.
 - Desktop runs going at once must not share a `CGW_KEYCHAIN_SERVICE`: each rolls the other's
   refresh token and the other comes back signed out. Every harness names its own.
+
+### Phase 4
+
+- The file-writing tool writes `\uXXXX` escapes of space and format characters (U+00A0, U+200B to
+  U+200F, U+2028/9, U+202A to U+202E, U+2066 to U+2069, U+FEFF) as the characters themselves: in C#
+  a raw U+2028 in a literal breaks the line and does not compile, and invisible ones cannot be
+  reviewed. Scan new sources for categories Cc, Cf, Zs, Zl, Zp and write escapes with the edit tool.
+- C# ports of the database rules must not use `Trim()` (it also removes U+0085 and keeps U+FEFF),
+  `Math.Round` (banker's), `double.ToString()` (not JavaScript's `String(n)`) or `DateTime` for
+  years outside 1 to 9999; the vectors name the exact behaviour. A class named `Convert` hides
+  `System.Convert` in its namespace. `JsonValue.Create(int).TryGetValue<double>` is false: compare
+  JSON as `JsonElement`s.
+- Hand-computed float expectations need checking in Node first: `2.675 * 100` is exactly 267.5 in
+  doubles, so `round(2.675, 2)` is 2.68. `x` and `y` are checkbox words in CSV inference.
+- Set-based writes go through `OPENJSON(@json) WITH (...)` with hex ids
+  (`CONVERT(binary(16), x, 2)`): EF's per-entity inserts ran at about 1,000 rows a second.
+  `Guid.CreateVersion7()` has no order within one millisecond. EF Core cannot filter on a
+  positional record it projected to: filter before `Select`.
+- A lazy cache filled after it is assigned breaks under PLINQ: build it, then publish it. Release
+  builds' first queries run unoptimised code (tiered JIT): warm up before measuring.
+- A refused operation's answer carries its own entity only, while the planner may have changed
+  others with it (reverse relations, converted rows, reverse properties): the engine fetches those
+  again. A trash of a database page sends every row through the feed, so a test of a refusal on a
+  trashed database passes without that: trash the row itself.
+- `readMirror` answers gain keys with a schema (Phase 4: `databases`, `views`): a migration test
+  comparing an old release's answers exactly must strip them and check they are empty.
+- The web build (`tsc --noEmit && vite build`) fails on any package's type error. While other work
+  is half done, a release app for the kill tests: `pnpm --filter @cgw/web exec vite build`, then
+  `pnpm exec node scripts/third-party-notices.mjs`, then `pnpm --filter @cgw/desktop build`.
+- A package's `tsc` includes `@cgw/workspace`'s source, so a half-done file there fails every
+  package that imports it: read the errors by path. `pnpm exec prettier --write <folder>` formats
+  every file in it: pass the file list.
+- Tiptap's `renderText` does not become ProseMirror's `leafText`: set `leafText` through
+  `extendNodeSchema`. ProseMirror keeps a child node view when only its block's attributes change,
+  so a view that needs its block's id must check it itself.
+- `IntersectionObserver` margins work only with the scrolling element as its root. jsdom has no
+  `IntersectionObserver` or `Range.getClientRects`, and refuses Node's own `Event` in
+  `dispatchEvent` (`packages/database/src/testing/dom.ts` installs jsdom's). Vitest collects only
+  `*.test.ts`: component tests use `createElement`, not JSX.
+- `CgFlyout` with an element anchor watches the whole document while mounted, even closed: mount
+  it only while open. `CgButton appearance="soft"` with no intent draws a nearly invisible label:
+  use `ghost` or `outline`, or give it an intent.
+- `›` and `‹` are bidi-mirrored characters: in RTL they are drawn the other way already, so never
+  flip them with `scaleX(-1)`. Read the drawing direction from `closest('[dir]')`, as the library
+  does. `dir="auto"` on a flex container aligns the whole row by its text: put it on the text span.
+- Virtualised rows keyed by row id rebuild every row on a scroll jump; keyed by slot they are
+  reused, but the row being edited needs a stable key or its uncontrolled editor loses what was
+  typed. A synthetic `stopPropagation` stops the native event too.
+- The first drag in a fresh Chrome has one frame of about 67 ms with no script, style or layout in
+  it: warm up before measuring a drag budget. Playwright drives the board and calendar drags with
+  `page.mouse`, as the block handle.
+- `pnpm exec` in pnpm 12 first checks the lockfile against the supply-chain policy over the network
+  (about a minute here); `npx vitest run …` skips it for quick runs.

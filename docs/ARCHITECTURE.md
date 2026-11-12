@@ -8,11 +8,12 @@ This document says what the parts are and how data moves between them. Why each 
 is in `DECISIONS.md`. The stored shapes are in `DATA_MODEL.md`, sync in `SYNC_DESIGN.md`, and the
 Sheet and ERP contracts in `INTEGRATIONS.md`.
 
-Status: Phases 0 to 2 are built: the local-first editor and page tree (Phase 1), and the server,
-accounts, sync while online, sharing, server search and history (Phase 2). What exists is listed
-in `CLAUDE.md`; later phases' parts are proposals. Spike results are in `DECISIONS.md`
-(2026-11-11: Phase 0 results); Phase 2's answers and defaults under 2026-11-12. Deployment is in
-`OPERATIONS.md`.
+Status: Phases 0 to 4 are built: the local-first editor and page tree (Phase 1); the server,
+accounts, sync while online, sharing, server search and history (Phase 2); offline, conflicts,
+migrations and the Mac app (Phase 3); workspace databases and their views (Phase 4). What exists
+is listed in `CLAUDE.md`; later phases' parts are proposals. Spike results are in `DECISIONS.md`
+(2026-11-11: Phase 0 results); each phase's answers and defaults under its own date. Deployment is
+in `OPERATIONS.md`.
 
 ## What already exists in the Cash Gear ecosystem
 
@@ -135,15 +136,19 @@ flowchart TB
   UI["@cashgear/ui<br/>(pinned git dependency)"]
   Shell["shell<br/>app frame, sidebar, routing, search UI, settings, theme, i18n, platform interface"]
   Editor["editor<br/>Tiptap extensions, node views, slash menu, bubble toolbar, block handle"]
+  Database["database<br/>table, board, list, calendar, gallery; cells, property and filter editors"]
   Doc["doc<br/>schema, block-id plugin, Yjs binding seam, text extraction, migrations"]
-  Workspace["workspace<br/>page tree, order keys, operations, outbox, sync engine, LocalStore interface"]
+  Workspace["workspace<br/>page tree, order keys, operations, outbox, sync engine, LocalStore interface, database rules"]
   StoreWeb["store-web<br/>IndexedDB"]
   StoreDesk["desktop store<br/>Tauri commands → cgw-store (SQLite)"]
   Api["api<br/>generated client"]
 
   Shell --> UI
   Editor --> UI
+  Database --> UI
   Shell --> Editor
+  Shell --> Database
+  Database --> Workspace
   Shell --> Workspace
   Editor --> Doc
   Doc --> Workspace
@@ -158,6 +163,11 @@ Dependency rules, enforced by lint:
 - `workspace` knows nothing about ProseMirror or Tiptap. It stores and moves opaque Yjs bytes.
   This is what keeps the page hierarchy independent of the editor.
 - `editor` knows nothing about storage or the network. It is given a `Y.Doc` and callbacks.
+- `database` (Phase 4) knows nothing about storage or the network either: it is given a
+  `DatabaseHost` (records, a live row source per view, operations, people, assets), which the shell
+  implements over the session, the local store and the sync engine. The editor knows nothing about
+  databases: a `databaseView` block is a frame the shell mounts the views into
+  (`EditorHost.databases`).
 - Only `shell` knows which platform it runs on, through the platform interface.
 
 ### Proposed repository layout
@@ -174,6 +184,7 @@ Package level only. Files inside are decided by the phase that creates them.
 | `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB | 1 |
 | `packages/shell` (`@cgw/shell`) | App frame and everything around the editor | 1 |
 | `packages/api` (`@cgw/api`) | Client generated from the server's OpenAPI document | 2 |
+| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost` | 4 |
 | `packages/erp` (`@cgw/erp`) | ERP connector client | 5 |
 | `crates/cgw-store` | `LocalStore` on SQLite, with FTS5 | 1 |
 | `crates/cgw-native` | Desktop helpers without Tauri: deep links read into routes, safe file names; the keychain in Phase 2 | 1 |
@@ -229,7 +240,9 @@ the API: the typed client (`@cgw/api`) authenticated by the platform's `auth`, t
   bookmarks, child pages and tables (Phase 1: each is small, and the editor needs no React
   renderer). The menus, toolbars and table controls drawn over the editor are React. Embeds
   (Phases 4 and 5) may use React node views; heavy ones mount when scrolled near and unmount when
-  far.
+  far. As built in Phase 4, the database block is a plain DOM frame: it mounts the host's React
+  view within 800 px of the scrolling pane, unmounts it beyond 2,400 px, and mounts again only when
+  its database, view, block id or editability changes, never per transaction.
 - **Slash menu.** Typing `/` opens a command menu at the caret, filtered as the user types, in
   the interface language, with keywords in both languages.
 - **Markdown shortcuts.** Input rules: `#`, `##`, `###`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`,
@@ -276,7 +289,11 @@ One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
 | Worker | Compaction, snapshots, validation of updates (on a loop of its own), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports | Serves requests |
 
 Modules, each with its own folder, services and tests: Identity, Workspaces, Pages, Documents,
-Assets, Search, Sharing, Sync, Audit, and later Databases, Workbooks, ErpLinks, Realtime, Ai.
+Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), and later Workbooks, ErpLinks,
+Realtime, Ai. The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
+(coercion, conversion, queries, formulas, rollups, CSV) held to the TypeScript by shared vectors,
+the operations on databases, views and rows, and the query engine: a database's rows cached in
+memory per database and rows version, evaluated by the ported `queryRows`, keyset paged.
 
 Conventions:
 
@@ -447,6 +464,11 @@ Targets, validated in Phase 0 and then gated in CI.
 | Edit durable locally | ≤ 1 s after the last key | Kill test |
 | Push round trip, one update | ≤ 200 ms at the server, p95 | Server timing under load |
 | Initial JavaScript, gzip | ≤ 350 kB before the editor loads; the editor in its own chunk | Build report, gated |
+| Database table: first rows of a 50,000-row database (Phase 4) | ≤ 500 ms | From opening the view to its first rows painted |
+| Database table: scrolling 50,000 rows | 60 frames a second | Frame times while scrolling, virtualised rows |
+| Database query on the server, 50,000 rows, one filter and one sort, p95 | ≤ 300 ms | Server timing, in process |
+| Board drag | ≤ 16 ms a frame | Frame times while a card is dragged |
+| Database cell edit | ≤ 16 ms to the next frame; durable ≤ 1 s | From the commit to the next frame; to the store |
 
 How the budgets are met:
 

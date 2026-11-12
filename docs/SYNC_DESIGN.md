@@ -79,6 +79,13 @@ interface LocalStore {
   repairState(pageId: Id): Promise<RepairState | null>;
   setRepairState(state: RepairState): Promise<void>;
 
+  // Databases (store schema 4, Phase 4); database and view records come with readMirror
+  readRows(databaseId: Id): Promise<RowRecord[]>;         // rows this device holds, trashed and templates too
+  trashedRows(workspaceId: Id): Promise<RowRecord[]>;     // rows that are their own trash root
+  dbHold(databaseId: Id): Promise<DbHold | null>;
+  dbHolds(workspaceId: Id): Promise<DbHold[]>;
+  holdDatabase(hold: DbHold): Promise<void>;              // full or partial; the engine fetches
+
   // Housekeeping
   purgeTrash(workspaceId: Id, before: string): Promise<Id[]>;
   schemaVersion(): Promise<number>;
@@ -86,8 +93,8 @@ interface LocalStore {
 }
 ```
 
-As built in Phase 1 and extended in Phases 2 and 3 (`packages/workspace/src/types.ts`, store
-schema 3).
+As built in Phase 1 and extended in Phases 2 to 4 (`packages/workspace/src/types.ts`, store
+schema 4).
 Both stores run the same operation planner (`planOps`), which holds the tree rules: IndexedDB
 inside its own transaction, the desktop against its in-memory mirror before it sends the plan to
 SQLite as one transaction. What the server says is planned by shared code too (`remote.ts`):
@@ -97,7 +104,7 @@ server has answered them; deletes always apply. A compaction in a synced workspa
 updates the server does not hold yet, so they are still pushed.
 
 Rules for both implementations, checked by one conformance suite run against each (51 cases on
-memory, IndexedDB and SQLite in Phase 3):
+memory, IndexedDB and SQLite in Phase 3; 73 in Phase 4):
 
 - Every method is one atomic transaction.
 - **Nothing unsent is dropped by the server's word.** When what the server says (`applyRemote`,
@@ -108,6 +115,9 @@ memory, IndexedDB and SQLite in Phase 3):
   `setAsideDoc` is the same step on the engine's word: it copies the log and takes the unsent
   updates out of it, and does nothing when nothing is unsent.
 - Removing a page also removes its pin and repair state; quarantine entries outlive their page.
+- Removing a database page removes its database record, views, hold and rows, each row as a removed
+  page (Phase 4). Rows count as pages for documents. A row upsert from the server is written only
+  for a database this device holds; database and view records always, as pages are.
 - `applyLocalOp` changes the mirror and adds to the outbox together, or does neither.
 - Bytes cross the Tauri boundary as raw binary, never base64 in JSON.
 - The store never runs SQL or a query given by the webview.
@@ -121,10 +131,11 @@ memory, IndexedDB and SQLite in Phase 3):
 - Older store: migrations run in order, inside a transaction, after a copy of the store is made
   (desktop: the SQLite file; browser: not possible, so migrations there must be additive). As
   built: SQLite checkpoints its WAL, copies the file to `workspace.v{n}.db` (synced, then renamed
-  into place), then runs every step from version n to 3 in one transaction; a migration that
+  into place), then runs every step from version n to 4 in one transaction; a migration that
   fails leaves the file as it was, and the next start tries again. IndexedDB's upgrade
   transaction only adds object stores and indexes. Both are tested from stores of every earlier
-  version (for SQLite, files written by the released v0.1.0 and v0.2.0 code).
+  version (for SQLite, files written by the released v0.1.0, v0.2.0 and v0.3.0 code), and the
+  SQLite migration is killed at every moment from each (`scripts/kill-migration.mjs`).
 - **Newer store than the app** (the user installed an older build): the app refuses to open the
   store and asks the user to update. It never wipes, because the outbox may hold unsynced work.
 
@@ -393,6 +404,42 @@ operations it read before it read the workspace give way to its creates (later o
 and only the updates it merged give way to the merged one (later ones stay after it; a local
 compaction in between makes it stop and start again).
 
+**Databases** (Phase 4): database, view and row records are metadata on this channel; their rules
+are in `DATA_MODEL.md` (Databases).
+
+- **Operations**: `page.create` of kind `database` (with its first properties) or `row` (its
+  database as parent, with its first values), `db.update` (property defs merged per property, with
+  `order`), `view.upsert`, `view.delete`, `row.update` (values merged per property, null clears),
+  and the page operations on rows (title, icon, cover, reorder among the database's rows, trash,
+  restore, delete). No `baseVersion` on the database ones: the last to reach the server wins, per
+  property. The answers carry `entityType` `database`, `view` or `row` (a database's create carries
+  its page and its record).
+- **Tree and feed**: the tree holds every database and view record the account may see and never a
+  row. The feed carries `database`, `view` and `row` changes; every change to a row (its values, its
+  page, its document's head) is a `row` change, never a `page` one, and a row made or removed also
+  writes a `database` change (its `rowCount`). A `database` delete is carried by its page's delete,
+  which removes everything it holds. Clients from before Phase 4 ignore entity types they do not
+  know, so they never see rows; a page holding a database view is document schema 3, which they
+  open read-only.
+- **Holds**: a device keeps a database's rows only once it holds it: a view showing it, a pin over
+  it, or its making on the device. A database of at most 5,000 rows is held `full`: every row is
+  fetched (`GET /databases/{id}/rows?after=&limit=`, by row id, 1,000 a request, at most 4 requests a
+  pass and the next pass 100 ms later while some remain; each page and the hold's place written in
+  one transaction), the feed keeps them fresh, and its views are queried on the device. A larger one
+  is held `partial`: its views ask the server (`POST /databases/{id}/query`, keyset paged), whose
+  rows are kept as a cache; offline it shows the rows on the device, and says so. A hold moves
+  between full and partial as `rowCount` crosses the limit. An `access` event marks the holds under
+  its root incomplete, and a feed past its retention marks all, so they are fetched again; a fetched
+  page also removes held rows the server no longer has.
+- **Rows' documents** are pages' documents: pushed, pulled when their head moves, set aside on 410,
+  as any page's. Pins hold the databases under them, not every row's document.
+- **Refusals**: a refused database, view or row operation takes the server's entity, as a page's
+  does. What the local planner changed beyond that entity (reverse relation values, rows converted by
+  a type change, a reverse property added to another database) is taken back by fetching what it
+  reached again. A record the feed brings while an operation on its id waits whose answer carries
+  something else (a page operation on a database's page, a visit, a favourite) is kept and taken
+  once nothing waits on it. The convergence simulator found both.
+
 **Access changes from moves** (Phase 2): the server writes an `access` change when a page with
 pages under it moves, when a move or a fallback (a restore or create whose parent has gone) makes
 a page `Restricted` to keep its access, and when pages cross between a shared and a private
@@ -483,6 +530,12 @@ repair path above.
 | A page is created under a parent that was deleted | The page is created at the top of its section, and the user is told |
 | Database row: two edits to different properties | Both stand |
 | Database row: two edits to the same property | The last to reach the server wins; the property's version rises |
+| A property's type changed while another device edits it offline | The edit lands converted to the new type (every write is coerced); what cannot be converted is cleared |
+| A property deleted while another device edits it | The edit is kept on the row, hidden; restoring the property shows it |
+| A select option deleted while another device sets it | The value is kept and reads as empty (an `isEmpty` filter matches it) |
+| Two people edit relations to the same rows | Each edit adds and removes its own ids on both sides, in the order the server receives them |
+| A row made offline in a database trashed elsewhere | The row is made in the trash with its database; restoring the database brings it back |
+| A view edited on two devices | The last to reach the server wins, whole view |
 
 Client clocks are never compared. "Last" always means the order the server received them.
 
@@ -623,7 +676,8 @@ not depend on which.
 | --- | --- |
 | `LocalStore` conformance suite, run on IndexedDB and SQLite | Both stores behave the same |
 | Kill the app at random points during typing, 1,000 runs | Reopened document equals the keystrokes whose save returned |
-| Two and three simulated clients, random operations, random network order, loss and duplication | All clients converge to the same document and the same tree |
+| Two and three simulated clients, random operations, random network order, loss and duplication | All clients converge to the same document and the same tree, and from Phase 4 the same database records, views and rows (values and per-property versions) |
+| Filter, sort, group, formula, rollup, conversion and CSV vectors, run in TypeScript and C# | The device and the server give the same rows and values |
 | Block-id fuzz: 10,000 operations including moves, splits, pastes, offline merges | No duplicate ids after quiescence; ids stable across moves |
 | 50 concurrent writers on one page | No client misses an update with repair disabled |
 | Every row of the conflict tables, scripted | The stated rule, including the notice the user sees |

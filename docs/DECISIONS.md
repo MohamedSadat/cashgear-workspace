@@ -777,3 +777,67 @@ speed up validation first, then tag; if that cannot hold CI under 5 s, ask again
 | Property types in 0.4.0 | The plan's thirteen (text, number, date, checkbox, select, multi-select, status, person, URL and files in M4.2; formula, relation and rollup in M4.6), plus email and phone (text with a check and a link), and four read-only types taken from the row's page record: created time, created by, last edited time, last edited by. The automatic four store nothing; they have filter and sort rules like the rest |
 | The row limit for local filtering | 5,000 rows. At or below it a device keeps every row of the database and filters, sorts and groups it locally, offline included; above it the server answers queries, keyset paged, and offline a database shows only the rows this device has already fetched, and says so |
 | The table view and `CgGrid` | Our own virtualised table in the new `@cgw/database` package, using the library's menus, flyouts, tag box, date editor and check box. `CgGrid` was assessed and not used: it turns row virtualisation off while a cell is edited and while rows are grouped (a 50,000-row table would draw every row), filters and sorts by its own engine where the plan needs one set of rules shared with the server, and has English-only labels. Generic pieces the views need that the library lacks are local stand-ins listed in `PROGRESS.md` for Track U, as in Phases 1 to 3; `CashGear.React.UI` is not changed |
+
+### Defaults picked (say if any should change)
+
+M4.1, the model and sync:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Where rows live | A row is a page of kind `row` under its database page, with a `DatabaseRows` record; rows are never in the tree, the sidebar, `readMirror` or `PageAncestors`; a row's access is its database's (no access list, no share link, no `Restricted`); nothing sits under a row, only rows under a database | One access check per database, not per row; a 50,000-row import or move touches no closure rows; v0.3.0 clients never see rows |
+| Rows in the feed | Every change to a row (values, page, document head) is a `row` change; a row made or removed also writes a `database` change (`rowCount`); the server logs them as page changes and the feed sends them as rows | One mechanism, as for pages; the worker's head moves needed no change; old clients ignore entity types they do not know |
+| Holds | A device keeps a database's rows only once it holds it (a view showing it, a pin over it, made on the device); full up to 5,000 rows (fetched 1,000 a request, 4 a pass, then kept fresh by the feed), else partial (the server's query results as a cache); an access event or a feed past its retention fetches holds again | As documents: held when opened or pinned, so a workspace with big databases never downloads rows nobody looks at |
+| Values | Numbers are IEEE doubles (not decimal strings); dates `YYYY-MM-DD` or UTC instants with an optional end; an empty value is absent; a relation keeps its first 1,000 ids, on both sides | Both evaluators agree to the bit; `DATA_MODEL.md` said decimal strings before and says doubles now |
+| Property and option ids | 8 base-62 characters; options a type change or an import makes are derived from SHA-256 of `databaseId NUL propertyId NUL name` | Every device and the server make the same options for the same conversion |
+| Deleting | A deleted property keeps its values and can be restored; a deleted option leaves values that read as empty; neither rewrites a row | "Deleting a property or an option never corrupts rows" |
+| A relation that no longer pairs | Changed to another type or pointed elsewhere: the reverse property becomes one-way and keeps its values | Nothing is lost, and nothing points at a property that is gone |
+| Type changes from the server | Convert every held row, those with a local edit waiting too | "Applied to every row a device holds" |
+| Refused operations | Take the server's entity, and fetch again what the planner changed beyond it (reverse relations, converted rows, reverse properties); a feed record waiting behind an operation whose answer carries another record is taken once nothing waits | Found by the convergence simulator (two seeds of 30 failed without it); the second also fixes a Phase 3 case: a page renamed elsewhere stayed stale while a visit to it waited |
+| A row made offline in a database trashed elsewhere | Made, in the trash with its database | Nothing typed is lost |
+| Upload of a local workspace | Databases, views and rows go up with the tree; relations, rollups and formulas, and rows' relation values, once every database and row exists | A relation may name what the server has not made yet |
+| Refusal codes | A row outside a database, a page under a database or a row, a row moved out: `invalid`; a change to anything trashed: `page.trashed`; a row's access list or share link: 400 `request.invalid` | The planner's codes, and the HTTP routes' |
+| Document schema 3 | `databaseView` (`databaseId`, `viewId`) and `dateMention` (`date`, `end`); the migration 2 → 3 only raises the version | One version for both new nodes |
+| The database block | A plain DOM frame, mounted within 800 px of the scrolling pane and unmounted beyond 2,400 px with its last height kept; mounted again only when its database, view, block id or editability changes | D26; a fast scroll past mounts nothing |
+| Dates in a page | The "@" menu: Today, Tomorrow, Pick a date (inserts today, then opens the picker); the device's calendar dates; drawn with `Intl` in the interface language | What a person means by today |
+| The views' lint rule | `packages/database` imports neither the shell, the editor, the stores nor `@cgw/api`, and touches no storage or network global | The editor's rule: the views are given a host |
+
+M4.2 to M4.5 and M4.7, the views:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Cell edits | Written on commit (Enter, Tab, blur): one `row.update`, the title one `page.update`; plain uncontrolled inputs | Nothing re-renders per key (Phase 1); commit to the next frame p95 14.7 ms at 50,000 rows |
+| Table geometry | Fixed row height (wrap: three lines), slot-keyed rows, columns outside the window not drawn, a sticky title column; widths by type, 60 to 1,200 px | 60 frames a second steady at 50,000 rows |
+| A new row in a view | Takes its group's value and the filter's simple `and` conditions; its title is typed before it is made | It shows where it was made, and an abandoned New leaves no empty row |
+| Links in cells | URL `http` and `https` only (a bare host gets `https://`), email `mailto:`, phone `tel:` with digits; drawn left to right | The editor's scheme rule |
+| Date-times | Entered and shown in the person's time zone, stored as UTC instants; "Include the time" is the property's setting | One instant for everyone |
+| A board drop | Into another column: one `row.update` of the group's property, after a `page.move` when the place needs a new order key; within a column one `page.move`; with a sort on the view only the column changes | It lands where it was dropped, and a sort keeps its order |
+| Keys on the board and calendar | Board: Space picks up, the arrows move, Space or Enter drops, Escape cancels; calendar: Alt and the arrows move a row by a day or a week; a press becomes a drag after 4 px | Everything by keyboard |
+| New board, list, calendar and gallery views | Show only the title until properties are shown | Twenty properties would make cards hundreds of pixels tall |
+| The calendar | Loads the view's rows up to 5,000 and says so past that; the week starts by the locale (Saturday in Arabic); our own month grid. `CgScheduler` was assessed (README and API, not measured) and not used: it ignores a date-time with no end, its all-day end is exclusive where a date value's end is inclusive, and it brings its own editor, toolbar and keyboard model. The month grid is a stand-in listed for Track U | As `CgGrid` for the table; the view is self-contained, so a swap later is cheap |
+| Templates | Built in: Tasks, Projects, Reading list, Meeting notes and Contacts, in both languages, with views and sample rows around the person's today; row templates are rows with `isTemplate` | Something to start from in either language |
+| CSV | Import on the device up to 5,000 rows (400 operations an apply), else the server's route; export by the device when it holds every row of the view, else the server's route; a text cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return is exported with a leading `'`, which import removes | A spreadsheet never runs a cell as a formula, and a round trip changes nothing |
+
+M4.3 and M4.6, the server:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The query engine | In memory: a database's queryable rows cached per database and `RowsVersion` (300,000 rows across databases, least recently used first, `Databases__CacheRows`), refreshed by reading only rows whose `Seq` moved; evaluated by the C# port of `queryRows`, in parallel above 4,000 rows; results kept briefly for paging; a keyset cursor. No typed value table | 270 ms p95 at 50,000 rows with a filter and a sort (budget 300); what runs is the port the vectors check, not a third translation into SQL |
+| Recompute | Formula and rollup results inline in the operation's transaction (the row, and up to 1,000 rows relating to it; every row after a formula change, up to 5,000), else `ComputePending` and the worker's `recompute` job every 2 s | Edits show their results at once; big databases catch up |
+| Limits | 500 properties and 1,000,000 characters of them; a view's config 100,000; queries 100 rows (500 at most); the rows route 500 (1,000); imports 50,000 rows and 20 MB of CSV, 1,000 rows a transaction, 20 a minute a person | Bounded requests and transactions |
+| The formula language | Function names case-sensitive; `mod` divisor-signed and `%` dividend-signed; `round` half away from zero; rollup percentages as fractions; an empty expression is empty; a formula reading a broken one gives its error | One stated behaviour for both evaluators |
+| The workspace export | Format version 2: `kind` on every page entry, rows with `databaseId` and `values`, `databases` (`{ id, properties, views }`, views in order-key order), and each database's `<title>.csv` beside its files (every property not deleted, title first; trashed rows left out) | The zip holds databases, and import reads them back from the JSON |
+| Server search and backlinks | A date mention's text is in the search text (`cgw-ydoc`, as `text.ts`); a page holding a database block links to that database | Dates are found; a database lists where it is shown |
+
+The app (the shell over the views):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Where a view's rows come from | Every row on the device (a local workspace, or a full and complete hold): queried there, formulas and rollups computed there; else, online, the server's query in pages of 100, rows made since the view opened that its filter takes added at the end; else the rows on the device, marked as such | Offline works for every database a device holds; the feed keeps copies fresh, so remote changes need no refetch |
+| Holds started by a view | Its database and the databases its relations point into | Titles of related rows and rollups need them |
+| People | A synced workspace's members, kept per workspace in prefs for offline; the person alone on a local workspace | Person cells and filters work offline |
+| A row's body | Made on its first open by someone who may edit it, when the server holds none; a row from a template copies the template's body | A reader writes nothing (Phase 3's rule) |
+| New database | Offered wherever New page is (the section's ▦, a page's menu, the palette), from `TemplatePicker` (Empty adds three rows), and "Import a CSV file as a new database" beside it; the editor's "Database" opens the same picker | One way to make a database everywhere |
+| A database's page | Up to 1,280 px wide; its title and icon as a page's; the view last chosen on this device; a block keeps its `viewId`, written when an editor picks another tab | Tables need the width; a block shows what its page shows |
+| The glyph | `▦` where a database has no icon; rows keep a page's | The table view's glyph |
+| A server import | Sends the outbox until nothing waits on that database (at most 8 passes), then imports | The database must be on the server first |
+| The workspace export on the device | Format version 2, as the server's; a database held partially exports the rows the device has; row templates in the JSON, not the CSV | A backup keeps what a person made; the CSV is a view of the rows |

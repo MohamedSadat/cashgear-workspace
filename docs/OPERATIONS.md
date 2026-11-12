@@ -98,7 +98,8 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `OpenIddict__SigningCertificateThumbprint`, `OpenIddict__EncryptionCertificateThumbprint` | Certificates in `LocalMachine\My`; the API refuses to issue tokens without them in production |
 | `DataProtection__Dpapi` | `true`: the cookie and token keys (kept in the database) are encrypted with the machine's DPAPI |
 | `Smtp__Host`, `__Port`, `__User`, `__Password`, `__From` | Mail (Q8); `Smtp__PickupDirectory` writes mail to a folder instead, for development and tests only |
-| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview` | Requests per minute (DECISIONS.md, defaults); leave unset in production |
+| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person); leave unset in production |
+| `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
 | `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
 | `Logging__Format` | `json` for structured logs with the correlation id in every line |
 | `Logging__LogLevel__Microsoft.AspNetCore` | `Warning` (`install.ps1` sets it), so ASP.NET Core's request lines, which hold the query string, are not logged |
@@ -123,6 +124,12 @@ IMMEDIATE`, outside a transaction): the migration's login needs `ALTER` on the d
 transactions open on the old version are rolled back once (the clients retry them). Azure SQL
 has the setting on already. To undo it, `ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT OFF`;
 the change feed's ordering does not depend on it.
+
+Version 0.4.0's migration (`Phase4Databases`) adds the `Databases`, `DatabaseViews` and
+`DatabaseRows` tables and a filtered index on `Pages`; it runs in a transaction like the others. The
+worker gains the `recompute` job (formula and rollup results of databases marked pending, every 2 s).
+A database's first query on an API instance reads all its rows into memory (about 2 s for 50,000
+rows on the reference machine); later ones read only rows written since.
 
 ## Backups and the restore drill
 
@@ -151,6 +158,7 @@ the change feed's ordering does not depend on it.
 | Rate limits | 429 answers with `limit.rate` in the logs | A client in a loop |
 | Storage used | `Workspaces.StorageUsedBytes` (Q10: recorded, not enforced) | — |
 | Retention | `JobStates` for `feedRetention` and `trashRetention` (every 10 minutes); `AuditLog` `page.purgedByRetention` | The change feed keeps 90 days and the trash 60 (DECISIONS.md, Phase 3); a device away longer than 90 days takes the whole tree when it returns (`410 feed.expired`) |
+| Database results | `JobStates` for `recompute`; `Databases.ComputePending` rows waiting | Formula and rollup results of big databases lag while it is behind; filters on them use the last results |
 | Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its
