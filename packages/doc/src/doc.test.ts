@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { fragmentToJSON, writeJSON, type DocJSON } from './binding';
 import { build, readableJSON, references, remapRefs, withNewIds } from './index';
-import { CONTENT, META, PageDocument, retryPending } from './document';
+import { CONTENT, META, PageDocument, newDocumentUpdate, retryPending } from './document';
+import { docCodec } from './codec';
 import { BLOCK_ID } from './ids';
 import { SCHEMA_VERSION, documentSchema, knownTypes, safeHref } from './schema';
 import { plainText, toMarkdown } from './text';
@@ -370,5 +371,53 @@ describe('Markdown in', () => {
     expect(looksLikeMarkdown('Just a sentence, with 2 * 3 in it.')).toBe(false);
     const ids = JSON.stringify(doc).match(/"id":"([0-9A-Za-z]{12})"/g) ?? [];
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('documents in sync (Phase 2)', () => {
+  it('writes as the session client id and leaves pulled updates out of the log', async () => {
+    const store = new MemoryStore();
+    const pageId = uuidv7();
+    await store.appendDocUpdates(pageId, [
+      { updateId: uuidv7(), data: newDocumentUpdate(pageId, undefined, 4242) },
+    ]);
+    expect(docCodec.clientIds((await store.loadDoc(pageId)).updates[0].data)).toEqual([4242]);
+
+    const page = await PageDocument.open(pageId, store, {
+      clientId: 5151,
+      maxDelayMs: 1,
+      idleMs: 1,
+    });
+    expect(page.doc.clientID).toBe(5151);
+    // Another device's edit, pulled: shown here, not saved or pushed again.
+    const peer = new Y.Doc();
+    peer.clientID = 6161;
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(page.doc));
+    const before = Y.encodeStateVector(peer);
+    peer.getMap(META).set('note', 'from a peer');
+    page.applyRemote([Y.encodeStateAsUpdate(peer, before)]);
+    expect(page.doc.getMap(META).get('note')).toBe('from a peer');
+    await page.flush();
+    const log = (await store.loadDoc(pageId)).updates;
+    expect(log.flatMap((u) => docCodec.clientIds(u.data))).not.toContain(6161);
+    await page.close();
+  });
+
+  it('merges updates and names the clients that wrote them', () => {
+    const a = new Y.Doc();
+    a.clientID = 11;
+    a.getText('t').insert(0, 'a');
+    const b = new Y.Doc();
+    b.clientID = 22;
+    b.getText('t').insert(0, 'b');
+    const merged = docCodec.merge([Y.encodeStateAsUpdate(a), Y.encodeStateAsUpdate(b)]);
+    expect(docCodec.clientIds(merged).sort()).toEqual([11, 22]);
+    // A deletion of someone else's content does not write as them.
+    const c = new Y.Doc();
+    c.clientID = 33;
+    Y.applyUpdate(c, Y.encodeStateAsUpdate(a));
+    const sv = Y.encodeStateVector(c);
+    c.getText('t').delete(0, 1);
+    expect(docCodec.clientIds(Y.encodeStateAsUpdate(c, sv))).toEqual([]);
   });
 });

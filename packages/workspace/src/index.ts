@@ -7,3 +7,12 @@ export { emptyPlan, planRemote, planSettle, uploadOps, type RemoteReader } from 
 export { MemoryStore } from './memory';
 export { normaliseText, searchTerms, snippet } from './search';
 export { newOp } from './build';
+export {
+  SyncEngine,
+  batchOf,
+  type SyncEvent,
+  type SyncState,
+  type SyncStatus,
+} from './sync/engine';
+export { OfflineError, SyncHttpError, type Account, type DocCodec, type SyncApi } from './sync/api';
+export { httpSyncApi, fromBase64, toBase64 } from './sync/http';

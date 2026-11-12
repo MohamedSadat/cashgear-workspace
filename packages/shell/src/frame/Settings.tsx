@@ -6,6 +6,7 @@ import type { ThemePreference } from '../theme';
 import { DataPanel } from '../exchange/DataPanel';
 import type { WorkspaceSession } from '../session';
 import { UpdateCheck, type UpdatesState } from './Updates';
+import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 
 export function Settings({
   onLanguage,
@@ -19,6 +20,7 @@ export function Settings({
   const { t, i18n } = useTranslation();
   const { theme, platform } = useShell();
   const preference = useThemePreference();
+  const cloud = useCloud();
   return (
     <section className="cgw-settings" aria-labelledby="cgw-settings-title">
       <h1 id="cgw-settings-title">{t('settings.title')}</h1>
@@ -44,6 +46,8 @@ export function Settings({
           label: <span lang={language}>{t(`language.${language}`)}</span>,
         }))}
       />
+      {cloud && <AccountSettings cloud={cloud} />}
+      {cloud && session.workspaceId && <MembersSettings cloud={cloud} session={session} />}
       {session.workspaceId && <DataPanel session={session} />}
       <h2>{t('settings.about')}</h2>
       <p data-testid="host-info">

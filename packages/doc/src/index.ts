@@ -26,6 +26,7 @@ export {
 export {
   CONTENT,
   LOAD,
+  REMOTE,
   META,
   PageDocument,
   documentVersion,
@@ -38,6 +39,7 @@ export {
   type SaveState,
 } from './document';
 export { plainText, toMarkdown, type TextContext } from './text';
+export { docCodec } from './codec';
 export * as build from './content';
 export { readableJSON, references, remapRefs, withNewIds, withoutIds } from './content';
 export { looksLikeMarkdown, parseInline, parseMarkdown } from './markdown';

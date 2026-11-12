@@ -16,6 +16,12 @@ const LOADING: PageDocState = { status: 'loading' };
  */
 export function usePageDoc(session: WorkspaceSession, pageId: string): PageDocState {
   const [loaded, setLoaded] = useState<{ pageId: string; state: PageDocState } | null>(null);
+  // A document the server replaced (a hard restore) is opened again.
+  const [generation, setGeneration] = useState(0);
+  useEffect(
+    () => session.onDocReset((reset) => reset === pageId && setGeneration((n) => n + 1)),
+    [session, pageId],
+  );
   useEffect(() => {
     let live = true;
     session.openDoc(pageId).then(
@@ -25,7 +31,7 @@ export function usePageDoc(session: WorkspaceSession, pageId: string): PageDocSt
     return () => {
       live = false;
     };
-  }, [session, pageId]);
+  }, [session, pageId, generation]);
   return loaded?.pageId === pageId ? loaded.state : LOADING;
 }
 

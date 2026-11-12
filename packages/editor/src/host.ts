@@ -30,6 +30,13 @@ export interface AssetInfo {
   contentType: string;
 }
 
+export interface LinkPreview {
+  title: string | null;
+  description: string | null;
+  siteName: string | null;
+  imageUrl: string | null;
+}
+
 export interface SlashItem {
   id: string;
   label: string;
@@ -77,6 +84,11 @@ export interface EditorHost {
   shortcut?: (chord: string) => string;
   /** Copies a link to a block of this page. */
   copyBlockLink?: (blockId: string) => void;
+  /**
+   * A bookmark's preview, fetched by the server behind its SSRF guard (Q13), or null when there
+   * is none (offline, local only, the page gave nothing). The image is an asset URL.
+   */
+  linkPreview?: (url: string) => Promise<LinkPreview | null>;
   openExternal?: (url: string) => void;
   onLinkRequest?: () => void;
 }

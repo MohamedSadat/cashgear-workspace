@@ -15,4 +15,4 @@ export {
   type BlockAction,
   type BlockActionName,
 } from './actions';
-export type { SlashItem } from './host';
+export type { LinkPreview, SlashItem } from './host';

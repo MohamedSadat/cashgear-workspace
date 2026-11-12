@@ -17,12 +17,13 @@ import { Frame } from './frame/Frame';
 import { Settings } from './frame/Settings';
 import { UpdateButton, useUpdates } from './frame/Updates';
 import { applyLanguage, createI18n, type Language } from './i18n';
-import type { WorkspacePlatform } from './platform';
+import { hasCloud, type WorkspacePlatform } from './platform';
 import { navigate, parseRoute, useHash } from './route';
 import { WorkspaceSession } from './session';
 import { Sidebar, useMirror } from './sidebar/Sidebar';
 import { Breadcrumbs } from './page/PageHeader';
-import { PageMenu } from './page/PageMenu';
+import { PageMenu, pageEvents } from './page/PageMenu';
+import { useAccount } from './cloud/CloudUi';
 import { Notice } from './Notice';
 import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
 // The palette loads with the frame: keys typed straight after Ctrl+K must reach its field.
@@ -30,11 +31,26 @@ import { Palette } from './search/Palette';
 import { ThemeController } from './theme';
 import { normaliseText } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
+import { Cloud } from './cloud/cloud';
+import {
+  AccountButton,
+  CloudContext,
+  InviteView,
+  SyncStatusLabel,
+  UploadBanner,
+  noticeKey,
+} from './cloud/CloudUi';
 
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
 // (ARCHITECTURE.md, Performance: Startup).
 const loadPageView = () => import('./page/PageView');
 const PageView = lazy(() => loadPageView().then((m) => ({ default: m.PageView })));
+const ShareDialog = lazy(() =>
+  import('./cloud/ShareDialog').then((m) => ({ default: m.ShareDialog })),
+);
+const SharedView = lazy(() =>
+  import('./cloud/SharedView').then((m) => ({ default: m.SharedView })),
+);
 
 export interface WorkspaceAppProps {
   platform: WorkspacePlatform;
@@ -52,6 +68,7 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
     [platform],
   );
   const [session, setSession] = useState<WorkspaceSession | null>(null);
+  const [cloud, setCloud] = useState<Cloud | null>(null);
   const [failed, setFailed] = useState<unknown>(null);
   useEffect(() => () => services.theme.dispose(), [services]);
   useEffect(() => {
@@ -59,19 +76,29 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
     let opened: WorkspaceSession | null = null;
     // The editor's chunk loads while the store opens, not after: the last page opens at start.
     void loadPageView().catch(() => undefined);
+    let connected: Cloud | null = null;
     platform
       .openStore()
       .then((store) => WorkspaceSession.start(store))
       .then(
         (started) => {
           opened = started;
-          if (live) setSession(started);
-          else void started.close();
+          if (!live) return void started.close();
+          setSession(started);
+          // The sync engine needs the document layer's codec, which loads with the editor.
+          if (!hasCloud(platform)) return;
+          void import('@cgw/doc').then(({ docCodec }) => {
+            if (!live) return;
+            connected = new Cloud(platform, started, docCodec);
+            setCloud(connected);
+            void connected.start();
+          });
         },
         (error: unknown) => live && setFailed(error),
       );
     return () => {
       live = false;
+      connected?.dispose();
       void opened?.close();
     };
   }, [platform]);
@@ -94,7 +121,9 @@ export function WorkspaceApp({ platform }: WorkspaceAppProps) {
   return (
     <I18nextProvider i18n={i18n}>
       <ShellContext.Provider value={services}>
-        {session ? <Workspace session={session} /> : <Starting failed={failed} />}
+        <CloudContext.Provider value={cloud}>
+          {session ? <Workspace session={session} cloud={cloud} /> : <Starting failed={failed} />}
+        </CloudContext.Provider>
       </ShellContext.Provider>
     </I18nextProvider>
   );
@@ -114,7 +143,7 @@ function Starting({ failed }: { failed: unknown }) {
   );
 }
 
-function Workspace({ session }: { session: WorkspaceSession }) {
+function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud | null }) {
   const { t, i18n } = useTranslation();
   const services = useShell();
   const route = parseRoute(useHash());
@@ -181,6 +210,21 @@ function Workspace({ session }: { session: WorkspaceSession }) {
   }, [session, visiting]);
 
   const [notice, setNotice] = useState<string | null>(null);
+  const account = useAccount(cloud);
+  const [sharing, setSharing] = useState<string | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => setSharing((event as CustomEvent<string>).detail);
+    pageEvents.addEventListener('share', open);
+    return () => pageEvents.removeEventListener('share', open);
+  }, []);
+  // What the sync engine has to say (a refused change, a page gone), in the interface language.
+  useEffect(
+    () =>
+      cloud?.onNotice((n) =>
+        setNotice(n.code === 'cloud.uploaded' ? t('cloud.uploaded') : t(noticeKey(n.code))),
+      ),
+    [cloud, t],
+  );
   const onError = useCallback(
     (error: unknown) => {
       const code = (error as { code?: string })?.code;
@@ -252,9 +296,30 @@ function Workspace({ session }: { session: WorkspaceSession }) {
     [services, t],
   );
 
-  // Settings stay reachable before a workspace exists (language and theme come first).
-  if (!session.workspaceId && route.kind !== 'settings')
-    return <FirstRun session={session} onCreated={() => rerender((n) => n + 1)} />;
+  // A page shared by link opens on its own, signed in or not.
+  if (route.kind === 'shared' && services.platform.apiBase)
+    return (
+      <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+        <SharedView
+          apiBase={services.platform.apiBase}
+          token={route.token}
+          pageId={route.pageId ?? null}
+        />
+      </Suspense>
+    );
+
+  // Settings and invitations stay reachable before a workspace exists.
+  if (!session.workspaceId && route.kind !== 'settings' && route.kind !== 'invite')
+    return (
+      <>
+        <FirstRun session={session} onCreated={() => rerender((n) => n + 1)} />
+        {cloud && (
+          <div className="cgw-firstrun-account">
+            <AccountButton cloud={cloud} />
+          </div>
+        )}
+      </>
+    );
 
   return (
     <Frame
@@ -266,7 +331,9 @@ function Workspace({ session }: { session: WorkspaceSession }) {
             onSearch={() => setPaletteOpen(true)}
             onError={onError}
           />
+          {cloud && <UploadBanner cloud={cloud} session={session} />}
           <div className="cgw-sidebar-footer">
+            {cloud && <AccountButton cloud={cloud} />}
             <CgButton
               appearance="ghost"
               icon="settings"
@@ -282,14 +349,33 @@ function Workspace({ session }: { session: WorkspaceSession }) {
         <>
           {page && !page.trashedAt && <Breadcrumbs session={session} page={page} />}
           <SaveStatus doc={route.kind === 'page' ? openDoc : null} />
-          {page && !page.trashedAt && <PageMenu session={session} page={page} onError={onError} />}
+          {cloud && <SyncStatusLabel cloud={cloud} session={session} />}
+          {page && !page.trashedAt && (
+            <PageMenu
+              session={session}
+              page={page}
+              onError={onError}
+              canShare={!!account && session.current?.localOnly === false}
+            />
+          )}
           <UpdateButton updates={updates} />
         </>
       }
     >
       {notice && <Notice text={notice} onClose={() => setNotice(null)} />}
+      {sharing && cloud && session.mirror.pages.get(sharing) && (
+        <Suspense fallback={null}>
+          <ShareDialog
+            cloud={cloud}
+            page={session.mirror.pages.get(sharing)!}
+            onClose={() => setSharing(null)}
+          />
+        </Suspense>
+      )}
       {paletteOpen && <Palette session={session} onClose={() => setPaletteOpen(false)} />}
-      {route.kind === 'settings' ? (
+      {route.kind === 'invite' && cloud ? (
+        <InviteView cloud={cloud} session={session} token={route.token} />
+      ) : route.kind === 'settings' ? (
         <Settings onLanguage={setLanguage} session={session} updates={updates} />
       ) : route.kind === 'trash' ? (
         <TrashView session={session} onError={onError} />

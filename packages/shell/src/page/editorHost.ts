@@ -60,8 +60,13 @@ const urls = new Map<Id, Promise<string | null>>();
 export function assetUrl(session: WorkspaceSession, assetId: Id): Promise<string | null> {
   let url = urls.get(assetId);
   if (!url) {
-    url = session.store.getAssetBytes(assetId).then((bytes) => {
-      if (!bytes) return null;
+    url = session.store.getAssetBytes(assetId).then(async (held) => {
+      // Not on this device: from the server by a signed URL, then kept here (M2.5).
+      const bytes = held ?? (await session.remoteAssets?.(assetId)) ?? null;
+      if (!bytes) {
+        urls.delete(assetId);
+        return null;
+      }
       const record = session.mirror.assets.get(assetId);
       // SVG is never drawn inline (ARCHITECTURE.md, Upload safety): it goes as plain bytes.
       const type =
@@ -138,6 +143,17 @@ export function editorHost(deps: HostDeps): EditorHost {
     strings: deps.strings,
     toggles: deps.toggles,
     openExternal: deps.openExternal,
+    linkPreview: async (url) => {
+      const preview = await session.remotePreview?.(url);
+      if (!preview) return null;
+      const imageUrl = preview.imageAssetId ? await assetUrl(session, preview.imageAssetId) : null;
+      return {
+        title: preview.title,
+        description: preview.description,
+        siteName: preview.siteName,
+        imageUrl,
+      };
+    },
     assets: {
       url: (assetId) => assetUrl(session, assetId),
       info: (assetId): AssetInfo | undefined => session.mirror.assets.get(assetId),

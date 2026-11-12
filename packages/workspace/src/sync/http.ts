@@ -154,19 +154,16 @@ function entityRecord(
 
 export function httpSyncApi(api: ApiClient): SyncApi {
   return {
+    // Asked at every start: 200 signed in or not, so a signed-out start logs no error.
     async me(): Promise<Account | null> {
-      try {
-        const me = await call(() => api.GET('/api/v1/account/me'));
-        return {
-          id: me.id,
-          email: me.email,
-          displayName: me.displayName,
-          deviceId: me.deviceId ?? null,
-        };
-      } catch (error) {
-        if (error instanceof SyncHttpError && error.status === 401) return null;
-        throw error;
-      }
+      const { account: me } = await call(() => api.GET('/api/v1/account/session'));
+      if (!me) return null;
+      return {
+        id: me.id,
+        email: me.email,
+        displayName: me.displayName,
+        deviceId: me.deviceId ?? null,
+      };
     },
 
     async listWorkspaces() {

@@ -12,10 +12,13 @@ export function PageMenu({
   session,
   page,
   onError,
+  canShare = false,
 }: {
   session: WorkspaceSession;
   page: PageRecord;
   onError: (error: unknown) => void;
+  /** The page's workspace is in the signed-in account. */
+  canShare?: boolean;
 }) {
   const { t } = useTranslation();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -53,6 +56,15 @@ export function PageMenu({
           label={t('workspace.pageMenu')}
           onClose={() => setMenu(null)}
           items={[
+            ...(canShare
+              ? [
+                  {
+                    label: t('share.open'),
+                    onSelect: () =>
+                      pageEvents.dispatchEvent(new CustomEvent('share', { detail: page.id })),
+                  },
+                ]
+              : []),
             {
               label: t('history.open'),
               onSelect: () =>

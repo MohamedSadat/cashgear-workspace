@@ -43,6 +43,18 @@ export class Mirror implements MirrorReader {
     this.emit();
   }
 
+  /** Everything replaced by a snapshot (after the store took changes from the server). */
+  reset(snapshot: MirrorSnapshot) {
+    this.workspaces.clear();
+    this.sections.clear();
+    this.pages.clear();
+    this.favourites.clear();
+    this.visits.clear();
+    this.assets.clear();
+    this.childIndex.clear();
+    this.load(snapshot);
+  }
+
   snapshot(workspaceId: Id | null = null): MirrorSnapshot {
     const mine = <T extends { workspaceId: Id }>(items: Iterable<T>) =>
       [...items].filter((item) => workspaceId === null || item.workspaceId === workspaceId);

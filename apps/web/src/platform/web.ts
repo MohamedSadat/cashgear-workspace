@@ -1,8 +1,15 @@
 import type { WorkspacePlatform } from '@cgw/shell';
 import { DATABASE, IndexedDbStore, workerIndex } from '@cgw/store-web';
 
+/** The API's origin, from the build (`VITE_CGW_API`); a sibling host of the web app (Q5). */
+export const apiBase =
+  (import.meta.env.VITE_CGW_API as string | undefined) ?? 'http://127.0.0.1:5280';
+
 export const webPlatform: WorkspacePlatform = {
   kind: 'web',
+  apiBase,
+  // The API's sign-in pages set an HttpOnly cookie; nothing here holds a credential.
+  auth: { kind: 'cookie' },
   setWindowTheme: async () => {},
   openExternal: async (url) => {
     window.open(url, '_blank', 'noopener,noreferrer');

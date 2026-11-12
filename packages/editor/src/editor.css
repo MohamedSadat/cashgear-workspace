@@ -1016,3 +1016,30 @@ h3.cgw-body {
 .cgw-touchbar-button[data-tool='italic'] span {
   font-style: italic;
 }
+
+/* A bookmark with a preview from the server (Q13). */
+.cgw-bookmark-card.has-preview {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.cgw-bookmark-title {
+  flex: 1 0 100%;
+  font-weight: 600;
+  color: var(--cg-text);
+}
+
+.cgw-bookmark-description {
+  flex: 1 0 100%;
+  font-size: 0.875em;
+  color: var(--cg-text-secondary);
+}
+
+.cgw-bookmark-image {
+  flex: 0 0 auto;
+  max-inline-size: 120px;
+  max-block-size: 72px;
+  object-fit: cover;
+  border-radius: 4px;
+  order: 10;
+}

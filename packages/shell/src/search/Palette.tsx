@@ -48,6 +48,15 @@ export function Palette({ session, onClose }: { session: WorkspaceSession; onClo
       if (!live) return;
       setResult({ query: q, hits: found });
       performance.measure('cgw-search', { start: started, end: performance.now() });
+      // Then the account's: pages this device holds no text for, local hits first (M2.7).
+      void session.remoteSearch?.(q, 20).then((remote) => {
+        if (!live || !remote.length) return;
+        const seen = new Set(found.map((hit) => hit.pageId));
+        const more = remote.filter(
+          (hit) => !seen.has(hit.pageId) && session.mirror.pages.has(hit.pageId),
+        );
+        if (more.length) setResult({ query: q, hits: [...found, ...more].slice(0, 30) });
+      });
     });
     return () => {
       live = false;

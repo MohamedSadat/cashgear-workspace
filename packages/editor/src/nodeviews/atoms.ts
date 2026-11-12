@@ -251,7 +251,7 @@ export function bookmarkView(host: () => EditorHost): NodeViewRenderer {
         queueMicrotask(() => input.focus());
         return;
       }
-      // The MVP shows the URL only; previews come from the server in Phase 2 (Q13).
+      // The URL always shows; a preview from the server, when there is one, fills the card (Q13).
       const link = el('a', 'cgw-bookmark-card');
       link.href = url;
       link.rel = 'noopener noreferrer nofollow';
@@ -269,6 +269,30 @@ export function bookmarkView(host: () => EditorHost): NodeViewRenderer {
         host().openExternal?.(url);
       });
       dom.append(link);
+      const drawn = url;
+      void host()
+        .linkPreview?.(url)
+        .then((preview) => {
+          // Text only through textContent; the image only from an asset URL the host gave.
+          if (!preview || safeHref(node.attrs.url) !== drawn || !link.isConnected) return;
+          if (preview.siteName)
+            link.querySelector('.cgw-bookmark-host')!.textContent = preview.siteName;
+          if (preview.title) link.prepend(el('span', 'cgw-bookmark-title', preview.title));
+          if (preview.description)
+            link.insertBefore(
+              el('span', 'cgw-bookmark-description', preview.description),
+              link.querySelector('.cgw-bookmark-host'),
+            );
+          if (preview.imageUrl && /^(blob:|https:|http:\/\/127\.0\.0\.1)/.test(preview.imageUrl)) {
+            const image = el('img', 'cgw-bookmark-image');
+            image.src = preview.imageUrl;
+            image.alt = '';
+            image.loading = 'lazy';
+            link.prepend(image);
+          }
+          link.classList.add('has-preview');
+        })
+        .catch(() => undefined);
     };
     draw();
     return {

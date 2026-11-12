@@ -32,6 +32,18 @@ export interface NewPage {
   after?: Id | null;
 }
 
+/** What the cloud connection gives the session (cloud/cloud.ts); absent, the session is local only. */
+export interface CloudHooks {
+  /** The Yjs client id this session writes a workspace's documents as (Q9). */
+  clientIdFor(workspaceId: Id): Promise<number | undefined>;
+  /** Pulls a page's document from the server, if its workspace syncs. */
+  pullPage(pageId: Id): Promise<void>;
+  /** Something changed locally: sync soon. */
+  changed(): void;
+  /** A workspace was just made here. */
+  created?(workspaceId: Id): void;
+}
+
 export class WorkspaceSession {
   readonly mirror: Mirror;
   private readonly docs = new Map<Id, Promise<PageDocument>>();
@@ -41,6 +53,21 @@ export class WorkspaceSession {
   private queue: Promise<unknown> = Promise.resolve();
   private workspace: Id | null;
   private readonly listeners = new Set<() => void>();
+  private readonly resetListeners = new Set<(pageId: Id) => void>();
+  private cloud: CloudHooks | null = null;
+  /** Bytes of an asset this device does not hold, from the server (cloud/cloud.ts). */
+  remoteAssets: ((assetId: Id) => Promise<Uint8Array | null>) | null = null;
+  /** Server search for a synced workspace, merged after local hits by the palette (M2.7). */
+  remoteSearch: ((q: string, limit: number) => Promise<SearchHit[]>) | null = null;
+  /** A bookmark's preview from the server, for a synced workspace (cloud/cloud.ts). */
+  remotePreview:
+    | ((url: string) => Promise<{
+        title: string | null;
+        description: string | null;
+        siteName: string | null;
+        imageAssetId: Id | null;
+      } | null>)
+    | null = null;
 
   private constructor(
     readonly store: LocalStore,
@@ -67,6 +94,48 @@ export class WorkspaceSession {
     const chosen =
       live.find((w) => w.id === last) ?? live.sort((a, b) => (a.id < b.id ? -1 : 1))[0];
     return new WorkspaceSession(store, mirror, chosen?.id ?? null, docOptions);
+  }
+
+  connect(hooks: CloudHooks) {
+    this.cloud = hooks;
+  }
+
+  /** The mirror read again from the store, after the sync engine wrote what the server said. */
+  async reloadMirror(): Promise<void> {
+    this.mirror.reset(await this.store.readMirror(null));
+    // A workspace this device lost goes from view; the first one the account brings opens.
+    if (!this.workspace || !this.mirror.workspaces.has(this.workspace)) {
+      const next = this.workspaces()[0]?.id ?? null;
+      if (next !== this.workspace) {
+        this.workspace = next;
+        for (const listener of this.listeners) listener();
+      }
+    }
+  }
+
+  /** Updates another device made, already stored: the open document shows them. */
+  applyRemoteDoc(pageId: Id, updates: Uint8Array[]) {
+    const open = this.docs.get(pageId);
+    if (open) void open.then((doc) => doc.applyRemote(updates)).catch(() => undefined);
+    this.scheduleIndex(pageId);
+  }
+
+  /** The page's document was replaced on the server: it is closed and opened again. */
+  resetDoc(pageId: Id) {
+    this.forget(pageId);
+    for (const listener of this.resetListeners) listener(pageId);
+  }
+
+  onDocReset(listener: (pageId: Id) => void): () => void {
+    this.resetListeners.add(listener);
+    return () => void this.resetListeners.delete(listener);
+  }
+
+  private clientIdFor(pageId: Id): Promise<number | undefined> {
+    const workspaceId = this.mirror.pages.get(pageId)?.workspaceId ?? this.workspace;
+    return workspaceId && this.cloud
+      ? this.cloud.clientIdFor(workspaceId)
+      : Promise.resolve(undefined);
   }
 
   get workspaceId(): Id | null {
@@ -112,6 +181,7 @@ export class WorkspaceSession {
         throw error;
       }
       this.mirror.apply(plan);
+      this.cloud?.changed();
     };
     const next = this.queue.then(run, run);
     this.queue = next.catch(() => undefined);
@@ -164,6 +234,7 @@ export class WorkspaceSession {
       newOp('section.create', workspace.id, personal.id, personal),
     ]);
     this.switchTo(workspace.id);
+    this.cloud?.created?.(workspace.id);
     return { workspace, shared, personal };
   }
 
@@ -239,8 +310,9 @@ export class WorkspaceSession {
     const record = this.pageRecord(page);
     const { newDocumentUpdate } = await import('@cgw/doc');
     await this.apply([newOp('page.create', record.workspaceId, record.id, record)]);
+    const clientId = await this.clientIdFor(record.id);
     await this.store.appendDocUpdates(record.id, [
-      { updateId: uuidv7(), data: newDocumentUpdate(record.id, content) },
+      { updateId: uuidv7(), data: newDocumentUpdate(record.id, content, clientId) },
     ]);
     if (content) void this.indexPage(record.id, content).catch(() => undefined);
     else this.fresh.add(record.id);
@@ -428,10 +500,11 @@ export class WorkspaceSession {
     await this.apply(
       records.map((record) => newOp('page.create', record.workspaceId, record.id, record)),
     );
+    const clientId = await this.clientIdFor(template.id);
     for (const [i, record] of records.entries()) {
       const content = remapRefs(withNewIds(contents[i]), ids);
       await this.store.appendDocUpdates(record.id, [
-        { updateId: uuidv7(), data: newDocumentUpdate(record.id, content) },
+        { updateId: uuidv7(), data: newDocumentUpdate(record.id, content, clientId) },
       ]);
       void this.indexPage(record.id, content).catch(() => undefined);
     }
@@ -445,8 +518,17 @@ export class WorkspaceSession {
     let doc = this.docs.get(pageId);
     if (!doc) {
       // The document layer (Yjs) loads with the editor, not with the frame.
-      doc = import('@cgw/doc').then(({ PageDocument }) =>
-        PageDocument.open(pageId, this.store, this.docOptions),
+      doc = Promise.all([import('@cgw/doc'), this.clientIdFor(pageId)]).then(
+        async ([{ PageDocument }, clientId]) => {
+          const opened = await PageDocument.open(pageId, this.store, {
+            ...this.docOptions,
+            clientId,
+          });
+          // Each save is pushed soon after; the server's newer state is pulled now.
+          opened.onSaved(() => this.cloud?.changed());
+          void this.cloud?.pullPage(pageId).catch(() => undefined);
+          return opened;
+        },
       );
       this.docs.set(pageId, doc);
       doc.catch(() => this.docs.delete(pageId));

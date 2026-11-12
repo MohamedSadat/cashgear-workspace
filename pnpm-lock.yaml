@@ -401,6 +401,9 @@ importers:
       '@cashgear/ui':
         specifier: github:MohamedSadat/CashGear.React.UI#ef1277e78c6151643043fe3327a7f0733307b873
         version: https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/ef1277e78c6151643043fe3327a7f0733307b873(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@cgw/api':
+        specifier: workspace:*
+        version: link:../api
       '@cgw/doc':
         specifier: workspace:*
         version: link:../doc

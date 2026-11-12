@@ -14,6 +14,8 @@ export const META = 'meta';
 
 /** Origins this layer gives Yjs transactions it makes itself, so autosave can tell them apart. */
 export const LOAD = Symbol('cgw-load');
+/** Updates pulled from the server: already in the store, never saved or pushed again. */
+export const REMOTE = Symbol('cgw-remote');
 
 export type SaveState = 'saved' | 'saving' | 'unsaved' | 'error' | 'readOnly';
 
@@ -33,6 +35,11 @@ export interface DocumentOptions {
   /** Keep a history snapshot after this many saved updates, or this long of editing. */
   historyEvery?: { updates: number; ms: number };
   historyKeep?: number;
+  /**
+   * The Yjs client id this session writes as (Q9: one the server issued to this device, in a
+   * synced workspace). Absent, Yjs picks one at random, as in a local-only workspace.
+   */
+  clientId?: number;
   /** Timers, for tests. */
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -110,8 +117,10 @@ export class PageDocument {
   private closed = false;
   private readonly listeners = new Set<(state: SaveState) => void>();
   private readonly savedListeners = new Set<() => void>();
-  private readonly options: Required<Omit<DocumentOptions, 'setTimer' | 'clearTimer'>> &
-    Pick<DocumentOptions, 'setTimer' | 'clearTimer'>;
+  private readonly options: Required<
+    Omit<DocumentOptions, 'setTimer' | 'clearTimer' | 'clientId'>
+  > &
+    Pick<DocumentOptions, 'setTimer' | 'clearTimer' | 'clientId'>;
 
   private constructor(
     readonly pageId: Id,
@@ -122,7 +131,7 @@ export class PageDocument {
     readonly report: OpenReport,
     options: DocumentOptions,
   ) {
-    this.options = { ...defaults, ...options };
+    this.options = { ...defaults, clientId: 0, ...options };
     this.doc = doc;
     this.fragment = doc.getXmlFragment(CONTENT);
     this.readOnly = documentVersion(doc) > SCHEMA_VERSION;
@@ -141,6 +150,7 @@ export class PageDocument {
     const started = performance.now();
     const stored = await store.loadDoc(pageId);
     const doc = new Y.Doc({ gc: true });
+    if (options.clientId) doc.clientID = options.clientId;
     const bad: number[] = [];
     doc.transact(() => {
       if (stored.snapshot) Y.applyUpdate(doc, stored.snapshot, LOAD);
@@ -234,7 +244,7 @@ export class PageDocument {
   }
 
   private readonly onUpdate = (update: Uint8Array, origin: unknown) => {
-    if (origin === LOAD || this.closed) return;
+    if (origin === LOAD || origin === REMOTE || this.closed) return;
     this.pending.push(update);
     this.setState('unsaved');
     if (!this.historyStarted) this.historyStarted = Date.now();
@@ -304,6 +314,24 @@ export class PageDocument {
     }
   }
 
+  /**
+   * Applies updates another device made, which the sync engine has already stored: the editor
+   * shows them, and they are neither saved again nor pushed (they carry the REMOTE origin).
+   */
+  applyRemote(updates: Uint8Array[]): void {
+    if (!updates.length || this.closed) return;
+    this.doc.transact(() => {
+      for (const update of updates) {
+        try {
+          Y.applyUpdate(this.doc, update, REMOTE);
+        } catch (error) {
+          console.warn('A pulled update did not apply:', error);
+        }
+      }
+    }, REMOTE);
+    retryPending(this.doc, REMOTE);
+  }
+
   /** Keeps a history snapshot now (before a restore, or when asked). */
   async keepHistory(): Promise<void> {
     await this.store.addHistory(
@@ -328,8 +356,9 @@ export class PageDocument {
  * A new page's first update: the meta map stamped, and the given content or one empty paragraph,
  * so the caret has somewhere to go. Made once, by the client that creates the page.
  */
-export function newDocumentUpdate(pageId: Id, json?: DocJSON): Uint8Array {
+export function newDocumentUpdate(pageId: Id, json?: DocJSON, clientId?: number): Uint8Array {
   const doc = new Y.Doc();
+  if (clientId) doc.clientID = clientId;
   stampMeta(doc, pageId);
   writeJSON(
     doc.getXmlFragment(CONTENT),
