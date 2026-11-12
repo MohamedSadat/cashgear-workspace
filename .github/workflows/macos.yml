@@ -1,0 +1,124 @@
+name: macOS
+# Phase 3, M3.6: the macOS app, on GitHub's macOS runner. Two jobs, side by side:
+#   acceptance     the native crates' tests (the login keychain too, under a test service), then
+#                  scripts/macos-acceptance.mjs: test builds with the test-only bridge (cargo
+#                  feature e2e-bridge), installed from their DMG and driven through the first
+#                  start, offline edits, a new page, deep links cold and running, the keychain and
+#                  the update; then sign-in and sync against the deployed API when its secrets are
+#                  set, else the results say "skipped: no deployed API configured".
+#   release-build  the release's universal build (scripts/macos-build.mjs, CGW_RELEASE_BUILD set,
+#                  so no bridge), signed and notarised when the Apple secrets are set, else ad-hoc;
+#                  scripts/macos-verify.mjs checks it: codesign, Gatekeeper, the stapled tickets,
+#                  both architectures starting, and no trace of the bridge.
+# Secrets, all optional (each part says what it skipped without them): APPLE_CERTIFICATE (the
+# Developer ID Application certificate and key as a .p12, in base64), APPLE_CERTIFICATE_PASSWORD,
+# APPLE_SIGNING_IDENTITY; APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY (the App Store Connect
+# API key's .p8 text); CGW_MACOS_API_BASE, CGW_MACOS_TEST_EMAIL, CGW_MACOS_TEST_PASSWORD (the
+# deployed API and its CI test account).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    name: Tests and the acceptance run (test build)
+    runs-on: macos-15
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: pnpm install --frozen-lockfile
+      # Tauri embeds apps/web/dist.
+      - run: pnpm build
+      # A locked keychain would wait for a password no one types: say which one is in use, and
+      # give the tests a time limit of their own.
+      - name: The runner's keychain
+        run: security default-keychain && security show-keychain-info "$(security default-keychain | tr -d ' "')" || true
+      - name: Native crates' tests, the login keychain included (under a test service)
+        timeout-minutes: 15
+        run: |
+          cargo test -p cgw-store
+          cargo test -p cgw-native -- --include-ignored
+      - name: Install, offline edits, deep links, keychain, update; the deployed API when set
+        timeout-minutes: 35
+        env:
+          CGW_MACOS_API_BASE: ${{ secrets.CGW_MACOS_API_BASE }}
+          CGW_MACOS_TEST_EMAIL: ${{ secrets.CGW_MACOS_TEST_EMAIL }}
+          CGW_MACOS_TEST_PASSWORD: ${{ secrets.CGW_MACOS_TEST_PASSWORD }}
+        run: node scripts/macos-acceptance.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-acceptance
+          path: |
+            bench/results/macos-acceptance.json
+            bench/results/macos-acceptance/
+          if-no-files-found: warn
+
+  release-build:
+    name: Universal release build (signed when the Apple secrets are set)
+    runs-on: macos-15
+    # About 25 minutes from a cold cache; notarising the app and the DMG adds Apple's queue.
+    timeout-minutes: 75
+    env:
+      # build.rs refuses the test-only bridge in a build with this set.
+      CGW_RELEASE_BUILD: '1'
+      # As the release is built (docs/OPERATIONS.md).
+      VITE_CGW_API: https://workspace-api.cashgearerp.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: The universal app (Developer ID and notarised when the secrets are set, else ad-hoc)
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Tauri's bundler names the key's id APPLE_API_KEY; the .p8's text goes to a file.
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY }}
+        run: node scripts/macos-build.mjs
+      - name: Signature, Gatekeeper, notarisation, both architectures, no bridge
+        run: node scripts/macos-verify.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-release-build
+          path: |
+            bench/results/macos-release.json
+            target/universal-apple-darwin/release/bundle/dmg/
+          if-no-files-found: warn
+          retention-days: 14

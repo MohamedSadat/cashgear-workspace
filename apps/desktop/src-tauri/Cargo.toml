@@ -30,3 +30,7 @@ serde_json = "1"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+# The test-only bridge (src/bridge.rs) the macOS acceptance run drives the app through. Test builds
+# only, never a release: build.rs refuses it when CGW_RELEASE_BUILD is set, and
+# scripts/macos-verify.mjs checks that the release binary has none of it.
+e2e-bridge = []

@@ -1,11 +1,14 @@
 //! Desktop helpers that need no Tauri, so they are tested on their own: reading a deep link into
-//! one of the app's routes, making a file name from what the page suggests, and the sign-in to the
-//! Workspace API ([`auth`]) with its refresh token in the OS keychain ([`keychain`]).
+//! one of the app's routes, making a file name from what the page suggests, the computer's name,
+//! and the sign-in to the Workspace API ([`auth`]) with its refresh token in the OS keychain
+//! ([`keychain`]). The same code serves Windows and macOS.
 
 pub mod auth;
 pub mod keychain;
 
 /// The app's own scheme (`plugins.deep-link` in tauri.conf.json). Test installs register another.
+/// Windows' installer registers it; on macOS the bundle's Info.plist does (`CFBundleURLTypes`,
+/// which Tauri's bundler writes from the same setting).
 pub const SCHEME: &str = "cashgear-workspace";
 
 /// Reads a deep link into the hash route the app shows, or `None` for anything else.
@@ -15,6 +18,11 @@ pub const SCHEME: &str = "cashgear-workspace";
 /// forward (`#/`). Ids are checked as strictly as the page's router does, and anything else in the
 /// link (a query, a fragment, another path) is refused rather than passed on, so a link can only
 /// ever choose a route.
+///
+/// Links reach this as the deep-link plugin hands them on: from the command line on Windows (a
+/// second start passes it to the first through the single-instance plugin), from the system's URL
+/// events on macOS, to a running app and to a cold start alike. Both arrive parsed by the `url`
+/// crate and written out again, which this reads the same way as the link itself.
 pub fn route(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;
     if scheme.is_empty()
@@ -53,6 +61,29 @@ fn is_uuid(value: &str) -> bool {
 /// A block id: twelve letters or digits.
 fn is_block_id(value: &str) -> bool {
     value.len() == 12 && value.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
+/// The computer's name, for the account's list of devices: `COMPUTERNAME` on Windows; on macOS
+/// the name set under System Settings, General, Sharing (`scutil --get ComputerName`), which a
+/// person knows better than the host name, and an app started from the Dock has no `HOSTNAME`;
+/// elsewhere `HOSTNAME`. `None` when there is none.
+pub fn computer_name() -> Option<String> {
+    #[cfg(windows)]
+    let name = std::env::var("COMPUTERNAME").ok();
+    #[cfg(target_os = "macos")]
+    let name = std::process::Command::new("/usr/sbin/scutil")
+        .args(["--get", "ComputerName"])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .or_else(|| std::env::var("HOSTNAME").ok());
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let name = std::env::var("HOSTNAME").ok();
+    name.map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
 }
 
 /// A file name from the percent-encoded name the page suggests in a header: decoded, with no
@@ -141,6 +172,51 @@ mod tests {
         ] {
             assert_eq!(route(url), None, "{url}");
         }
+    }
+
+    /// tao reads a macOS URL event's `NSURL` with the `url` crate and the deep-link plugin hands it
+    /// on written out again; on Windows the plugin parses the command line the same way. What the
+    /// parser does to a link (an empty path, `%2e%2e`) must not change the route it chooses.
+    #[test]
+    fn reads_links_as_the_url_parser_hands_them_over() {
+        for link in [
+            "cashgear-workspace://",
+            "cashgear-workspace:///",
+            "cashgear-workspace://trash",
+            "cashgear-workspace://settings/",
+            &format!("cashgear-workspace://p/{PAGE}"),
+            &format!("cashgear-workspace://p/{PAGE}/"),
+            &format!("cashgear-workspace://p/{PAGE}/a1B2c3D4e5F6"),
+            &format!("cashgear-workspace://p/{}", PAGE.to_uppercase()),
+            &format!("cashgear-workspace://p/{PAGE}?x=1"),
+            &format!("cashgear-workspace://p/{PAGE}#/settings"),
+            "cashgear-workspace://p/%2e%2e",
+            "cashgear-workspace://p/../settings",
+            "cashgear-workspace://P/settings",
+            "cashgear-workspace://unknown",
+        ] {
+            let parsed = url::Url::parse(link).unwrap().to_string();
+            assert_eq!(route(&parsed), route(link), "{link} parsed as {parsed}");
+        }
+    }
+
+    #[test]
+    fn names_the_computer() {
+        let name = computer_name();
+        if let Some(name) = &name {
+            assert!(!name.is_empty() && name.trim() == name && !name.contains('\n'));
+        }
+        #[cfg(windows)]
+        assert_eq!(
+            name,
+            std::env::var("COMPUTERNAME")
+                .ok()
+                .map(|n| n.trim().to_owned())
+                .filter(|n| !n.is_empty())
+        );
+        // Every Mac has a computer name (GitHub's runners too).
+        #[cfg(target_os = "macos")]
+        assert!(name.is_some());
     }
 
     #[test]

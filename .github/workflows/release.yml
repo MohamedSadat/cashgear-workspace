@@ -1,29 +1,38 @@
 name: Release
 # A version tag (v0.1.0) builds the release, as Sheet does: the web build, the installer test, and
-# the signed Windows installer with its update. With the updater's key present
-# (scripts/release-check.mjs) it drafts the GitHub release; publishing the draft is what makes
-# installed apps see the update. Without Azure Artifact Signing it signs with a throwaway
-# certificate, and the notes say so.
+# the signed Windows installer with its update; beside it the universal macOS app (Apple silicon
+# and Intel) with its DMG and update. With the updater's key present (scripts/release-check.mjs)
+# the draft job drafts the GitHub release, with one latest.json for both; publishing the draft is
+# what makes installed apps see the update. Without Azure Artifact Signing the Windows build is
+# signed with a throwaway certificate, and without the Apple secrets the macOS app is ad-hoc
+# signed; the notes say so. The macOS acceptance run is .github/workflows/macos.yml, on main.
 #
 # Repository variables: CGW_SIGN_ENDPOINT, CGW_SIGN_ACCOUNT, CGW_SIGN_PROFILE (Azure Artifact
 # Signing). Secrets: TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD), made by scripts/updater-key.mjs;
-# AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID. The updater's public key is in
-# tauri.conf.json.
+# AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID; for macOS APPLE_CERTIFICATE (the
+# Developer ID Application .p12, in base64), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+# and for notarisation APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY (the App Store Connect
+# API key's .p8 text). The updater's public key is in tauri.conf.json.
 on:
   push:
     tags: ['v*']
-  # Run on a branch to try the release build and installer test without drafting.
+  # Run on a branch to try the release builds and the installer test without drafting.
   workflow_dispatch:
 permissions:
   contents: write
 concurrency:
   group: release-${{ github.ref }}
+env:
+  # A release never holds the test-only bridge: build.rs refuses it with this set.
+  CGW_RELEASE_BUILD: '1'
 
 jobs:
   release:
-    name: Build, test and draft the release
+    name: Build and test the Windows release
     runs-on: windows-latest
     timeout-minutes: 120
+    outputs:
+      complete: ${{ steps.check.outputs.complete }}
     env:
       CGW_SIGN_ENDPOINT: ${{ vars.CGW_SIGN_ENDPOINT }}
       CGW_SIGN_ACCOUNT: ${{ vars.CGW_SIGN_ACCOUNT }}
@@ -49,7 +58,11 @@ jobs:
       - name: Check the release
         id: check
         run: pnpm release:check
+      # The page's API (docs/OPERATIONS.md: the release is built with VITE_CGW_API); without it
+      # the released app talked to http://127.0.0.1:5280.
       - run: pnpm build
+        env:
+          VITE_CGW_API: https://workspace-api.cashgearerp.com
       - name: Install, update and uninstall a test build
         run: pnpm desktop:installer-test
       - name: Code signing (Azure Artifact Signing, else a throwaway certificate)
@@ -84,14 +97,12 @@ jobs:
       - name: Gather the release files
         if: steps.check.outputs.complete == 'true' && github.ref_type == 'tag'
         run: node scripts/release-assets.mjs target/release-files "${{ steps.check.outputs.notes }}"
-      - name: Draft the GitHub release
+      # The draft job drafts the release once the macOS half is built too.
+      - uses: actions/upload-artifact@v4
         if: steps.check.outputs.complete == 'true' && github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "${{ github.ref_name }}" target/release-files/*
-          --draft --title "Cash Gear Workspace ${{ steps.check.outputs.version }}"
-          --notes-file "${{ steps.check.outputs.notes }}"
+        with:
+          name: release-files-windows
+          path: target/release-files/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -99,3 +110,100 @@ jobs:
           path: |
             target/release/bundle/nsis/
             bench/results/
+
+  macos:
+    name: Build the macOS release (universal, signed and notarised when set up)
+    runs-on: macos-15
+    timeout-minutes: 90
+    outputs:
+      signing: ${{ steps.build.outputs.signing }}
+    env:
+      # The page's API (docs/OPERATIONS.md: the release is built with VITE_CGW_API).
+      VITE_CGW_API: https://workspace-api.cashgearerp.com
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - name: Check the release
+        id: check
+        run: node scripts/release-check.mjs
+      - run: pnpm build
+      - name: The universal app (Developer ID and notarised when the secrets are set, else ad-hoc)
+        id: build
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Tauri's bundler names the key's id APPLE_API_KEY; the .p8's text goes to a file.
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY }}
+        run: node scripts/macos-build.mjs
+      - name: Signature, Gatekeeper, notarisation, both architectures, no bridge
+        run: node scripts/macos-verify.mjs
+      - name: Gather the macOS release files
+        if: steps.check.outputs.complete == 'true' && github.ref_type == 'tag'
+        run: node scripts/macos-release-assets.mjs target/release-files
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.complete == 'true' && github.ref_type == 'tag'
+        with:
+          name: release-files-macos
+          path: target/release-files/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-build-macos
+          path: |
+            target/universal-apple-darwin/release/bundle/dmg/
+            bench/results/
+
+  draft:
+    name: Draft the GitHub release
+    needs: [release, macos]
+    if: needs.release.outputs.complete == 'true' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGW_SIGN_ENDPOINT: ${{ vars.CGW_SIGN_ENDPOINT }}
+      CGW_SIGN_ACCOUNT: ${{ vars.CGW_SIGN_ACCOUNT }}
+      CGW_SIGN_PROFILE: ${{ vars.CGW_SIGN_PROFILE }}
+      CGW_MACOS_SIGNING: ${{ needs.macos.outputs.signing }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files-windows
+          path: target/release-files
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files-macos
+          path: target/release-files
+      # The notes again, now that both platforms' signing is known.
+      - name: The release notes
+        id: check
+        run: node scripts/release-check.mjs
+      - name: One update feed for Windows and macOS
+        run: node scripts/macos-release-assets.mjs --merge target/release-files "${{ steps.check.outputs.notes }}"
+      - name: Draft the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}" target/release-files/*
+          --draft --title "Cash Gear Workspace ${{ steps.check.outputs.version }}"
+          --notes-file "${{ steps.check.outputs.notes }}"

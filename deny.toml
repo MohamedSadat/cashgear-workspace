@@ -3,7 +3,7 @@
 # that a GPL dependency makes it fail. Copied from cashgear-sheet.
 
 [graph]
-targets = ["x86_64-pc-windows-msvc", "aarch64-apple-darwin"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-apple-darwin", "x86_64-apple-darwin"]
 
 [licenses]
 # No GPL, AGPL, LGPL, SSPL or BUSL in anything shipped.

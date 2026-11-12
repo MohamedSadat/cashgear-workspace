@@ -5,7 +5,9 @@
 //     section for it;
 //   - which release settings are present. Without the updater's key the workflow builds and
 //     tests the release but does not draft it. Without Azure Artifact Signing it signs with a
-//     throwaway certificate and says so in the notes.
+//     throwaway certificate and says so in the notes. CGW_MACOS_SIGNING (notarised, signed or
+//     ad-hoc), which the release workflow passes on from its macOS job, says how the macOS app
+//     is signed: the notes warn of Gatekeeper unless it is notarised.
 // Prints the version, and writes `version`, `notes` (the changelog section, as a file),
 // `complete` and `signed` to GITHUB_OUTPUT when it is set.
 import {
@@ -58,6 +60,9 @@ if (!section?.trim()) problems.push(`CHANGELOG.md has no section for ${version}.
 const env = process.env;
 const updater = !!env.TAURI_SIGNING_PRIVATE_KEY;
 const signed = !!(env.CGW_SIGN_ENDPOINT && env.CGW_SIGN_ACCOUNT && env.CGW_SIGN_PROFILE);
+const macos = env.CGW_MACOS_SIGNING || null;
+if (macos && !['notarised', 'signed', 'ad-hoc'].includes(macos))
+  problems.push(`CGW_MACOS_SIGNING is ${macos}, not notarised, signed or ad-hoc.`);
 
 if (problems.length) {
   console.error('The release is not ready:\n  ' + problems.join('\n  '));
@@ -74,6 +79,7 @@ console.log(
     ? 'Azure Artifact Signing is set up.'
     : 'Azure Artifact Signing (CGW_SIGN_ENDPOINT, CGW_SIGN_ACCOUNT, CGW_SIGN_PROFILE) is not set up: a throwaway certificate signs it.',
 );
+if (macos) console.log(`The macOS app is ${macos}.`);
 if (env.GITHUB_OUTPUT) {
   mkdirSync(join(root, 'target'), { recursive: true });
   const notes = join(root, 'target/release-notes.md');
@@ -81,7 +87,18 @@ if (env.GITHUB_OUTPUT) {
     ? ''
     : '> This build is signed with a throwaway test certificate, so Windows SmartScreen warns ' +
       'before it installs. Installed copies update themselves from here.\n\n';
-  writeFileSync(notes, signing + section.trim() + '\n');
+  const gatekeeper = {
+    'ad-hoc':
+      '> The macOS app is ad-hoc signed, not yet with a Developer ID, so Gatekeeper will not open ' +
+      'it at first: after the first try, choose Open Anyway under System Settings, Privacy & ' +
+      'Security. After each update macOS may ask once for your password before the app can ' +
+      'read its sign-in from the keychain. Installed copies update themselves from here.\n\n',
+    signed:
+      '> The macOS app is signed with a Developer ID but not notarised, so Gatekeeper will not ' +
+      'open it at first: after the first try, choose Open Anyway under System Settings, Privacy ' +
+      '& Security.\n\n',
+  }[macos ?? ''];
+  writeFileSync(notes, signing + (gatekeeper ?? '') + section.trim() + '\n');
   appendFileSync(
     env.GITHUB_OUTPUT,
     `version=${version}\nnotes=${notes}\ncomplete=${updater}\nsigned=${signed}\n`,

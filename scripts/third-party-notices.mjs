@@ -1,6 +1,7 @@
-// Writes the third-party notices the app and the installer ship: every Rust crate built into the
-// desktop app, every npm package in the web bundle, and what @cashgear/ui vendors, each with its
-// licence, followed by the licence texts their packages carry. Adapted from cashgear-sheet.
+// Writes the third-party notices the app and the installers ship: every Rust crate built into the
+// desktop app on Windows and on macOS, every npm package in the web bundle, and what @cashgear/ui
+// vendors, each with its licence, followed by the licence texts their packages carry. Adapted
+// from cashgear-sheet.
 //   node scripts/third-party-notices.mjs [output]   (default apps/web/dist/third-party-notices.txt)
 // pnpm build runs it after the web build.
 import { spawnSync } from 'node:child_process';
@@ -59,9 +60,11 @@ function crates(roots, platform) {
     }));
 }
 
+// The same notices ship with every build: Windows' crates, and the macOS universal app's, which
+// holds both Apple targets.
 const rust = new Map();
-for (const pkg of crates(['cgw-desktop'], 'x86_64-pc-windows-msvc')) {
-  rust.set(`${pkg.name} ${pkg.version}`, pkg);
+for (const platform of ['x86_64-pc-windows-msvc', 'aarch64-apple-darwin', 'x86_64-apple-darwin']) {
+  for (const pkg of crates(['cgw-desktop'], platform)) rust.set(`${pkg.name} ${pkg.version}`, pkg);
 }
 
 // npm: what the web bundle ships.

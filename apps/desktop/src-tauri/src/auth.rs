@@ -87,9 +87,7 @@ pub async fn auth_sign_in(
     device_name: Option<String>,
 ) -> Result<bool, Error> {
     let account = auth.account(&api_base)?;
-    let computer = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .ok();
+    let computer = cgw_native::computer_name();
     let name = auth::device_name(device_name.as_deref(), computer.as_deref());
     let open: Open = match auth.url_file.clone() {
         Some(file) => Box::new(move |url| write_url(&file, url)),

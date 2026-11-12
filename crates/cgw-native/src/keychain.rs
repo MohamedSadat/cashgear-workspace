@@ -1,10 +1,17 @@
 //! The OS keychain, where the desktop keeps its refresh token (D16; ARCHITECTURE.md, Token
-//! storage): Windows Credential Manager, or Keychain Services on macOS. Nothing here writes a
-//! secret to a file or a log, and errors never carry one.
+//! storage): Windows Credential Manager, or Keychain Services on macOS (a generic password in the
+//! user's login keychain, service `com.cashgear.workspace` and the API base as the account). Both
+//! go through `keyring-core` with the OS's own store crate. Nothing here writes a secret to a file
+//! or a log, and errors never carry one.
 //!
 //! One Windows credential holds at most 2,560 bytes, and a refresh token can be longer (an
 //! encrypted JWT grows with the keys and the claims), so a secret is kept in parts: the entry for
-//! the account itself, then `{account}#1`, `{account}#2`, ... Reading joins them in order.
+//! the account itself, then `{account}#1`, `{account}#2`, ... Reading joins them in order. macOS
+//! has no such limit, but the parts are kept there too, so one tested path serves both.
+//!
+//! On macOS an item may be read without a prompt by the app that made it, known by its code
+//! signature: a Developer ID app keeps that identity across updates, an ad-hoc signed one does
+//! not, so after an update of an ad-hoc build macOS asks once before the app can read its token.
 
 use std::sync::Arc;
 
@@ -275,18 +282,23 @@ mod tests {
         );
     }
 
-    /// The real keychain, under a service of its own. It writes to the user's Credential Manager
-    /// (and removes what it wrote), so it runs on request: `cargo test -p cgw-native -- --ignored`.
+    /// The real keychain, under a service of its own: Credential Manager on Windows, the login
+    /// keychain on macOS. It writes there (and removes what it wrote), so it runs on request:
+    /// `cargo test -p cgw-native -- --ignored`. The macOS workflow runs it on GitHub's runner.
     #[test]
     #[ignore = "writes to the OS keychain"]
     fn round_trips_through_the_os_keychain() {
-        let keychain = Keychain::open("com.cashgear.workspace.test").unwrap();
+        let keychain = Keychain::open(&format!("{SERVICE}.test")).unwrap();
         let account = "http://127.0.0.1:1";
         delete(&keychain, account).unwrap();
         assert_eq!(read(&keychain, account).unwrap(), None);
         let long = "t".repeat(PART + 100);
         write(&keychain, account, &long).unwrap();
         assert_eq!(read(&keychain, account).unwrap().as_deref(), Some(&*long));
+        assert!(keychain.get(&format!("{account}#1")).unwrap().is_some());
+        // Another service (a test run's, or the person's own) does not see it.
+        let other = Keychain::open(&format!("{SERVICE}.test.other")).unwrap();
+        assert_eq!(read(&other, account).unwrap(), None);
         write(&keychain, account, "short").unwrap();
         assert_eq!(read(&keychain, account).unwrap().as_deref(), Some("short"));
         assert_eq!(keychain.get(&format!("{account}#1")).unwrap(), None);

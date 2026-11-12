@@ -8,6 +8,9 @@
 //! refresh token stays on this side, in the OS keychain, and the page only gets access tokens.
 
 mod auth;
+// Test builds only (`--features e2e-bridge`): never in a release (build.rs).
+#[cfg(feature = "e2e-bridge")]
+mod bridge;
 mod updates;
 
 use std::path::PathBuf;
@@ -16,7 +19,8 @@ use std::sync::Mutex;
 use cgw_store::Store;
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::menu::{Menu, MenuItem, MenuItemKind};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::DialogExt;
 
@@ -130,7 +134,61 @@ fn open_links(app: &AppHandle, urls: impl IntoIterator<Item = String>) {
     }
 }
 
+/// The id of the app menu's Quit on macOS (⌘Q).
+pub(crate) const QUIT_MENU_ID: &str = "cgw-quit";
+
+/// Closes the main window as its close button does: the page writes its pending saves first
+/// (`onCloseRequested`), then the app ends with its last window. Without a window there is
+/// nothing left to save.
+pub(crate) fn close_main_window<R: Runtime>(app: &AppHandle<R>) {
+    match app.get_webview_window("main") {
+        Some(window) => {
+            if window.close().is_err() {
+                app.exit(0);
+            }
+        }
+        None => app.exit(0),
+    }
+}
+
+/// Tauri's default macOS menu, with the app menu's Quit (⌘Q) replaced by an item that closes the
+/// window as its close button does. The default Quit ends the app at once (`terminate:`, and tao
+/// has no `applicationShouldTerminate`), which skipped the page's pending saves. Quitting from the
+/// Dock, logging out and shutting down still end the app at once, a known limit: they can lose
+/// what the page had not yet written (its autosave runs 150 ms after typing stops).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn menu_with_saving_quit<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let menu = Menu::default(app)?;
+    // On macOS the first submenu is the app's own, and Quit is its last item.
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
+        if let Some(MenuItemKind::Predefined(quit)) = app_menu.items()?.last() {
+            let text = quit.text()?;
+            app_menu.remove(quit)?;
+            app_menu.append(&MenuItem::with_id(
+                app,
+                QUIT_MENU_ID,
+                text,
+                true,
+                Some("CmdOrCtrl+Q"),
+            )?)?;
+        }
+    }
+    Ok(menu)
+}
+
+/// What a menu item does: only Quit is the app's own.
+pub(crate) fn on_menu<R: Runtime>(app: &AppHandle<R>, id: &str) -> bool {
+    if id == QUIT_MENU_ID {
+        close_main_window(app);
+        return true;
+    }
+    false
+}
+
 fn main() {
+    // A test build started by LaunchServices reads its test settings first (bridge.rs).
+    #[cfg(feature = "e2e-bridge")]
+    bridge::load_settings();
     let mut builder = tauri::Builder::default();
     // One app per data folder, since one process owns the store: starting it again (a deep link
     // clicked while it runs) brings this window forward, and the link comes to this instance.
@@ -143,7 +201,15 @@ fn main() {
             }
         }));
     }
+    // macOS has an app menu; its Quit writes pending saves before the app ends.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.menu(menu_with_saving_quit);
+    }
     builder
+        .on_menu_event(|app, event| {
+            on_menu(app, event.id().as_ref());
+        })
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -154,7 +220,9 @@ fn main() {
             let dir = data_dir(app.handle())?;
             let store = Store::open(&dir).map_err(|error| error.to_string())?;
             app.manage(LocalStore(Mutex::new(store)));
-            // The installer registers the scheme; a link the app was started with comes first.
+            // Windows' installer registers the scheme, and a link the app was started with is on
+            // its command line. On macOS the bundle's Info.plist registers it, and links come as
+            // the system's URL events, to a cold start too, just after this.
             let handle = app.handle().clone();
             if let Ok(Some(urls)) = app.deep_link().get_current() {
                 open_links(&handle, urls.into_iter().map(|url| url.to_string()));
@@ -162,6 +230,8 @@ fn main() {
             app.deep_link().on_open_url(move |event| {
                 open_links(&handle, event.urls().into_iter().map(|url| url.to_string()));
             });
+            #[cfg(feature = "e2e-bridge")]
+            bridge::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -173,8 +243,41 @@ fn main() {
             updates::update_install,
             auth::auth_sign_in,
             auth::auth_token,
-            auth::auth_sign_out
+            auth::auth_sign_out,
+            #[cfg(feature = "e2e-bridge")]
+            bridge::e2e_bridge_reply
         ])
         .run(tauri::generate_context!())
         .expect("the desktop app failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    /// macOS lays its bundle settings (tauri.macos.conf.json) over tauri.conf.json, and nothing
+    /// else: both platforms run under the one CSP and open the same links.
+    #[test]
+    fn the_macos_settings_change_only_the_bundle() {
+        let macos: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.macos.conf.json")).unwrap();
+        let keys: Vec<&str> = macos
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .filter(|key| *key != "$schema")
+            .collect();
+        assert_eq!(keys, ["bundle"]);
+        assert_eq!(macos["bundle"]["macOS"]["signingIdentity"], "-");
+        assert!(macos["bundle"]["icon"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|icon| icon.as_str().unwrap().ends_with(".icns")));
+        let base: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        assert_eq!(
+            base["plugins"]["deep-link"]["desktop"]["schemes"],
+            serde_json::json!([cgw_native::SCHEME])
+        );
+    }
 }
