@@ -1,6 +1,8 @@
-// Settings → Your data: export the workspace, import an export, and what the browser keeps.
+// Settings → Your data: export the workspace (from this device, or from the account as the server
+// makes it), import an export, and what the browser keeps.
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
@@ -20,7 +22,17 @@ export async function exportAndSave(
 export function DataPanel({ session }: { session: WorkspaceSession }) {
   const { t } = useTranslation();
   const { platform } = useShell();
-  const [busy, setBusy] = useState<null | 'export' | 'import'>(null);
+  const cloud = useCloud();
+  const account = useAccount(cloud);
+  const workspace = session.current;
+  // The server decides; the button is offered to those it would answer.
+  const serverExport =
+    !!cloud &&
+    !!account &&
+    !!workspace &&
+    !workspace.localOnly &&
+    (workspace.role === 'owner' || workspace.role === 'admin');
+  const [busy, setBusy] = useState<null | 'export' | 'import' | 'serverExport'>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -57,6 +69,34 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
         >
           {t('exchange.exportWorkspace')}
         </button>
+        {serverExport && (
+          <button
+            type="button"
+            className="cgw-button"
+            disabled={busy !== null}
+            onClick={() => {
+              setBusy('serverExport');
+              setMessage(t('exchange.serverExporting'));
+              cloud
+                .exportWorkspace(workspace.id)
+                .then((bytes) =>
+                  platform.saveFile(
+                    `${workspace.name || t('page.untitled')}.zip`,
+                    bytes,
+                    'application/zip',
+                  ),
+                )
+                .then(() => setMessage(t('exchange.exported')))
+                .catch((error: unknown) => {
+                  console.error(error);
+                  setMessage(t('exchange.exportFailed'));
+                })
+                .finally(() => setBusy(null));
+            }}
+          >
+            {t('exchange.serverExport')}
+          </button>
+        )}
         <button
           type="button"
           className="cgw-button"

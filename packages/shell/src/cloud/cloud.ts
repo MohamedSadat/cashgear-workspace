@@ -379,6 +379,35 @@ export class Cloud {
     );
   }
 
+  // Export from the server (Phase 3) -----------------------------------------------------------------
+
+  /**
+   * The workspace's export as the server makes it (owners and admins): every page the requester
+   * may read, written by the worker; asked for, waited on, then read by its signed URL.
+   */
+  async exportWorkspace(
+    workspaceId: Id,
+    { timeoutMs = 120_000, pollMs = 1000 }: { timeoutMs?: number; pollMs?: number } = {},
+  ): Promise<Uint8Array> {
+    let current = await data(
+      this.api.POST('/api/v1/workspaces/{workspaceId}/exports', {
+        params: { path: { workspaceId } },
+      }),
+    );
+    const deadline = Date.now() + timeoutMs;
+    while (current.status === 'pending') {
+      if (Date.now() > deadline) throw new Error('The export is taking too long');
+      await new Promise((done) => setTimeout(done, pollMs));
+      current = await data(
+        this.api.GET('/api/v1/exports/{exportId}', { params: { path: { exportId: current.id } } }),
+      );
+    }
+    if (current.status !== 'ready' || !current.url) throw new Error('The export failed');
+    const response = await getSigned(current.url);
+    if (!response.ok) throw new Error('The export could not be read');
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   // Search (M2.7) ------------------------------------------------------------------------------------
 
   /** Server search over every page this account may read in the workspace, normalised alike. */
