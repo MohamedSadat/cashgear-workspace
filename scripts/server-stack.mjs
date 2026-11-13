@@ -33,8 +33,10 @@ const origins = [
   'http://localhost:5273',
   'http://tauri.localhost',
   'tauri://localhost',
-  // The v0.2.0 web build that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs).
+  // The old web builds that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs): v0.2.0
+  // and v0.3.0.
   'http://127.0.0.1:4279',
+  'http://127.0.0.1:4278',
 ];
 
 const children = [];
@@ -180,6 +182,8 @@ const env = {
         RateLimits__anonymous: '10000',
         RateLimits__user: '100000',
         RateLimits__push: '100000',
+        // Phase 4: the specs and bench/phase4.mjs seed databases through the import route.
+        RateLimits__import: '10000',
       }
     : {}),
 };

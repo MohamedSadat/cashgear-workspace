@@ -1,33 +1,51 @@
-// Phase 3's acceptance criterion "an old desktop build against a migrated document: read-only,
-// nothing pushed, the server's bytes unchanged". The old build is the web build of v0.2.0
-// (scripts/old-build.mjs, in target/old-build, served on 127.0.0.1:4279), which runs the same
-// document code as the v0.2.0 desktop app (that app embeds this very build): schema version 1, its
-// gate (D7) and its sync engine. Both builds talk to the e2e server stack as the same person.
+// The old builds against what this build writes: an older desktop app meeting newer documents
+// and data must show them read-only, push nothing, and leave the server's bytes as they were. The
+// old builds are the web builds of the releases (scripts/old-build.mjs, in target/old-build/<tag>,
+// served on 127.0.0.1:4279 for v0.2.0 and :4278 for v0.3.0), each running the same document code
+// as that release's desktop app (the app embeds that very build). Both builds talk to the e2e
+// server stack as the same person.
 //
-// The page is made by the old build at version 1; this build opens it, which migrates it to
-// version 2 (an ordinary edit, pushed; the worker raises the page). The old build, started again
-// on its own copy, pulls that and must then show the page read-only, write nothing when typed
-// into, and send no update; the server's state of the page (state hash and the updates' bytes)
-// is the same before and after. A second page, made by this build at version 2 and never held by
-// the old build, is opened there too: v0.2.0 decides read-only when it opens a page, from what it
-// holds, so a page it never held opens editable until opened again (an annotation says which); a
-// third such page is typed into at that first open, to show what then happens (426, nothing
-// stored on the server).
+// Phase 3 (v0.2.0, schema version 1): the page is made by the old build at version 1; this build
+// opens it, which migrates it to this build's version (an ordinary edit, pushed; the worker raises
+// the page). The old build, started again on its own copy, pulls that and must then show the page
+// read-only, write nothing when typed into, and send no update; the server's state of the page
+// (state hash and the updates' bytes) is the same before and after. A second page, made by this
+// build and never held by the old build, is opened there too: v0.2.0 decides read-only when it
+// opens a page, from what it holds, so a page it never held opens editable until opened again (an
+// annotation says which); a third such page is typed into at that first open, to show what then
+// happens (426, nothing stored on the server).
+//
+// Phase 4 (v0.3.0, schema version 2, no databases): a page holding a database block (schema 3)
+// opens read-only there, the block drawn as needing a newer version, nothing sent, the server's
+// bytes kept; and it never sees rows: its sidebar, its store and its sync know a database's page
+// as a page, never its rows, while rows change on the server.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
-import { OLD_ORIGIN, oldBuild, serveOldBuild } from '../../scripts/old-build.mjs';
+import { oldBuild, originOf, serveOldBuild } from '../../scripts/old-build.mjs';
+import { chooseOptions, fullPage, newDatabase, openRow, showView } from './database';
 
-test.skip(desktop, 'The old build is the v0.2.0 web build, in a browser');
-test.skip(!oldBuild(), 'No old build: run node scripts/old-build.mjs first');
+/** This build's document schema version (the old builds' are in their marker). */
+const CURRENT = Number(
+  readFileSync(join(import.meta.dirname, '../../packages/doc/src/schema.ts'), 'utf8').match(
+    /SCHEMA_VERSION\s*=\s*(\d+)/,
+  )![1],
+);
 
-let server: { kill(): void } | null = null;
-test.beforeAll(async () => {
-  server = await serveOldBuild();
-});
-test.afterAll(() => server?.kill());
+test.skip(desktop, 'The old builds are web builds, in a browser');
+
+const servers: { kill(): void }[] = [];
+test.afterAll(() => servers.splice(0).forEach((s) => s.kill()));
+async function serve(tag: string) {
+  test.skip(!oldBuild(tag), `No ${tag} build: run node scripts/old-build.mjs first`);
+  const child = await serveOldBuild(tag);
+  if (child) servers.push(child);
+  return originOf(tag);
+}
 
 const NEWER =
   'This page was saved by a newer version of Cash Gear Workspace. It is shown read-only; update the app to edit it.';
@@ -61,6 +79,7 @@ test('the v0.2.0 build shows a migrated page read-only, sends nothing, and the s
   browser,
 }) => {
   test.setTimeout(240000);
+  const OLD_ORIGIN = await serve('v0.2.0');
   const account = await newAccount('Two builds');
   const api = await apiSession(account);
 
@@ -105,7 +124,7 @@ test('the v0.2.0 build shows a migrated page read-only, sends nothing, and the s
     .poll(async () => (await pageRecord(api, workspaceId, migratedId))?.docSchemaVersion, {
       timeout: 60000,
     })
-    .toBe(2);
+    .toBe(CURRENT);
   await newPage(now, 'Made by the new build');
   await now.keyboard.type('Written by version two');
   await waitSaved(now);
@@ -121,7 +140,7 @@ test('the v0.2.0 build shows a migrated page read-only, sends nothing, and the s
       .poll(async () => (await pageRecord(api, workspaceId, id))?.docSchemaVersion, {
         timeout: 60000,
       })
-      .toBe(2);
+      .toBe(CURRENT);
   expect(nowErrors).toEqual([]);
   await current.close();
   const before = {
@@ -209,7 +228,133 @@ test('the v0.2.0 build shows a migrated page read-only, sends nothing, and the s
     typed: await serverState(api, typedId),
   };
   expect(after).toEqual(before);
-  expect((await pageRecord(api, workspaceId, migratedId)).docSchemaVersion).toBe(2);
+  expect((await pageRecord(api, workspaceId, migratedId)).docSchemaVersion).toBe(CURRENT);
   await oldContext.close();
+  await api.dispose();
+});
+
+test('the v0.3.0 build shows a page with a database read-only, sends nothing, and never sees rows', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.3.0');
+  const account = await newAccount('Two releases');
+  const api = await apiSession(account);
+
+  // This build: a page holding a database (schema 3), and a database of its own with rows.
+  const current = await browser.newContext();
+  const now = await current.newPage();
+  const nowErrors = watchErrors(now);
+  await now.goto('/');
+  await signIn(now, account);
+  await signedIn(now, account);
+  await now.getByLabel('Workspace name').fill('Two releases');
+  await now.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(now)).toBeVisible();
+  await newPage(now, 'Plans with a table');
+  await now.keyboard.type('Written by version three');
+  await now.keyboard.press('Enter');
+  await now.keyboard.type('/database');
+  await now.getByRole('option', { name: /^Database/ }).click();
+  await now
+    .getByRole('dialog', { name: 'New database' })
+    .getByRole('button', { name: 'Create' })
+    .click();
+  await expect(editor(now).locator('.cgw-db')).toBeVisible();
+  await waitSaved(now);
+  const plansId = pageIdOf(now);
+  await newDatabase(now, 'Tasks');
+  const tasksId = pageIdOf(now);
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  const workspaceId = (
+    (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+  ).find((w) => w.name === 'Two releases')!.id;
+  await expect
+    .poll(async () => (await pageRecord(api, workspaceId, plansId))?.docSchemaVersion, {
+      timeout: 60000,
+    })
+    .toBe(CURRENT);
+  const rowTitles = (
+    (await api.get(`/api/v1/databases/${tasksId}/rows?limit=100`)).rows as { title: string }[]
+  ).map((r) => r.title);
+  expect(rowTitles).toContain('Review the budget');
+  const before = await serverState(api, plansId);
+
+  // v0.3.0, signed in as the same person on its own copy.
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  // Document updates, and operations other than the visits opening a page records.
+  const pushes: string[] = [];
+  old.on('request', (request) => {
+    if (request.method() !== 'POST') return;
+    if (/\/doc\/(updates|repair)$/.test(request.url())) pushes.push(request.url());
+    if (/\/ops$/.test(request.url()))
+      for (const op of (request.postDataJSON()?.ops ?? []) as { type: string }[])
+        if (op.type !== 'visit.record') pushes.push(`${op.type} ${request.url()}`);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  const sidebar = old.getByRole('tree', { name: 'Pages' });
+  // The database is a page to it; its rows are nowhere.
+  await expect(sidebar.getByRole('treeitem', { name: /Tasks/ })).toBeVisible({ timeout: 30000 });
+  for (const title of rowTitles)
+    await expect(sidebar.getByRole('treeitem', { name: new RegExp(title) })).toHaveCount(0);
+
+  // The page with a database: read-only, the block drawn as needing a newer version.
+  await sidebar.getByRole('treeitem', { name: /Plans with a table/ }).click();
+  await expect(editor(old)).toContainText('Written by version three', { timeout: 20000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  await expect(
+    editor(old).getByText('This block needs a newer version of Cash Gear Workspace.'),
+  ).toBeVisible();
+  await expect(old.locator('.cgw-page [contenteditable="true"]')).toHaveCount(0);
+  const shown = (await editor(old).textContent())!;
+  await editor(old).click();
+  await old.keyboard.type('typed in the old build');
+  await old.keyboard.press('Enter');
+  await expect(editor(old)).toHaveText(shown);
+  // The database's own page opens as an (empty) page: no table, no row.
+  await sidebar.getByRole('treeitem', { name: /Tasks/ }).click();
+  await expect(old.getByLabel('Page title')).toHaveValue('Tasks', { timeout: 20000 });
+  await expect(old.locator('[role="grid"]')).toHaveCount(0);
+  for (const title of rowTitles) await expect(old.getByText(title)).toHaveCount(0);
+
+  // Rows change on the server meanwhile: their feed changes are not its kind, and it stays well.
+  const again = await current.newPage();
+  await again.goto(`/#/p/${tasksId}`);
+  await showView(fullPage(again), 'All tasks');
+  await openRow(again, 'Review the budget');
+  await chooseOptions(again, 'Status', ['Done']);
+  await expect(syncStatus(again)).toHaveText('Synced', { timeout: 30000 });
+  await old.waitForTimeout(5000);
+  await expect(syncStatus(old)).toHaveText('Synced');
+  const stored = await old.evaluate(
+    () =>
+      new Promise<string[]>((done) => {
+        const open = indexedDB.open('cgw-workspace');
+        open.onsuccess = () => {
+          const db = open.result;
+          const all = db.transaction('pages').objectStore('pages').getAll();
+          all.onsuccess = () => {
+            db.close();
+            done((all.result as { title: string }[]).map((p) => p.title));
+          };
+        };
+      }),
+  );
+  expect(stored).toContain('Tasks');
+  for (const title of rowTitles) expect(stored).not.toContain(title);
+
+  // Nothing sent, and the server holds what it held.
+  expect(pushes, 'what the old build sent').toEqual([]);
+  expect(await serverState(api, plansId)).toEqual(before);
+  expect(oldErrors).toEqual([]);
+  expect(nowErrors).toEqual([]);
+  await oldContext.close();
+  await current.close();
   await api.dispose();
 });

@@ -5,9 +5,10 @@ import { editor, waitSaved, watchErrors } from './helpers';
 // Phase 1 exit criterion 12: in Arabic the app is right to left and no string of its own is left
 // in English. Each main screen is walked: every visible text node, label, placeholder and tooltip
 // outside what the person wrote (page titles, page content, the workspace name) must have no
-// English word. Key names are allowed: shortcuts are shown as the keys are labelled.
+// English word. Key names are allowed: shortcuts are shown as the keys are labelled; and so is the
+// CSV format's name (Phase 4: "Import a CSV file…"), which Arabic writes as it is.
 
-const KEYS = /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+)\b/g;
+const KEYS = /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV)\b/g;
 
 async function english(page: Page, screen: string): Promise<string[]> {
   return page.evaluate(
