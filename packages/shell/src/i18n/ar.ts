@@ -1,4 +1,4 @@
-import { ar as databaseAr } from '../../../database/src/i18n/ar';
+import { ar as databaseAr } from '@cgw/database/i18n';
 import type { Catalogue } from './catalogue';
 
 // The Arabic catalogue. Same keys as `en.ts`; the type checks it. The database views' section

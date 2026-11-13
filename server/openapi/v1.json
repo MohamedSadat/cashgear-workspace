@@ -2580,7 +2580,10 @@
               "array"
             ],
             "items": {
-              "type": "string"
+              "type": [
+                "null",
+                "string"
+              ]
             }
           },
           "header": {
@@ -3900,7 +3903,9 @@
           "pageId",
           "title",
           "snippet",
-          "score"
+          "score",
+          "kind",
+          "databaseId"
         ],
         "type": "object",
         "properties": {
@@ -3921,6 +3926,16 @@
               "string"
             ],
             "format": "double"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "databaseId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },

@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -34,4 +35,26 @@ public sealed partial class RouteParameters : IOpenApiOperationTransformer
 
     [GeneratedRegex(@"\{([A-Za-z]+)(?::[^}]*)?\}")]
     private static partial Regex Names();
+}
+
+/// <summary>
+/// A collection property whose items are a nullable reference type (<c>IReadOnlyList&lt;string?&gt;</c>:
+/// the import's columns, null for a column not imported) has nullable items in the document; the
+/// generator reads only the property's own nullability.
+/// </summary>
+public sealed class NullableItems : IOpenApiSchemaTransformer
+{
+    private readonly NullabilityInfoContext nullability = new();
+
+    public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken ct)
+    {
+        if (context.JsonPropertyInfo?.AttributeProvider is not PropertyInfo property
+            || schema.Items is not OpenApiSchema items || items.Type is not { } type)
+            return Task.CompletedTask;
+        NullabilityInfo info;
+        lock (nullability) info = nullability.Create(property);
+        var item = info.ElementType ?? (info.GenericTypeArguments is [var only] ? only : null);
+        if (item?.ReadState == NullabilityState.Nullable) items.Type = type | JsonSchemaType.Null;
+        return Task.CompletedTask;
+    }
 }

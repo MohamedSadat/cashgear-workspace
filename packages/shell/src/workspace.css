@@ -683,9 +683,3 @@
   border-radius: 6px;
   color: var(--cg-text-secondary);
 }
-
-/* The editor's database placeholder is `hidden` while the database is drawn, but its own rule
-   (display: flex) wins over the attribute: kept hidden here until editor.css says so itself. */
-.cgw-database-placeholder[hidden] {
-  display: none;
-}

@@ -19,6 +19,7 @@ import {
   type Id,
   type LocalStore,
   type Operation,
+  type PageKind,
   type PageRecord,
   type PropertyDef,
   type RowRecord,
@@ -94,6 +95,15 @@ const mayEdit = canEditPage;
 /** A page, a database's page or a row, as the session finds it by id. */
 export type AnyPage = PageRecord | RowRecord;
 
+/**
+ * A hit of the server's search: what was found and, for a row, its database (this device may not
+ * hold the row; rows are not in the tree). An older server names neither.
+ */
+export interface RemoteSearchHit extends SearchHit {
+  kind?: PageKind;
+  databaseId?: Id | null;
+}
+
 export const isRowRecord = (page: AnyPage | undefined | null): page is RowRecord =>
   page?.kind === 'row';
 
@@ -119,11 +129,14 @@ export class WorkspaceSession {
   private readonly rowListeners = new Set<(databaseId: Id) => void>();
   private readonly pendingRows = new Set<Id>();
   private rowsTask: Promise<void> | null = null;
+  /** Each workspace's count of rows in the trash on their own (`trashedRowCount`). */
+  private readonly rowTrash = new Map<Id, { count: number; fresh: boolean; counting: boolean }>();
+  private readonly rowTrashListeners = new Set<() => void>();
   private cloud: CloudHooks | null = null;
   /** Bytes of an asset this device does not hold, from the server (cloud/cloud.ts). */
   remoteAssets: ((assetId: Id) => Promise<Uint8Array | null>) | null = null;
   /** Server search for a synced workspace, merged after local hits by the palette (M2.7). */
-  remoteSearch: ((q: string, limit: number) => Promise<SearchHit[]>) | null = null;
+  remoteSearch: ((q: string, limit: number) => Promise<RemoteSearchHit[]>) | null = null;
   /** A bookmark's preview from the server, for a synced workspace (cloud/cloud.ts). */
   remotePreview:
     | ((url: string) => Promise<{
@@ -184,6 +197,8 @@ export class WorkspaceSession {
       this.mirror.loadRows(id, rows[i]);
       this.rowDatabases.add(id);
     });
+    // The store took changes from elsewhere: rows of a database removed with it, say.
+    this.trashedRowsMoved();
     // Access changed on the server (a resync): a page opened to edit, or to read, opens again the
     // other way, so the editor follows and a reader's open never writes.
     for (const [pageId, editable] of this.editable) {
@@ -269,7 +284,13 @@ export class WorkspaceSession {
         this.mirror.load(await this.store.readMirror(null));
         throw error;
       }
+      // A row trashed, restored or removed: the trash's count of rows is read again.
+      const ownRoot = (row: RowRecord | undefined) => !!row && row.trashRootId === row.id;
+      const trashMoved =
+        plan.deleteRows.length > 0 ||
+        plan.rows.some((row) => ownRoot(row) !== ownRoot(this.mirror.rowRecords.get(row.id)));
       this.mirror.apply(plan);
+      if (trashMoved) this.trashedRowsMoved();
       // A database made here holds every row it has: its (new) rows are all in the mirror.
       for (const op of ops)
         if (op.type === 'page.create' && op.payload.kind === 'database') {
@@ -341,8 +362,59 @@ export class WorkspaceSession {
       this.pendingRows.clear();
       for (const id of ids)
         if (this.rowDatabases.has(id)) this.mirror.loadRows(id, await this.store.readRows(id));
+      this.trashedRowsMoved();
       for (const id of ids) for (const listener of this.rowListeners) listener(id);
     });
+  }
+
+  /**
+   * How many rows of a workspace are in the trash on their own (each its own trash root), for the
+   * sidebar's count: 0 until counted. Rows are not all in the mirror, so the store counts them,
+   * again only when a change could move the count: a plan here that trashes, restores or deletes
+   * a row, the sync engine's word that rows changed, or the mirror read again; never per edit.
+   */
+  trashedRowCount(workspaceId: Id): number {
+    let entry = this.rowTrash.get(workspaceId);
+    if (!entry)
+      this.rowTrash.set(workspaceId, (entry = { count: 0, fresh: false, counting: false }));
+    if (!entry.fresh && !entry.counting) void this.countTrashedRows(workspaceId);
+    return entry.count;
+  }
+
+  /** Told when a workspace's count of trashed rows has changed. Stable, for `useSyncExternalStore`. */
+  readonly onTrashedRows = (listener: () => void): (() => void) => {
+    this.rowTrashListeners.add(listener);
+    return () => void this.rowTrashListeners.delete(listener);
+  };
+
+  /** The counts are stale: the open workspace's is counted now, the others when next asked. */
+  private trashedRowsMoved() {
+    for (const [id, entry] of this.rowTrash) {
+      entry.fresh = false;
+      if (id === this.workspace && !entry.counting) void this.countTrashedRows(id);
+    }
+  }
+
+  private async countTrashedRows(workspaceId: Id) {
+    const entry = this.rowTrash.get(workspaceId);
+    if (!entry) return;
+    entry.counting = true;
+    try {
+      // Moved again while the store counted: that count is not shown, the next one is.
+      while (!entry.fresh) {
+        entry.fresh = true;
+        const count = await this.store.trashedRows(workspaceId).then(
+          (rows) => rows.length,
+          () => entry.count,
+        );
+        if (entry.fresh && count !== entry.count) {
+          entry.count = count;
+          for (const listener of this.rowTrashListeners) listener();
+        }
+      }
+    } finally {
+      entry.counting = false;
+    }
   }
 
   /** Told after a held database's rows (or its hold) changed and the mirror has them. */

@@ -476,6 +476,34 @@ public sealed class DatabaseTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task Search_hits_say_what_they_found_and_a_rows_database()
+    {
+        var ws = await Ws.Create(server);
+        var member = await Kit.Join(server, ws, "member");
+        var page = (await ws.NewPage("Budget notes")).GetProperty("id").GetGuid();
+        var database = await NewDatabase(ws, "Budget table", [Prop("pText001", "text")]);
+        var row = (await NewRow(ws, database, "Budget review")).GetProperty("id").GetGuid();
+        async Task<Dictionary<Guid, JsonElement>> Hits(HttpClient client)
+        {
+            var response = await client.GetAsync($"/api/v1/workspaces/{ws.Id}/search?q=budget");
+            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+            return (await Kit.Json(response)).GetProperty("hits").EnumerateArray().ToDictionary(h => h.GetProperty("pageId").GetGuid());
+        }
+        var hits = await Hits(ws.Client);
+        Assert.Equal(new[] { page, database, row }.Order(), hits.Keys.Order());
+        Assert.Equal("page", hits[page].GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, hits[page].GetProperty("databaseId").ValueKind);
+        Assert.Equal("database", hits[database].GetProperty("kind").GetString());
+        Assert.Equal(JsonValueKind.Null, hits[database].GetProperty("databaseId").ValueKind);
+        Assert.Equal("row", hits[row].GetProperty("kind").GetString());
+        Assert.Equal(database, hits[row].GetProperty("databaseId").GetGuid());
+        // A row's level is its database's: restricted to nobody else, the member finds neither.
+        Assert.Equal(3, (await Hits(member.Client)).Count);
+        await Kit.Share(ws, database, true);
+        Assert.Equal([page], (await Hits(member.Client)).Keys);
+    }
+
+    [Fact]
     public async Task The_query_filters_sorts_groups_and_pages_with_a_keyset_cursor()
     {
         var ws = await Ws.Create(server);

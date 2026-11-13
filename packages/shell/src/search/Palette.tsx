@@ -1,6 +1,6 @@
 // Ctrl+K: search page titles and text, open a result, or run a command. Titles come from the
 // mirror at once; text matches come from the local store's index (M1.8), normalised the same way.
-import { normaliseText, type SearchHit } from '@cgw/workspace';
+import { normaliseText } from '@cgw/workspace';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell } from '../context';
@@ -8,7 +8,7 @@ import { Dialog } from '../Dialog';
 import type { ShellDatabaseHost } from '../database/host';
 import { pageGlyph } from '../database/make';
 import { navigate } from '../route';
-import { isRowRecord, type WorkspaceSession } from '../session';
+import { isRowRecord, type RemoteSearchHit, type WorkspaceSession } from '../session';
 import { formatShortcut } from '../shortcuts';
 
 interface Item {
@@ -35,7 +35,7 @@ export function Palette({
   const services = useShell();
   const [query, setQuery] = useState('');
   // The hits and the query they answer: while a search runs, the last hits stay in view.
-  const [result, setResult] = useState<{ query: string; hits: SearchHit[] }>({
+  const [result, setResult] = useState<{ query: string; hits: RemoteSearchHit[] }>({
     query: '',
     hits: [],
   });
@@ -59,8 +59,9 @@ export function Palette({
       if (!live) return;
       setResult({ query: q, hits: found });
       performance.measure('cgw-search', { start: started, end: performance.now() });
-      // Then the account's: pages this device holds no text for, local hits first (M2.7). A hit
-      // the mirror has no page for is a row (rows are not in the tree); it is found when opened.
+      // Then the account's: pages this device holds no text for, local hits first (M2.7). A row
+      // this device does not hold (rows are not in the tree) is pulled from its database when
+      // opened.
       void session.remoteSearch?.(q, 20).then((remote) => {
         if (!live || !remote.length) return;
         const seen = new Set(found.map((hit) => hit.pageId));
@@ -83,13 +84,15 @@ export function Palette({
     const pages: Item[] = hits.map((hit) => {
       const page = session.record(hit.pageId);
       const row = isRowRecord(page) ? page : null;
-      const database = row ? session.mirror.pages.get(row.databaseId) : undefined;
+      const databaseId = row?.databaseId ?? hit.databaseId ?? null;
+      const database = databaseId ? session.mirror.pages.get(databaseId) : undefined;
       const open = () => {
-        if (session.mirror.pages.has(hit.pageId) || row || !databases)
-          return navigate({ kind: 'page', pageId: hit.pageId });
-        // A row this device does not hold: its database is found and the row pulled first.
+        // A hit the mirror has no page for is a row, unless the server says it is not.
+        const pulled = !page && (hit.kind ?? 'row') === 'row';
+        if (!pulled || !databases) return navigate({ kind: 'page', pageId: hit.pageId });
+        // A row this device does not hold: the row is pulled from its database first.
         void databases
-          .locateRow(hit.pageId, hit.title)
+          .locateRow(hit.pageId, hit.title, databaseId)
           .catch(() => false)
           .then(() => navigate({ kind: 'page', pageId: hit.pageId }));
       };

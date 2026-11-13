@@ -494,16 +494,18 @@ export class ShellDatabaseHost implements DatabaseHost {
   }
 
   /**
-   * A row a search found that this device does not hold (the server's search names only its id
-   * and title): each database of the workspace not held in full is asked for rows by that title
-   * until one has it; that database is then held and the row kept, as a page is pulled when it
-   * is opened. True when the row is on this device after.
+   * A row a search found that this device does not hold, pulled as a page is when it is opened.
+   * The server's hit names the row's database: that database is held and its query asked for
+   * rows by the row's title, which keeps the rows it answers on this device; a row its title does
+   * not find there (a template) comes with the next pass when the database is held in full. A hit
+   * that names no database (a server before 0.4.0) asks each database not held in full by that
+   * title until one has it. True when the row is on this device after.
    */
-  async locateRow(rowId: Id, title: string): Promise<boolean> {
+  async locateRow(rowId: Id, title: string, databaseId: Id | null = null): Promise<boolean> {
     if (await this.session.findRow(rowId)) return true;
     const sync = this.sync;
     const workspaceId = this.session.workspaceId;
-    if (!sync || !sync.online() || !workspaceId || !title.trim()) return false;
+    if (!sync || !sync.online() || !workspaceId) return false;
     const request: QueryRequest = {
       filter: null,
       sorts: [],
@@ -512,6 +514,21 @@ export class ShellDatabaseHost implements DatabaseHost {
       context: this.queryContext(),
       limit: 100,
     };
+    if (databaseId) {
+      try {
+        const hold = await sync.holdDatabase(databaseId);
+        this.holds.set(databaseId, hold);
+        if (title.trim()) await sync.queryDatabase(databaseId, request);
+        if (await this.session.findRow(rowId)) return true;
+        if (hold.mode !== 'full') return false;
+        await sync.syncNow();
+        return !!(await this.session.findRow(rowId));
+      } catch {
+        // Refused or offline: not found.
+        return false;
+      }
+    }
+    if (!title.trim()) return false;
     const peek = sync.peekQuery ?? sync.queryDatabase;
     for (const database of this.session.mirror.databases.values()) {
       const page = this.session.mirror.pages.get(database.id);

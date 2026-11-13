@@ -9,13 +9,14 @@ import { pageGlyph } from './database/make';
 import { Dialog } from './Dialog';
 import { navigate } from './route';
 import type { WorkspaceSession } from './session';
-import { useMirror } from './sidebar/Sidebar';
+import { useMirror, useTrashedRowCount } from './sidebar/Sidebar';
 
 export const TRASH_RETENTION_DAYS = 60;
 
-/** The workspace's trashed rows, read again whenever the mirror changes. */
+/** The workspace's trashed rows, read again whenever the mirror or their count changes. */
 function useTrashedRows(session: WorkspaceSession, workspaceId: Id | null): RowRecord[] {
   const revision = useMirror(session);
+  const count = useTrashedRowCount(session, workspaceId);
   const [rows, setRows] = useState<RowRecord[]>([]);
   useEffect(() => {
     if (!workspaceId) return setRows([]);
@@ -27,7 +28,7 @@ function useTrashedRows(session: WorkspaceSession, workspaceId: Id | null): RowR
     return () => {
       live = false;
     };
-  }, [session, workspaceId, revision]);
+  }, [session, workspaceId, revision, count]);
   return rows;
 }
 

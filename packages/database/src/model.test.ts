@@ -459,4 +459,29 @@ describe('the catalogues', () => {
     }
     expect(missing).toEqual([]);
   });
+
+  it('are the package entry `./i18n`, which imports no package (React, i18next, the views)', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'),
+    ) as { exports: Record<string, string> };
+    const entry = join(import.meta.dirname, '..', manifest.exports['./i18n']);
+    const seen = new Set<string>();
+    const walk = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      for (const [, from] of readFileSync(file, 'utf8').matchAll(/\bfrom\s+'([^']+)'/g)) {
+        expect(from.startsWith('./'), `${file} imports ${from}`).toBe(true);
+        walk(join(file, '..', `${from}.ts`));
+      }
+    };
+    walk(entry);
+    expect([...seen].map((f) => f.split(/[\\/]/).pop()).sort()).toEqual([
+      'ar.ts',
+      'catalogue.ts',
+      'catalogues.ts',
+      'en.ts',
+      'views-ar.ts',
+      'views-en.ts',
+    ]);
+  });
 });

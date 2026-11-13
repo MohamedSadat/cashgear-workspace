@@ -927,7 +927,7 @@ export interface components {
       message: string;
     };
     ImportRequestDto: {
-      columns: null | string[];
+      columns: null | (null | string)[];
       csv: null | string;
       /** @default false */
       header: boolean;
@@ -1249,6 +1249,9 @@ export interface components {
       total: number | string;
     };
     SearchHitDto: {
+      /** Format: uuid */
+      databaseId: null | string;
+      kind: string;
       /** Format: uuid */
       pageId: string;
       /** Format: double */

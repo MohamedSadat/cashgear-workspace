@@ -35,6 +35,7 @@ builder.Services.AddOpenApi("v1", options =>
         return Task.CompletedTask;
     });
     options.AddOperationTransformer<RouteParameters>();
+    options.AddSchemaTransformer<NullableItems>();
 });
 builder.Services.AddHealthChecks()
     .AddCheck<SqlHealth>("sql", tags: ["ready"])

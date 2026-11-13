@@ -16,6 +16,13 @@ export function useMirror(session: WorkspaceSession): number {
   );
 }
 
+/** How many rows of the workspace are in the trash on their own (counted by the session). */
+export function useTrashedRowCount(session: WorkspaceSession, workspaceId: Id | null): number {
+  return useSyncExternalStore(session.onTrashedRows, () =>
+    workspaceId ? session.trashedRowCount(workspaceId) : 0,
+  );
+}
+
 function PageLink({
   page,
   active,
@@ -64,11 +71,13 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
   const [templates, setTemplates] = useState<{ x: number; y: number } | null>(null);
   const [creating, setCreating] = useState(false);
   const workspaceId = session.workspaceId;
+  const trashedRows = useTrashedRowCount(session, workspaceId);
   if (!workspaceId) return null;
   const favourites = session.mirror.favouritesOf(workspaceId);
   const recent = session.mirror.recentOf(workspaceId, 5);
   const templateList = session.mirror.templatesOf(workspaceId);
-  const trashCount = session.mirror.trash(workspaceId).length;
+  // Pages trashed with what is under them, and rows trashed on their own.
+  const trashCount = session.mirror.trash(workspaceId).length + trashedRows;
   const recoveredCount = cloud ? cloud.recovery.visible().length : 0;
   const unavailable = (page: PageRecord) => !!marks && !marks.has(page.id);
   return (

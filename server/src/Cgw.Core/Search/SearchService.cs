@@ -9,7 +9,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core.Search;
 
-public sealed record SearchHitDto(Guid PageId, string Title, string Snippet, double Score);
+/// <summary>
+/// A page found. <c>Kind</c> is the page's (<c>page</c>, <c>database</c>, <c>row</c>);
+/// <c>DatabaseId</c> is a row's database (null for anything else), so a client that does not hold
+/// the row knows which database to fetch it from.
+/// </summary>
+public sealed record SearchHitDto(Guid PageId, string Title, string Snippet, double Score, string Kind, Guid? DatabaseId);
 public sealed record SearchResultDto(IReadOnlyList<SearchHitDto> Hits, string? Cursor);
 
 /// <summary>
@@ -64,6 +69,8 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
         public string Title { get; set; } = "";
         public DateTimeOffset UpdatedAt { get; set; }
         public int TitleHits { get; set; }
+        public string Kind { get; set; } = PageKinds.Page;
+        public byte[]? ParentPageId { get; set; }
     }
 
     public async Task<Result<SearchResultDto>> SearchAsync(Member member, string? q, int? limit, string? cursor, CancellationToken ct = default)
@@ -82,17 +89,12 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
 
         var full = await fullText.AvailableAsync(db, ct);
         var levels = await access.AllLevelsAsync(member);
-        // Rows are not in it: a row found has its database's level, read when one is found.
-        var rowDatabases = new Dictionary<Guid, Guid?>();
-        async Task<string> LevelAsync(Guid pageId)
-        {
-            if (levels.TryGetValue(pageId, out var level)) return level;
-            if (!rowDatabases.TryGetValue(pageId, out var database))
-                rowDatabases[pageId] = database = await db.Pages.AsNoTracking().Where(p => p.Id == pageId && p.Kind == PageKinds.Row)
-                    .Select(p => p.ParentPageId).FirstOrDefaultAsync(ct);
-            return database is { } d ? levels.GetValueOrDefault(d, Levels.None) : Levels.None;
-        }
-        var hits = new List<(Key Key, string Title)>();
+        // Rows are not in it: a row found has its database's (its parent's) level.
+        string Level(Guid pageId, string kind, Guid? databaseId) =>
+            kind == PageKinds.Row
+                ? databaseId is { } d ? levels.GetValueOrDefault(d, Levels.None) : Levels.None
+                : levels.GetValueOrDefault(pageId, Levels.None);
+        var hits = new List<(Key Key, string Title, string Kind, Guid? DatabaseId)>();
         var take = Math.Max(size * 3, 60);
         var exhausted = false;
         Key? scanned = after;
@@ -103,8 +105,9 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
             {
                 var key = new Key(row.TitleHits, row.UpdatedAt, GuidBytes.FromBytes(row.PageId));
                 scanned = key;
-                if (await LevelAsync(key.PageId) == Levels.None) continue;
-                hits.Add((key, row.Title));
+                Guid? databaseId = row.Kind == PageKinds.Row && row.ParentPageId is { } parent ? GuidBytes.FromBytes(parent) : null;
+                if (Level(key.PageId, row.Kind, databaseId) == Levels.None) continue;
+                hits.Add((key, row.Title, row.Kind, databaseId));
                 if (hits.Count > size) break;
             }
             if (rows.Count < take)
@@ -129,7 +132,9 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
                 h.Key.PageId,
                 h.Title,
                 Snippet(texts.GetValueOrDefault(h.Key.PageId) ?? "", terms),
-                1 + (double)h.Key.TitleHits / terms.Length))
+                1 + (double)h.Key.TitleHits / terms.Length,
+                h.Kind,
+                h.DatabaseId))
             .ToList();
         return new SearchResultDto(result, next);
     }
@@ -175,8 +180,8 @@ public sealed class SearchService(CgwDb db, Access access, FullText fullText, ID
             keyset = "WHERE h.TitleHits < @ct OR (h.TitleHits = @ct AND (h.UpdatedAt < @cu OR (h.UpdatedAt = @cu AND h.PageId > @ci)))";
         }
         var sql = $"""
-            SELECT TOP (@take) h.PageId, h.Title, h.UpdatedAt, h.TitleHits FROM (
-                SELECT p.Id AS PageId, p.Title, p.UpdatedAt, ({string.Join(" + ", titleHits)}) AS TitleHits
+            SELECT TOP (@take) h.PageId, h.Title, h.UpdatedAt, h.TitleHits, h.Kind, h.ParentPageId FROM (
+                SELECT p.Id AS PageId, p.Title, p.UpdatedAt, ({string.Join(" + ", titleHits)}) AS TitleHits, p.Kind, p.ParentPageId
                 FROM Pages p
                 WHERE p.WorkspaceId = @ws AND p.TrashedAt IS NULL AND p.DeletedAt IS NULL
                     AND {string.Join(" AND ", where)}

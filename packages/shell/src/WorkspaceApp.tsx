@@ -431,10 +431,11 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     const workspaceId = session.workspaceId;
     if (!workspaceId) return;
     const before = new Date(Date.now() - TRASH_RETENTION_DAYS * 86_400_000).toISOString();
+    // The mirror is read again (not merged: what went is gone from it), and the trash's count.
     void session.store
       .purgeTrash(workspaceId, before)
       .then(async (gone) => {
-        if (gone.length) session.mirror.load(await session.store.readMirror(null));
+        if (gone.length) await session.reloadMirror();
       })
       .catch(() => undefined);
   }, [session, session.workspaceId]);

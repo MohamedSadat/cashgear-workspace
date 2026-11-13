@@ -23,7 +23,7 @@ import {
 } from '@cgw/workspace';
 import type { DatabaseSync } from '../database/host';
 import type { CloudPlatform } from '../platform';
-import { NotOnDeviceError, type WorkspaceSession } from '../session';
+import { NotOnDeviceError, type RemoteSearchHit, type WorkspaceSession } from '../session';
 import { OfflineState } from './offline';
 import { Recovery } from './recovery';
 
@@ -432,13 +432,8 @@ export class Cloud {
         const answer = await data(
           this.api.POST('/api/v1/databases/{databaseId}/import', {
             params: { path: { databaseId } },
-            // A column not imported is null (contract section 4); the generated schema
-            // writes the items as strings only.
-            body: {
-              csv: request.csv,
-              columns: request.columns as string[],
-              header: request.header,
-            },
+            // A column not imported is null (contract section 4).
+            body: { csv: request.csv, columns: request.columns, header: request.header },
           }),
         );
         return {
@@ -674,11 +669,13 @@ export class Cloud {
           params: { path: { workspaceId: workspace.id }, query: { q, limit } },
         }),
       );
-      return answer.hits.map((hit) => ({
+      return answer.hits.map((hit): RemoteSearchHit => ({
         pageId: hit.pageId,
         title: hit.title,
         snippet: hit.snippet,
         score: Number(hit.score),
+        kind: hit.kind === 'row' || hit.kind === 'database' ? hit.kind : 'page',
+        databaseId: hit.databaseId ?? null,
       }));
     } catch {
       return [];

@@ -440,11 +440,14 @@ export class MemoryDatabaseHost implements DatabaseHost {
           break;
       }
     }
-    if (props === null)
-      for (const id of changed) {
-        const row = this.rowRecords.get(id);
-        if (row) this.templateCache.delete(row.databaseId);
-      }
+    // The template list is kept until a change could alter it: a structural one, or any change
+    // to a template (its values, its title) or to a row that was one.
+    for (const id of changed) {
+      const row = this.rowRecords.get(id);
+      if (!row) continue;
+      const listed = this.templateCache.get(row.databaseId)?.some((r) => r.id === id);
+      if (props === null || row.isTemplate || listed) this.templateCache.delete(row.databaseId);
+    }
     this.emit(changed, props);
   }
 

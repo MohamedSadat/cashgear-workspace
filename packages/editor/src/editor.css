@@ -1106,6 +1106,10 @@ h3.cgw-body {
   color: var(--cg-text-secondary);
   font-style: italic;
 }
+/* Hidden while the database is drawn: the rule above would otherwise win over `hidden`. */
+.cgw-database-placeholder[hidden] {
+  display: none;
+}
 .cgw-database-choose {
   padding: 2px 10px;
   border: 1px solid var(--cg-border);

@@ -46,4 +46,11 @@ describe('catalogues', () => {
       expect(/[A-Za-z]/.test(text.replace(/\{\{\w+\}\}/g, '')), `${key}: ${text}`).toBe(false);
     }
   });
+
+  it('take the database section from @cgw/database/i18n, the catalogues alone', async () => {
+    const entry = await import('@cgw/database/i18n');
+    expect(Object.keys(entry).sort()).toEqual(['ar', 'en']);
+    expect(en.database).toBe(entry.en.database);
+    expect(ar.database).toBe(entry.ar.database);
+  });
 });

@@ -397,6 +397,56 @@ describe('the toolbar and menus', () => {
     await mouse(board, 'click');
     expect(host.views(tasksId)).toHaveLength(2);
     expect(host.views(tasksId)[1]).toMatchObject({ type: 'board', name: 'Board' });
+    // The view made is the one shown, though the host listed it before its change resolved.
+    const selected = container.querySelector('[role="tab"][aria-selected="true"]')!;
+    expect(selected.textContent).toContain('Board');
+  });
+
+  it('selects a view by a mouse click on its tab, and reorders by a drag of it', async () => {
+    const { view, host, tasksId } = table(2);
+    await mount(view);
+    await mouse(container.querySelector('[aria-label="Add a view"]')!, 'click');
+    const board = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
+      b.textContent?.includes('Board'),
+    )!;
+    await mouse(board, 'click');
+    const tab = (name: string) =>
+      [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) =>
+        t.textContent?.includes(name),
+      )!;
+    expect(tab('Board').getAttribute('aria-selected')).toBe('true');
+    // As a browser sends a click while `CgTabs` holds the pointer on the tab's wrapper (for its
+    // drag): down on the tab, then up and the click on the wrapper.
+    const press = async (target: Element, type: string, x: number) => {
+      const init = { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 10 };
+      await act(async () => {
+        target.dispatchEvent(
+          type === 'click'
+            ? new MouseEvent(type, init)
+            : new PointerEvent(type, { ...init, pointerId: 1 }),
+        );
+      });
+      await flush();
+    };
+    let wrapper = tab('All tasks').parentElement!;
+    expect(wrapper.dataset.tabKey).toBeTruthy();
+    await press(tab('All tasks'), 'pointerdown', 10);
+    await press(wrapper, 'pointerup', 11);
+    await press(wrapper, 'click', 11);
+    expect(tab('All tasks').getAttribute('aria-selected')).toBe('true');
+    expect(tab('Board').getAttribute('aria-selected')).toBe('false');
+
+    // A drag of the Board tab before the first: the views are reordered and the choice stays.
+    const upserts = opsOf(host, 'view.upsert').length;
+    wrapper = tab('Board').parentElement!;
+    await press(tab('Board'), 'pointerdown', 100);
+    await press(wrapper, 'pointermove', 60);
+    await press(wrapper, 'pointermove', -10);
+    await press(wrapper, 'pointerup', -10);
+    await press(wrapper, 'click', -10);
+    expect(opsOf(host, 'view.upsert')).toHaveLength(upserts + 1);
+    expect(host.views(tasksId).map((v) => v.name)).toEqual(['Board', 'All tasks']);
+    expect(tab('All tasks').getAttribute('aria-selected')).toBe('true');
   });
 });
 

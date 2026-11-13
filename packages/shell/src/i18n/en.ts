@@ -2,9 +2,9 @@
 // one, so a missing or extra key fails the typecheck, and `t()` only accepts keys that exist.
 //
 // The database views' strings are their own section, `database`, written in `@cgw/database` and
-// merged here (read from its catalogue module, not the package's index, so the frame's bundle
-// does not take the views with it).
-import { en as databaseEn } from '../../../database/src/i18n/en';
+// merged here (from `@cgw/database/i18n`, the catalogues alone, not the package's index, so the
+// frame's bundle does not take the views with it).
+import { en as databaseEn } from '@cgw/database/i18n';
 
 export const en = {
   ...databaseEn,

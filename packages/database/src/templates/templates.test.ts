@@ -140,6 +140,8 @@ describe('row templates', () => {
         createdAt: new Date().toISOString(),
       },
     ]);
+    // The host's list of templates follows a change to one.
+    expect(host.rowTemplates(tasksId)[0].values[P.priority]).toBe('prHigh01');
     const items = rowTemplateItems({
       host,
       databaseId: tasksId,
@@ -167,8 +169,7 @@ describe('row templates', () => {
         },
       },
     };
-    // The memory host's template list is cached until a structural change: read the record itself.
-    const rowId = await createFromTemplate(host, tasksId, host.rowRecords.get(id!)!, filtered);
+    const rowId = await createFromTemplate(host, tasksId, host.rowTemplates(tasksId)[0], filtered);
     const made = host.rowRecords.get(rowId!)!;
     expect(made.isTemplate).toBe(false);
     expect(made.templateOfPageId).toBe(id);
@@ -178,5 +179,32 @@ describe('row templates', () => {
     const source = host.rows(tasksId, { viewId, spec: { filter: null, sorts: [], group: null } });
     expect(source.snapshot().rows.some((r) => r.id === id)).toBe(false);
     source.close();
+  });
+
+  it("keeps the memory host's list while nothing changes it, and follows every change to a template", async () => {
+    const { host, tasksId, viewId } = seed(3);
+    const view = host.views(tasksId).find((v) => v.id === viewId)!;
+    const id = (await createTemplate(host, tasksId, view, 'Weekly'))!;
+    const op = (type: 'row.update' | 'page.update', entityId: Id, payload: object) =>
+      ({
+        opId: testId(),
+        type,
+        workspaceId: view.workspaceId,
+        entityId,
+        baseVersion: null,
+        payload,
+        createdAt: new Date().toISOString(),
+      }) as never;
+    const list = host.rowTemplates(tasksId);
+    expect(host.rowTemplates(tasksId)).toBe(list);
+    // A value of a row that is not a template: the same list.
+    const plain = host.rowsOf(tasksId).find((r) => !r.isTemplate)!;
+    await host.apply([op('row.update', plain.id, { values: { [P.priority]: 'prLow001' } })]);
+    expect(host.rowTemplates(tasksId)).toBe(list);
+    // The template's title, then its end as a template in a change that also names it.
+    await host.apply([op('page.update', id, { title: 'Monthly' })]);
+    expect(host.rowTemplates(tasksId).map((r) => r.title)).toEqual(['Monthly']);
+    await host.apply([op('page.update', id, { title: 'Once', isTemplate: false })]);
+    expect(host.rowTemplates(tasksId)).toEqual([]);
   });
 });

@@ -283,6 +283,42 @@ describe('the database host on a local workspace', () => {
     source.close();
   });
 
+  it("counts the trash's rows for the sidebar, reading the store only when a change moves it", async () => {
+    const { store, session, host, databaseId, ws } = await localDatabase();
+    const reads = vi.spyOn(store, 'trashedRows');
+    let told = 0;
+    const off = session.onTrashedRows(() => told++);
+    const count = async (n: number) => {
+      await until(() => session.trashedRowCount(ws.id) === n, `a count of ${n}`);
+      await until(async () => (await store.trashedRows(ws.id)).length === n);
+    };
+    expect(session.trashedRowCount(ws.id)).toBe(0);
+    await until(() => reads.mock.calls.length === 1, 'the first count');
+    const [one, two] = session.mirror.rowsOf(databaseId);
+    await session.trashPage(one.id);
+    await until(() => session.trashedRowCount(ws.id) === 1, 'one row');
+    await session.trashPage(two.id);
+    await until(() => session.trashedRowCount(ws.id) === 2, 'two rows');
+    expect(told).toBe(2);
+    // Edits that do not move a row in or out of the trash read nothing.
+    const before = reads.mock.calls.length;
+    const [three] = session.mirror.rowsOf(databaseId).filter((r) => !r.trashedAt);
+    await host.apply([newOp('page.update', ws.id, three.id, { title: 'Renamed' })]);
+    await session.updatePage(three.id, { icon: '✅' });
+    for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reads.mock.calls.length).toBe(before);
+    // A restore, and a delete for good.
+    await session.restorePage(one.id);
+    await count(1);
+    await session.deletePage(two.id);
+    await count(0);
+    // The sync engine's word that rows changed (another device's trash, say): counted again.
+    const at = reads.mock.calls.length;
+    session.rowsChanged(databaseId);
+    await until(() => reads.mock.calls.length > at, 'a count after the rows changed');
+    off();
+  });
+
   it('makes empty rows after the last ones', async () => {
     const { session, host, databaseId, ws, section } = await localDatabase();
     const last = [...session.mirror.rowsOf(databaseId)]
@@ -415,6 +451,62 @@ describe('the database host on a synced workspace', () => {
     expect(await session.findRow(far.id)).toBeNull();
     expect(await host.locateRow(far.id, far.title)).toBe(true);
     expect((await session.findRow(far.id))?.databaseId).toBe(db.id);
+  });
+
+  it('pulls a row a search found from the database the hit names, asking no other', async () => {
+    const server = new FakeServer();
+    const { db, one, two, ws, section, a, host, session } = await synced(server);
+    const other = await makeDatabase(one.store, ws.id, section.id, a.id, ['Far away'], 'Projects');
+    await one.engine.syncOnce();
+    await two.engine.syncOnce();
+    const asked: string[] = [];
+    let passes = 0;
+    const { sync } = syncOf(two, server, {
+      peekQuery: (id, request) => {
+        asked.push(`peek ${id}`);
+        return server.api(ALICE).query(id, request);
+      },
+      queryDatabase: (id, request) => {
+        asked.push(`query ${id}`);
+        return two.engine.queryDatabase(id, request);
+      },
+      syncNow: () => {
+        passes++;
+        return two.engine.syncOnce();
+      },
+    });
+    host.connect(sync);
+    const [far] = other.rows;
+    expect(await session.findRow(far.id)).toBeNull();
+    expect(await host.locateRow(far.id, far.title, other.db.id)).toBe(true);
+    expect((await session.findRow(far.id))?.databaseId).toBe(other.db.id);
+    expect(asked).toEqual([`query ${other.db.id}`]);
+    expect(passes).toBe(0);
+    expect(await two.store.dbHold(db.id)).toBeNull();
+  });
+
+  it('pulls a template a search found, which no query answers, with a pass', async () => {
+    const server = new FakeServer();
+    const { one, two, ws, section, a, host, session, sync } = await synced(server);
+    const other = await makeDatabase(one.store, ws.id, section.id, a.id, ['Far away'], 'Projects');
+    const template = {
+      ...rowCreate(ws.id, section.id, other.db.id, 'Weekly review', {}, 'b0'),
+      isTemplate: true,
+    };
+    await one.store.applyLocalOps([newOp('page.create', ws.id, template.id, template)]);
+    await one.engine.syncOnce();
+    await two.engine.syncOnce();
+    let passes = 0;
+    host.connect({
+      ...sync,
+      syncNow: () => {
+        passes++;
+        return two.engine.syncOnce();
+      },
+    });
+    expect(await host.locateRow(template.id, template.title, other.db.id)).toBe(true);
+    expect((await session.findRow(template.id))?.isTemplate).toBe(true);
+    expect(passes).toBe(1);
   });
 
   it('imports a CSV on the server once the database it made has reached it', async () => {

@@ -2,6 +2,7 @@
 // viewport and unmounted far from it, never mounted again per transaction (D26); a placeholder
 // without a host or a database; inserted by "Database" and "Linked view"; an atom like the others
 // for the keyboard, the block menu and the clipboard, which keeps it a link to the same database.
+import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { installDom } from './testing';
 
@@ -116,6 +117,31 @@ describe('the database view block', () => {
     expect(mounts).toHaveLength(1);
     expect(mounts[0].options.viewId).toBeNull();
     expect(editor.state.doc.toJSON()).toBeTruthy();
+  });
+
+  it('draws the placeholder only without the database, by the stylesheet too', async () => {
+    // The placeholder's own `display` must not beat its `hidden` attribute.
+    const style = document.createElement('style');
+    style.textContent = readFileSync(new URL('./editor.css', import.meta.url), 'utf8');
+    document.head.append(style);
+    try {
+      const shown = setup();
+      await tick();
+      const waiting = shown.views()[0].querySelector<HTMLElement>('.cgw-database-placeholder')!;
+      expect(getComputedStyle(waiting).display).toBe('flex');
+      const { host } = databaseHost();
+      const drawn = setup(undefined, host);
+      await tick();
+      const placeholder = drawn.views()[0].querySelector<HTMLElement>('.cgw-database-placeholder')!;
+      expect(placeholder.hidden).toBe(true);
+      expect(getComputedStyle(placeholder).display).toBe('none');
+      // Nothing else the editor hides is drawn either.
+      for (const element of [shown.element, drawn.element])
+        for (const hidden of element.querySelectorAll<HTMLElement>('[hidden]'))
+          expect(getComputedStyle(hidden).display, hidden.className).toBe('none');
+    } finally {
+      style.remove();
+    }
   });
 
   it("mounts the host's view in its frame once, with its database, view, block and editability", async () => {
