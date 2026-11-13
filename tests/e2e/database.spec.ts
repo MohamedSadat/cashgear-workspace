@@ -20,6 +20,7 @@ import {
   chooseDate,
   chooseFromList,
   chooseOptions,
+  expectInRow,
   fullPage,
   grid,
   newDatabase,
@@ -174,8 +175,8 @@ test('a database with every property type is made, edited and shown in all five 
 
   // The table shows them all (the title stays as the grid scrolls across).
   const widget = rowOf(db, 'Widget');
-  await expect(widget).toContainText('Hardware');
-  await expect(widget).toContainText('Fits the left bracket');
+  await expectInRow(db, widget, 'Hardware');
+  await expectInRow(db, widget, 'Fits the left bracket');
   await expect(db.getByRole('status')).toHaveText('Rows: 2');
 
   // The other four views, every property shown on each.
@@ -204,16 +205,11 @@ test('a database with every property type is made, edited and shown in all five 
         continue;
       }
       if (type === 'Table') {
-        // Columns outside the window are not drawn: the first ones, then the last ones.
-        await expect(widget).toContainText('Fits the left bracket');
-        await expect(widget).toContainText('Hardware');
-        // To the end: right in English, left in Arabic (where scrollLeft runs negative).
-        await grid(db).evaluate(
-          (el) =>
-            (el.scrollLeft =
-              getComputedStyle(el).direction === 'rtl' ? -el.scrollWidth : el.scrollWidth),
-        );
-        await expect(widget).toContainText('25');
+        // Columns outside the window are not drawn: scroll across to each.
+        await expectInRow(db, widget, 'Fits the left bracket');
+        await expectInRow(db, widget, 'Hardware');
+        // Towards the end: right in English, left in Arabic (where scrollLeft runs negative).
+        await expectInRow(db, widget, '25');
         await grid(db).evaluate((el) => (el.scrollLeft = 0));
         continue;
       }

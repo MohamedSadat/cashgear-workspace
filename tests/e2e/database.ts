@@ -40,6 +40,30 @@ export const WORDS = {
 /** The database on its own page. */
 export const fullPage = (page: Page) => page.locator('.cgw-database-page .cgw-db');
 export const grid = (scope: Page | Locator) => scope.locator('[role="grid"].cgw-grid');
+
+/**
+ * Columns outside the table's window are not drawn, and how many fit depends on the window (the
+ * desktop's on CI is narrower than a browser's): scroll the grid across, a window at a time and
+ * round again, until the row shows `text`.
+ */
+export async function expectInRow(scope: Page | Locator, row: Locator, text: string) {
+  const table = grid(scope);
+  await expect
+    .poll(
+      async () => {
+        if ((await row.textContent())?.includes(text)) return true;
+        await table.evaluate((el) => {
+          const rtl = getComputedStyle(el).direction === 'rtl';
+          const atEnd = Math.abs(el.scrollLeft) + el.clientWidth >= el.scrollWidth - 1;
+          const step = Math.max(100, el.clientWidth * 0.8);
+          el.scrollLeft = atEnd ? 0 : el.scrollLeft + (rtl ? -step : step);
+        });
+        return false;
+      },
+      { timeout: 15_000, intervals: [100, 200, 300] },
+    )
+    .toBe(true);
+}
 export const pageId = (page: Page) => new URL(page.url()).hash.match(/#\/p\/([0-9a-f-]{36})/)![1];
 
 /**
