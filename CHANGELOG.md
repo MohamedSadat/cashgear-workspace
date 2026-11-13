@@ -4,6 +4,43 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.4.0] - 2026-11-13
+
+Databases: tables of rows with typed properties, inside pages or as pages of their own, shown as
+a table, a board, a list, a calendar or a gallery.
+
+- **Databases.** "New database" wherever "New page" is, empty or from a template (Tasks,
+  Projects, Reading list, Meeting notes, Contacts), and `/database` in a page for one inside it.
+  `/linked view` shows a database that lives elsewhere. Every row is a page: open it for its
+  properties above a page of its own.
+- **Properties.** Text, number (with a format), date (with an end and a time), checkbox, select,
+  multi-select, status, person, URL, email, phone and files; relations to another database, kept
+  in step on both sides; rollups over them; formulas; and created and last edited time and by.
+  Add, rename, reorder, hide and delete them; a deleted property can be restored with its values.
+  Changing a property's type says what will happen to its values before it does.
+- **Views.** A virtualised table that scrolls 50,000 rows smoothly; a board you drag cards across
+  and within; a list; a month calendar you drag rows across; a gallery with covers. Each view has
+  its own filter (conditions and groups), sorts, grouping and shown properties.
+- **Formulas.** `prop("Name")`, arithmetic, comparisons, `if`, text, number and date functions,
+  with the property names shown while you type and errors said plainly. The server computes the
+  same results, so big databases filter and sort by them too.
+- **Big databases.** Up to 5,000 rows, a database is kept on your device and works offline. Above
+  that the server finds, sorts and pages the rows for you, and offline you see the rows this device
+  has, and are told so.
+- **Two people, one row.** Edits to different properties of a row both stand; for the same
+  property the last to reach the server wins. An edit made offline before someone changed the
+  property's type lands converted.
+- **CSV.** Import a file into a database or as a new one, and export any view. Exported cells that
+  a spreadsheet could run as formulas are made safe, and come back unchanged on import.
+- **Dates in a page.** "@" offers Today, Tomorrow and a date picker; dates show in your language.
+- **The rest.** Rows can be trashed and restored like pages; search finds rows; the workspace
+  export and import keep databases, their views and rows; a shared link shows a note where a
+  database is (databases are not shared by link yet).
+- **Versions.** Pages edited in 0.4.0 move to document version 3, which 0.3.0 opens read-only; it
+  never sees a database's rows. This device's store moves to version 4 (the desktop keeps a copy
+  of the old file).
+- **Fixed.** A page renamed elsewhere could stay stale while a visit to it waited to be sent.
+
 ## [0.3.0] - 2026-11-12
 
 Offline: keep working with no network, on the desktop and in the browser, and everything syncs

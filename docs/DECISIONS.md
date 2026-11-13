@@ -841,3 +841,17 @@ The app (the shell over the views):
 | The glyph | `▦` where a database has no icon; rows keep a page's | The table view's glyph |
 | A server import | Sends the outbox until nothing waits on that database (at most 8 passes), then imports | The database must be on the server first |
 | The workspace export on the device | Format version 2, as the server's; a database held partially exports the rows the device has; row templates in the JSON, not the CSV | A backup keeps what a person made; the CSV is a view of the rows |
+
+M4.7 and the proof:
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| How the budgets are read (`bench/phase4.mjs`) | First rows: from the database page's route to the table's first row, the median of five opens after the first (the first open, while the server fills its query cache, is tracked); 60 frames a second and a board drag ≤ 16 ms: the frame interval's p95 ≤ 17.5 ms (a 60 Hz frame and timer jitter); a cell edit "local ≤ 16 ms": Enter to the cell showing the value, p95 of 40 edits, with the next frame gated at 33 ms as Q19 did for keystrokes; durable: to the store's transaction, p95 ≤ 1 s; the server query in CI's Linux server job (SQL Server), the rest in the Windows job | The plan's figures, measured where they can be, as Phases 1 to 3 measured theirs |
+| A cell edit before the store answers | The session applies the change in memory first and reads the store again if the write is refused | A commit showed only after IndexedDB committed (28 ms p95 before, 14.9 ms after) |
+| A database's own page | Fills its area; the view scrolls inside itself | It drew every loaded row and scrolled at 4.5 frames a second at 50,000 rows |
+| Assets and operations | The engine uploads files before it pushes operations, in each pass | The server takes a row's file or a cover only once it holds the bytes; a file added to a row was lost |
+| A new relation or rollup | "Add a property" opens its settings first; nothing is written until Done | A relation without a target was refused without a word |
+| An inline database's header | The toolbar wraps under the tabs when both do not fit; the tabs keep at least `min(100%, 16rem)` | "Table" was drawn as "Tal" |
+| Old builds in the specs | v0.2.0 on port 4279 and v0.3.0 on 4278 (`target/old-build/<tag>`); a visit is the only operation an old build may send | Each released build meets the documents of the one after it |
+| The Arabic check | "CSV" is allowed, as key names are | It is the format's name in both languages |
+| The e2e stack's import limit | `RateLimits__import` 10,000, as `push` | The specs and the bench import through the route |

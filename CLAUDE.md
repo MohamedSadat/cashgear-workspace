@@ -3,10 +3,10 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 3 are done (0.3.0: the local-first editor; accounts, sync, sharing, server
-search and history; then offline, conflicts, migrations and the Mac app); the next step is Phase 4
-(workspace databases). Evidence is in `docs/PROGRESS.md`; spike results and the decisions they
-changed are in `docs/DECISIONS.md`.
+Status: Phases 0 to 4 are done (0.4.0: the local-first editor; accounts, sync, sharing, server
+search and history; offline, conflicts, migrations and the Mac app; then workspace databases and
+their views); the next step is Phase 5 (Sheet embeds and read-only ERP blocks). Evidence is in
+`docs/PROGRESS.md`; spike results and the decisions they changed are in `docs/DECISIONS.md`.
 
 ## Workflow
 
@@ -121,8 +121,9 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `cargo build -p cgw-store --bin cgw-store-cli` | The binary the SQLite conformance suite runs through (`pnpm check` builds it; without it the suite is skipped locally) |
 | `node scripts/kill-test.mjs --target web|desktop --runs N` | Kill the app while typing, reopen, check nothing saved was lost (web needs `pnpm build`; desktop needs the release build). `--sync`: signed in, against the e2e server stack (started if not running), the network cut in some runs, the server's text checked every `--check-every` runs; `--until-compaction`: each run waits to kill during a compaction; `--kill tree` (the web's default) or `immediate`; failures in full to `<out>.failures.jsonl` |
 | `node scripts/kill-migration.mjs --runs N` | Kill the desktop store's migration from the v1 and v2 fixtures at every moment, then check every read against the release's answers and the copy against the old file |
-| `node scripts/old-build.mjs [--serve]` | v0.2.0's web build from its tag, with its own lockfile, into `target/old-build` (served on 127.0.0.1:4279 for `old-build.spec.ts`) |
+| `node scripts/old-build.mjs [--tag v0.3.0] [--serve]` | The web builds of v0.2.0 and v0.3.0 from their tags, each with its own lockfile, into `target/old-build/<tag>` (served on 127.0.0.1:4279 and 4278 for `old-build.spec.ts`) |
 | `pnpm bench:phase3 [-- --desktop]` | Phase 3's budgets (reconnect with 1,000 waiting updates, pinning 500 pages while typing, the store for 1,000 pages, the desktop's cold start offline), gated against the budgets and `bench/previous/phase3.json` |
+| `pnpm bench:phase4 [-- --desktop] [--server \| --no-server]` | Phase 4's budgets: first rows of a 50,000-row database (seeded through the import route), scrolling it, a board drag, a cell edit shown, to the next frame and durable (web, and the desktop with `--desktop`); `--server` runs only the server's query budget (`Phase4Bench`), `--no-server` everything else; gated against the budgets and `bench/previous/phase4.json` |
 | `node scripts/state-hash-vectors.mjs [--check]` | The state-hash vectors (`packages/doc/vectors/state-hash-vectors.json`), made by plain Yjs; `--check` fails if they are stale |
 | `node crates/cgw-store/tests/fixtures/make.mjs` | The SQLite migration fixtures, written by `cgw-store` built from the v0.1.0 and v0.2.0 tags (offline, under `target/store-fixtures`) |
 | `SIM_SEEDS=60 SIM_STEPS=200 pnpm exec vitest run packages/doc/src/sync-sim` | The convergence simulator at size (CI runs 4 seeds of 40 rounds); `SIM_SEED` replays one |
@@ -341,3 +342,26 @@ Added as they are found, grouped by phase.
   `page.mouse`, as the block handle.
 - `pnpm exec` in pnpm 12 first checks the lockfile against the supply-chain policy over the network
   (about a minute here); `npx vitest run …` skips it for quick runs.
+- Git's writes into `.git/objects` can be refused for a moment (PowerShell too, with or without the
+  sandbox), a different file each time: retry `git add` in a loop; each attempt keeps what it wrote.
+- The shell's, the editor's and `@cgw/database`'s stylesheets share the `cgw-` prefix and load at
+  once, so a class one styles is styled by the others too: the database package's own are
+  `cgw-db-*`, kept so by `packages/database/src/styles.test.ts`.
+- `CgFlyout` drops an explicit `width` (its positioned overlay spreads `width: undefined` over
+  it), so it is never kept inside the window: pass the width in `style` too. One mounted `open` is
+  not reliably focused through `onAfterOpen`: focus its first control a frame after mount
+  (`CellFlyout`; both for Track U). React portals bubble synthetic events through the component
+  tree: a click in a flyout reaches its owner's `onClick`.
+- The server takes a cover or a row's file only once it holds the bytes, so the engine uploads
+  assets first in each pass.
+- Axe: `aria-owns` does not take a row's children out of it; `aria-controls` must name an element
+  that is there; a widget's `aria-label` must hold its visible text (name it by
+  `aria-labelledby` and put the action in `aria-description`).
+- A reused e2e server stack runs the server it was built with: start it again after server
+  changes. A share link shows the worker's derived document, a moment behind the updates: wait for
+  `GET /pages/{id}/doc/json` to hold what a spec checks. The sync status is translated: wait for
+  `data-state="synced"`, not its text.
+- In RTL a scroller's `scrollLeft` runs from 0 to negative values. Calendar day cells are keyed
+  `data-day` by days since 1970-01-01 (UTC): place checks by geometry (`onCalendarDay`).
+- In a template literal `\s` is `s`: build a `RegExp` from a string with `\\s`. `pnpm install` in
+  an old build's tree can fail once with "os error 183" on Windows: run it again.

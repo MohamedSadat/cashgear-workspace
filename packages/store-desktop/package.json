@@ -1,6 +1,6 @@
 {
   "name": "@cgw/store-desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "The desktop's LocalStore: typed requests in a binary frame to crates/cgw-store over Tauri's invoke (or, in tests, the cgw-store-cli process).",
