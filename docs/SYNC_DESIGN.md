@@ -359,11 +359,12 @@ subtree again from the server (a scoped resync), so its pages show the server's 
 **As built in Phase 3** (`engine.ts`; the convergence simulator found the two tree rules last in
 this list):
 
-- One pass, per synced workspace: push the outbox; push unsent document updates in batches; pull
-  the feed to its end; reconcile the tree if a subtree operation was answered; pull held pages
-  whose head or epoch moved, and a bounded number of pinned pages not held yet; up to four
-  state-hash checks; upload assets. Passes come every 1.5 s, 100 ms after a pass that left work,
-  50 ms when a change came during one.
+- One pass, per synced workspace: upload assets (Phase 4: first, since the server takes a cover or
+  a row's file only once it holds the bytes, and refused the operation that named one sent before
+  them); push the outbox; push unsent document updates in batches; pull the feed to its end;
+  reconcile the tree if a subtree operation was answered; pull held pages whose head or epoch
+  moved, and a bounded number of pinned pages not held yet; up to four state-hash checks. Passes
+  come every 1.5 s, 100 ms after a pass that left work, 50 ms when a change came during one.
 - **Backoff** after a failure: `min(5 min, 1 s × 2^(n−1)) × (0.5 + random)`, never shorter than the
   server's `Retry-After` (sent on every 429 and 503), even when the network returning or the
   window's focus kicks a pass. A local change does not cut a backoff short.

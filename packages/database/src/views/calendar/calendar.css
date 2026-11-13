@@ -120,7 +120,9 @@
 
 .cgw-cal-day[data-today] .cgw-cal-num {
   background: var(--cg-accent);
-  color: var(--cg-accent-contrast, #fff);
+  /* The surface's colour reads on the accent in both themes (white on the dark theme's light
+     blue did not: 2.5:1). */
+  color: var(--cg-surface);
   font-weight: 600;
 }
 

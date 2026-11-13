@@ -236,7 +236,7 @@ export function BoardView({
     let el = indicator.current;
     if (!el) {
       el = document.createElement('div');
-      el.className = 'cgw-drop-indicator';
+      el.className = 'cgw-db-drop-indicator';
       el.setAttribute('aria-hidden', 'true');
       indicator.current = el;
     }

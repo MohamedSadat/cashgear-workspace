@@ -107,7 +107,7 @@ export function PropertiesEditor({
               {editable ? (
                 <button
                   type="button"
-                  className="cgw-handle"
+                  className="cgw-db-handle"
                   aria-label={t('properties.drag', { name: def.name })}
                   aria-keyshortcuts="ArrowUp ArrowDown"
                   {...handleProps(def.id)}

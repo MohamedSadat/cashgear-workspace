@@ -100,6 +100,46 @@ describe('databases: sync', { timeout: 30_000 }, () => {
     expect(one.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
   });
 
+  // Found by the Phase 4 e2e specs: a file added to a row while online was pushed before its
+  // bytes, refused (a file the server does not hold), and taken back: the row lost it. A page's
+  // cover had the same order since Phase 2.
+  it("a file added to a row, and a page's cover, go up before the operations that name them", async () => {
+    const { server, one, ws, a, db, rows } = await withTasks();
+    const FILES = 'Files001';
+    await one.store.applyLocalOps([
+      newOp('db.update', ws.id, db.id, {
+        properties: [{ id: FILES, name: 'Files', type: 'files' }],
+      }),
+    ]);
+    await one.engine.syncOnce();
+    const asset = {
+      id: uuidv7(),
+      workspaceId: ws.id,
+      fileName: 'widget.png',
+      contentType: 'image/png',
+      sizeBytes: 3,
+      sha256: 'abc',
+      width: 2,
+      height: 2,
+      createdAt: new Date().toISOString(),
+    };
+    await one.store.putAsset(asset, new Uint8Array([137, 80, 78]));
+    const page = (await one.store.readMirror(ws.id)).pages.find((p) => p.id === a.id)!;
+    await one.store.applyLocalOps([
+      newOp('row.update', ws.id, rows[0].id, { values: { [FILES]: [asset.id] } }),
+      newOp('page.update', ws.id, a.id, { coverAssetId: asset.id }, page.version),
+    ]);
+    await one.engine.syncOnce();
+    expect(one.events.filter((e) => e.kind === 'notice')).toEqual([]);
+    expect(await one.store.nextOutboxBatch(10, ws.id)).toEqual([]);
+    expect(serverRow(server, rows[0].id)!.values[FILES]).toEqual([asset.id]);
+    expect((await one.store.readRows(db.id)).find((r) => r.id === rows[0].id)).toMatchObject({
+      values: { [FILES]: [asset.id] },
+    });
+    const there = [...server.spaces.values()][0].mirror.pages.get(a.id);
+    expect(there?.coverAssetId).toBe(asset.id);
+  });
+
   it('fetches a large database in passes of four requests, the next 100 ms later, then keeps it fresh from the feed', async () => {
     const server = new FakeServer();
     const clock = new VirtualClock();

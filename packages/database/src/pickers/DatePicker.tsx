@@ -85,7 +85,7 @@ export function DatePicker({ value, includeTime, onChange, onDone }: DatePickerP
   };
 
   return (
-    <div className="cgw-date-picker">
+    <div className="cgw-db-date-picker">
       {draft.hasEnd ? (
         <CgCalendar
           selectionMode="range"

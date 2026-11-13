@@ -277,19 +277,23 @@ export class WorkspaceSession {
       // The rows a plan reads (the database's, and those its relations point into) are here first.
       await this.prepareRows(ops);
       const plan = await planOps(ops, this.mirror);
-      try {
-        await this.store.applyLocalOps(ops);
-      } catch (error) {
-        // The store saw something the mirror did not: read the truth back.
-        this.mirror.load(await this.store.readMirror(null));
-        throw error;
-      }
-      // A row trashed, restored or removed: the trash's count of rows is read again.
+      // A row trashed, restored or removed: the trash's count of rows is read again (after the
+      // write).
       const ownRoot = (row: RowRecord | undefined) => !!row && row.trashRootId === row.id;
       const trashMoved =
         plan.deleteRows.length > 0 ||
         plan.rows.some((row) => ownRoot(row) !== ownRoot(this.mirror.rowRecords.get(row.id)));
+      // The change shows at once (a cell, a title, a page), and the store's write follows: a
+      // cell edit waited for IndexedDB's commit (about 20 ms) and its old value showed for a
+      // frame or two (bench/phase4.mjs, "local ≤ 16 ms").
       this.mirror.apply(plan);
+      try {
+        await this.store.applyLocalOps(ops);
+      } catch (error) {
+        // The store saw something the mirror did not: its truth, read back whole.
+        await this.reloadMirrorNow();
+        throw error;
+      }
       if (trashMoved) this.trashedRowsMoved();
       // A database made here holds every row it has: its (new) rows are all in the mirror.
       for (const op of ops)

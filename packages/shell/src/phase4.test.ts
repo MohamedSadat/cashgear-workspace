@@ -123,6 +123,40 @@ async function localDatabase() {
   return { store, session, host, ...made, ...database };
 }
 
+describe('a change through the session', () => {
+  // Found by bench/phase4.mjs: a cell edit showed only once IndexedDB's write committed (about
+  // 20 ms), the old value drawn meanwhile ("local ≤ 16 ms").
+  it("shows before the store's write resolves, and a refused write takes the store's truth back", async () => {
+    const { store, session, databaseId } = await localDatabase();
+    const row = session.mirror.rowsOf(databaseId)[0];
+    let release!: () => void;
+    let refuse = false;
+    const write = store.applyLocalOps.bind(store);
+    store.applyLocalOps = async (ops) => {
+      await new Promise<void>((done) => (release = done));
+      if (refuse) throw new Error('The store refused it');
+      return write(ops);
+    };
+    const edit = (title: string) =>
+      session.apply([newOp('page.update', row.workspaceId, row.id, { title }, null)]);
+    const first = edit('Shown at once');
+    await until(() => !!release, 'the write to start');
+    expect(session.record(row.id)?.title).toBe('Shown at once');
+    release();
+    await first;
+    expect(((await store.getPage(row.id)) as RowRecord).title).toBe('Shown at once');
+    // Refused by the store: the mirror reads the store's truth again.
+    refuse = true;
+    release = undefined as never;
+    const second = edit('Never stored');
+    await until(() => !!release, 'the second write to start');
+    expect(session.record(row.id)?.title).toBe('Never stored');
+    release();
+    await expect(second).rejects.toThrow('The store refused it');
+    expect(session.record(row.id)?.title).toBe('Shown at once');
+  });
+});
+
 describe('the database host on a local workspace', () => {
   it('reads the database, its views and rows from the session, live', async () => {
     const { session, host, databaseId, viewId, ws } = await localDatabase();
@@ -418,6 +452,33 @@ describe('the database host on a synced workspace', () => {
     snapshot = await settled(source, (s) => s.rows[0]?.values[PROP.notes] === 'Seen');
     expect(snapshot.rows[0].id).toBe(top.id);
     offline.close();
+    source.close();
+  });
+
+  // Found by the Phase 4 e2e specs (Edge): a query that failed as the network came back left the
+  // view on this device's rows for good, since the network had already been seen to return.
+  it('asks the server again after a query failed while online', async () => {
+    const server = new FakeServer();
+    const { db, view, two, session } = await synced(server);
+    server.seedRows(db.id, LOCAL_ROW_LIMIT + 5, (i) => ({ [PROP.count]: i }));
+    await two.engine.syncOnce();
+    let failures = 1;
+    const { sync, changed } = syncOf(two, server, {
+      queryDatabase: async (id, request) => {
+        if (failures-- > 0)
+          throw Object.assign(new Error('The network is down'), { name: 'NetworkError' });
+        return two.engine.queryDatabase(id, request);
+      },
+    });
+    const host = hostFor(session);
+    host.connect(sync);
+    const source = host.rows(db.id, { viewId: view.id, spec: ALL, pageSize: 50 });
+    expect((await settled(source, (s) => s.localOnly)).localOnly).toBe(true);
+    expect(sync.online()).toBe(true);
+    // The engine's next status (online all along): the view asks the server again.
+    changed();
+    const snapshot = await settled(source, (s) => !s.localOnly && s.total === LOCAL_ROW_LIMIT + 8);
+    expect(snapshot.rows).toHaveLength(50);
     source.close();
   });
 

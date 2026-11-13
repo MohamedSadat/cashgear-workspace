@@ -189,7 +189,7 @@ export function FormulaEditor({ database, def, sample, lookups, onSave }: Formul
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => accept(s)}
             >
-              <span className="cgw-menu-hint">
+              <span className="cgw-db-menu-hint">
                 {s.kind === 'function' ? t('formula.functions') : t('formula.properties')}
               </span>
               <code dir="auto">{s.label}</code>

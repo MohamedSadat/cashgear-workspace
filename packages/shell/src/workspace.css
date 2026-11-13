@@ -660,6 +660,19 @@
 /* Phase 4: databases. A database's own page is wider than a page of text: its views need the room. */
 .cgw-page.cgw-database-page {
   max-inline-size: min(1280px, 100%);
+  /* The page fills the page area and its view the rest of it, so the view scrolls inside itself
+     and draws only what is in its window (a table of 50,000 rows grown to its rows' height
+     scrolled the page with every row drawn, at about 8 frames a second). */
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 32rem;
+}
+
+.cgw-page.cgw-database-page > .cgw-db {
+  flex: 1 1 0;
+  block-size: auto;
+  min-block-size: 0;
 }
 
 /* A database block's root inside the editor's frame (database/mount.tsx). */

@@ -381,7 +381,8 @@ export function CalendarView({
           type="button"
           className="cgw-text-button cgw-cal-undated-toggle"
           aria-pressed={undatedOpen}
-          aria-controls={`${idPrefix}-undated`}
+          // Only while the list is there: an id that names nothing is an error to a screen reader.
+          aria-controls={undatedOpen ? `${idPrefix}-undated` : undefined}
           onClick={() => setUndatedOpen((open) => !open)}
         >
           {t('calendar.noDate', { count: undated.length })}
@@ -535,6 +536,7 @@ function Week({
   const { t } = env;
   const hidden = hiddenPerDay(pieces, lanes);
   const activeCol = activeDay - start;
+  const shown = pieces.filter((p) => p.lane < lanes);
   return (
     <div className="cgw-cal-week" role="row" style={{ blockSize: height }}>
       {Array.from({ length: 7 }, (_, col) => {
@@ -590,49 +592,54 @@ function Week({
           </div>
         );
       })}
+      {/* A row's children are its cells: the rows drawn over the week's days are the cell after
+          them (a screen reader reads the days, then what is on them). Named by its rows; what
+          it holds is its description. */}
       <div
         className="cgw-cal-lanes"
-        role="none"
+        role="gridcell"
+        aria-description={t('calendar.weekItems', {
+          start: dateLabel(start),
+          end: dateLabel(start + 6),
+        })}
         style={{ gridTemplateRows: `repeat(${lanes}, ${LANE}px)` }}
       >
-        {pieces
-          .filter((p) => p.lane < lanes)
-          .map((p) => {
-            const { item } = p;
-            const title = item.row.title || t('untitled');
-            const covers = activeCol >= p.col && activeCol < p.col + p.span;
-            const label =
-              item.end > item.start
-                ? t('calendar.span', {
-                    title,
-                    start: dateLabel(item.start),
-                    end: dateLabel(item.end),
-                  })
-                : item.time
-                  ? t('calendar.timed', { time: item.time, title })
-                  : title;
-            return (
-              <div
-                key={`${item.row.id}:${p.week}`}
-                className="cgw-cal-item"
-                role="button"
-                tabIndex={covers ? 0 : -1}
-                data-cal-item=""
-                data-cal-drag={writable ? '' : undefined}
-                data-row-id={item.row.id}
-                data-before={p.before || undefined}
-                data-after={p.after || undefined}
-                aria-label={label}
-                aria-description={writable ? t('calendar.moveHint') : undefined}
-                style={{ gridColumn: `${p.col + 1} / span ${p.span}`, gridRow: p.lane + 1 }}
-              >
-                {item.time && !p.before ? <span className="cgw-cal-time">{item.time}</span> : null}
-                <span className="cgw-cal-title" dir="auto">
-                  {title}
-                </span>
-              </div>
-            );
-          })}
+        {shown.map((p) => {
+          const { item } = p;
+          const title = item.row.title || t('untitled');
+          const covers = activeCol >= p.col && activeCol < p.col + p.span;
+          const label =
+            item.end > item.start
+              ? t('calendar.span', {
+                  title,
+                  start: dateLabel(item.start),
+                  end: dateLabel(item.end),
+                })
+              : item.time
+                ? t('calendar.timed', { time: item.time, title })
+                : title;
+          return (
+            <div
+              key={`${item.row.id}:${p.week}`}
+              className="cgw-cal-item"
+              role="button"
+              tabIndex={covers ? 0 : -1}
+              data-cal-item=""
+              data-cal-drag={writable ? '' : undefined}
+              data-row-id={item.row.id}
+              data-before={p.before || undefined}
+              data-after={p.after || undefined}
+              aria-label={label}
+              aria-description={writable ? t('calendar.moveHint') : undefined}
+              style={{ gridColumn: `${p.col + 1} / span ${p.span}`, gridRow: p.lane + 1 }}
+            >
+              {item.time && !p.before ? <span className="cgw-cal-time">{item.time}</span> : null}
+              <span className="cgw-cal-title" dir="auto">
+                {title}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -132,8 +132,22 @@
 }
 
 .cgw-db .cgw-db-tabs > div:first-child {
+  flex-wrap: wrap;
   border-block-end: 1px solid var(--cg-border);
   background: transparent;
+}
+
+/* The tabs keep room for their names: when the toolbar (the header's end slot) does not fit
+   beside them, as in a database inside a page, it goes on a line of its own under them. */
+.cgw-db .cgw-db-tabs > div:first-child > div:first-child {
+  flex: 1 1 auto;
+  min-inline-size: min(100%, 16rem);
+}
+
+.cgw-db .cgw-db-tabs > div:first-child > div:last-child {
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+  margin-inline-start: auto;
 }
 
 .cgw-db .cgw-db-panel {
@@ -227,8 +241,8 @@
 
 .cgw-icon-button:focus-visible,
 .cgw-text-button:focus-visible,
-.cgw-menu-item:focus-visible,
-.cgw-handle:focus-visible,
+.cgw-db-menu-item:focus-visible,
+.cgw-db-handle:focus-visible,
 .cgw-row-prop-value:focus-visible,
 .cgw-row-prop-name:focus-visible {
   outline: var(--cg-focus-ring-width, 2px) solid var(--cg-focus-ring-color, var(--cg-accent));
@@ -295,7 +309,7 @@
   gap: 8px;
 }
 
-.cgw-handle {
+.cgw-db-handle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -315,7 +329,7 @@
 
 /* ---- The table -------------------------------------------------------------------------------- */
 
-.cgw-table {
+.cgw-db-table {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -332,7 +346,7 @@
   font-size: 14px;
 }
 
-.cgw-table.is-embedded .cgw-grid {
+.cgw-db-table.is-embedded .cgw-grid {
   flex: none;
   max-block-size: min(70vh, 640px);
 }
@@ -734,43 +748,43 @@ textarea.cgw-inline-editor {
 }
 
 .cgw-chip[data-colour='gray'],
-.cgw-swatch[data-colour='gray'] {
+.cgw-db-swatch[data-colour='gray'] {
   --cgw-db-chip-bg: var(--cgw-db-gray-bg);
 }
 .cgw-chip[data-colour='brown'],
-.cgw-swatch[data-colour='brown'] {
+.cgw-db-swatch[data-colour='brown'] {
   --cgw-db-chip-bg: var(--cgw-db-brown-bg);
 }
 .cgw-chip[data-colour='orange'],
-.cgw-swatch[data-colour='orange'] {
+.cgw-db-swatch[data-colour='orange'] {
   --cgw-db-chip-bg: var(--cgw-db-orange-bg);
 }
 .cgw-chip[data-colour='yellow'],
-.cgw-swatch[data-colour='yellow'] {
+.cgw-db-swatch[data-colour='yellow'] {
   --cgw-db-chip-bg: var(--cgw-db-yellow-bg);
 }
 .cgw-chip[data-colour='green'],
-.cgw-swatch[data-colour='green'] {
+.cgw-db-swatch[data-colour='green'] {
   --cgw-db-chip-bg: var(--cgw-db-green-bg);
 }
 .cgw-chip[data-colour='blue'],
-.cgw-swatch[data-colour='blue'] {
+.cgw-db-swatch[data-colour='blue'] {
   --cgw-db-chip-bg: var(--cgw-db-blue-bg);
 }
 .cgw-chip[data-colour='purple'],
-.cgw-swatch[data-colour='purple'] {
+.cgw-db-swatch[data-colour='purple'] {
   --cgw-db-chip-bg: var(--cgw-db-purple-bg);
 }
 .cgw-chip[data-colour='pink'],
-.cgw-swatch[data-colour='pink'] {
+.cgw-db-swatch[data-colour='pink'] {
   --cgw-db-chip-bg: var(--cgw-db-pink-bg);
 }
 .cgw-chip[data-colour='red'],
-.cgw-swatch[data-colour='red'] {
+.cgw-db-swatch[data-colour='red'] {
   --cgw-db-chip-bg: var(--cgw-db-red-bg);
 }
 
-.cgw-swatch {
+.cgw-db-swatch {
   display: inline-block;
   inline-size: 14px;
   block-size: 14px;
@@ -862,7 +876,7 @@ textarea.cgw-inline-editor {
 .cgw-sort-editor,
 .cgw-properties-editor,
 .cgw-files-editor,
-.cgw-date-picker {
+.cgw-db-date-picker {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -981,12 +995,12 @@ textarea.cgw-inline-editor {
   padding-block-start: 6px;
 }
 
-.cgw-menu {
+.cgw-db-menu {
   display: flex;
   flex-direction: column;
 }
 
-.cgw-menu-item {
+.cgw-db-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1002,38 +1016,38 @@ textarea.cgw-inline-editor {
   cursor: pointer;
 }
 
-.cgw-menu-item:hover,
-.cgw-menu-item:focus-visible {
+.cgw-db-menu-item:hover,
+.cgw-db-menu-item:focus-visible {
   background: var(--cg-hover, var(--cgw-db-active-bg));
 }
 
-.cgw-menu-item:disabled {
+.cgw-db-menu-item:disabled {
   color: var(--cg-disabled-text);
   cursor: default;
 }
 
-.cgw-menu-glyph {
+.cgw-db-menu-glyph {
   inline-size: 1.2em;
   color: var(--cg-text-secondary);
   text-align: center;
 }
 
-.cgw-menu-text {
+.cgw-db-menu-text {
   flex: 1;
 }
 
-.cgw-menu-hint {
+.cgw-db-menu-hint {
   color: var(--cg-text-secondary);
   font-size: 12px;
 }
 
-.cgw-menu-separator {
+.cgw-db-menu-separator {
   block-size: 1px;
   margin-block: 4px;
   background: var(--cg-border);
 }
 
-.cgw-menu-switch {
+.cgw-db-menu-switch {
   padding-block: 4px;
   padding-inline: 6px;
 }
@@ -1286,6 +1300,11 @@ textarea.cgw-inline-editor {
   padding-inline: 6px;
   border-radius: var(--cg-radius-sm, 3px);
   cursor: pointer;
+}
+
+.cgw-row-prop-text {
+  /* Lays its value out as the value's own children (it only names it). */
+  display: contents;
 }
 
 .cgw-row-prop-value .cgw-chips {

@@ -3,13 +3,13 @@
 // a click edits, Escape cancels, a commit is one write). The title is the page's own and is left
 // to the page.
 import type { Id, RowRecord } from '@cgw/workspace';
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { renderCell } from './cells/CellDisplay';
 import { useCellEnv, type CellEnv } from './cells/env';
 import { InlineEditor } from './cells/InlineEditor';
 import { PickerEditor } from './cells/PickerEditor';
 import { DatabaseContext, useDatabase, useDatabaseContextValue, useHost } from './context';
-import type { PropertyDef } from './core';
+import { newPropertyId, type PropertyDef } from './core';
 import type { DatabaseHost } from './host';
 import { useDbT } from './i18n';
 import {
@@ -20,6 +20,7 @@ import {
   uniqueName,
 } from './model/properties';
 import { newPropertyDef } from './properties/defs';
+import { NewPropertySetup, SET_UP_FIRST } from './properties/NewPropertySetup';
 import { PropertyMenu } from './properties/PropertyMenu';
 import { TypePicker } from './properties/TypePicker';
 import { CellFlyout } from './cells/CellFlyout';
@@ -46,6 +47,9 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
   const [editing, setEditing] = useState<{ id: string; seed: string | null } | null>(null);
   const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
   const [adding, setAdding] = useState<HTMLElement | null>(null);
+  const [settingUp, setSettingUp] = useState<{ def: PropertyDef; anchor: HTMLElement } | null>(
+    null,
+  );
   const properties = useMemo(
     () => (database ? liveProperties(database).filter((p) => p.type !== 'title') : []),
     [database],
@@ -103,9 +107,17 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
             <TypePicker
               label={t('property.addLabel')}
               onPick={(type) => {
+                const anchor = adding;
                 setAdding(null);
+                const name = uniqueName(database, t(`type.${type}`));
+                // A relation or a rollup is set up first: written without its settings it is
+                // refused.
+                if (SET_UP_FIRST.includes(type)) {
+                  if (anchor) setSettingUp({ def: { id: newPropertyId(), name, type }, anchor });
+                  return;
+                }
                 void context.actions.addProperty(
-                  newPropertyDef(type, uniqueName(database, t(`type.${type}`)), {
+                  newPropertyDef(type, name, {
                     todo: t('option.defaultTodo'),
                     inProgress: t('option.defaultInProgress'),
                     complete: t('option.defaultComplete'),
@@ -114,6 +126,19 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
               }}
             />
           </CellFlyout>
+        ) : null}
+        {settingUp ? (
+          <NewPropertySetup
+            def={settingUp.def}
+            database={database}
+            anchor={settingUp.anchor}
+            onSave={({ def, reverse }) =>
+              void (def.type === 'relation'
+                ? context.actions.addRelation(def, reverse)
+                : context.actions.addProperty(def))
+            }
+            onClose={() => setSettingUp(null)}
+          />
         ) : null}
       </section>
     </DatabaseContext.Provider>
@@ -163,6 +188,10 @@ function PropertyLine({
     requestAnimationFrame(() => cell?.focus());
   };
   const content = renderCell(def, row, env);
+  // Named by the property and its value, as they are shown (the value's text is part of the
+  // name); what a press does is its description.
+  const nameId = useId();
+  const valueId = `${nameId}-value`;
   return (
     <div className="cgw-row-prop">
       <dt>
@@ -175,7 +204,9 @@ function PropertyLine({
           <span className="cgw-th-glyph" aria-hidden="true">
             {TYPE_GLYPH[def.type]}
           </span>
-          <span dir="auto">{def.name}</span>
+          <span id={nameId} dir="auto">
+            {def.name}
+          </span>
         </button>
       </dt>
       <dd>
@@ -184,10 +215,14 @@ function PropertyLine({
           className={`cgw-row-prop-value cgw-type-${def.type}`}
           tabIndex={0}
           role="button"
-          aria-label={t('cell.edit', { name: def.name })}
-          aria-readonly={!canEditValue || undefined}
+          aria-labelledby={`${nameId} ${valueId}`}
+          aria-description={canEditValue ? t('cell.edit', { name: def.name }) : undefined}
+          aria-disabled={!canEditValue || undefined}
           onKeyDown={onKeyDown}
           onClick={(event) => {
+            // A click in the picker's flyout bubbles here through React's portal: the option
+            // chosen there closes the picker, and must not open it again.
+            if (!event.currentTarget.contains(event.target as Node)) return;
             if ((event.target as HTMLElement).closest('a, button, input, textarea')) return;
             start();
           }}
@@ -202,7 +237,9 @@ function PropertyLine({
               label={def.name}
             />
           ) : (
-            (content ?? <span className="cgw-placeholder">{t('cell.empty')}</span>)
+            <span id={valueId} className="cgw-row-prop-text">
+              {content ?? <span className="cgw-placeholder">{t('cell.empty')}</span>}
+            </span>
           )}
           {editing && kind === 'picker' && cell ? (
             <PickerEditor def={def} row={row} env={env} anchor={cell} onDone={done} />

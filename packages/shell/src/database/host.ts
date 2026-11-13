@@ -171,7 +171,6 @@ export class ShellDatabaseHost implements DatabaseHost {
   private mePerson: Person | null = null;
   private context: QueryContext | null = null;
   private contextKey = '';
-  private wasOnline = false;
 
   constructor(private readonly options: ShellDatabaseHostOptions) {
     this.session = options.session;
@@ -189,15 +188,14 @@ export class ShellDatabaseHost implements DatabaseHost {
     for (const off of this.offSync) off();
     this.offSync = [];
     this.sync = sync;
-    this.wasOnline = !!sync?.online();
     if (sync) {
       this.offSync.push(
         sync.subscribe(() => {
           const online = sync.online();
-          if (online !== this.wasOnline) {
-            this.wasOnline = online;
-            for (const source of this.sources) source.onlineChanged(online);
-          }
+          // Every status while online, not only the one that brought the network back: a query
+          // that failed as it came back left its view on this device's rows (a source that is
+          // not waiting on the network does nothing).
+          if (online) for (const source of this.sources) source.onlineChanged(true);
           void this.refreshPeople();
           this.schedule();
         }),
@@ -585,6 +583,10 @@ export class ShellDatabaseHost implements DatabaseHost {
       this.options.onError?.(error);
       throw error;
     }
+    // The change is in the store now (durable): bench/phase4.mjs times a cell edit to here. One
+    // mark at a time, so a long session keeps none.
+    performance.clearMarks('cgw-db-applied');
+    performance.mark('cgw-db-applied');
     // A row's title is found by search (its search entry, as a page's).
     const titled = ops.filter(
       (op) =>

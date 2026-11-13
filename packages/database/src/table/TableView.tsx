@@ -21,7 +21,7 @@ import {
 import { useCellEnv } from '../cells/env';
 import type { EditEnd } from '../cells/InlineEditor';
 import { CellFlyout } from '../cells/CellFlyout';
-import { TITLE_PROPERTY, type PropertyDef, type PropertyType } from '../core';
+import { TITLE_PROPERTY, newPropertyId, type PropertyDef, type PropertyType } from '../core';
 import { useDatabaseContext } from '../context';
 import { useDbT } from '../i18n';
 import { linkFor } from '../model/links';
@@ -36,6 +36,7 @@ import {
 } from '../model/properties';
 import { placeProperty, withWidth } from '../model/viewConfig';
 import { newPropertyDef } from '../properties/defs';
+import { NewPropertySetup, SET_UP_FIRST } from '../properties/NewPropertySetup';
 import { PropertyMenu, type PropertyPanel } from '../properties/PropertyMenu';
 import { TypePicker } from '../properties/TypePicker';
 import type { ViewProps } from '../views/types';
@@ -145,6 +146,9 @@ export function TableView({
   const [editing, setEditing] = useState<Editing | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [adding, setAdding] = useState<HTMLElement | null>(null);
+  const [settingUp, setSettingUp] = useState<{ def: PropertyDef; anchor: HTMLElement } | null>(
+    null,
+  );
   const pendingMenu = useRef<string | null>(null);
   const pendingRow = useRef<string | null>(null);
   const activeItem = Math.min(active.item, items.length - 1);
@@ -314,16 +318,26 @@ export function TableView({
     });
   }, [columns, gridId]);
 
+  const lastPlace = () => {
+    const last = columns[columns.length - 1];
+    return last ? { view, anchor: last.id, side: 'after' as const } : undefined;
+  };
   const createProperty = (type: PropertyType) => {
+    const anchor = adding;
     setAdding(null);
-    const def = newPropertyDef(type, uniqueName(database, t(`type.${type}`)), {
+    const name = uniqueName(database, t(`type.${type}`));
+    // A relation or a rollup is set up first: written without its settings it is refused.
+    if (SET_UP_FIRST.includes(type)) {
+      if (anchor) setSettingUp({ def: { id: newPropertyId(), name, type }, anchor });
+      return;
+    }
+    const def = newPropertyDef(type, name, {
       todo: t('option.defaultTodo'),
       inProgress: t('option.defaultInProgress'),
       complete: t('option.defaultComplete'),
     });
     pendingMenu.current = def.id;
-    const last = columns[columns.length - 1];
-    void actions.addProperty(def, last ? { view, anchor: last.id, side: 'after' } : undefined);
+    void actions.addProperty(def, lastPlace());
   };
 
   // ---- Row menu ------------------------------------------------------------------------------
@@ -541,7 +555,7 @@ export function TableView({
   const empty = snapshot.complete && snapshot.rows.length === 0 && !snapshot.loading;
 
   return (
-    <div className={`cgw-table${embedded ? ' is-embedded' : ''}`}>
+    <div className={`cgw-db-table${embedded ? ' is-embedded' : ''}`}>
       <div
         ref={grid}
         role="grid"
@@ -648,6 +662,22 @@ export function TableView({
         >
           <TypePicker label={t('property.addLabel')} onPick={createProperty} />
         </CellFlyout>
+      ) : null}
+      {settingUp ? (
+        <NewPropertySetup
+          def={settingUp.def}
+          database={database}
+          anchor={settingUp.anchor}
+          onSave={({ def, reverse }) =>
+            void (def.type === 'relation'
+              ? actions.addRelation(def, reverse, lastPlace())
+              : actions.addProperty(def, lastPlace()))
+          }
+          onClose={() => {
+            setSettingUp(null);
+            focusGrid();
+          }}
+        />
       ) : null}
       <CgContextMenu<RowRecord>
         items={rowMenuItems}

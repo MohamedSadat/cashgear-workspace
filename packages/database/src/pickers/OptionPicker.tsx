@@ -177,7 +177,7 @@ export function OptionPicker({
         {canManage && !trimmed ? (
           <button
             type="button"
-            className="cgw-handle"
+            className="cgw-db-handle"
             aria-label={t('option.drag', { name: option.name })}
             tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
@@ -374,14 +374,14 @@ function OptionEditor({
               checked={option.colour === c}
               onChange={() => write({ ...option, colour: c })}
             />
-            <span className="cgw-swatch" data-colour={c} aria-hidden="true" />
+            <span className="cgw-db-swatch" data-colour={c} aria-hidden="true" />
             {t(`colour.${c}`)}
           </label>
         ))}
       </fieldset>
       <button
         type="button"
-        className="cgw-menu-item cgw-danger"
+        className="cgw-db-menu-item cgw-danger"
         onClick={() => {
           onChange({ ...def, options: options.filter((o) => o.id !== option.id) });
           onBack();

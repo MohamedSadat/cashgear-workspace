@@ -1,14 +1,14 @@
 /* The list view: lines at fixed heights in one scrolling box, the title first and the shown
    properties after it, pushed to the line's end. */
 
-.cgw-list {
+.cgw-db-list {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-block-size: 0;
 }
 
-.cgw-list-scroll {
+.cgw-db-list-scroll {
   position: relative;
   flex: 1;
   min-block-size: 120px;
@@ -16,16 +16,16 @@
   overscroll-behavior: contain;
 }
 
-.cgw-list.is-embedded .cgw-list-scroll {
+.cgw-db-list.is-embedded .cgw-db-list-scroll {
   flex: none;
   max-block-size: min(70vh, 640px);
 }
 
-.cgw-list-body {
+.cgw-db-list-body {
   position: relative;
 }
 
-.cgw-list-body > [role='listitem'] {
+.cgw-db-list-body > [role='listitem'] {
   position: absolute;
   inset-inline: 0;
   box-sizing: border-box;
@@ -33,7 +33,7 @@
   align-items: center;
 }
 
-.cgw-list-row {
+.cgw-db-list-row {
   gap: 12px;
   padding-inline: 12px;
   border-block-end: 1px solid var(--cg-border);
@@ -42,17 +42,17 @@
   outline: none;
 }
 
-.cgw-list-row:hover {
+.cgw-db-list-row:hover {
   background: var(--cg-hover, var(--cgw-db-row-hover));
 }
 
-.cgw-list-row:focus-visible,
-.cgw-list-group-button:focus-visible {
+.cgw-db-list-row:focus-visible,
+.cgw-db-list-group-button:focus-visible {
   box-shadow: inset 0 0 0 var(--cg-focus-ring-width, 2px)
     var(--cg-focus-ring-color, var(--cg-accent));
 }
 
-.cgw-list-title {
+.cgw-db-list-title {
   display: flex;
   flex: 1 1 auto;
   align-items: center;
@@ -63,12 +63,12 @@
   white-space: nowrap;
 }
 
-.cgw-list-title > span:last-child {
+.cgw-db-list-title > span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.cgw-list-props {
+.cgw-db-list-props {
   display: flex;
   flex: 0 1 auto;
   align-items: center;
@@ -81,7 +81,7 @@
   white-space: nowrap;
 }
 
-.cgw-list-prop {
+.cgw-db-list-prop {
   display: inline-flex;
   flex: 0 1 auto;
   min-inline-size: 0;
@@ -90,7 +90,7 @@
   color: var(--cg-text-secondary);
 }
 
-.cgw-list-group-button {
+.cgw-db-list-group-button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -108,41 +108,41 @@
   outline: none;
 }
 
-.cgw-list-chevron {
+.cgw-db-list-chevron {
   display: inline-block;
   color: var(--cg-text-secondary);
   transition: transform var(--cg-transition-fast, 120ms) ease;
 }
 
-.cgw-list-group-button[aria-expanded='false'] .cgw-list-chevron {
+.cgw-db-list-group-button[aria-expanded='false'] .cgw-db-list-chevron {
   transform: rotate(-90deg);
 }
 
-.cgw-list-group-button[aria-expanded='false']:dir(rtl) .cgw-list-chevron {
+.cgw-db-list-group-button[aria-expanded='false']:dir(rtl) .cgw-db-list-chevron {
   transform: rotate(90deg);
 }
 
-.cgw-list-count {
+.cgw-db-list-count {
   color: var(--cg-text-secondary);
   font-size: 12px;
   font-weight: 400;
 }
 
-.cgw-list-more,
-.cgw-list-new {
+.cgw-db-list-more,
+.cgw-db-list-new {
   padding-inline: 4px;
 }
 
-.cgw-list-new .cgw-board-new {
+.cgw-db-list-new .cgw-board-new {
   inline-size: 100%;
 }
 
-.cgw-list-input {
+.cgw-db-list-input {
   padding-inline: 8px;
   box-shadow: inset 0 0 0 2px var(--cgw-db-active);
 }
 
-.cgw-list-empty {
+.cgw-db-list-empty {
   margin: 0;
   padding: var(--cg-space-4, 16px);
   color: var(--cg-text-secondary);

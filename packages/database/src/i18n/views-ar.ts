@@ -57,6 +57,7 @@ export const viewsAr: Strings<typeof viewsEn> = {
     more: '+{{count}} أخرى',
     moreLabel: '{{count}} أخرى في {{date}}',
     dayItems: 'صفوف {{date}}',
+    weekItems: 'صفوف الأسبوع من {{start}} إلى {{end}}',
     noDate: 'بلا تاريخ: {{count}}',
     noDateTitle: 'صفوف بلا تاريخ',
     noDateEmpty: 'لكل صف تاريخ.',

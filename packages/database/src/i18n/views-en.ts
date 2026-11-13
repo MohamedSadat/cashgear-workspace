@@ -54,6 +54,7 @@ export const viewsEn = {
     more: '+{{count}} more',
     moreLabel: '{{count}} more on {{date}}',
     dayItems: 'Rows on {{date}}',
+    weekItems: 'Rows in the week from {{start}} to {{end}}',
     noDate: 'No date: {{count}}',
     noDateTitle: 'Rows with no date',
     noDateEmpty: 'Every row has a date.',

@@ -461,7 +461,7 @@ describe('a row page', () => {
     expect(names).toContain('Status');
     expect(names).not.toContain('Name');
     const notes = [...container.querySelectorAll<HTMLElement>('.cgw-row-prop-value')].find(
-      (v) => v.getAttribute('aria-label') === 'Edit Notes',
+      (v) => v.getAttribute('aria-description') === 'Edit Notes',
     )!;
     await key(notes, 'Enter');
     const input = notes.querySelector<HTMLTextAreaElement>('textarea')!;
@@ -469,5 +469,111 @@ describe('a row page', () => {
     await key(input, 'Enter');
     expect(opsOf(host, 'row.update')).toHaveLength(1);
     expect(host.rowRecords.get(row.id)!.values[P.notes]).toBe('Checked with finance');
+  });
+
+  // Axe (WCAG 2.5.3, label in name): a value's name holds the text it shows.
+  it("names each value by its property and the value's own text", async () => {
+    const { host, tasksId } = seed(2);
+    const row = host.rowsOf(tasksId)[0];
+    await mount(h(RowProperties, { host, rowId: row.id }));
+    const value = container.querySelector<HTMLElement>('[aria-description="Edit Priority"]')!;
+    const name = value
+      .getAttribute('aria-labelledby')!
+      .split(' ')
+      .map((id) => document.getElementById(id)!.textContent)
+      .join(' ');
+    expect(value.getAttribute('aria-label')).toBeNull();
+    expect(name).toBe(`Priority ${value.textContent}`);
+  });
+
+  // Found by the Phase 4 e2e specs: the click on an option bubbled through React's portal to the
+  // value it was opened from, which opened the picker again.
+  it('a click on an option chooses it and closes the picker', async () => {
+    const { host, tasksId } = seed(2);
+    const row = host.rowsOf(tasksId)[0];
+    await mount(h(RowProperties, { host, rowId: row.id }));
+    const value = container.querySelector<HTMLElement>('[aria-description="Edit Priority"]')!;
+    await mouse(value, 'click');
+    const high = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) =>
+      o.textContent?.includes('High'),
+    )!;
+    await mouse(high, 'click');
+    expect(opsOf(host, 'row.update')).toHaveLength(1);
+    expect(document.querySelector('.cgw-picker-input')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('sets a new relation up before writing it, from "Add a property"', async () => {
+    const { host, tasksId } = seed(2);
+    const row = host.rowsOf(tasksId)[0];
+    await mount(h(RowProperties, { host, rowId: row.id }));
+    const add = container.querySelector<HTMLElement>('.cgw-row-props-add')!;
+    await mouse(add, 'click');
+    const relation = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((i) =>
+      i.textContent?.includes('Relation'),
+    )!;
+    await mouse(relation, 'click');
+    // Nothing is written yet: a relation without its database would be refused.
+    expect(opsOf(host, 'db.update')).toHaveLength(0);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.getAttribute('aria-label')).toBe('Relation settings');
+    const select = dialog.querySelector<HTMLSelectElement>('select')!;
+    await act(async () => {
+      select.value = tasksId;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const done = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => b.textContent === 'Done',
+    )!;
+    await mouse(done, 'click');
+    const updates = opsOf(host, 'db.update') as unknown as {
+      payload: { properties: { type: string }[] };
+    }[];
+    expect(updates).toHaveLength(1);
+    // The relation and, two-way by default, its reverse in this database.
+    expect(updates[0].payload.properties.map((p) => p.type)).toEqual(['relation', 'relation']);
+    const relations = host.database(tasksId)!.properties.filter((p) => p.type === 'relation');
+    expect(relations.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('the table adds a property', () => {
+  it('sets a relation and a rollup up before writing them', async () => {
+    const { view, host, tasksId } = table(2);
+    await mount(view);
+    const before = host.database(tasksId)!.properties.length;
+    const open = async (type: string) => {
+      await mouse(container.querySelector('.cgw-th-add button')!, 'click');
+      const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((i) =>
+        i.textContent?.trim().endsWith(type),
+      )!;
+      await mouse(item, 'click');
+      return document.querySelector<HTMLElement>('[role="dialog"]')!;
+    };
+    const rollup = await open('Rollup');
+    expect(rollup.getAttribute('aria-label')).toBe('Rollup settings');
+    const [, property, fn] = [...rollup.querySelectorAll<HTMLSelectElement>('select')];
+    await act(async () => {
+      property.value = 'title';
+      property.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+      fn.value = 'count';
+      fn.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await mouse(
+      [...rollup.querySelectorAll<HTMLButtonElement>('button')].find(
+        (b) => b.textContent === 'Done',
+      )!,
+      'click',
+    );
+    const made = host.database(tasksId)!.properties;
+    expect(made).toHaveLength(before + 1);
+    expect(made.at(-1)).toMatchObject({ type: 'rollup', rollup: { fn: 'count' } });
+    // Shown in the view, after the last column.
+    const headers = [...container.querySelectorAll('[role="columnheader"]')].map((c) =>
+      c.getAttribute('aria-label'),
+    );
+    expect(headers.at(-1)).toBe('Rollup, Rollup');
   });
 });

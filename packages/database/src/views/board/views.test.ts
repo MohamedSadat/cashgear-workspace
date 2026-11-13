@@ -201,12 +201,12 @@ describe('the list', () => {
   it('draws a line per row with its shown properties, virtualised, and Enter opens one', async () => {
     const { view, host } = await viewOf('list', 2000);
     await mount(view);
-    const lines = container.querySelectorAll<HTMLElement>('.cgw-list-row');
+    const lines = container.querySelectorAll<HTMLElement>('.cgw-db-list-row');
     expect(lines.length).toBeGreaterThan(5);
     expect(lines.length).toBeLessThan(80);
     lines[0].focus();
     await key(lines[0], 'ArrowDown');
-    expect(document.activeElement).toBe(container.querySelectorAll('.cgw-list-row')[1]);
+    expect(document.activeElement).toBe(container.querySelectorAll('.cgw-db-list-row')[1]);
     await key(document.activeElement!, 'Enter');
     expect(host.opened.at(-1)?.kind).toBe('row');
   });
@@ -214,12 +214,12 @@ describe('the list', () => {
   it('shows groups with counts that collapse', async () => {
     const { view } = await viewOf('list', 8, { group: { propertyId: P.status } });
     await mount(view);
-    const headers = container.querySelectorAll<HTMLButtonElement>('.cgw-list-group-button');
+    const headers = container.querySelectorAll<HTMLButtonElement>('.cgw-db-list-group-button');
     expect(headers.length).toBe(4);
-    const before = container.querySelectorAll('.cgw-list-row').length;
+    const before = container.querySelectorAll('.cgw-db-list-row').length;
     await click(headers[1]);
     expect(headers[1].getAttribute('aria-expanded')).toBe('false');
-    expect(container.querySelectorAll('.cgw-list-row').length).toBeLessThan(before);
+    expect(container.querySelectorAll('.cgw-db-list-row').length).toBeLessThan(before);
   });
 });
 
@@ -247,6 +247,29 @@ describe('the calendar', () => {
     expect(container.querySelector('.cgw-cal-undated-toggle')!.textContent).toBe(
       `No date: ${undated}`,
     );
+  });
+
+  // Axe: a row's children are its cells (the rows drawn over a week are a cell of its own after
+  // the days), and the "No date" toggle names its list only while the list is there.
+  it("draws a week's rows in a cell of the week, and names the undated list only when open", async () => {
+    const { view } = await viewOf('calendar', 200);
+    await mount(view);
+    const items = [...container.querySelectorAll<HTMLElement>('[data-cal-item]')];
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      const cell = item.parentElement!.closest('[role]')!;
+      expect(cell.getAttribute('role')).toBe('gridcell');
+      expect(cell.getAttribute('aria-description')).toMatch(/^Rows in the week from /);
+      expect(cell.hasAttribute('aria-label')).toBe(false);
+      expect(cell.parentElement!.getAttribute('role')).toBe('row');
+    }
+    for (const row of container.querySelectorAll('.cgw-cal-week[role="row"]'))
+      for (const child of row.children) expect(child.getAttribute('role')).toBe('gridcell');
+    const toggle = container.querySelector<HTMLElement>('.cgw-cal-undated-toggle')!;
+    expect(toggle.hasAttribute('aria-controls')).toBe(false);
+    await act(async () => toggle.click());
+    const list = document.getElementById(toggle.getAttribute('aria-controls')!);
+    expect(list?.classList.contains('cgw-cal-undated')).toBe(true);
   });
 
   it('starts the week on Saturday in Arabic', async () => {

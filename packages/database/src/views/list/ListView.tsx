@@ -230,10 +230,10 @@ export function ListView({
   const empty = snapshot.complete && !snapshot.loading && snapshot.rows.length === 0;
 
   return (
-    <div className={`cgw-list${embedded ? ' is-embedded' : ''}`}>
+    <div className={`cgw-db-list${embedded ? ' is-embedded' : ''}`}>
       <div
         ref={scroller}
-        className="cgw-list-scroll"
+        className="cgw-db-list-scroll"
         onScroll={measure}
         onKeyDown={onKeyDown}
         onFocus={onFocus}
@@ -244,7 +244,7 @@ export function ListView({
           role="list"
           aria-label={t('list.label', { name })}
           aria-busy={snapshot.loading || undefined}
-          className="cgw-list-body"
+          className="cgw-db-list-body"
           style={{ blockSize: layout.total }}
         >
           {drawn.map((i) => {
@@ -275,18 +275,18 @@ export function ListView({
             if (item.kind === 'group') {
               const label = group ? groupText(group.def, group.rule, item.group, env) : item.group;
               return (
-                <div key={item.key} className="cgw-list-group" {...common}>
+                <div key={item.key} className="cgw-db-list-group" {...common}>
                   <button
                     type="button"
                     data-focus="group"
                     tabIndex={isActive ? 0 : -1}
-                    className="cgw-list-group-button"
+                    className="cgw-db-list-group-button"
                     aria-expanded={!item.collapsed}
                     aria-label={t(item.collapsed ? 'group.expand' : 'group.collapse', {
                       name: label,
                     })}
                   >
-                    <span aria-hidden="true" className="cgw-list-chevron">
+                    <span aria-hidden="true" className="cgw-db-list-chevron">
                       ▾
                     </span>
                     {group ? (
@@ -297,14 +297,16 @@ export function ListView({
                         env={env}
                       />
                     ) : null}
-                    <span className="cgw-list-count">{item.count.toLocaleString(env.locale)}</span>
+                    <span className="cgw-db-list-count">
+                      {item.count.toLocaleString(env.locale)}
+                    </span>
                   </button>
                 </div>
               );
             }
             if (item.kind === 'more')
               return (
-                <div key={item.key} className="cgw-list-more" {...common}>
+                <div key={item.key} className="cgw-db-list-more" {...common}>
                   <button
                     type="button"
                     data-focus="more"
@@ -320,14 +322,14 @@ export function ListView({
                 ? groupText(group.def, group.rule, item.group, env)
                 : null;
             return (
-              <div key={item.key} className="cgw-list-new" {...common}>
+              <div key={item.key} className="cgw-db-list-new" {...common}>
                 {draft === item.group && titleDef ? (
                   <InlineEditor
                     def={titleDef}
                     row={draftRow(database)}
                     env={env}
                     label={t('card.newLabel')}
-                    className="cgw-list-input"
+                    className="cgw-db-list-input"
                     commit={(value) => {
                       if (typeof value === 'string' && value.trim())
                         void actions.createRow({ title: value, view, groupKey: item.group });
@@ -354,7 +356,7 @@ export function ListView({
           })}
         </div>
         {empty ? (
-          <p className="cgw-list-empty">
+          <p className="cgw-db-list-empty">
             {searching || (config.filter?.children.length ?? 0) > 0
               ? t('list.noMatch')
               : t('list.empty')}
@@ -389,12 +391,12 @@ const ListLine = memo(
     return (
       <div
         {...common}
-        className="cgw-list-row"
+        className="cgw-db-list-row"
         data-focus="row"
         tabIndex={active ? 0 : -1}
         aria-label={row.title || env.t('untitled')}
       >
-        <span className="cgw-list-title">
+        <span className="cgw-db-list-title">
           {row.icon ? (
             <span className="cgw-card-icon" aria-hidden="true">
               {row.icon}
@@ -404,9 +406,9 @@ const ListLine = memo(
             {row.title || env.t('untitled')}
           </span>
         </span>
-        <span className="cgw-list-props">
+        <span className="cgw-db-list-props">
           {cardLines(row, shown).map((def) => (
-            <span key={def.id} className="cgw-list-prop" title={def.name}>
+            <span key={def.id} className="cgw-db-list-prop" title={def.name}>
               {renderCell(def, row, env)}
             </span>
           ))}

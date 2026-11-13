@@ -354,7 +354,7 @@ export function PropertyMenuBody({
           </MenuItem>
         ) : null}
         {editable && isDateType(def.type) ? (
-          <div className="cgw-menu-switch">
+          <div className="cgw-db-menu-switch">
             <CgSwitch
               checked={def.date?.includeTime === true}
               label={t('property.includeTime')}

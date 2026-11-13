@@ -42,7 +42,7 @@ export function SortEditor({
               {editable ? (
                 <button
                   type="button"
-                  className="cgw-handle"
+                  className="cgw-db-handle"
                   aria-label={t('sort.drag')}
                   aria-keyshortcuts="ArrowUp ArrowDown"
                   {...handleProps(rule.propertyId)}

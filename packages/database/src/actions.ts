@@ -186,6 +186,48 @@ export function createActions(host: DatabaseHost, databaseId: Id) {
       } else ops.push(dbUpdate([def]));
       return send(ops);
     },
+    /**
+     * Adds a relation set up before it is written (a relation names its database), placed as
+     * `addProperty` places a property, with its reverse property when it is two-way.
+     */
+    addRelation(
+      def: PropertyDef,
+      reverse: { databaseId: Id; def: PropertyDef } | null,
+      place?: { view: ViewRecord; anchor: PropertyId; side: 'before' | 'after' },
+    ): Promise<void> {
+      if (!reverse || reverse.databaseId !== databaseId)
+        return actions.addProperty(def, place).then(() =>
+          reverse
+            ? send([
+                newOp('db.update', workspaceId(), reverse.databaseId, {
+                  properties: [reverse.def],
+                }),
+              ])
+            : undefined,
+        );
+      // A relation to this database: both sides in one write, the reverse after the relation.
+      const db = database();
+      if (!db) return Promise.resolve();
+      const ids = db.properties.map((p) => p.id);
+      const at = place ? ids.indexOf(place.anchor) : -1;
+      ids.splice(at < 0 ? ids.length : place!.side === 'before' ? at : at + 1, 0, def.id);
+      ids.splice(ids.indexOf(def.id) + 1, 0, reverse.def.id);
+      const ops: Operation[] = [dbUpdate([def, reverse.def], ids)];
+      if (place)
+        ops.push(
+          viewUpsert({
+            ...place.view,
+            config: placeProperty(
+              place.view.config,
+              { ...db, properties: [...db.properties, def] },
+              def.id,
+              place.anchor,
+              place.side,
+            ),
+          }),
+        );
+      return send(ops);
+    },
     /** Deletes a property: it is hidden everywhere and can be restored; its values stay. */
     deleteProperty(def: PropertyDef): Promise<void> {
       if (def.id === TITLE_PROPERTY) return Promise.resolve();

@@ -576,6 +576,7 @@ export class FakeServer {
     for (const database of plan.databases)
       if (database.id !== op.entityId && !this.visible(account, database.id))
         throw new Refusal('access.denied');
+    this.checkFiles(m, plan);
     this.cascadeTrash(m, op, plan);
     this.stampRows(m, account, op, plan);
     // What the plan removes, read before it goes.
@@ -629,6 +630,35 @@ export class FakeServer {
    * A relation written to a row keeps only rows of its target database the server has (as the
    * server reads the ids it is given); the rest are dropped before the planner sees them.
    */
+  /**
+   * The server's rule for files (OpsService `CoverAsync`, DatabaseOps `FilesAsync`): a page's new
+   * cover, and each file newly added to a row, must be a file the server holds; knowing its id is
+   * not enough (`access.denied`).
+   */
+  private checkFiles(m: Mirror, plan: Plan) {
+    const held = (id: Id) => this.assets.get(id)?.completed === true;
+    for (const page of plan.pages) {
+      const cover = page.coverAssetId;
+      if (cover && cover !== m.pages.get(page.id)?.coverAssetId && !held(cover))
+        throw new Refusal('access.denied');
+    }
+    for (const row of plan.rows) {
+      const database =
+        plan.databases.find((d) => d.id === row.databaseId) ?? m.databases.get(row.databaseId);
+      const before = m.rowRecords.get(row.id);
+      if (row.coverAssetId && row.coverAssetId !== before?.coverAssetId && !held(row.coverAssetId))
+        throw new Refusal('access.denied');
+      for (const def of database?.properties ?? []) {
+        if (def.type !== 'files') continue;
+        const now = row.values[def.id];
+        const was = before?.values[def.id];
+        const old = new Set(Array.isArray(was) ? (was as string[]) : []);
+        for (const id of Array.isArray(now) ? (now as string[]) : [])
+          if (!old.has(id) && !held(id)) throw new Refusal('access.denied');
+      }
+    }
+  }
+
   private keepRelated(m: Mirror, op: Operation): Operation {
     let values: Record<PropertyId, Value | null> | undefined;
     let databaseId: Id | null | undefined;

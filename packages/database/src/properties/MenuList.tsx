@@ -21,7 +21,7 @@ export function menuKeys(event: KeyboardEvent<HTMLElement>) {
 
 export function MenuList({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div role="menu" aria-label={label} className="cgw-menu" onKeyDown={menuKeys}>
+    <div role="menu" aria-label={label} className="cgw-db-menu" onKeyDown={menuKeys}>
       {children}
     </div>
   );
@@ -55,18 +55,18 @@ export function MenuItem({
       tabIndex={-1}
       disabled={disabled}
       data-cg-initial-focus={initialFocus ? '' : undefined}
-      className={`cgw-menu-item${danger ? ' cgw-danger' : ''}`}
+      className={`cgw-db-menu-item${danger ? ' cgw-danger' : ''}`}
       onClick={onSelect}
     >
-      <span className="cgw-menu-glyph" aria-hidden="true">
+      <span className="cgw-db-menu-glyph" aria-hidden="true">
         {checked ? '✓' : (glyph ?? '')}
       </span>
-      <span className="cgw-menu-text">{children}</span>
-      {hint ? <span className="cgw-menu-hint">{hint}</span> : null}
+      <span className="cgw-db-menu-text">{children}</span>
+      {hint ? <span className="cgw-db-menu-hint">{hint}</span> : null}
     </button>
   );
 }
 
 export function MenuSeparator() {
-  return <div role="separator" className="cgw-menu-separator" />;
+  return <div role="separator" className="cgw-db-menu-separator" />;
 }

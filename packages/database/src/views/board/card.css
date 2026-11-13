@@ -106,7 +106,7 @@ body > .cgw-drag-ghost {
   will-change: transform;
 }
 
-.cgw-drop-indicator {
+.cgw-db-drop-indicator {
   position: absolute;
   z-index: 2;
   inset-block-start: 0;
@@ -118,7 +118,7 @@ body > .cgw-drag-ghost {
   will-change: transform;
 }
 
-.cgw-drop-indicator[data-mode='column'] {
+.cgw-db-drop-indicator[data-mode='column'] {
   block-size: 100%;
   min-block-size: 40px;
   border-radius: var(--cg-radius-md, 6px);

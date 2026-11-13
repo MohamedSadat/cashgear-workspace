@@ -1,5 +1,7 @@
 // The sync engine (SYNC_DESIGN.md, The sync loop): the same in the browser and on the desktop,
 // over a LocalStore and a SyncApi. One pass, per synced workspace of the signed-in account:
+//   0. upload assets the server lacks (before the operations that may name them: a cover, a
+//      row's files);
 //   1. push the outbox, oldest first, and take the server's answers into the mirror;
 //   2. push document updates not yet sent, in batches the server takes (at most 200 updates and
 //      4 MB a request, an update over 1 MB alone), each settled before the next;
@@ -7,8 +9,7 @@
 //      past this device's cursor), and resync any subtree access changed on;
 //   4. pull documents this device holds whose server head moved, then a bounded number of pinned
 //      pages it does not hold yet;
-//   5. compare a few pages' state hashes with the server's, and repair those that differ;
-//   6. upload assets the server lacks.
+//   5. compare a few pages' state hashes with the server's, and repair those that differ.
 // Phase 4 (databases): after the feed, the rows of databases this device holds in full and has
 // not fetched yet come by their own route (at most 4 requests of 1,000 rows a pass, the next pass
 // soon while some remain); the feed keeps held rows fresh after that; pins hold the databases in
@@ -572,6 +573,9 @@ export class SyncEngine {
       }
       for (const workspace of held) {
         try {
+          // Files first: the server takes a cover or a row's file only once it holds the bytes, so
+          // an operation naming a file sent before them is refused and the file lost.
+          await this.uploadAssets(workspace);
           await this.pushOutbox(workspace, account);
           await this.pushDocs(workspace);
           await this.pullChanges(workspace, account);
@@ -583,7 +587,6 @@ export class SyncEngine {
           await this.pullDocs(workspace, mirror.pages, pinned);
           await this.fetchPinned(workspace, pinned);
           await this.runChecks(workspace);
-          await this.uploadAssets(workspace);
         } catch (error) {
           // The workspace is gone for this account: forget it here, as another device's removal would.
           if (
@@ -1777,7 +1780,7 @@ export class SyncEngine {
     return true;
   }
 
-  // 6. Assets --------------------------------------------------------------------------------------
+  // 0. Assets --------------------------------------------------------------------------------------
 
   private async uploadAssets(workspace: WorkspaceRecord) {
     const pending = (await this.store.pendingAssets(20)).filter(
