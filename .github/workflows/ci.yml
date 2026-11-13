@@ -104,8 +104,10 @@ jobs:
           run=$(gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$run" ]; then
             gh run download "$run" --name phase2-server --dir bench/previous-run
-            found=$(find bench/previous-run -name phase2.json | head -n 1)
-            if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" bench/previous/phase2.json; fi
+            for name in phase2.json phase4.json; do
+              found=$(find bench/previous-run -name "$name" | head -n 1)
+              if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" "bench/previous/$name"; fi
+            done
           fi
       # Phase 2's server budgets (bench/phase2.mjs): push, pull, feed, search on the full-text path,
       # compaction and the 200-user load test, in Release, gated against the last run on main.
@@ -114,6 +116,12 @@ jobs:
         env:
           CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
           CGW_TEST_FULLTEXT: required
+      # Phase 4's server budget (bench/phase4.mjs --server, Phase4Bench): the query over 50,000 rows
+      # with one filter and one sort, p95, through the API on SQL Server.
+      - name: Phase 4 server budget (the query at 50,000 rows)
+        run: pnpm bench:phase4 -- --server
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -152,9 +160,10 @@ jobs:
       - run: pnpm rust:fmt
       # Tauri embeds apps/web/dist, so the web build comes before clippy.
       - run: pnpm build
-      # Phase 3: the v0.2.0 web build (target/old-build, from the tag and its own lockfile), which
-      # tests/e2e/old-build.spec.ts serves beside this build.
-      - name: The old build (v0.2.0's web app)
+      # The released web builds (target/old-build/<tag>, each from its tag and its own lockfile)
+      # that tests/e2e/old-build.spec.ts serves beside this build: v0.2.0 (Phase 3) and v0.3.0
+      # (Phase 4: a page with a database, and rows it must never see).
+      - name: The old builds (v0.2.0's and v0.3.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs
@@ -240,7 +249,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -256,6 +265,12 @@ jobs:
       # no server answering; against the server stack started above.
       - name: Phase 3 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase3 -- --desktop
+      # Phase 4's (bench/phase4.mjs): a 50,000-row database imported through the server's route,
+      # its first rows, the table's scroll, a board drag and a cell edit in Chrome (IndexedDB), and
+      # a cell edit on the desktop app (SQLite); against the server stack started above. The
+      # server's query budget runs in the server job.
+      - name: Phase 4 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase4 -- --desktop --no-server
       - uses: actions/upload-artifact@v4
         if: always()
         with:
