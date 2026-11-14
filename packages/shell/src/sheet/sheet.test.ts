@@ -689,7 +689,7 @@ describe('the workbook list', { timeout: 30_000 }, () => {
     expect(stock.querySelectorAll('button')).toHaveLength(2);
     const byLabel = (label: string) =>
       element.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
-    await act(async () => byLabel('Move Budget 2026 to the trash').click());
+    await act(async () => byLabel('Move to the trash: Budget 2026').click());
     await until(() => rows().length === 1, 'the list without it');
     const patch = server.requests.find((r) => r.method === 'PATCH')!;
     expect(patch.url.pathname).toBe(`/api/v1/workbooks/${WORKBOOK}`);
@@ -730,4 +730,49 @@ describe('the workbook list', { timeout: 30_000 }, () => {
     expect(rows()).toHaveLength(1);
     expect(rows()[0]).toContain('Stock');
   });
+
+  // WCAG 2.5.3 (Axe's label-content-name-mismatch, found by tests/e2e/a11y.spec.ts): a button
+  // named for its row says what it shows, so a person who says its words reaches it.
+  it.each(['en', 'ar'] as const)(
+    "names each row's buttons by their visible words, then the workbook (%s)",
+    async (language) => {
+      const books = [book()];
+      const api = createApi({
+        baseUrl: 'http://api.test',
+        auth: { kind: 'cookie' },
+        fetch: fakeServer(books).fetch as never,
+      });
+      const cloud = fakeCloud('synced', { id: 'u1' }, api);
+      const element = document.createElement('div');
+      document.body.append(element);
+      const root = createRoot(element);
+      roots.push({ destroy: () => root.unmount() });
+      const services = {
+        platform: { kind: 'web', sheetOrigin: ORIGIN, openExternal: vi.fn() },
+      } as never;
+      await act(async () =>
+        root.render(
+          h(
+            I18nextProvider,
+            { i18n: createI18n(language) },
+            h(
+              ShellContext.Provider,
+              { value: services },
+              h(WorkbooksView, { session: fakeSession(), cloud: cloud as never }),
+            ),
+          ),
+        ),
+      );
+      await until(() => !!element.querySelector('tbody tr button'), 'the row');
+      const buttons = [...element.querySelectorAll<HTMLButtonElement>('tbody tr button')];
+      expect(buttons.length).toBeGreaterThanOrEqual(4);
+      for (const button of buttons) {
+        const label = button.getAttribute('aria-label')!;
+        expect(label.startsWith(button.textContent!), `${label} / ${button.textContent}`).toBe(
+          true,
+        );
+        expect(label).toContain('Budget 2026');
+      }
+    },
+  );
 });
