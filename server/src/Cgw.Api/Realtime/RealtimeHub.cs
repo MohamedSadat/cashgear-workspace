@@ -178,13 +178,23 @@ public sealed class RealtimeHub(
         });
     }
 
-    /// <summary>An unexpected failure is an answer too (500 <c>server.error</c>), and says nothing of the server's insides.</summary>
+    /// <summary>
+    /// An unexpected failure is an answer too (500 <c>server.error</c>), and says nothing of the
+    /// server's insides. A call cut short because its connection closed is not a failure: SQL
+    /// Server reports the cancelled command as a <c>SqlException</c> ("Operation cancelled by
+    /// user"), not an <see cref="OperationCanceledException"/>, and nobody is left to answer.
+    /// </summary>
     private async Task<Answer<T>> Guarded<T>(Func<Task<Answer<T>>> call)
         where T : class
     {
         try
         {
             return await call();
+        }
+        catch (Exception e) when (Context.ConnectionAborted.IsCancellationRequested)
+        {
+            logger.LogDebug(e, "A hub call ended with its connection");
+            return new Failure(Codes.ServerError, 500, "The connection closed during the call");
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
