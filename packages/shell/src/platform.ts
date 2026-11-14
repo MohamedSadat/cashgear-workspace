@@ -45,6 +45,21 @@ export interface WorkspacePlatform {
   auth?: AuthPlatform;
   /** The web app's address, for share links made on the desktop; the browser uses its own. */
   webBase?: string;
+  /**
+   * Cash Gear Sheet's one origin for this build (`VITE_CGW_SHEET`; live
+   * `https://sheet.cashgearerp.com`, local-API builds the mock on `http://127.0.0.1:4283`): the
+   * embed's frame, the messages it takes, the launch links it opens. Without it a workbook shows
+   * its picture only.
+   */
+  sheetOrigin?: string;
+  /**
+   * Cash Gear ERP's two origins for this build, and no other ever (decisions, 2026-11-14): its
+   * API (`VITE_CGW_ERP_API`; live `https://api.cashgearerp.com`, local-API builds the mock on
+   * `http://127.0.0.1:4282`) and its client, whose connect page opens in a pop-up or the system
+   * browser (`VITE_CGW_ERP_CLIENT`; live `https://erp.cashgearerp.com`, the mock on
+   * `http://127.0.0.1:4284`). Without them ERP blocks show their placeholder.
+   */
+  erp?: { apiBase: string; clientOrigin: string };
   /** Gives the window's own frame a theme, or the system's with null; a no-op in a browser. */
   setWindowTheme(theme: Theme | null): Promise<void>;
   /** Opens a link outside the app, in the system browser on the desktop. */
@@ -61,7 +76,9 @@ export interface WorkspacePlatform {
   updates?: PlatformUpdates;
   /**
    * Desktop deep links (`cashgear-workspace://p/{pageId}`): `open` gets the route's hash, the
-   * link the app started with first. Returns the unsubscribe.
+   * link the app started with first. Cash Gear ERP's return from the system browser comes the
+   * same way, as `cashgear-workspace://erp#ticket=…&state=…` (never held for a start): the shell
+   * takes it before any route and never navigates to it. Returns the unsubscribe.
    */
   onDeepLink?(open: (hash: string) => void): () => void;
 }

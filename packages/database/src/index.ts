@@ -67,4 +67,4 @@ export {
 export { createFromTemplate, createTemplate, rowTemplateItems } from './templates/rowTemplates';
 export { ImportDialog, type ImportDialogProps } from './csv/ImportDialog';
 export { exportView, exportFileName, type ExportResult } from './csv/exportView';
-export type { CsvImportRequest, CsvImportResult } from './host';
+export type { CsvImportRequest, CsvImportResult, WorkbookExportResult } from './host';

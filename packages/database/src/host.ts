@@ -218,6 +218,23 @@ export interface DatabaseHost {
    * browser downloads the file.
    */
   saveFile?(fileName: string, data: Blob): Promise<void>;
+
+  // ---- Workbooks (Phase 5, M5.5; optional: the shell implements them for a synced workspace) --
+  /**
+   * "Export to a workbook": a new workbook holding the view's rows in its filter and sort order
+   * and its shown properties, written by the server (`POST /databases/{id}/workbooks`). Absent
+   * on a local workspace; rejects with a notice code (`offline`, `limit.size`, ...) as the
+   * error's message when refused.
+   */
+  exportWorkbook?(databaseId: Id, viewId: Id, name: string): Promise<WorkbookExportResult>;
+  /** "Open in Cash Gear Sheet" for a workbook (after an export). */
+  openWorkbook?(workbookId: Id): void;
+}
+
+/** A workbook a view was exported to. */
+export interface WorkbookExportResult {
+  workbookId: Id;
+  name: string;
 }
 
 /** The server's CSV import, as its route takes it. */

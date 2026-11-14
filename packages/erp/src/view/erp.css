@@ -1,0 +1,370 @@
+/* The ERP views: the block, the link screen and the settings section. Logical properties only
+   (they mirror in RTL), colours from the --cg-* tokens of @cashgear/ui, which have a light and a
+   dark set. Every class is the package's own (`cgw-erp-*`), so nothing the shell, the editor or
+   the database views style is styled here, nor the other way round. */
+
+.cgw-erp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-2, 8px);
+  padding-block: var(--cg-space-2, 8px);
+  padding-inline: var(--cg-space-3, 12px);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-md, 6px);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font-family: var(--cg-font-family, inherit);
+  font-size: var(--cg-font-size-md, 14px);
+  line-height: var(--cg-line-height, 1.45);
+  min-inline-size: 0;
+}
+
+.cgw-erp-muted {
+  color: var(--cg-text-secondary);
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-space-2, 8px);
+  padding-block: var(--cg-space-3, 12px);
+}
+
+.cgw-erp-message p {
+  margin: 0;
+}
+
+.cgw-erp-message[aria-busy='true'] .cgw-erp-message-text {
+  color: var(--cg-text-secondary);
+}
+
+.cgw-erp-reference {
+  font-family: var(--cg-font-mono, ui-monospace, monospace);
+  unicode-bidi: plaintext;
+}
+
+.cgw-erp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+}
+
+.cgw-erp-company,
+.cgw-erp-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+}
+
+.cgw-erp-company label,
+.cgw-erp-field label {
+  color: var(--cg-text-secondary);
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-select,
+.cgw-erp-input {
+  box-sizing: border-box;
+  min-block-size: 28px;
+  max-inline-size: 16rem;
+  padding-block: 2px;
+  padding-inline: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font: inherit;
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-input[type='search'] {
+  inline-size: 16rem;
+}
+
+.cgw-erp-select:focus-visible,
+.cgw-erp-input:focus-visible,
+.cgw-erp-scroll:focus-visible,
+.cgw-erp-checks input:focus-visible {
+  outline: var(--cg-focus-ring-width, 2px) solid var(--cg-focus-ring-color, var(--cg-accent));
+  outline-offset: 1px;
+}
+
+.cgw-erp-input[aria-invalid='true'] {
+  border-color: var(--cg-danger, #b42318);
+}
+
+.cgw-erp-invalid {
+  color: var(--cg-danger-text, #b42318);
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+/* Choosing the data */
+
+.cgw-erp-choose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-2, 8px);
+  padding-block: var(--cg-space-2, 8px);
+}
+
+.cgw-erp-choose-title {
+  margin: 0;
+  font-weight: var(--cg-font-weight-medium, 500);
+}
+
+.cgw-erp-choose-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A connector's data */
+
+.cgw-erp-loaded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-2, 8px);
+  min-inline-size: 0;
+}
+
+.cgw-erp-loaded[aria-busy='true'] .cgw-erp-table {
+  opacity: 0.6;
+}
+
+.cgw-erp-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cg-space-1, 4px) var(--cg-space-3, 12px);
+}
+
+.cgw-erp-title {
+  font-weight: var(--cg-font-weight-medium, 600);
+}
+
+.cgw-erp-head-end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+  margin-inline-start: auto;
+}
+
+.cgw-erp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+  padding-block-end: var(--cg-space-2, 8px);
+  border-block-end: 1px solid var(--cg-border);
+}
+
+.cgw-erp-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-space-2, 8px);
+  padding: var(--cg-space-3, 12px);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+  background: var(--cg-surface-subtle, var(--cg-surface));
+}
+
+.cgw-erp-fieldset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--cg-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.cgw-erp-fieldset legend {
+  margin-block-end: var(--cg-space-1, 4px);
+  padding: 0;
+  color: var(--cg-text-secondary);
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cg-space-1, 4px) var(--cg-space-4, 16px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-erp-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-space-1, 4px);
+  cursor: pointer;
+}
+
+.cgw-erp-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-3, 12px);
+}
+
+.cgw-erp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+}
+
+.cgw-erp-note {
+  margin: 0;
+  color: var(--cg-warning-text, #98600a);
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+/* The table: it scrolls inside the block, never the page. */
+
+.cgw-erp-scroll {
+  max-block-size: 32rem;
+  overflow: auto;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+}
+
+.cgw-erp-table {
+  inline-size: max-content;
+  min-inline-size: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-table th,
+.cgw-erp-table td {
+  padding-block: 4px;
+  padding-inline: 8px;
+  border-block-end: 1px solid var(--cg-border);
+  text-align: start;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.cgw-erp-table th {
+  position: sticky;
+  inset-block-start: 0;
+  background: var(--cg-surface-subtle, var(--cg-surface));
+  color: var(--cg-text-secondary);
+  font-weight: var(--cg-font-weight-medium, 500);
+}
+
+.cgw-erp-table th[aria-sort] {
+  color: var(--cg-text);
+}
+
+.cgw-erp-table tbody tr:hover td {
+  background: var(--cg-hover, transparent);
+}
+
+.cgw-erp-table .cgw-erp-num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.cgw-erp-offset {
+  color: var(--cg-text-secondary);
+}
+
+.cgw-erp-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cgw-erp-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cg-space-2, 8px);
+}
+
+.cgw-erp-pager > :first-child {
+  margin-inline-end: auto;
+}
+
+/* The link screen and the settings section */
+
+.cgw-erp-screen {
+  max-inline-size: 40rem;
+  margin-block: var(--cg-space-6, 32px);
+  margin-inline: auto;
+  padding-inline: var(--cg-space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-3, 12px);
+}
+
+.cgw-erp-screen h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.cgw-erp-screen p {
+  margin: 0;
+}
+
+.cgw-erp-screen form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-3, 12px);
+}
+
+.cgw-erp-screen .cgw-erp-checks {
+  flex-direction: column;
+}
+
+.cgw-erp-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-2, 8px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-erp-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px) var(--cg-space-4, 16px);
+  padding: var(--cg-space-2, 8px) var(--cg-space-3, 12px);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+}
+
+.cgw-erp-link-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-end: auto;
+}
+
+.cgw-erp-confirm {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-2, 8px);
+}
+
+.cgw-erp-confirm p {
+  margin: 0;
+}

@@ -8,6 +8,12 @@ export type {
   DatabaseRef,
   EditorHost,
   EditorStrings,
+  ErpBlockAttrs,
+  ErpMountOptions,
+  MountedFrame,
+  SheetBlockAttrs,
+  SheetMountOptions,
+  WorkbookRef,
 } from './host';
 export * as blocks from './blocks';
 export { EditorOverlays } from './ui/EditorOverlays';
@@ -18,6 +24,7 @@ export {
   insertBody,
   insertDatabaseView,
   insertFiles,
+  insertSheetEmbed,
   setKind,
   type BlockAction,
   type BlockActionName,

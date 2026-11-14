@@ -29,6 +29,19 @@ export interface EditorStrings {
   databaseUnavailable: string;
   databaseNotChosen: string;
   databaseChoose: string;
+  /**
+   * A workbook block's accessible name; what it says with no workbook, with the buttons that
+   * choose or make one, and when it cannot be drawn here.
+   */
+  sheetEmbed: string;
+  sheetNotChosen: string;
+  sheetChoose: string;
+  sheetCreate: string;
+  sheetUnavailable: string;
+  /** An ERP view block's accessible name; what it says with no link, and when it cannot be drawn. */
+  erpView: string;
+  erpNotChosen: string;
+  erpUnavailable: string;
   /** The "@" menu's groups and its date items; what a date with no valid value says. */
   mentionPages: string;
   mentionDates: string;

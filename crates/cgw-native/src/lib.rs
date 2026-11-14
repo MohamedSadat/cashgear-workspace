@@ -1,5 +1,6 @@
 //! Desktop helpers that need no Tauri, so they are tested on their own: reading a deep link into
-//! one of the app's routes, making a file name from what the page suggests, the computer's name,
+//! one of the app's routes (or into Cash Gear ERP's return, which is never one), making a file name
+//! from what the page suggests, the computer's name,
 //! and the sign-in to the Workspace API ([`auth`]) with its refresh token in the OS keychain
 //! ([`keychain`]). The same code serves Windows and macOS.
 
@@ -46,6 +47,72 @@ pub fn route(url: &str) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Cash Gear ERP's return from the system browser (INTEGRATIONS.md, "A user's session"): the
+/// connect ticket and the state the app sent, read from `cashgear-workspace://erp#ticket=…&state=…`.
+/// It is never a route: the page takes it before any (the shell hands it to the connect waiting
+/// for it), and it is never held for a later start, since a ticket only means something to the
+/// window that asked for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ErpReturn {
+    /// 256 random bits in base64url: 43 characters.
+    pub ticket: String,
+    /// 128 random bits in base64url: 22 characters.
+    pub state: String,
+}
+
+impl ErpReturn {
+    /// The link as the page reads it (`@cgw/erp`'s `parseErpDeepLink`), always on the app's own
+    /// scheme, rebuilt from the two values alone so nothing else of the original goes on.
+    pub fn link(&self) -> String {
+        format!("{SCHEME}://erp#ticket={}&state={}", self.ticket, self.state)
+    }
+}
+
+/// Reads Cash Gear ERP's return, `cashgear-workspace://erp#ticket=…&state=…`, or `None` for
+/// anything else. Exactly these two values, each once, in either order, each exactly as long as
+/// the contract makes it and in base64url; no query, no other path. A test install's scheme reads
+/// the same way, as for routes.
+pub fn erp_return(url: &str) -> Option<ErpReturn> {
+    let (scheme, rest) = url.split_once("://")?;
+    if scheme.is_empty()
+        || !scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '+' || c == '.')
+        || url.len() > 256
+    {
+        return None;
+    }
+    let (place, fragment) = rest.split_once('#')?;
+    if !place.eq_ignore_ascii_case("erp") && !place.eq_ignore_ascii_case("erp/") {
+        return None;
+    }
+    let mut ticket = None;
+    let mut state = None;
+    for part in fragment.split('&') {
+        let (key, value) = part.split_once('=')?;
+        let slot = match key {
+            "ticket" if is_base64url(value, 43) => &mut ticket,
+            "state" if is_base64url(value, 22) => &mut state,
+            _ => return None,
+        };
+        if slot.replace(value.to_owned()).is_some() {
+            return None;
+        }
+    }
+    Some(ErpReturn {
+        ticket: ticket?,
+        state: state?,
+    })
+}
+
+/// `len` characters of the base64url alphabet, no padding.
+fn is_base64url(value: &str, len: usize) -> bool {
+    value.len() == len
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// A page id: a UUID in lower case, as the workspace writes them.
@@ -197,6 +264,92 @@ mod tests {
         ] {
             let parsed = url::Url::parse(link).unwrap().to_string();
             assert_eq!(route(&parsed), route(link), "{link} parsed as {parsed}");
+        }
+    }
+
+    const TICKET: &str = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE";
+    const STATE: &str = "0123456789abcdefABCD-_";
+
+    #[test]
+    fn reads_the_erps_return() {
+        assert_eq!(TICKET.len(), 43);
+        assert_eq!(STATE.len(), 22);
+        let expected = Some(ErpReturn {
+            ticket: TICKET.into(),
+            state: STATE.into(),
+        });
+        for link in [
+            format!("cashgear-workspace://erp#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://erp/#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://ERP#state={STATE}&ticket={TICKET}"),
+            // A test install's scheme reads the same way.
+            format!("cgw-installer-test://erp#ticket={TICKET}&state={STATE}"),
+        ] {
+            assert_eq!(erp_return(&link), expected, "{link}");
+            // It is never a route, so nothing can navigate to it.
+            assert_eq!(route(&link), None, "{link}");
+        }
+        // The page gets it rebuilt on the app's own scheme, from the two values alone.
+        let read = erp_return(&format!(
+            "cgw-installer-test://erp/#state={STATE}&ticket={TICKET}"
+        ))
+        .unwrap();
+        assert_eq!(
+            read.link(),
+            format!("cashgear-workspace://erp#ticket={TICKET}&state={STATE}")
+        );
+    }
+
+    #[test]
+    fn refuses_anything_else_as_the_erps_return() {
+        let short = &TICKET[1..];
+        let long = format!("{TICKET}A");
+        let bad = TICKET.replace('A', "+");
+        for link in [
+            String::new(),
+            "cashgear-workspace://erp".into(),
+            "cashgear-workspace://erp#".into(),
+            format!("cashgear-workspace://erp#ticket={TICKET}"),
+            format!("cashgear-workspace://erp#state={STATE}"),
+            format!("cashgear-workspace://erp#ticket={short}&state={STATE}"),
+            format!("cashgear-workspace://erp#ticket={long}&state={STATE}"),
+            format!("cashgear-workspace://erp#ticket={bad}&state={STATE}"),
+            format!(
+                "cashgear-workspace://erp#ticket={TICKET}&state={}",
+                &STATE[1..]
+            ),
+            format!("cashgear-workspace://erp#ticket={TICKET}&state={STATE}&x=1"),
+            format!("cashgear-workspace://erp#ticket={TICKET}&ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://erp#ticket={TICKET}&state={STATE}&"),
+            format!("cashgear-workspace://erp?x=1#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://erp/more#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://p/erp#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://erp#ticket%3D{TICKET}&state={STATE}"),
+            format!("://erp#ticket={TICKET}&state={STATE}"),
+            format!("cash gear://erp#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://erp#ticket={TICKET}&state={STATE}#again"),
+        ] {
+            assert_eq!(erp_return(&link), None, "{link}");
+        }
+        // A route is not the ERP's return.
+        assert_eq!(erp_return("cashgear-workspace://settings"), None);
+    }
+
+    /// As for routes: what the URL parser does to the link on its way here changes nothing.
+    #[test]
+    fn reads_the_erps_return_as_the_url_parser_hands_it_over() {
+        for link in [
+            format!("cashgear-workspace://erp#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://erp/#ticket={TICKET}&state={STATE}"),
+            format!("cashgear-workspace://ERP#state={STATE}&ticket={TICKET}"),
+            format!("cashgear-workspace://erp?x=1#ticket={TICKET}&state={STATE}"),
+        ] {
+            let parsed = url::Url::parse(&link).unwrap().to_string();
+            assert_eq!(
+                erp_return(&parsed),
+                erp_return(&link),
+                "{link} parsed as {parsed}"
+            );
         }
     }
 

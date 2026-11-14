@@ -9,6 +9,7 @@ import type { DatabaseHost } from '../host';
 import { useDbT } from '../i18n';
 import { exportFileName, exportView } from './exportView';
 import { ImportDialog } from './ImportDialog';
+import { useWorkbookExport } from './workbookExport';
 
 export interface ViewsExtras {
   /** Items for the view menu (its context is the view). */
@@ -20,6 +21,8 @@ export interface ViewsExtras {
 export function useViewsExtras(host: DatabaseHost, databaseId: Id, editable: boolean): ViewsExtras {
   const { t } = useDbT();
   const [importing, setImporting] = useState(false);
+  // "Export to a workbook" (Phase 5), where the host can make one.
+  const workbook = useWorkbookExport(host, databaseId);
   const [status, setStatus] = useState<{ text: string; error: boolean } | null>(null);
   useEffect(() => {
     if (!status) return;
@@ -60,6 +63,7 @@ export function useViewsExtras(host: DatabaseHost, databaseId: Id, editable: boo
       text: t('csv.menuExport'),
       command: ({ invocation }) => void runExport(invocation.context),
     },
+    ...workbook.menuItems,
   ];
 
   const element = (
@@ -75,6 +79,7 @@ export function useViewsExtras(host: DatabaseHost, databaseId: Id, editable: boo
       {importing ? (
         <ImportDialog host={host} databaseId={databaseId} onClose={() => setImporting(false)} />
       ) : null}
+      {workbook.element}
     </>
   );
   return { menuItems, element };

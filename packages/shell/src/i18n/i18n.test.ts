@@ -33,6 +33,21 @@ describe('catalogues', () => {
       'search.shortcut',
       'databases.importCsv',
       'databases.importCsvInside',
+      // Phase 5: the products Cash Gear Sheet and ERP, and ranges in A1 notation.
+      'editor.erpView',
+      'editor.erpNotChosen',
+      'editor.erpUnavailable',
+      'blocks.erpData',
+      'sheets.liveTitle',
+      'sheets.emptyNote',
+      'sheets.open',
+      'sheets.openNamed',
+      'sheets.openFailed',
+      'sheets.noOrigin',
+      'sheets.errorContract',
+      'sheets.rangeHint',
+      'sheets.rangeInvalid',
+      'sheets.newNote',
     ]);
     for (const [key, text] of arabic) {
       if (allowed.has(key) || key.startsWith('keywords.')) continue;

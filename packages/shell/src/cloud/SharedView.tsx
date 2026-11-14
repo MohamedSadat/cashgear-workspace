@@ -7,6 +7,7 @@ import { BlockEditorView, type EditorHost, type EditorStrings } from '@cgw/edito
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { navigate } from '../route';
+import { noAccessWorkbooks } from '../sheet/shared';
 
 interface SharedPage {
   id: string;
@@ -101,6 +102,8 @@ export function SharedView({
         return () => note.remove();
       },
     },
+    // A workbook is never shared outside its workspace: no picture, only that (Phase 5).
+    workbooks: noAccessWorkbooks(t('sheets.noAccess')),
     pages: {
       title: (id) => tree?.pages.find((p) => p.id === id)?.title,
       icon: (id) => tree?.pages.find((p) => p.id === id)?.icon,

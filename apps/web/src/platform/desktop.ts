@@ -4,6 +4,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UpdateInfo, WorkspacePlatform } from '@cgw/shell';
 import { DesktopStore } from '@cgw/store-desktop';
+import { erpFor } from './erp';
+import { sheetOriginFor } from './sheet';
 
 const bytes = (answer: ArrayBuffer | Uint8Array | number[]) =>
   answer instanceof Uint8Array
@@ -45,6 +47,11 @@ const authCommand = async <T>(command: string, args: Record<string, unknown>): P
 export const desktopPlatform: WorkspacePlatform = {
   kind: 'desktop',
   apiBase,
+  // The embed loads from Sheet's web origin; the window's CSP lists it in `frame-src`.
+  sheetOrigin: sheetOriginFor(apiBase),
+  // Cash Gear ERP's API (in the window's CSP) and its client, whose connect page opens in the
+  // system browser and comes back by deep link (`onDeepLink`, crates/cgw-native).
+  erp: erpFor(apiBase),
   // PKCE in the system browser, back to a loopback listener on the native side, which keeps the
   // refresh token in the OS keychain (D16). Only short-lived access tokens reach this page, and
   // only in memory; the device's name is the computer's.

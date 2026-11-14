@@ -389,5 +389,19 @@ export const en = {
       delete: 'Delete',
       addProperty: 'Add a property',
     },
+    // "Export to a workbook" on a view's menu (Phase 5, csv/workbookExport.tsx).
+    workbook: {
+      menuExport: 'Export to a workbook…',
+      title: 'Export to a workbook',
+      name: 'Workbook name',
+      note: 'A new workbook with this view’s rows, in its filter and sort order, and the properties it shows.',
+      start: 'Export',
+      exporting: 'Exporting to a workbook…',
+      done: 'The workbook “{{name}}” is made.',
+      open: 'Open in Cash Gear Sheet',
+      failed: 'The workbook could not be made.',
+      offline: 'Exporting to a workbook needs a connection.',
+      tooLarge: 'This view is too large for a workbook.',
+    },
   },
 };

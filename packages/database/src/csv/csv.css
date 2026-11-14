@@ -139,3 +139,15 @@
   gap: 8px;
   inline-size: 100%;
 }
+
+/* "Export to a workbook" (Phase 5): the name, and what the workbook will hold. */
+.cgw-db-workbook-form {
+  display: grid;
+  gap: 6px;
+}
+
+.cgw-db-workbook-note {
+  margin: 0;
+  color: var(--cg-text-secondary);
+  font-size: 13px;
+}

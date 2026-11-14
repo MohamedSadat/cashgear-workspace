@@ -1125,6 +1125,49 @@ h3.cgw-body {
   border-color: var(--cg-accent);
 }
 
+/* A workbook or an ERP view (schema version 4): a frame the host draws into, by the same rules as
+   a database view (nodeviews/frame.ts). */
+.cgw-sheetEmbed,
+.cgw-erpView {
+  margin-block: 6px;
+}
+.cgw-embed-frame {
+  inline-size: 100%;
+}
+.cgw-embed-frame:empty {
+  min-block-size: 120px;
+  border-radius: 6px;
+  background: var(--cg-surface-subtle);
+}
+.cgw-embed-placeholder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--cg-border);
+  border-radius: 6px;
+  color: var(--cg-text-secondary);
+  font-style: italic;
+}
+.cgw-embed-placeholder[hidden] {
+  display: none;
+}
+.cgw-embed-choose {
+  padding: 2px 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 5px;
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font: inherit;
+  font-style: normal;
+  cursor: pointer;
+}
+.cgw-embed-choose:hover,
+.cgw-embed-choose:focus-visible {
+  border-color: var(--cg-accent);
+}
+
 /* A date in a line (schema version 3), drawn in the interface language. */
 .cgw-date-mention {
   border-radius: 4px;

@@ -4,7 +4,8 @@
 //! only (ARCHITECTURE.md, Security): the local store takes one of a fixed set of requests in a
 //! binary frame, never SQL; saving a file opens the native dialog here, so no command takes a path
 //! from the page. A deep link (`cashgear-workspace://p/{pageId}`) can only choose one of the app's
-//! routes (crates/cgw-native). Signing in to the Workspace API happens here too (auth.rs): the
+//! routes, or hand the page Cash Gear ERP's return (`…://erp#ticket=…&state=…`), which is never a
+//! route (crates/cgw-native). Signing in to the Workspace API happens here too (auth.rs): the
 //! refresh token stays on this side, in the OS keychain, and the page only gets access tokens.
 
 mod auth;
@@ -110,21 +111,37 @@ fn app_info(app: AppHandle) -> AppInfo {
     }
 }
 
-/// Brings the window forward and hands the last link that names a route to the page.
+/// Brings the window forward and hands the page Cash Gear ERP's return, if one came, and the last
+/// link that names a route.
+///
+/// The ERP's return (`cashgear-workspace://erp#ticket=…&state=…`, crates/cgw-native) goes to a
+/// page that listens, rebuilt from its two values, as a link the page takes before any route and
+/// never navigates to. It is never held for a page that is not listening yet: its ticket means
+/// something only to the window that asked for it, which a start does not have.
 fn open_links(app: &AppHandle, urls: impl IntoIterator<Item = String>) {
-    let Some(route) = urls
-        .into_iter()
-        .filter_map(|url| cgw_native::route(&url))
-        .last()
-    else {
+    let urls: Vec<String> = urls.into_iter().collect();
+    let erp = urls
+        .iter()
+        .rev()
+        .find_map(|url| cgw_native::erp_return(url));
+    let route = urls.iter().rev().find_map(|url| cgw_native::route(url));
+    if erp.is_none() && route.is_none() {
         return;
-    };
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
     let state = app.state::<DeepLinks>();
     let Ok(mut links) = state.0.lock() else {
+        return;
+    };
+    if let Some(erp) = erp {
+        if links.1 {
+            let _ = app.emit("deep-link", erp.link());
+        }
+    }
+    let Some(route) = route else {
         return;
     };
     if links.1 {

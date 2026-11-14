@@ -1,5 +1,7 @@
 import type { WorkspacePlatform } from '@cgw/shell';
 import { DATABASE, IndexedDbStore, workerIndex } from '@cgw/store-web';
+import { erpFor } from './erp';
+import { sheetOriginFor } from './sheet';
 
 /** The API's origin, from the build (`VITE_CGW_API`); a sibling host of the web app (Q5). */
 export const apiBase =
@@ -8,6 +10,9 @@ export const apiBase =
 export const webPlatform: WorkspacePlatform = {
   kind: 'web',
   apiBase,
+  sheetOrigin: sheetOriginFor(apiBase),
+  // Cash Gear ERP's API and client; its connect page opens in a pop-up with its opener.
+  erp: erpFor(apiBase),
   // The API's sign-in pages set an HttpOnly cookie; nothing here holds a credential.
   auth: { kind: 'cookie' },
   setWindowTheme: async () => {},

@@ -747,6 +747,52 @@ export class ShellDatabaseHost implements DatabaseHost {
     if (this.options.saveFile)
       await this.options.saveFile(fileName, bytes, data.type || 'text/csv;charset=utf-8');
   };
+
+  // ---- Workbooks (Phase 5: "Export to a workbook", for a synced workspace) ---------------------
+
+  private workbooks: WorkbookSync | null = null;
+
+  /** The server's workbook routes came (or went): sheet/host.ts gives them with the connection. */
+  connectWorkbooks(workbooks: WorkbookSync | null) {
+    this.workbooks = workbooks;
+    this.schedule();
+  }
+
+  get exportWorkbook(): ExportWorkbook | undefined {
+    return this.syncsCurrent() && this.workbooks ? this.exportToWorkbook : undefined;
+  }
+
+  get openWorkbook(): ((workbookId: Id) => void) | undefined {
+    const workbooks = this.workbooks;
+    return this.syncsCurrent() && workbooks ? (id) => void workbooks.open(id) : undefined;
+  }
+
+  private readonly exportToWorkbook: ExportWorkbook = async (databaseId, viewId, name) => {
+    const sync = this.sync;
+    const workbooks = this.workbooks;
+    if (!sync || !workbooks || !sync.online()) throw new Error('offline');
+    try {
+      // A database made here (or a change to its view) reaches the server first.
+      await this.session.flushAll();
+      await this.untilSent(databaseId, sync);
+      return await workbooks.exportView(databaseId, viewId, name);
+    } catch (error) {
+      throw new Error(
+        error instanceof Error && error.message === 'offline' ? 'offline' : noticeCode(error),
+        { cause: error },
+      );
+    }
+  };
+}
+
+type ExportWorkbook = NonNullable<DatabaseHost['exportWorkbook']>;
+
+/** What the host needs of the server's workbooks (sheet/host.ts gives it). */
+export interface WorkbookSync {
+  /** `POST /databases/{id}/workbooks`: a new workbook of the view's rows. */
+  exportView(databaseId: Id, viewId: Id, name: string): Promise<{ workbookId: Id; name: string }>;
+  /** "Open in Cash Gear Sheet". */
+  open(workbookId: Id): Promise<void>;
 }
 
 /** A refusal as the notice code the views show (`offline`, `db.tooLarge`, `access.denied`, ...). */

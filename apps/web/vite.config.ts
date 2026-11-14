@@ -12,14 +12,23 @@ const { version } = JSON.parse(
 // The API this build talks to (src/platform/web.ts reads the same variable), and so the
 // Content Security Policy it is served with (ARCHITECTURE.md, Security): scripts and styles from
 // the app itself, images from it or made in it (assets arrive as bytes by signed URL), network
-// only to the API and Blob Storage, frames only from Sheet, no plugins, no forms; workers, the
+// only to the API, Blob Storage and Cash Gear ERP's API, frames only from Sheet, no plugins, no
+// forms; no Cross-Origin-Opener-Policy (the ERP's connect pop-up posts to its opener); workers, the
 // service worker among them, only from the app itself. `vite preview` sends the same header, so
 // every e2e run is under the policy that ships; the production build writes it into
 // staticwebapp.config.json for Azure Static Web Apps (docs/OPERATIONS.md).
 const api = process.env.VITE_CGW_API ?? 'http://127.0.0.1:5280';
 const local = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(api);
 const blob = local ? 'http://127.0.0.1:10000' : 'https://*.blob.core.windows.net';
-const sheet = 'https://sheet.cashgearerp.com https://proud-desert-008137810.4.azurestaticapps.net';
+// Cash Gear Sheet's one origin (`VITE_CGW_SHEET`, src/platform/sheet.ts reads the same): the
+// embed's frame and nothing else; a build against a local API frames the mock Sheet.
+const sheet =
+  process.env.VITE_CGW_SHEET ?? (local ? 'http://127.0.0.1:4283' : 'https://sheet.cashgearerp.com');
+// Cash Gear ERP's API (`VITE_CGW_ERP_API`, src/platform/erp.ts reads the same, with the ERP
+// client's `VITE_CGW_ERP_CLIENT`): the only other origin the app calls. Its client is only ever
+// opened as a pop-up, which no fetch directive covers. A build against a local API calls the mock.
+const erpApi =
+  process.env.VITE_CGW_ERP_API || (local ? 'http://127.0.0.1:4282' : 'https://api.cashgearerp.com');
 const csp = [
   "default-src 'self'",
   "script-src 'self'",
@@ -27,7 +36,7 @@ const csp = [
   // Tiptap adds its own small stylesheet at run time.
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  `connect-src 'self' ${api} ${blob}`,
+  `connect-src 'self' ${api} ${blob} ${erpApi}`,
   `frame-src ${sheet}`,
   "object-src 'none'",
   "base-uri 'self'",

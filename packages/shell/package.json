@@ -15,6 +15,7 @@
     "@cgw/database": "workspace:*",
     "@cgw/doc": "workspace:*",
     "@cgw/editor": "workspace:*",
+    "@cgw/erp": "workspace:*",
     "@cgw/workspace": "workspace:*",
     "fflate": "0.8.3",
     "i18next": "27.1.1",

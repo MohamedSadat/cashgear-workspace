@@ -17,6 +17,8 @@ import { canAsk, requestDatabasePick, requestNewDatabase } from '../database/dia
 import type { ShellDatabaseHost } from '../database/host';
 import { emptyRowsOps, newDatabaseOps } from '../database/make';
 import { mountDatabase } from '../database/mount';
+import { useWorkbooksHost } from '../sheet/host';
+import { useErpHost } from '../erp/host';
 import { formatShortcut } from '../shortcuts';
 import {
   NewerDocumentError,
@@ -157,6 +159,10 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
   const services = useShell();
   const { platform } = services;
   const databases = useDatabaseHost();
+  // Workbooks (Phase 5): the block's frame and the dialogs that choose or make one.
+  const workbooks = useWorkbooksHost(session, page.id);
+  // ERP views (Phase 5): the block's frame, from the reader's own ERP session.
+  const erp = useErpHost(session);
   const strings = t('editor', { returnObjects: true }) as unknown as EditorStrings;
   const toggles = useMemo(() => new ToggleState(session, page.id), [session, page.id]);
   const language = i18n.language;
@@ -198,6 +204,8 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
             pick: requestDatabasePick,
           }
         : undefined,
+      workbooks,
+      erp,
       slash: {
         list: (query: string) => slashItems(services, t, query),
         run: (id: string) => void services.commands.run(id, { services, toggleSidebar: () => {} }),
@@ -222,6 +230,8 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
       t,
       language,
       databases,
+      workbooks,
+      erp,
     ],
   );
 }

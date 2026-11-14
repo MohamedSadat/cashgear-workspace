@@ -1,0 +1,293 @@
+/* Workbooks (Phase 5): the block inside the editor's frame (SheetBlock.tsx), the workbook list
+   (WorkbooksView.tsx) and the dialogs. Logical properties only, so right to left needs nothing
+   of its own; colours from the theme's variables, so dark needs nothing either. */
+
+.cgw-sheet-block {
+  display: block;
+  inline-size: 100%;
+}
+
+.cgw-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 8px;
+  background: var(--cg-surface);
+  color: var(--cg-text);
+}
+
+.cgw-sheet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 32px;
+}
+
+.cgw-sheet-glyph {
+  color: var(--cg-accent);
+  font-size: 1.1rem;
+}
+
+.cgw-sheet-title {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.cgw-sheet-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cgw-sheet-saved {
+  color: var(--cg-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.cgw-sheet-button {
+  padding: 3px 10px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.cgw-sheet-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.cgw-sheet-icon {
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cg-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cgw-sheet-icon:hover {
+  border-color: var(--cg-border);
+  color: var(--cg-text);
+}
+
+.cgw-sheet-icon:focus-visible,
+.cgw-sheet-link:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 1px;
+}
+
+.cgw-sheet-message {
+  margin: 0;
+  color: var(--cg-text-secondary);
+}
+
+.cgw-sheet-message.is-warn {
+  color: var(--cg-warning-text, var(--cg-text));
+}
+
+.cgw-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.cgw-sheet-link {
+  color: var(--cg-accent);
+}
+
+.cgw-sheet-stage {
+  position: relative;
+}
+
+.cgw-sheet-picture {
+  margin: 0;
+}
+
+.cgw-sheet-picture img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  border: 1px solid var(--cg-border);
+  border-radius: 4px;
+  /* Pictures are drawn in the file's own light colours, whatever the page's theme. */
+  background: #fff;
+}
+
+.cgw-sheet-picture figcaption {
+  margin-block-start: 4px;
+  color: var(--cg-text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* The live embed loads behind the picture and takes its place once it has drawn. */
+.cgw-sheet-live {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 1px;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.cgw-sheet-live[hidden] {
+  display: none;
+}
+
+.cgw-sheet-live[data-shown] {
+  position: static;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.cgw-sheet-live iframe {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+  border-radius: 4px;
+}
+
+.cgw-sheet-picker {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 18rem);
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 6px;
+  background: var(--cg-surface-subtle);
+}
+
+.cgw-sheet-picker-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.cgw-sheet-hint {
+  grid-column: 2;
+  color: var(--cg-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.cgw-sheet-picker .cgw-sheet-message,
+.cgw-sheet-picker-buttons {
+  grid-column: 1 / -1;
+}
+
+.cgw-sheet-picker-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Track U: the library's context menu reads `--cg-color-*` tokens the app's themes do not set,
+   so in the dark theme its items were the light theme's dark text, and the active one a light
+   band, on the dark surface. */
+.cgw-sheet-menu {
+  --cg-color-text: var(--cg-text);
+  --cg-color-border: var(--cg-border);
+  --cg-color-focus: var(--cg-accent);
+  --cg-color-surface-hover: color-mix(in srgb, var(--cg-text) 12%, var(--cg-surface));
+}
+
+/* A block on a page shared by link, or with no way to reach workbooks: what it is, no picture. */
+.cgw-sheet-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--cg-border);
+  border-radius: 6px;
+  color: var(--cg-text-secondary);
+}
+
+/* The workbook list (#/workbooks). */
+.cgw-workbooks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-inline-size: 960px;
+  margin-inline: auto;
+  padding: 24px 32px 48px;
+}
+
+.cgw-workbooks h1 {
+  margin: 0;
+}
+
+.cgw-workbooks-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-workbooks-bar .cgw-input {
+  flex: 1 1 16rem;
+}
+
+.cgw-workbooks-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.cgw-workbooks-table th,
+.cgw-workbooks-table td {
+  padding: 8px 6px;
+  border-block-end: 1px solid var(--cg-border);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.cgw-workbooks-table th {
+  color: var(--cg-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.cgw-workbooks-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.cgw-workbooks-muted {
+  color: var(--cg-text-secondary);
+}
+
+.cgw-workbook-pick-list {
+  max-block-size: 50vh;
+  overflow: auto;
+}
+
+.cgw-workbook-form {
+  display: grid;
+  gap: 8px;
+}
+
+.cgw-workbook-form fieldset {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 6px;
+}
+
+/* A checkbox or radio with its words (the editor's `.cgw-check` is a to-do's box). */
+.cgw-workbook-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

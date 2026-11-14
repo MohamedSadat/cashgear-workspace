@@ -5,8 +5,9 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { newBlockId, type TextKind } from '@cgw/doc';
 import { blockAt, currentBlock, firstBody, turnInto, type BlockInfo } from './blocks';
-import type { DatabaseRef, EditorHost } from './host';
+import type { DatabaseRef, EditorHost, WorkbookRef } from './host';
 import { mentionKey } from './mention';
+import { workbookAttrs } from './nodeviews/sheet';
 
 export type BlockActionName =
   | 'paragraph'
@@ -29,7 +30,10 @@ export type BlockActionName =
   | 'pageLink'
   | 'tableOfContents'
   | 'database'
-  | 'linkedView';
+  | 'linkedView'
+  | 'workbook'
+  | 'existingWorkbook'
+  | 'erpData';
 
 export interface BlockAction {
   name: BlockActionName;
@@ -240,7 +244,44 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
       if (picked && !editor.isDestroyed) insertDatabaseView(editor, picked);
     },
   },
+  {
+    // Schema version 4: a new workbook of this workspace, made by the host with no version (Sheet
+    // makes the first), then shown here (nodeviews/sheet.ts).
+    name: 'workbook',
+    glyph: '⊞',
+    turnInto: false,
+    available: (host) => !!host.workbooks?.create,
+    apply: async (editor, host) => {
+      const made = await host.workbooks?.create?.();
+      if (made && !editor.isDestroyed) insertSheetEmbed(editor, made);
+    },
+  },
+  {
+    // Schema version 4: a workbook that exists, picked by the host among those the person reads.
+    name: 'existingWorkbook',
+    glyph: '⊟',
+    turnInto: false,
+    available: (host) => !!host.workbooks?.pick,
+    apply: async (editor, host) => {
+      const picked = await host.workbooks?.pick?.();
+      if (picked && !editor.isDestroyed) insertSheetEmbed(editor, picked);
+    },
+  },
+  {
+    // Schema version 4: an ERP view with nothing chosen yet; its link and connector are chosen
+    // in the view itself (nodeviews/erp.ts).
+    name: 'erpData',
+    glyph: '⇄',
+    turnInto: false,
+    available: (host) => !!host.erp?.mount,
+    apply: (editor) => insertBody(editor, editor.schema.nodes.erpView.create(), 'after'),
+  },
 ];
+
+/** Puts a workbook's view in the document as a block of its own, the caret after it. */
+export function insertSheetEmbed(editor: Editor, ref: WorkbookRef) {
+  insertBody(editor, editor.schema.nodes.sheetEmbed.create(workbookAttrs(ref)), 'after');
+}
 
 /** Puts a database view in the document as a block of its own, the caret after it. */
 export function insertDatabaseView(editor: Editor, ref: DatabaseRef) {

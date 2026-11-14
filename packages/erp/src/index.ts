@@ -38,3 +38,19 @@ export {
   type PopupConnectOptions,
   type PopupWindow,
 } from './connect';
+// What the shell gives the views (`./view` has the views themselves, React; `./i18n` their
+// catalogues): no React here, so the app's frame can take these without the views.
+export {
+  RecordLinkError,
+  type ErpAvailability,
+  type ErpBlockAttrs,
+  type ErpConnection,
+  type ErpLinkInfo,
+  type ErpLinkScreenHost,
+  type ErpLinksState,
+  type ErpSessionsApi,
+  type ErpSettingsHost,
+  type ErpViewHost,
+  type LinkableWorkspace,
+  type RecordLinkFailure,
+} from './view/host';

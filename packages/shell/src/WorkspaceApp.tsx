@@ -45,6 +45,12 @@ import { DatabaseHostContext } from './database/context';
 import { DatabaseDialogs, requestCsvImport, requestNewDatabase } from './database/dialogs';
 import { ShellDatabaseHost } from './database/host';
 import { assetsOf } from './page/editorHost';
+import { workbookSync } from './sheet/launch';
+import { WorkbookDialogs } from './sheet/WorkbookDialogs';
+import { useErpServices } from './erp/host';
+import { installErpLinkCapture } from './erp/linkTicket';
+import { ErpLinkRoute } from './erp/LinkRoute';
+import { isErpDeepLink } from '@cgw/erp';
 
 // The editor, Tiptap and Yjs load in their own chunk, after the frame has painted from the mirror
 // (ARCHITECTURE.md, Performance: Startup).
@@ -55,6 +61,10 @@ const ShareDialog = lazy(() =>
 );
 const SharedView = lazy(() =>
   import('./cloud/SharedView').then((m) => ({ default: m.SharedView })),
+);
+// The workspace's workbooks (Phase 5), loaded when the list opens.
+const WorkbooksView = lazy(() =>
+  import('./sheet/WorkbooksView').then((m) => ({ default: m.WorkbooksView })),
 );
 // A database's own page: the database views' chunk, loaded when one opens.
 const DatabasePage = lazy(() =>
@@ -67,6 +77,8 @@ export interface WorkspaceAppProps {
 
 export function WorkspaceApp({ platform }: WorkspaceAppProps) {
   const [i18n] = useState(() => createI18n());
+  // Cash Gear ERP's link ticket leaves the address before any route is read (erp/linkTicket.ts).
+  useState(installErpLinkCapture);
   const services = useMemo<ShellServices>(
     () => ({
       platform,
@@ -218,6 +230,11 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
   );
   useEffect(() => () => databases.dispose(), [databases]);
   useEffect(() => databases.connect(cloud ? cloud.databaseSync() : null), [databases, cloud]);
+  // "Export to a workbook" in the database views (Phase 5), over the same connection.
+  useEffect(
+    () => databases.connectWorkbooks(cloud ? workbookSync(cloud, services.platform) : null),
+    [databases, cloud, services],
+  );
 
   // Starting with no page asked for (the desktop window, a bare address), the last page visited
   // opens, as it was left.
@@ -458,10 +475,18 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
   const flushAll = useCallback(() => session.flushAll(), [session]);
   const updates = useUpdates(services.platform.updates, flushAll);
 
+  // The tab's Cash Gear ERP services (erp/services.ts), told of the cloud as it comes.
+  const erp = useErpServices(session);
+  const erpRef = useRef(erp);
+  erpRef.current = erp;
+
   // A deep link on the desktop chooses a route; the page router checks it again.
   useEffect(
     () =>
       services.platform.onDeepLink?.((hash) => {
+        // Cash Gear ERP's return goes to the connect waiting for it, before any route: it is
+        // never navigated to, so it never reaches the address or the history.
+        if (erpRef.current?.takeDeepLink(hash) || isErpDeepLink(hash)) return;
         navigate(parseRoute(hash));
       }),
     [services],
@@ -494,7 +519,12 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     );
 
   // Settings and invitations stay reachable before a workspace exists.
-  if (!session.workspaceId && route.kind !== 'settings' && route.kind !== 'invite')
+  if (
+    !session.workspaceId &&
+    route.kind !== 'settings' &&
+    route.kind !== 'invite' &&
+    route.kind !== 'erpLink'
+  )
     return (
       <>
         <FirstRun session={session} onCreated={() => rerender((n) => n + 1)} />
@@ -520,6 +550,16 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
             {cloud && <UploadBanner cloud={cloud} session={session} />}
             <div className="cgw-sidebar-footer">
               {cloud && <AccountButton cloud={cloud} />}
+              {cloud && (
+                <CgButton
+                  appearance="ghost"
+                  fullWidth
+                  data-testid="workbooks-link"
+                  onClick={() => navigate({ kind: 'workbooks' })}
+                >
+                  {t('sheets.screenTitle')}
+                </CgButton>
+              )}
               <CgButton
                 appearance="ghost"
                 icon="settings"
@@ -564,10 +604,17 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
           <Palette session={session} databases={databases} onClose={() => setPaletteOpen(false)} />
         )}
         <DatabaseDialogs session={session} host={databases} />
+        <WorkbookDialogs session={session} cloud={cloud} databases={databases} />
         {route.kind === 'invite' && cloud ? (
           <InviteView cloud={cloud} session={session} token={route.token} />
+        ) : route.kind === 'erpLink' ? (
+          <ErpLinkRoute session={session} services={erp} />
         ) : route.kind === 'settings' ? (
           <Settings onLanguage={setLanguage} session={session} updates={updates} />
+        ) : route.kind === 'workbooks' ? (
+          <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+            <WorkbooksView session={session} cloud={cloud} />
+          </Suspense>
         ) : route.kind === 'trash' ? (
           <TrashView session={session} onError={onError} />
         ) : route.kind === 'recovered' && cloud ? (

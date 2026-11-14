@@ -7,7 +7,7 @@
 import { CgButton, CgPopup } from '@cashgear/ui';
 import type { Id } from '@cgw/workspace';
 import { parseCsv } from '@cgw/workspace';
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   LOCAL_ROW_LIMIT,
   type DatabaseRecord,
@@ -48,6 +48,8 @@ export interface ImportDialogProps {
   databaseId: Id | null;
   /** Where a new database goes (default: beside this database). */
   place?: DatabasePlace;
+  /** A file to read at once, as if it had been picked (a workbook's range as CSV, Phase 5). */
+  initialFile?: File;
   /** Closed: with the database the rows went into, when an import was made. */
   onClose(result?: { databaseId: Id; created: number }): void;
 }
@@ -71,7 +73,7 @@ interface Loaded {
   parsed: string[][];
 }
 
-export function ImportDialog({ host, databaseId, place, onClose }: ImportDialogProps) {
+export function ImportDialog({ host, databaseId, place, initialFile, onClose }: ImportDialogProps) {
   const { t } = useDbT();
   const database = useHost(host, () => (databaseId ? host.database(databaseId) : null));
   const input = useRef<HTMLInputElement>(null);
@@ -117,6 +119,13 @@ export function ImportDialog({ host, databaseId, place, onClose }: ImportDialogP
       setPhase({ kind: 'pick', error: t('csv.readFailed') });
     }
   };
+  // A file handed in is read once, as a picked one is.
+  const handed = useRef(false);
+  useEffect(() => {
+    if (!initialFile || handed.current) return;
+    handed.current = true;
+    void read(initialFile);
+  });
   const onHeaderChange = (on: boolean) => {
     setHasHeader(on);
     if (file && database)

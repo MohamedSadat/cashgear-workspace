@@ -22,6 +22,8 @@ import { Mentions, pageMentionView } from './mention';
 import { SlashCommands, type SlashKeys } from './slash';
 import { bookmarkView, childPageView, codeBlockView, fileView, imageView } from './nodeviews/atoms';
 import { databaseViewView } from './nodeviews/database';
+import { erpViewView } from './nodeviews/erp';
+import { sheetEmbedView } from './nodeviews/sheet';
 import { textBodyView } from './nodeviews/textBody';
 import { Tables } from './tables';
 import { TableOfContents, tableOfContentsView } from './toc';
@@ -63,8 +65,8 @@ export interface BlockEditor {
 export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
   let host: EditorHost = options.host ?? {};
   const getHost = () => host;
-  // Node views that draw from the host (a date in the interface language, a database view's
-  // frame) are told when it is replaced: nothing else would draw them again.
+  // Node views that draw from the host (a date in the interface language, a database view's,
+  // workbook's or ERP view's frame) are told when it is replaced: nothing else would draw them.
   const hostListeners = new Set<() => void>();
   const onHostChange: OnHostChange = (listener) => {
     hostListeners.add(listener);
@@ -89,6 +91,8 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     childPage: childPageView,
     tableOfContents: tableOfContentsView,
     databaseView: (h) => databaseViewView(h, onHostChange),
+    sheetEmbed: (h) => sheetEmbedView(h, onHostChange),
+    erpView: (h) => erpViewView(h, onHostChange),
     pageMention: pageMentionView,
     dateMention: (h) => dateMentionView(h, () => ui, onHostChange),
   };

@@ -8,6 +8,7 @@ import type { WorkspaceSession } from '../session';
 import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 import { OfflineSettings } from '../cloud/OfflineSettings';
+import { ErpSettingsSection } from '../erp/SettingsSection';
 
 export function Settings({
   onLanguage,
@@ -51,6 +52,17 @@ export function Settings({
       {cloud && session.workspaceId && <MembersSettings cloud={cloud} session={session} />}
       {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
       {session.workspaceId && <DataPanel session={session} />}
+      {cloud && session.workspaceId && <ErpSettingsSection session={session} />}
+      {cloud && session.workspaceId && (
+        <>
+          <h2>{t('sheets.screenTitle')}</h2>
+          <p>
+            <a href="#/workbooks" data-testid="settings-workbooks">
+              {t('sheets.settingsLink')}
+            </a>
+          </p>
+        </>
+      )}
       <h2>{t('settings.about')}</h2>
       <p data-testid="host-info">
         {t(platform.kind === 'desktop' ? 'frame.platformDesktop' : 'frame.platformWeb')}{' '}
