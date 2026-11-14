@@ -108,8 +108,8 @@ Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
 | Bookmark | `bookmark` | `url` | No | Yes (URL only; preview in Phase 2) |
 | Child page | `childPage` | `pageId` | No | Yes |
 | Table of contents | `tableOfContents` | none | No | Phase 3 (schema version 2): drawn as the page's headings, each a link to its block; Markdown and plain text write nothing for it |
-| Embedded spreadsheet | `sheetEmbed` | `workbookId`, `sheet`, `range`, `chartId`, `height` | No | Phase 5 |
-| Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize` | No | Phase 5 |
+| Embedded spreadsheet | `sheetEmbed` | `workbookId`, `sheet`, `range`, `chartId`, `height` (all null by default) | No | Phase 5 (schema version 4): an atom body drawn by the host lazily near the viewport (the stored picture, then the live embed); deleting the block never deletes the workbook; Markdown and plain text write nothing for it |
+| Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize` (all null by default; `filter`, `fields` and `sort` are JSON text) | No | Phase 5 (schema version 4): an atom body holding settings only, never ERP data; drawn from each reader's own ERP session; Markdown and plain text write nothing for it |
 | Database view | `databaseView` | `databaseId`, `viewId` (null: the database's first view) | No | Phase 4 (schema version 3): an inline database or a linked view, drawn by the host lazily near the viewport; deleting the block never deletes the database; Markdown and plain text write nothing for it |
 
 Notes:
@@ -189,6 +189,10 @@ build can draw, and never drops it.
 As built in Phase 4: version 3 adds `databaseView` and `dateMention`; step 2 → 3 only raises
 `meta.schemaVersion`, by the same path. Fixture: `packages/doc/fixtures/doc-v2.json`; a build that
 knows only version 2 opens a version-3 page read-only with both new nodes as placeholders, kept.
+
+As built in Phase 5: version 4 adds `sheetEmbed` and `erpView`; step 3 → 4 only raises
+`meta.schemaVersion`, by the same path. Fixture: `packages/doc/fixtures/doc-v3.json`; a build that
+knows only version 3 opens a version-4 page read-only with both new nodes as placeholders, kept.
 
 ## Relational records
 
@@ -420,22 +424,40 @@ one such `'` off, so a spreadsheet never runs a cell as a formula and a round tr
 
 ### Workbooks (Phase 5)
 
+As built (`server/src/Cgw.Core/Workbooks`, migration `Phase5Workbooks`); every table is tenant-owned.
+
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `Workbooks` | `Id`, `WorkspaceId`, `Name`, `CurrentVersionId`, `ETag`, `CreatedBy`, `TrashedAt` | A document in its own right, not owned by any page |
-| `WorkbookVersions` | `Id`, `WorkbookId`, `BlobKey`, `SizeBytes`, `Sha256`, `SavedBy`, `SavedAt` | The xlsx bytes |
-| `WorkbookPermissions` | (`WorkbookId`, `PrincipalType`, `PrincipalId`), `Level` | Its own access list |
-| `WorkbookPreviews` | (`WorkbookId`, `VersionId`, `ViewHash`), `AssetId` | A picture of a range or chart, for offline and for readers without Sheet loaded |
+| `Workbooks` | `Id`, `WorkspaceId`, `Name`, `SearchName`, `CurrentVersionId`, `Restricted`, `Version`, `CreatedBy`, `CreatedAt`, `UpdatedAt`, `TrashedAt`, `TrashedBy` | A document in its own right, not owned by any page. No version until Sheet's first save. The content's ETag is `"<CurrentVersionId>"`; `Version` is the record's (rename, trash, restore, its list), sent as `ETag` by `GET /workbooks/{id}`. Not in the change feed, not in search |
+| `WorkbookVersions` | `Id`, `WorkbookId`, `BlobKey`, `SizeBytes`, `Sha256`, `SavedBy`, `SavedAt` | The xlsx bytes, at most 100 MB; `Sha256` is lower-case hex over the stored bytes (Sheet's lost-answer rule). The newest 10 are kept |
+| `WorkbookPermissions` | (`WorkbookId`, `PrincipalType`, `PrincipalId`), `Level` | Its own access list, by person or for the whole workspace, at the pages' five levels (decided by `WorkbookAccess`) |
+| `WorkbookPreviews` | (`WorkbookId`, `ViewHash`), `VersionId`, `BlobKey`, `Width`, `Height`, `SizeBytes`, `MadeBy`, `MadeAt` | A PNG of one view (a range or a chart, in the file's own colours), sent by someone who may edit the workbook: at most 2 MB and 4,096 px a side, the newest one per view, at most 100 a workbook. Its own blob, not an asset, so the unreferenced-asset clean-up never takes it |
+| `WorkbookTickets` | `Id`, `WorkbookId`, `UserId`, `Access`, `TokenHash`, `ExpiresAt`, `UsedAt` | A launch ticket: 256 random bits kept only as SHA-256, 120 seconds, one use |
+| `FileSessions` | `Id`, `WorkbookId`, `UserId`, `Access`, `TokenHash`, `Language`, `IdleExpiresAt`, `MaxExpiresAt`, `EndedAt`, `Renews` | Sheet's file session: the token kept only as SHA-256, 30 minutes idle, 10 hours at most; a copy moves it to the copy |
 
-Deleting a page that embeds a workbook does not delete the workbook.
+Blob layout: `workspaces/{workspaceId}/workbooks/{workbookId}/versions/{versionId}.xlsx` and
+`…/previews/{versionId}/{viewHash}.png`. A workbook is never reachable outside its workspace or by a
+share link. A copy keeps its original's access list (its maker at least `edit`); a view exported
+to a workbook takes its database's access: neither is seen by more people than what it came from.
+Deleting a page that embeds a workbook does not delete the workbook; a workbook trashed for 60
+days is deleted with its versions and pictures by the worker (`WorkbookRetentionJob`). Removing a
+member drops their rows in workbooks' lists and ends their file sessions.
+
+On a device, the last picture drawn or fetched for a block's view is kept as an asset
+(`uploaded: true`, so it is never sent; its id derived from the workbook id and `viewHash`) with a
+pref `workbookPicture:<workbookId>:<viewHash>` holding when it was made, its version, size and the
+workbook's name, so offline the block shows it with its date. No store schema change.
 
 ### ERP links (Phase 5)
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `ErpLinks` | `Id`, `WorkspaceId`, `ErpBaseUrl`, `Company`, `LinkedBy`, `LinkedAt`, `RevokedAt` | Which ERP company a workspace is linked to. No key, token or session is stored |
+| `ErpLinks` | `Id`, `WorkspaceId`, `ErpLinkId`, `ErpBaseUrl`, `Company`, `CompanyName`, `LinkedBy`, `LinkedAt`, `RevokedAt`, `RevokedBy` | Which ERP company a workspace is linked to: where to ask (always `Erp__ApiBase`) and the ERP's own link id. No key, token or session is stored; the ERP checks its own link on every session |
 
-ERP data is never written to any Workspace table or document.
+ERP data is never written to any Workspace table, document, local store, pref, search index or
+log: an ERP view's records live in its React state for as long as the page is open, and its
+session in memory (`@cgw/erp`, whose lint keeps it off every store). The proof inspects every
+store after viewing (`PROGRESS.md`, Phase 5).
 
 ### Sync and audit
 
@@ -443,7 +465,7 @@ ERP data is never written to any Workspace table or document.
 | --- | --- | --- |
 | `WorkspaceChanges` | (`WorkspaceId`, `Seq`), `EntityType`, `EntityId`, `Kind`, `Version`, `ActorUserId`, `CreatedAt` | The change feed. `Kind` is `upsert`, `delete`, `grant` or `revoke` |
 | `AppliedOps` | `OpId`, `WorkspaceId`, `UserId`, `Result` (JSON), `CreatedAt` | Idempotency. Written in the same transaction as the operation |
-| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes. Account events have no workspace |
+| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes, workbook changes (made, renamed, trashed, restored, access changed, saved and copied by Sheet). Account events have no workspace |
 | `WorkspaceExports` | `Id`, `WorkspaceId`, `RequestedBy`, `Status`, `BlobKey`, `SizeBytes`, `Error` | A workspace's export zip, written by the worker |
 | `JobStates` | `Name`, `LastRunAt`, `LastOkAt`, `LastError`, `Runs` | Each worker job's last run: the worker's lag and the API's health check |
 

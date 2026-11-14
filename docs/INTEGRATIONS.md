@@ -240,15 +240,19 @@ Workspace's own routes (Phase 5), on the Workspace session:
 | `/api/v1/workbooks/{id}` | PATCH | Edit; `If-Match`; `{name?, trashed?}` | 200 `Workbook` |
 | `/api/v1/workbooks/{id}` | DELETE | Full; to the trash | 204 |
 | `/api/v1/workbooks/{id}/permissions` | GET, PUT | Read (entries shown to `full` only), `full` to change; `If-Match` | 200 |
-| `/api/v1/workbooks/{id}/content` | GET | Read | 200 `{readUrl, etag, size, versionId}` (null with no version) |
-| `/api/v1/workbooks/{id}/previews/{viewHash}` | GET | Read | 200 `{url, versionId, etag, madeAt, width, height}`, or 404 |
+| `/api/v1/workbooks/{id}/content` | GET | Read | 200 `{readUrl, etag, size, versionId, expiresAt}` (null with no version) |
+| `/api/v1/workbooks/{id}/previews/{viewHash}` | GET | Read | 200 `{url, versionId, etag, madeAt, width, height, expiresAt}`: the view's newest picture, of whichever version (`etag` says which), or 404 |
 | `/api/v1/workbooks/{id}/previews/{viewHash}` | PUT | Edit; body the PNG; `X-Workbook-Version` | 204 |
-| `/api/v1/workbooks/{id}/launch` | POST | Read; `{}` | 200 `{url}` |
-| `/api/v1/workbooks/{id}/import` | POST | Read the workbook and edit the database; `{databaseId?, sheet, range, header}` | 200 `{databaseId, rows}` |
-| `/api/v1/databases/{id}/workbooks` | POST | Read the database, create workbooks; `{viewId, name}` | 201 `Workbook` (version 1, written by the server) |
+| `/api/v1/workbooks/{id}/launch` | POST | Read; `{}` | 200 `{url, expiresAt}` |
+| `/api/v1/workbooks/{id}/sheets` | GET | Read | 200 `{sheets: [{name, usedRange, hidden}]}` (empty with no version) |
+| `/api/v1/workbooks/{id}/range?sheet=&range=` | GET | Read | 200 `{sheet, range, csv}`: the range as CSV in canonical text (dates `YYYY-MM-DD`, numbers as JavaScript's `String(n)`, `true`/`false`); the app's CSV import makes the rows, in a new database or an existing one |
+| `/api/v1/databases/{id}/workbooks` | POST | Read the database, not a guest; `{viewId?, name}` | 201 `Workbook` (version 1, written by the server with `DocumentFormat.OpenXml`: the view's rows in its order, its shown properties, typed cells; it takes the database's access) |
 
-`Workbook` is `{id, workspaceId, name, versionId, etag, size, savedAt, savedBy, createdBy,
-createdAt, trashedAt, access}`, where `access` is the caller's level.
+`Workbook` is `{id, workspaceId, name, version, versionId, etag, size, savedAt, savedBy,
+createdBy, createdAt, trashedAt, access}`: `version` is the record's (`ETag` of `GET`, `If-Match`
+of `PATCH` and of the permissions' `PUT`, 409 `version.conflict` when stale), `etag` the content's
+(`"<versionId>"`, null with no version), `savedBy` `{id, name}`, `access` the caller's level. As
+built in Phase 5 (`server/src/Cgw.Core/Workbooks`; operation ids in `server/openapi/v1.json`).
 
 ### Opening the full editor
 
@@ -318,6 +322,10 @@ Workspace routes for this (Phase 5):
 | 5a | Stored picture, name and "Open in Cash Gear Sheet" | Cloud workbooks and the launch flow (Track S1, S2) |
 | 5b | Live read-only range in the iframe; refresh | The embed route (Track S3) |
 | 5c | Live chart; import a range into a database; export a view to a workbook | Track S4 |
+
+All three were built in Phase 5 (`packages/shell/src/sheet`, the blocks' lazy frame in
+`@cgw/editor`). Range import and view export run on Workspace's server (decisions, 2026-11-14), so
+they need no Track S4; S4's pictures and charts are what 5c's live charts draw.
 
 ### Track S: work in the Sheet repo
 

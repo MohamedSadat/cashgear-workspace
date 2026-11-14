@@ -47,7 +47,11 @@ API's host and no token is in JavaScript (Q5).
    (30 days or more), blob versioning on. CORS on the Blob service for the web app's origin and
    the desktop's on each system (`https://workspace.cashgearerp.com`, `http://tauri.localhost` on
    Windows, `tauri://localhost` on macOS): methods `GET`,
-   `HEAD`, `PUT`, headers `*`, exposed headers `*`. Give the host's identity (a managed identity
+   `HEAD`, `PUT`, headers `*`, exposed headers `*`. Phase 5: a second rule for Cash Gear Sheet's
+   origins (`https://sheet.cashgearerp.com`): methods `GET`, `HEAD`, `OPTIONS`, headers `*`, exposed
+   headers `*` (Sheet's embed and its cloud route read workbooks by signed URL); and tell the Sheet
+   repository the account's exact origin (`https://<account>.blob.core.windows.net`) for its CSP
+   (Sheet's `apps/web/src/csp.ts` and `staticwebapp.config.json`). Give the host's identity (a managed identity
    on an Azure VM, or a service principal whose `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and
    certificate are in the machine's environment) the roles **Storage Blob Data Contributor** and
    **Storage Blob Delegator** on the account: the API signs URLs with user-delegation keys, and
@@ -69,6 +73,9 @@ API's host and no token is in JavaScript (Q5).
      -SqlServer <server> -Database CashGearWorkspace `
      -BlobServiceUri https://<account>.blob.core.windows.net -WebOrigin https://workspace.cashgearerp.com `
      -SmtpHost <host> -SmtpUser <user> -ServiceAccount 'DOMAIN\cgw-workspace$'
+   # Phase 5's three, shown with their defaults (the live Sheet and ERP):
+   #   -SheetOrigin https://sheet.cashgearerp.com -SheetOrigins https://sheet.cashgearerp.com
+   #   -ErpApiBase https://api.cashgearerp.com
    Remove-Item Env:\CGW_SMTP_PASSWORD
    ```
 
@@ -78,7 +85,10 @@ API's host and no token is in JavaScript (Q5).
    own registry key, starts both, and prints `/health/ready`.
 8. **Web app.** Deploy `apps/web/dist` to Static Web Apps (its GitHub Action with the deployment
    token as a repository secret, as Sheet does), built with
-   `VITE_CGW_API=https://workspace-api.cashgearerp.com`.
+   `VITE_CGW_API=https://workspace-api.cashgearerp.com`, and from 0.5.0
+   `VITE_CGW_SHEET=https://sheet.cashgearerp.com`, `VITE_CGW_ERP_API=https://api.cashgearerp.com`
+   and `VITE_CGW_ERP_CLIENT=https://erp.cashgearerp.com` (each is written into the CSP the build
+   ships: `frame-src` Sheet alone, `connect-src` the ERP's API).
 9. **Check.** `/health/ready` shows `sql`, `blob` and `worker` healthy (the worker shows healthy
    once it has validated at least once; until a first push it reports "has not run"). Sign up on
    `https://workspace-api.cashgearerp.com/account/signup`, confirm, sign in from the web app,
@@ -98,7 +108,10 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `OpenIddict__SigningCertificateThumbprint`, `OpenIddict__EncryptionCertificateThumbprint` | Certificates in `LocalMachine\My`; the API refuses to issue tokens without them in production |
 | `DataProtection__Dpapi` | `true`: the cookie and token keys (kept in the database) are encrypted with the machine's DPAPI |
 | `Smtp__Host`, `__Port`, `__User`, `__Password`, `__From` | Mail (Q8); `Smtp__PickupDirectory` writes mail to a folder instead, for development and tests only |
-| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person); leave unset in production |
+| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import`, `__ticket`, `__sheet` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person; `ticket` Sheet's Redeem, 30 a minute an address; `sheet` Sheet's session routes, 600 a minute an address); leave unset in production |
+| `Sheet__Origin`, `Sheet__Origins__N` | Phase 5: Cash Gear Sheet's origin for launch links (`{origin}/cloud#launch=…`), and the origins allowed to redeem them, to call the sheet-session routes (CORS without credentials) and, outside production, to read Azurite. Required, https, in production |
+| `Workbooks__MaxSaveBytes` | The largest version Sheet may save (100 MB; 413 `limit.size` above it). The API's `web.config` lets IIS take bodies up to 110 MB, so the API's own limit answers first |
+| `Erp__ApiBase` | The one ERP API an ERP link may name (`https://api.cashgearerp.com`). Required, https, in production. The server never calls it |
 | `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
 | `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
 | `Logging__Format` | `json` for structured logs with the correlation id in every line |
@@ -130,6 +143,21 @@ Version 0.4.0's migration (`Phase4Databases`) adds the `Databases`, `DatabaseVie
 worker gains the `recompute` job (formula and rollup results of databases marked pending, every 2 s).
 A database's first query on an API instance reads all its rows into memory (about 2 s for 50,000
 rows on the reference machine); later ones read only rows written since.
+
+Version 0.5.0's migration (`Phase5Workbooks`) adds `Workbooks`, `WorkbookVersions`,
+`WorkbookPermissions`, `WorkbookPreviews`, `WorkbookTickets`, `FileSessions` and `ErpLinks`, in a
+transaction like the others. Before installing it, add the Blob Storage CORS rule for Sheet's
+origins (First installation, step 3); `install.ps1` sets `Sheet__Origin`, `Sheet__Origins__0` and
+`Erp__ApiBase` (the live ones by default), without which the API refuses to start. The worker gains
+`workbookRetention` (workbooks in the trash for 60 days). The web app is built with the three
+`VITE_CGW_SHEET`, `VITE_CGW_ERP_*` variables above.
+
+The ERP's side (Track E, in its repositories, deployed by you): run
+`CashGear.IdentitySystem/DbScripts/Create_WorkspaceConnect.sql` on CGService before deploying a
+UnifiedAPI built with Track E (Sheet's sessions read its columns too), deploy UnifiedAPI, then add
+a company to `WorkspaceConnect:Companies` to turn Workspace on for it; deploy ERPClient_React
+(its "Link Cash Gear Workspace" stays hidden until then). Sheet's side: deploy Sheet's web app
+with Track S3 to S5 (its `/embed` route), and give it the storage account's origin as above.
 
 ## Backups and the restore drill
 

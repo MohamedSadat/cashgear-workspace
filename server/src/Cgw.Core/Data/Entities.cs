@@ -532,12 +532,12 @@ public sealed class WorkbookPermission : ITenantOwned
     public DateTimeOffset CreatedAt { get; set; }
 }
 
-/// <summary>A picture of one view of one version (a range or chart in a theme), PNG, as a blob beside the workbook.</summary>
+/// <summary>A picture of one view of one version (a range or a chart, in the file's own colours), PNG, as a blob beside the workbook.</summary>
 public sealed class WorkbookPreview : ITenantOwned
 {
     public Guid WorkbookId { get; set; }
     public Guid VersionId { get; set; }
-    /// <summary>Workspace's own hash of the resolved view and theme: lower-case hex SHA-256.</summary>
+    /// <summary>Workspace's own hash of the view (<c>viewHash</c>): lower-case hex SHA-256.</summary>
     public string ViewHash { get; set; } = "";
     public Guid WorkspaceId { get; set; }
     public string BlobKey { get; set; } = "";

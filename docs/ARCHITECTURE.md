@@ -10,7 +10,8 @@ Sheet and ERP contracts in `INTEGRATIONS.md`.
 
 Status: Phases 0 to 4 are built: the local-first editor and page tree (Phase 1); the server,
 accounts, sync while online, sharing, server search and history (Phase 2); offline, conflicts,
-migrations and the Mac app (Phase 3); workspace databases and their views (Phase 4). What exists
+migrations and the Mac app (Phase 3); workspace databases and their views (Phase 4); Sheet
+workbooks embedded in pages and read-only ERP blocks (Phase 5). What exists
 is listed in `CLAUDE.md`; later phases' parts are proposals. Spike results are in `DECISIONS.md`
 (2026-11-11: Phase 0 results); each phase's answers and defaults under its own date. Deployment is
 in `OPERATIONS.md`.
@@ -142,12 +143,15 @@ flowchart TB
   StoreWeb["store-web<br/>IndexedDB"]
   StoreDesk["desktop store<br/>Tauri commands → cgw-store (SQLite)"]
   Api["api<br/>generated client"]
+  Erp["erp<br/>ERP client, sessions in memory, the ERP view"]
 
   Shell --> UI
   Editor --> UI
   Database --> UI
   Shell --> Editor
   Shell --> Database
+  Shell --> Erp
+  Erp --> UI
   Database --> Workspace
   Shell --> Workspace
   Editor --> Doc
@@ -168,6 +172,12 @@ Dependency rules, enforced by lint:
   implements over the session, the local store and the sync engine. The editor knows nothing about
   databases: a `databaseView` block is a frame the shell mounts the views into
   (`EditorHost.databases`).
+- `erp` (Phase 5) holds the ERP's answers in memory and React state only: lint keeps it off
+  `localStorage`, `sessionStorage`, `indexedDB`, `caches`, the stores, `@cgw/workspace`,
+  `@cgw/api` and the layers above it; it calls the ERP itself (`fetch`), with the reader's own
+  session. The editor knows nothing about Sheet or the ERP: `sheetEmbed` and `erpView` blocks are
+  frames the shell draws into (`EditorHost.workbooks`, `EditorHost.erp`); the sheet embed's
+  contract and its iframe host (`SheetEmbed`, DOM and `postMessage` only) are in `@cgw/editor`.
 - Only `shell` knows which platform it runs on, through the platform interface.
 
 ### Proposed repository layout
@@ -185,12 +195,12 @@ Package level only. Files inside are decided by the phase that creates them.
 | `packages/shell` (`@cgw/shell`) | App frame and everything around the editor | 1 |
 | `packages/api` (`@cgw/api`) | Client generated from the server's OpenAPI document | 2 |
 | `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost` | 4 |
-| `packages/erp` (`@cgw/erp`) | ERP connector client | 5 |
+| `packages/erp` (`@cgw/erp`) | ERP connector client and the ERP view | 5 (built) |
 | `crates/cgw-store` | `LocalStore` on SQLite, with FTS5 | 1 |
 | `crates/cgw-native` | Desktop helpers without Tauri: deep links read into routes, safe file names; the keychain in Phase 2 | 1 |
 | `crates/cgw-ydoc` | Bytes-in, bytes-out Yjs functions over `yrs` | 0 (spike), 2 |
 | `server/` | .NET solution: API, worker, domain, infrastructure, tests | 2 |
-| `tests/e2e`, `tests/mocks`, `bench/`, `scripts/`, `docs/` | As in Sheet | 0 |
+| `tests/e2e`, `tests/mocks` (Phase 5: Sheet and the ERP), `tests/contracts` (Phase 5: `erp-connect.1`), `bench/`, `scripts/`, `docs/` | As in Sheet | 0 |
 
 ### Responsibilities
 
@@ -242,7 +252,10 @@ the API: the typed client (`@cgw/api`) authenticated by the platform's `auth`, t
   (Phases 4 and 5) may use React node views; heavy ones mount when scrolled near and unmount when
   far. As built in Phase 4, the database block is a plain DOM frame: it mounts the host's React
   view within 800 px of the scrolling pane, unmounts it beyond 2,400 px, and mounts again only when
-  its database, view, block id or editability changes, never per transaction.
+  its database, view, block id or editability changes, never per transaction. Phase 5 put the
+  database, sheet embed and ERP view blocks on one such lazy frame (`nodeviews/frame.ts`): mounted
+  again only when the key changes (database, workbook or link; block id; editability), and given
+  other attribute changes in place.
 - **Slash menu.** Typing `/` opens a command menu at the caret, filtered as the user types, in
   the interface language, with keywords in both languages.
 - **Markdown shortcuts.** Input rules: `#`, `##`, `###`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`,
@@ -289,8 +302,8 @@ One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
 | Worker | Compaction, snapshots, validation of updates (on a loop of its own), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports | Serves requests |
 
 Modules, each with its own folder, services and tests: Identity, Workspaces, Pages, Documents,
-Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), and later Workbooks, ErpLinks,
-Realtime, Ai. The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
+Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), Workbooks and ErpLinks (Phase 5,
+`Cgw.Core/Workbooks`), and later Realtime, Ai. The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
 (coercion, conversion, queries, formulas, rollups, CSV) held to the TypeScript by shared vectors,
 the operations on databases, views and rows, and the query engine: a database's rows cached in
 memory per database and rows version, evaluated by the ported `queryRows`, keyset paged.
@@ -325,8 +338,8 @@ Conventions:
 | --- | --- | --- |
 | Web app | Sign in on the API's own pages; `Secure`, `HttpOnly`, `SameSite=Lax` cookie; antiforgery token on writes | Cookie only. Nothing in `localStorage` |
 | Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The API's page asks the signed-in person to confirm the desktop's sign-in ("as {email}?") and issues the code only on that form's POST, so a link cannot sign a desktop in silently. The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager; the login keychain on macOS), never in the webview; access token in memory |
-| Sheet (opening a workbook) | One-time launch ticket → file session | In memory |
-| ERP blocks | One-time ticket from the ERP → ERP session | In memory |
+| Sheet (opening a workbook) | One-time launch ticket → file session (`sheet-session.1`): the API's own routes under `/api/v1/sheet-sessions`, a CORS policy for Sheet's origins without credentials | In memory, in Sheet's tab |
+| ERP blocks | One-time ticket from the ERP client (a pop-up's `postMessage`, or the desktop's deep link `cashgear-workspace://erp#…`) → an ERP session the browser holds (`erp-connect.1`); Workspace's server never calls the ERP | In memory, per link per tab |
 
 Accounts are ASP.NET Core Identity. OpenIddict issues tokens. Sign-in is rate-limited and locks
 out after repeated failures. Passkeys and external providers can be added through Identity later.
@@ -434,9 +447,9 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Links | Scheme allow-list checked when parsed, when drawn and when clicked; external links open with `noopener noreferrer` |
 | Embedded content | Sandboxed iframes from an allow-list of origins; bookmarks are static cards, with previews fetched by the server |
 | Link previews | Server-side fetch behind an SSRF guard: public addresses only, no redirects to private ranges, size and time limits |
-| Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the Sheet origin; `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and, later, linked ERP origins. No COEP. On the web it is made from the build's API address (`apps/web/vite.config.ts`): `vite preview` sends it, so e2e runs under it, and the build writes it into `staticwebapp.config.json` with `nosniff`, a referrer policy and `frame-ancestors 'none'`; the desktop's is in `tauri.conf.json`. The API's own sign-in pages send a CSP of their own (no script at all; forms only to itself, the web app and the loopback listener) |
+| Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the one Sheet origin of the build (`VITE_CGW_SHEET`); `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and the ERP's API (`VITE_CGW_ERP_API`, Phase 5). No COEP. On the web it is made from the build's API address (`apps/web/vite.config.ts`): `vite preview` sends it, so e2e runs under it, and the build writes it into `staticwebapp.config.json` with `nosniff`, a referrer policy and `frame-ancestors 'none'`; the desktop's is in `tauri.conf.json`. The API's own sign-in pages send a CSP of their own (no script at all; forms only to itself, the web app and the loopback listener) |
 | Tauri | Minimal capabilities; typed commands only; no command takes SQL, a path outside the app's data directory, or a URL to fetch; `frame-src` as on the web. The macOS acceptance run drives the app through a test-only bridge (cargo feature `e2e-bridge`): `build.rs` refuses it in a release build and the release check fails a binary that holds it |
-| Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption, push and search |
+| Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption (`ticket`, per address), push and search; Sheet's session routes in a bucket of their own (`sheet`) |
 | Audit | Append-only log of sign-ins, member and role changes, sharing changes, exports, restores, permanent deletions, ERP link changes, with a correlation id |
 | Token storage | Web: cookie only. Desktop: OS keychain. ERP and file sessions: memory only. Tickets and sessions are stored hashed on the server |
 | Secrets | Not in the repo and not in settings files. Environment or a secret store; managed identity for Blob where the host allows it. A check fails on a secret in the repository (`scripts/check-secrets.mjs`, first in `pnpm check` and in CI): private keys, storage keys and SAS signatures, tokens, the updater's key, connection-string passwords, key and environment files |
@@ -484,7 +497,7 @@ How the budgets are met:
   reopened from the local store.
 - **Background work.** Search indexing, export, and compaction of local documents run in workers.
 - **Embeds.** A sheet embed loads its iframe only when near the viewport; before that it shows
-  the stored picture. A database view asks for a page of rows at a time and virtualises its own
+  the stored picture (Phase 5: the budgets are in `bench/phase5.mjs`). A database view asks for a page of rows at a time and virtualises its own
   rows.
 - **Startup.** The shell paints from the mirror before the editor chunk loads; the last page's
   document is read in parallel.

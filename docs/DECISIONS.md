@@ -883,3 +883,26 @@ M4.7 and the proof:
 | Workbooks and ERP blocks in a local workspace | The block says to sign in; nothing is made | Both live on servers |
 | Workbooks in search | Not in search; the workbook list filters by name | A workbook's content is not Workspace's to index |
 | A workbook's trash | 60 days, then deleted with its versions and pictures by the worker, as pages | One retention rule |
+
+Built in M5.1 to M5.7 (the streams' choices, each in its note):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| `sheet-embed.1`'s validators | Exactly the fields the table names, at every level; a parsed message is a fresh copy of them; URLs visible ASCII with a lower-case scheme and no user name or password; strong ETags; capital A1 ranges without leading zeros; `error.message` always present; `ready.contracts` 1 to 16 names; chart titles 1 to 255 characters | One strict reading both sides run as shared vectors (288 cases; Sheet's validators pass every one) |
+| The 4,096 px rule | On the picture's own pixels; the block asks for `maxWidth * scale` and `maxHeight * scale` at most 4,096, `scale` at most 2 | Sheet only lowers density for the 2 MB rule |
+| The sheet block's frame | 480 px high unless the block says otherwise; the picture until `loaded`, then the live view; one retry with a fresh URL on `source.forbidden` | The page does not jump, and an expired URL heals itself |
+| "Open in Cash Gear Sheet" | A new tab with `noopener` in the browser, the system browser on the desktop | Sheet's tab owes Workspace's nothing |
+| No access and deleted for good | Both are 404, both shown as "You don't have access to this workbook"; "deleted" only for a 410 outside the trash | A workbook's existence is not told to someone who cannot read it |
+| Versions and pictures kept | The newest 10 versions of a workbook; the newest picture of each view, at most 100 a workbook | Bounded storage; Sheet keeps no history of its own here |
+| A copy (Sheet's "Save a copy") and an export | Keep their source's access (a copy's maker at least `edit`; an export its database's) | Neither is ever seen by more people than what it came from |
+| A workbook's record writes | `If-Match` optional on `PATCH` and on the permissions' `PUT`; a stale one is 409 `version.conflict`, as page permissions answer; `DELETE` and `PATCH {trashed: true}` both trash; no delete for good by a person | As pages |
+| Sheet's session routes | Renew checks access again, End does not; rate buckets `ticket` (Redeem, 30 a minute an address) and `sheet` (600) | Ending always helps; a refused site cannot spend a ticket |
+| Range CSV | Fields holding a separator, quote or line break quoted; text guarded as the database CSV is (`'` before `=`, `+`, `-`, `@`, tab, CR); error cells as their text; time-only formats as numbers | The app's CSV import takes it back exactly |
+| IIS request limit | `web.config` allows 110 MB | The API's own 413 at 100 MB answers first |
+| The web CSP's `frame-src` | The build's one Sheet origin only (the desktop keeps Sheet's Static Web Apps host too) | One origin is the allow-list |
+| ERP column names | In the interface language (the schema carries both) | The page around the block is in that language |
+| An ERP filter on a field the reader cannot see | Shows nothing, never dropped | A filter never widens what a block shows |
+| Recording a link that answers 409 | "Already linked" only when the existing link has the same ERP link id; else "stale", and the person unlinks in settings first | Nothing is replaced without a person |
+| The desktop's ERP sessions | Ended on `pagehide` only | A second close handler would let the window close before the shell finishes saving |
+| Old builds in the specs | v0.4.0 joins on port 4277 | Each released build meets the documents of the one after it |
+| A view with no picture yet | `GET …/previews/{viewHash}` answers 404, as INTEGRATIONS.md says; the browser logs it once per new view | A picture is a resource; the block shows the live view or its own text meanwhile |
