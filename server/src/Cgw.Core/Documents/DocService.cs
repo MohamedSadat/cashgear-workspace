@@ -45,8 +45,13 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
     public const int MaxUpdateBytes = 1024 * 1024;
     public const int MaxRequestBytes = 4 * 1024 * 1024;
     public const int MaxPull = 1000;
-    /// <summary>Updates per minute to one page, from everyone (SYNC_DESIGN.md, What the server checks).</summary>
-    public const int PerPagePerMinute = 1200;
+    /// <summary>
+    /// Updates per minute to one page, from everyone (SYNC_DESIGN.md, What the server checks): 20
+    /// people at the per-person push budget (600 a minute). From Phase 6 an open page saves (and
+    /// pushes) about once a key, so the Phase 2 figure of 1,200 stopped a page at four or five
+    /// people typing at once (bench/phase6.mjs, 20 editors at five keys a second).
+    /// </summary>
+    public const int PerPagePerMinute = 12_000;
 
     /// <summary>
     /// The push both transports make (Phase 6 contracts, section 1): the HTTP route and the hub's
