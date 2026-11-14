@@ -107,7 +107,10 @@ class PresenceView {
     this.offHost = onHostChange(() => {
       this.subscribe();
       this.refresh();
-      this.told = 'null';
+      // Nothing told to this host yet: it is told the selection, or null, whichever it is when the
+      // timer fires. ('null' here would never tell it null: a host that shares the old one's
+      // presence would keep showing the old selection after the editor lost focus.)
+      this.told = '';
       this.queueLocal();
     });
   }

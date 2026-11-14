@@ -321,4 +321,19 @@ describe('presence cursors', () => {
     await settle();
     expect(other.told).toHaveLength(1);
   });
+
+  it('tell a new host null when the editor loses focus before the selection was told to it', async () => {
+    // The shell gives a new host when the page re-renders (the comments panel opening for
+    // "Comment" does), and the composer takes the focus at once: the presence behind both hosts
+    // still holds the selection, so the blur must say null to the new one.
+    const [a] = peers(docOf(paragraph('alpha beta')));
+    a.be.editor.view.dom.focus();
+    selectIn(a, 0, 0, 5);
+    await settle();
+    expect(a.presence.told.at(-1)).not.toBeNull();
+    a.be.setHost({ ...a.presence.host });
+    a.be.editor.view.dom.blur();
+    await settle();
+    expect(a.presence.told.at(-1)).toBeNull();
+  });
 });
