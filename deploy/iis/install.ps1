@@ -12,12 +12,30 @@
   environment of the session that runs this script and stored as an app-pool and service
   environment variable, which only administrators can read.
 
+  On a host outside a domain (no gMSA), leave out -ServiceAccount: the app pool runs as its own
+  ApplicationPoolIdentity and the worker as its virtual account (NT SERVICE\<service name>), and
+  the script gives both a SQL login and user, read access to the OpenID Connect certificates'
+  private keys and to the Azure certificate file. Blob Storage then goes through a service
+  principal: -AzureClientId, -AzureTenantId and -AzureCertificatePath (a PFX without a password,
+  readable only by administrators and the two identities).
+
 .EXAMPLE
   .\deploy\iis\install.ps1 -Root C:\CashGearWorkspace -HostName workspace-api.cashgearerp.com `
     -CertificateThumbprint <https cert> -SigningThumbprint <cert> -EncryptionThumbprint <cert> `
     -SqlServer sql01 -Database CashGearWorkspace -BlobServiceUri https://<account>.blob.core.windows.net `
     -WebOrigin https://workspace.cashgearerp.com -SmtpHost smtp.example.com -SmtpUser workspace@example.com `
     -ServiceAccount 'DOMAIN\cgw-workspace$'
+
+.EXAMPLE
+  # A workgroup host: built-in identities, the HTTPS certificate in WebHosting, a local SQL Server
+  # with its self-signed certificate, Blob Storage through a service principal.
+  .\deploy\iis\install.ps1 -Root C:\CashGearWorkspace -HostName workspace-api.cashgearerp.com `
+    -CertificateThumbprint <https cert> -CertificateStore WebHosting `
+    -SigningThumbprint <cert> -EncryptionThumbprint <cert> `
+    -SqlServer '.\MSSQLSERVER01' -TrustServerCertificate -Database CashGearWorkspace `
+    -BlobServiceUri https://<account>.blob.core.windows.net -WebOrigin https://workspace.cashgearerp.com `
+    -SmtpHost smtp.example.com -SmtpUser workspace@example.com `
+    -AzureClientId <app id> -AzureTenantId <tenant id> -AzureCertificatePath C:\CashGearWorkspace\secrets\azure-storage.pfx
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -43,7 +61,18 @@ param(
   [string[]] $SheetOrigins = @('https://sheet.cashgearerp.com'),
   [string] $ErpApiBase = 'https://api.cashgearerp.com',
   # A group managed service account (gMSA) or a domain account; the app pool runs as the same.
-  [Parameter(Mandatory)] [string] $ServiceAccount
+  # Left out: the built-in identities (see the description).
+  [string] $ServiceAccount = '',
+  # The store the HTTPS certificate is in (My, or WebHosting where IIS keeps site certificates).
+  # The binding is by host name (SNI), so other sites on port 443 keep their own certificates.
+  [string] $CertificateStore = 'My',
+  # A SQL Server on this host with its own self-signed certificate: still encrypted, not verified.
+  [switch] $TrustServerCertificate,
+  # A service principal for Blob Storage on a host with no managed identity (DefaultAzureCredential
+  # reads these three from the environment).
+  [string] $AzureClientId = '',
+  [string] $AzureTenantId = '',
+  [string] $AzureCertificatePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,7 +81,11 @@ $package = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $manifest = Get-Content (Join-Path $package 'manifest.json') -Raw | ConvertFrom-Json
 Write-Host "Installing Cash Gear Workspace server $($manifest.version) ($($manifest.commit)) to $Root"
 
-$connection = "Server=$SqlServer;Database=$Database;Integrated Security=true;Encrypt=true;TrustServerCertificate=false"
+$trust = if ($TrustServerCertificate) { 'true' } else { 'false' }
+$connection = "Server=$SqlServer;Database=$Database;Integrated Security=true;Encrypt=true;TrustServerCertificate=$trust"
+$builtIn = -not $ServiceAccount
+$poolIdentity = if ($builtIn) { "IIS AppPool\$SiteName" } else { $ServiceAccount }
+$workerIdentity = if ($builtIn) { "NT SERVICE\$ServiceName" } else { $ServiceAccount }
 $environment = [ordered]@{
   ASPNETCORE_ENVIRONMENT = 'Production'
   DOTNET_ENVIRONMENT = 'Production'
@@ -79,6 +112,11 @@ $environment = [ordered]@{
   'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
 }
 for ($i = 0; $i -lt $SheetOrigins.Count; $i++) { $environment["Sheet__Origins__$i"] = $SheetOrigins[$i] }
+if ($AzureClientId) {
+  $environment['AZURE_CLIENT_ID'] = $AzureClientId
+  $environment['AZURE_TENANT_ID'] = $AzureTenantId
+  $environment['AZURE_CLIENT_CERTIFICATE_PATH'] = $AzureCertificatePath
+}
 # The SMTP password comes from this session's environment, never from a parameter or a file.
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
 
@@ -101,16 +139,24 @@ foreach ($part in 'api', 'worker') {
 # 3. The app pool and the site: no managed code (ASP.NET Core Module), its own identity.
 if (-not (Test-Path "IIS:\AppPools\$SiteName")) { New-WebAppPool $SiteName | Out-Null }
 Set-ItemProperty "IIS:\AppPools\$SiteName" -Name managedRuntimeVersion -Value ''
-Set-ItemProperty "IIS:\AppPools\$SiteName" -Name processModel -Value @{ identityType = 3; userName = $ServiceAccount; password = '' }
+if ($builtIn) {
+  Set-ItemProperty "IIS:\AppPools\$SiteName" -Name processModel.identityType -Value ApplicationPoolIdentity
+} else {
+  Set-ItemProperty "IIS:\AppPools\$SiteName" -Name processModel -Value @{ identityType = 3; userName = $ServiceAccount; password = '' }
+}
+# The Azure certificate file is loaded with the identity's profile.
+Set-ItemProperty "IIS:\AppPools\$SiteName" -Name processModel.loadUserProfile -Value $true
 Set-ItemProperty "IIS:\AppPools\$SiteName" -Name startMode -Value AlwaysRunning
 & "$env:windir\system32\inetsrv\appcmd.exe" clear config -section:system.applicationHost/applicationPools "/[name='$SiteName'].environmentVariables" | Out-Null
 foreach ($name in $environment.Keys) {
   & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools "/+[name='$SiteName'].environmentVariables.[name='$name',value='$($environment[$name])']" | Out-Null
 }
 if (-not (Test-Path "IIS:\Sites\$SiteName")) {
-  New-WebSite -Name $SiteName -PhysicalPath (Join-Path $Root 'api') -ApplicationPool $SiteName -HostHeader $HostName -Port 443 -Ssl | Out-Null
+  # SslFlags 1: Server Name Indication, so the certificate is bound to this host name only and
+  # the host's other sites on 443 (and its 0.0.0.0:443 default) are left as they are.
+  New-WebSite -Name $SiteName -PhysicalPath (Join-Path $Root 'api') -ApplicationPool $SiteName -HostHeader $HostName -Port 443 -Ssl -SslFlags 1 | Out-Null
   $binding = Get-WebBinding -Name $SiteName -Protocol https
-  $binding.AddSslCertificate($CertificateThumbprint, 'My')
+  $binding.AddSslCertificate($CertificateThumbprint, $CertificateStore)
 } else {
   Set-ItemProperty "IIS:\Sites\$SiteName" -Name physicalPath -Value (Join-Path $Root 'api')
 }
@@ -124,12 +170,50 @@ $exe = Join-Path $Root 'worker\Cgw.Worker.exe'
 if (-not (Get-Service $ServiceName -ErrorAction SilentlyContinue)) {
   New-Service -Name $ServiceName -BinaryPathName "`"$exe`"" -DisplayName 'Cash Gear Workspace worker' -StartupType Automatic | Out-Null
 }
-& sc.exe config $ServiceName obj= $ServiceAccount | Out-Null
+& sc.exe config $ServiceName obj= $workerIdentity | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Setting the worker's account failed ($LASTEXITCODE)" }
 & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
 $values = $environment.Keys | ForEach-Object { "$_=$($environment[$_])" }
 Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $values
 
-# 5. Start, then check.
+# 5. The built-in identities exist only now: give them the database and the keys they read.
+if ($builtIn) {
+  Write-Host "Granting $poolIdentity and $workerIdentity..."
+  $sql = New-Object System.Data.SqlClient.SqlConnection "Server=$SqlServer;Database=$Database;Integrated Security=true"
+  $sql.Open()
+  try {
+    foreach ($identity in $poolIdentity, $workerIdentity) {
+      $command = $sql.CreateCommand()
+      # The roles OPERATIONS.md names for the app's identity. Names are bracketed; they come from
+      # this script's own parameters.
+      $command.CommandText = @"
+IF SUSER_ID(N'$identity') IS NULL CREATE LOGIN [$identity] FROM WINDOWS;
+IF USER_ID(N'$identity') IS NULL CREATE USER [$identity] FOR LOGIN [$identity];
+ALTER ROLE db_datareader ADD MEMBER [$identity];
+ALTER ROLE db_datawriter ADD MEMBER [$identity];
+ALTER ROLE db_ddladmin ADD MEMBER [$identity];
+"@
+      $command.ExecuteNonQuery() | Out-Null
+    }
+  } finally { $sql.Close() }
+
+  $keyFiles = foreach ($thumbprint in $SigningThumbprint, $EncryptionThumbprint) {
+    $certificate = Get-Item "Cert:\LocalMachine\My\$thumbprint"
+    $key = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($certificate)
+    $name = if ($key -is [System.Security.Cryptography.RSACng]) { $key.Key.UniqueName } else { $key.CspKeyContainerInfo.UniqueKeyContainerName }
+    @("$env:ProgramData\Microsoft\Crypto\Keys\$name", "$env:ProgramData\Microsoft\Crypto\RSA\MachineKeys\$name") |
+      Where-Object { Test-Path $_ } | Select-Object -First 1
+  }
+  if ($AzureCertificatePath) { $keyFiles += $AzureCertificatePath }
+  foreach ($file in $keyFiles) {
+    foreach ($identity in $poolIdentity, $workerIdentity) {
+      & icacls.exe $file /grant "${identity}:R" | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "Granting $identity read on $file failed ($LASTEXITCODE)" }
+    }
+  }
+}
+
+# 6. Start, then check.
 Start-WebSite $SiteName
 Start-Service $ServiceName
 Start-Sleep -Seconds 5

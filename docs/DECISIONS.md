@@ -906,3 +906,27 @@ Built in M5.1 to M5.7 (the streams' choices, each in its note):
 | The desktop's ERP sessions | Ended on `pagehide` only | A second close handler would let the window close before the shell finishes saving |
 | Old builds in the specs | v0.4.0 joins on port 4277 | Each released build meets the documents of the one after it |
 | A view with no picture yet | `GET …/previews/{viewHash}` answers 404, as INTEGRATIONS.md says; the browser logs it once per new view | A picture is a resource; the block shows the live view or its own text meanwhile |
+
+## 2026-11-14: Production hosting
+
+### Answered by you
+
+- The web app on Azure Static Web Apps' Free plan, deployed from this repository's `main` by the
+  workflow Azure wrote, with the custom domain `workspace.cashgearerp.com`.
+- The Workspace API at `workspace-api.cashgearerp.com`, its own IIS site on the host that serves
+  `api.cashgearerp.com`, not under UnifiedAPI's host name.
+- Its database on that host's `MSSQLSERVER01` instance, a database of its own.
+- A new private storage account and an app registration (service principal) for Blob Storage,
+  rather than a container in `cashgearstorage`.
+- Mail through the ERP's SMTP account (`smtp.gmail.com`, `info@cashgearerp.com`).
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The Static Web Apps build | The workflow builds with pnpm (`pnpm build` with the four `VITE_CGW_*` origins of OPERATIONS.md) and the action only uploads `apps/web/dist` | Oryx runs `npm install` in `apps/web` and cannot read `workspace:*`; as Sheet's workflow |
+| Identities on a workgroup host | `IIS AppPool\CashGearWorkspaceApi` and `NT SERVICE\CashGearWorkspaceWorker`, made by `install.ps1` when `-ServiceAccount` is left out | No domain, so no gMSA; built-in identities have no password to keep |
+| The Blob credential | A certificate made on the host, PFX without a password under `C:\CashGearWorkspace\secrets` readable by administrators and the two identities; only its public half uploaded | `DefaultAzureCredential` reads a certificate from a file only; the private key never leaves the host, and no secret is typed or shown |
+| The HTTPS binding | By host name (SNI) from `WebHosting` | The host's other sites on 443 and its default binding stay as they are |
+| SQL encryption on the host | `TrustServerCertificate=true` for the local instance | Its certificate is self-signed; the connection never leaves the machine |
+| Storage account | `cashgearworkspace`, Spain Central (as `cashgearstorage`), Standard LRS, soft delete 30 days for blobs and containers, versioning | OPERATIONS.md step 3 |

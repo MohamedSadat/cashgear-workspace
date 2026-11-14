@@ -35,7 +35,11 @@ API's host and no token is in JavaScript (Q5).
 
 1. **Host prerequisites.** Windows Server with IIS, the ASP.NET Core Module and the .NET 10
    runtime (the Hosting Bundle). A group managed service account (gMSA), say
-   `DOMAIN\cgw-workspace$`, for both the app pool and the worker.
+   `DOMAIN\cgw-workspace$`, for both the app pool and the worker. A host outside a domain has no
+   gMSA: leave out `-ServiceAccount` and the app pool runs as its own `IIS AppPool\<site>`, the
+   worker as `NT SERVICE\<service>`; `install.ps1` gives both their SQL login and user (the roles
+   below) and read access to the OpenID Connect keys and the Azure certificate file once they
+   exist.
 2. **Database.** Create the database. Give the gMSA a login with `db_datareader`,
    `db_datawriter` and `db_ddladmin` (the bundle creates the tables; `db_ddladmin` can be removed
    after the first run if migrations are run by a DBA instead). Turn on
@@ -55,7 +59,12 @@ API's host and no token is in JavaScript (Q5).
    on an Azure VM, or a service principal whose `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and
    certificate are in the machine's environment) the roles **Storage Blob Data Contributor** and
    **Storage Blob Delegator** on the account: the API signs URLs with user-delegation keys, and
-   never holds an account key (D17).
+   never holds an account key (D17). `DefaultAzureCredential` reads a service principal's
+   certificate from a file (`AZURE_CLIENT_CERTIFICATE_PATH`), not from a store: make it on the
+   host (`New-SelfSignedCertificate`), write it as a PFX without a password under
+   `<root>\secrets`, readable only by administrators and the two identities, and upload only its
+   public half to the app registration; `install.ps1` takes `-AzureClientId`, `-AzureTenantId`
+   and `-AzureCertificatePath`.
 4. **Certificates** in `LocalMachine\My`, readable by the gMSA: the HTTPS certificate for
    `workspace-api.cashgearerp.com`, and two for OpenID Connect (signing and encryption; RSA 2048
    or more, self-signed is fine, they never leave the server). Note their thumbprints.
@@ -79,6 +88,11 @@ API's host and no token is in JavaScript (Q5).
    Remove-Item Env:\CGW_SMTP_PASSWORD
    ```
 
+   A host that keeps its site certificates in IIS's `WebHosting` store passes
+   `-CertificateStore WebHosting`; the binding is always by host name (SNI), so the host's other
+   sites on 443 keep theirs. A SQL Server on the same host with its own self-signed certificate
+   takes `-TrustServerCertificate` (still encrypted, not verified).
+
    It runs the migrations first (a failure stops it with the old version still serving), copies
    the files, configures the app pool (no managed code, the gMSA, always running) with the
    environment below, binds HTTPS, installs the worker service with the same environment in its
@@ -93,6 +107,20 @@ API's host and no token is in JavaScript (Q5).
    once it has validated at least once; until a first push it reports "has not run"). Sign up on
    `https://workspace-api.cashgearerp.com/account/signup`, confirm, sign in from the web app,
    create a workspace, and open it on a second device.
+
+## Production as installed
+
+Installed 2026-11-14. Names only; no setting here is a secret.
+
+| Part | Where |
+| --- | --- |
+| Web app | Static Web App `cashgear-workspace-web` (Free plan) in resource group `rg-cashgear-workspace`, custom domain `workspace.cashgearerp.com`; deployed by `.github/workflows/azure-static-web-apps-ambitious-field-02a19e810.yml` on every push to `main` |
+| API and worker | The IIS host behind `api.cashgearerp.com` (Windows Server 2022, workgroup): site and app pool `CashGearWorkspaceApi`, service `CashGearWorkspaceWorker`, files under `C:\CashGearWorkspace`, built-in identities |
+| HTTPS | The `*.cashgearerp.com` certificate in `WebHosting`, bound to `workspace-api.cashgearerp.com` by SNI |
+| Database | `CashGearWorkspace` on the host's `MSSQLSERVER01` instance (SQL Server 2019 Standard, no Full-Text Search: search uses `LIKE`) |
+| Blob Storage | Storage account `cashgearworkspace` (Spain Central, Standard LRS, no public access, soft delete and container soft delete 30 days, versioning), container `workspace`, CORS as in step 3 |
+| Blob identity | App registration `cashgear-workspace-api` with Storage Blob Data Contributor and Storage Blob Delegator on that account only; its certificate made on the host, PFX in `C:\CashGearWorkspace\secrets` (expires 2028-11-14; the app registration accepts it until 2027-11-14, so upload it again or make a new one before then) |
+| Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account; the password is an app password, entered on the host only) |
 
 ## Configuration
 
