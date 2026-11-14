@@ -210,10 +210,17 @@ async function seedWorkspace(api) {
   );
   if (written.status !== 0) throw new Error('The corpus was not written');
   const docs = JSON.parse(readFileSync(join(corpus, 'docs.json'), 'utf8'));
+  // The documents carry @cgw/doc's schema version (3 from Phase 4): pushed as an older client's,
+  // the worker refuses them as newer than their pusher, and the pages stay empty.
+  const docVersion = Math.max(
+    ...Object.keys(
+      JSON.parse(readFileSync(join(root, 'packages/doc/vectors/schema-elements.json'), 'utf8')),
+    ).map(Number),
+  );
   await pool(all, 8, async ({ id }) => {
     await api.post(`/api/v1/pages/${id}/doc/updates`, {
       epoch: 0,
-      clientSchemaVersion: 2,
+      clientSchemaVersion: docVersion,
       updates: [{ updateId: uuidv7(), data: docs[id] }],
     });
   });
