@@ -48,6 +48,9 @@ import { assetsOf } from './page/editorHost';
 import { workbookSync } from './sheet/launch';
 import { WorkbookDialogs } from './sheet/WorkbookDialogs';
 import { useErpServices } from './erp/host';
+import { Collab, collabDeps } from './collab/collab';
+import { CollabContext, collaborates, usePagePresence, usePeople } from './collab/context';
+import { PresenceBar } from './collab/Avatars';
 import { installErpLinkCapture } from './erp/linkTicket';
 import { ErpLinkRoute } from './erp/LinkRoute';
 import { isErpDeepLink } from '@cgw/erp';
@@ -66,6 +69,8 @@ const SharedView = lazy(() =>
 const WorkbooksView = lazy(() =>
   import('./sheet/WorkbooksView').then((m) => ({ default: m.WorkbooksView })),
 );
+// The inbox (Phase 6), loaded when it opens.
+const InboxView = lazy(() => import('./collab/InboxView').then((m) => ({ default: m.InboxView })));
 // A database's own page: the database views' chunk, loaded when one opens.
 const DatabasePage = lazy(() =>
   import('./database/DatabasePage').then((m) => ({ default: m.DatabasePage })),
@@ -229,6 +234,18 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     [session, services],
   );
   useEffect(() => () => databases.dispose(), [databases]);
+  // Collaboration (Phase 6): people, presence, comments and the inbox, over the cloud.
+  // Made in an effect, so a render that React throws away leaves nothing listening.
+  const [collab, setCollab] = useState<Collab | null>(null);
+  useEffect(() => {
+    if (!cloud) return setCollab(null);
+    const made = new Collab(collabDeps(cloud, session, () => i18n.t('presence.someone')));
+    setCollab(made);
+    return () => {
+      setCollab(null);
+      made.dispose();
+    };
+  }, [cloud, session, i18n]);
   useEffect(() => databases.connect(cloud ? cloud.databaseSync() : null), [databases, cloud]);
   // "Export to a workbook" in the database views (Phase 5), over the same connection.
   useEffect(
@@ -492,6 +509,21 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     [services],
   );
 
+  useEffect(
+    () =>
+      collab
+        ? services.commands.register({
+            id: 'app.inbox',
+            group: 'navigation',
+            label: () => t('inbox.open'),
+            keywords: () => [t('keywords.inbox')],
+            when: () => !!collab.deps.self(),
+            run: () => navigate({ kind: 'inbox' }),
+          })
+        : undefined,
+    [services, collab, t],
+  );
+
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(
     () =>
@@ -537,112 +569,145 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     );
 
   return (
-    <DatabaseHostContext.Provider value={databases}>
-      <Frame
-        sidebar={
-          <div className="cgw-sidebar-inner">
-            <Sidebar
-              session={session}
-              activePageId={isRowRecord(shown) ? shown.databaseId : (page?.id ?? null)}
-              onSearch={() => setPaletteOpen(true)}
-              onError={onError}
-            />
-            {cloud && <UploadBanner cloud={cloud} session={session} />}
-            <div className="cgw-sidebar-footer">
-              {cloud && <AccountButton cloud={cloud} />}
-              {cloud && (
+    <CollabContext.Provider value={collab}>
+      <DatabaseHostContext.Provider value={databases}>
+        <Frame
+          sidebar={
+            <div className="cgw-sidebar-inner">
+              <Sidebar
+                session={session}
+                activePageId={isRowRecord(shown) ? shown.databaseId : (page?.id ?? null)}
+                onSearch={() => setPaletteOpen(true)}
+                onError={onError}
+              />
+              {cloud && <UploadBanner cloud={cloud} session={session} />}
+              <div className="cgw-sidebar-footer">
+                {cloud && <AccountButton cloud={cloud} />}
+                {cloud && (
+                  <CgButton
+                    appearance="ghost"
+                    fullWidth
+                    data-testid="workbooks-link"
+                    onClick={() => navigate({ kind: 'workbooks' })}
+                  >
+                    {t('sheets.screenTitle')}
+                  </CgButton>
+                )}
                 <CgButton
                   appearance="ghost"
+                  icon="settings"
                   fullWidth
-                  data-testid="workbooks-link"
-                  onClick={() => navigate({ kind: 'workbooks' })}
+                  onClick={() => navigate({ kind: 'settings' })}
                 >
-                  {t('sheets.screenTitle')}
+                  {t('frame.settings')}
                 </CgButton>
-              )}
-              <CgButton
-                appearance="ghost"
-                icon="settings"
-                fullWidth
-                onClick={() => navigate({ kind: 'settings' })}
-              >
-                {t('frame.settings')}
-              </CgButton>
+              </div>
             </div>
-          </div>
-        }
-        topBar={
-          <>
-            {onScreen && <Breadcrumbs session={session} page={onScreen} />}
-            <SaveStatus
-              doc={route.kind === 'page' && onScreen?.kind !== 'database' ? openDoc : null}
-            />
-            {cloud && <SyncStatusLabel cloud={cloud} session={session} />}
-            {onScreen && (
-              <PageMenu
-                session={session}
-                page={onScreen}
-                onError={onError}
-                canShare={!!account && session.current?.localOnly === false}
+          }
+          topBar={
+            <>
+              {onScreen && <Breadcrumbs session={session} page={onScreen} />}
+              <SaveStatus
+                doc={route.kind === 'page' && onScreen?.kind !== 'database' ? openDoc : null}
               />
-            )}
-            <UpdateButton updates={updates} />
-          </>
-        }
-      >
-        {notice && <Notice text={notice.text} action={notice.action} onClose={closeNotice} />}
-        {sharing && cloud && session.mirror.pages.get(sharing) && (
-          <Suspense fallback={null}>
-            <ShareDialog
-              cloud={cloud}
-              page={session.mirror.pages.get(sharing)!}
-              onClose={() => setSharing(null)}
+              {onScreen && onScreen.kind !== 'database' && account && (
+                <TopBarPresence collab={collab} session={session} page={onScreen} />
+              )}
+              {cloud && <SyncStatusLabel cloud={cloud} session={session} />}
+              {onScreen && (
+                <PageMenu
+                  session={session}
+                  page={onScreen}
+                  onError={onError}
+                  canShare={!!account && session.current?.localOnly === false}
+                />
+              )}
+              <UpdateButton updates={updates} />
+            </>
+          }
+        >
+          {notice && <Notice text={notice.text} action={notice.action} onClose={closeNotice} />}
+          {sharing && cloud && session.mirror.pages.get(sharing) && (
+            <Suspense fallback={null}>
+              <ShareDialog
+                cloud={cloud}
+                page={session.mirror.pages.get(sharing)!}
+                onClose={() => setSharing(null)}
+              />
+            </Suspense>
+          )}
+          {paletteOpen && (
+            <Palette
+              session={session}
+              databases={databases}
+              onClose={() => setPaletteOpen(false)}
             />
-          </Suspense>
-        )}
-        {paletteOpen && (
-          <Palette session={session} databases={databases} onClose={() => setPaletteOpen(false)} />
-        )}
-        <DatabaseDialogs session={session} host={databases} />
-        <WorkbookDialogs session={session} cloud={cloud} databases={databases} />
-        {route.kind === 'invite' && cloud ? (
-          <InviteView cloud={cloud} session={session} token={route.token} />
-        ) : route.kind === 'erpLink' ? (
-          <ErpLinkRoute session={session} services={erp} />
-        ) : route.kind === 'settings' ? (
-          <Settings onLanguage={setLanguage} session={session} updates={updates} />
-        ) : route.kind === 'workbooks' ? (
-          <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
-            <WorkbooksView session={session} cloud={cloud} />
-          </Suspense>
-        ) : route.kind === 'trash' ? (
-          <TrashView session={session} onError={onError} />
-        ) : route.kind === 'recovered' && cloud ? (
-          <RecoveredView cloud={cloud} session={session} />
-        ) : onScreen ? (
-          <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
-            {onScreen.kind === 'database' ? (
-              <DatabasePage key={onScreen.id} session={session} page={onScreen} />
-            ) : (
-              <PageView session={session} page={onScreen} onEditor={(_, doc) => setOpenDoc(doc)} />
-            )}
-          </Suspense>
-        ) : route.kind === 'page' && !page && row === undefined ? (
-          <div className="cgw-page-loading">{t('app.loading')}</div>
-        ) : route.kind === 'page' ? (
-          <div className="cgw-empty">
-            <h1>{trashed ? t('trash.pageInTrash') : t('frame.notFound')}</h1>
-            {trashed && <a href="#/trash">{t('trash.open')}</a>}
-          </div>
-        ) : (
-          <div className="cgw-empty">
-            <h1>{t('frame.emptyTitle')}</h1>
-            <p>{t('frame.emptyBody')}</p>
-          </div>
-        )}
-      </Frame>
-    </DatabaseHostContext.Provider>
+          )}
+          <DatabaseDialogs session={session} host={databases} />
+          <WorkbookDialogs session={session} cloud={cloud} databases={databases} />
+          {route.kind === 'invite' && cloud ? (
+            <InviteView cloud={cloud} session={session} token={route.token} />
+          ) : route.kind === 'erpLink' ? (
+            <ErpLinkRoute session={session} services={erp} />
+          ) : route.kind === 'settings' ? (
+            <Settings onLanguage={setLanguage} session={session} updates={updates} />
+          ) : route.kind === 'workbooks' ? (
+            <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+              <WorkbooksView session={session} cloud={cloud} />
+            </Suspense>
+          ) : route.kind === 'inbox' && collab && account ? (
+            <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+              <InboxView collab={collab} session={session} />
+            </Suspense>
+          ) : route.kind === 'trash' ? (
+            <TrashView session={session} onError={onError} />
+          ) : route.kind === 'recovered' && cloud ? (
+            <RecoveredView cloud={cloud} session={session} />
+          ) : onScreen ? (
+            <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+              {onScreen.kind === 'database' ? (
+                <DatabasePage key={onScreen.id} session={session} page={onScreen} />
+              ) : (
+                <PageView
+                  session={session}
+                  page={onScreen}
+                  onEditor={(_, doc) => setOpenDoc(doc)}
+                />
+              )}
+            </Suspense>
+          ) : route.kind === 'page' && !page && row === undefined ? (
+            <div className="cgw-page-loading">{t('app.loading')}</div>
+          ) : route.kind === 'page' ? (
+            <div className="cgw-empty">
+              <h1>{trashed ? t('trash.pageInTrash') : t('frame.notFound')}</h1>
+              {trashed && <a href="#/trash">{t('trash.open')}</a>}
+            </div>
+          ) : (
+            <div className="cgw-empty">
+              <h1>{t('frame.emptyTitle')}</h1>
+              <p>{t('frame.emptyBody')}</p>
+            </div>
+          )}
+        </Frame>
+      </DatabaseHostContext.Provider>
+    </CollabContext.Provider>
   );
+}
+
+/** The others on the page on screen, in the top bar (Phase 6). */
+function TopBarPresence({
+  collab,
+  session,
+  page,
+}: {
+  collab: Collab | null;
+  session: WorkspaceSession;
+  page: AnyPage;
+}) {
+  const shared = collaborates(collab, session, page.workspaceId);
+  const store = usePagePresence(shared ? collab : null, page.id, page.workspaceId);
+  const people = usePeople(shared ? collab : null, page.workspaceId);
+  return <PresenceBar store={store} people={people} />;
 }
 
 /**

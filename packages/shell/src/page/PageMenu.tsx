@@ -1,6 +1,7 @@
-// The page's menu in the top bar: favourite, share, history, export, template, available
-// offline, trash. A database's page has no document (no history), and is not a template; a row
-// is part of its database: no favourite, sharing, template, export or pin of its own.
+// The page's menu in the top bar: favourite, share, comments, history, export, template,
+// available offline, trash. A database's page has no document (no history, no comments), and is
+// not a template; a row is part of its database: no favourite, sharing, template, export or pin of
+// its own (a row's body takes comments as a page's does).
 import type { Id, PageRecord } from '@cgw/workspace';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -86,6 +87,16 @@ export function PageMenu({
                     label: t('share.open'),
                     onSelect: () =>
                       pageEvents.dispatchEvent(new CustomEvent('share', { detail: page.id })),
+                  },
+                ]
+              : []),
+            // Comments (Phase 6): for the members of a workspace in the account.
+            ...(canShare && !database
+              ? [
+                  {
+                    label: t('comments.toggle'),
+                    onSelect: () =>
+                      pageEvents.dispatchEvent(new CustomEvent('comments', { detail: page.id })),
                   },
                 ]
               : []),

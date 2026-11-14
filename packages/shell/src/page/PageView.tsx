@@ -7,10 +7,14 @@ import {
   type EditorHost,
   type EditorStrings,
 } from '@cgw/editor';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { unreachable } from '../cloud/cloud';
-import { useCloud } from '../cloud/CloudUi';
+import { useAccount, useCloud } from '../cloud/CloudUi';
+import { collaborates, useCollab, useCommentsStore, usePagePresence } from '../collab/context';
+import { CommentsPanel, levelOf, mayComment, type DraftAnchor } from '../collab/CommentsPanel';
+import { registerCommentsCommand } from '../collab/commands';
+import { takeThreadRequest, threadEvents } from '../collab/threads';
 import { useShell } from '../context';
 import { useDatabaseHost } from '../database/context';
 import { canAsk, requestDatabasePick, requestNewDatabase } from '../database/dialogs';
@@ -163,6 +167,20 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
   const workbooks = useWorkbooksHost(session, page.id);
   // ERP views (Phase 5): the block's frame, from the reader's own ERP session.
   const erp = useErpHost(session);
+  // People (Phase 6): mentions drawn with names, and the "@" menu's people, for the members of a
+  // workspace in the account only.
+  const collab = useCollab();
+  useAccount(useCloud());
+  const directory = collaborates(collab, session, page.workspaceId)
+    ? collab!.people(page.workspaceId)
+    : null;
+  const people = useMemo(
+    () =>
+      directory
+        ? { name: directory.name, search: directory.search, subscribe: directory.subscribe }
+        : undefined,
+    [directory],
+  );
   const strings = t('editor', { returnObjects: true }) as unknown as EditorStrings;
   const toggles = useMemo(() => new ToggleState(session, page.id), [session, page.id]);
   const language = i18n.language;
@@ -206,6 +224,7 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
         : undefined,
       workbooks,
       erp,
+      ...(people ? { people } : {}),
       slash: {
         list: (query: string) => slashItems(services, t, query),
         run: (id: string) => void services.commands.run(id, { services, toggleSidebar: () => {} }),
@@ -232,6 +251,7 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
       databases,
       workbooks,
       erp,
+      people,
     ],
   );
 }
@@ -302,7 +322,105 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   const services = useShell();
   const { platform } = services;
   const editorRef = useRef<BlockEditor | null>(null);
-  const host = usePageHost(session, page);
+  const plainHost = usePageHost(session, page);
+  const collab = useCollab();
+  const account = useAccount(useCloud());
+  // Comments and presence (Phase 6) are for the members of a workspace in the account; a page
+  // shared by link never comes here (SharedView), and shows neither.
+  const together = !!account && collaborates(collab, session, page.workspaceId);
+  const level = levelOf(session, page);
+  const presence = usePagePresence(together ? collab : null, page.id, page.workspaceId);
+  const comments = useCommentsStore(collab, page.id, together);
+  // This session on the page: the others see it, and tell its cursor from theirs by its Yjs id.
+  useEffect(() => {
+    if (!presence) return;
+    presence.attach(doc.doc.clientID);
+    return () => presence.detach();
+  }, [presence, doc]);
+  const [panel, setPanel] = useState(false);
+  const [draft, setDraft] = useState<DraftAnchor | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    threadId: string;
+    n: number;
+    focus: boolean;
+  } | null>(null);
+  const showThread = useCallback((threadId: string, focus: boolean) => {
+    setPanel(true);
+    setFocusRequest((was) => ({ threadId, n: (was?.n ?? 0) + 1, focus }));
+  }, []);
+  const closePanel = useCallback(() => {
+    setPanel(false);
+    setDraft(null);
+    comments?.setActive(null);
+  }, [comments]);
+  // A notification's thread, asked for before or while the page is on screen.
+  useEffect(() => {
+    if (!comments) return;
+    const wanted = takeThreadRequest(page.id);
+    if (wanted) showThread(wanted, true);
+    const onThread = (event: Event) => {
+      const detail = (event as CustomEvent<{ pageId: string; threadId: string }>).detail;
+      if (detail.pageId !== page.id) return;
+      takeThreadRequest(page.id);
+      showThread(detail.threadId, true);
+    };
+    threadEvents.addEventListener('thread', onThread);
+    return () => threadEvents.removeEventListener('thread', onThread);
+  }, [comments, page.id, showThread]);
+  // The page menu's "Comments", and the command (palette and shortcut).
+  useEffect(() => {
+    if (!comments) return;
+    const toggle = () => setPanel((open) => !open);
+    const onMenu = (event: Event) => (event as CustomEvent<string>).detail === page.id && toggle();
+    pageEvents.addEventListener('comments', onMenu);
+    const off = registerCommentsCommand(services.commands, t, toggle);
+    return () => {
+      pageEvents.removeEventListener('comments', onMenu);
+      off();
+    };
+  }, [comments, page.id, services, t]);
+  useEffect(() => {
+    if (!panel) comments?.setActive(null);
+  }, [panel, comments]);
+  const presenceHost = useMemo(
+    () =>
+      presence
+        ? { cursors: presence.cursors, subscribe: presence.subscribe, setLocal: presence.setLocal }
+        : undefined,
+    [presence],
+  );
+  const commentsHost = useMemo(
+    () =>
+      comments
+        ? {
+            threads: comments.editorThreads,
+            subscribe: comments.subscribeEditor,
+            // A highlight clicked or reached in the page: its thread is shown, the caret stays.
+            open: (threadId: string) => {
+              comments.setActive(threadId);
+              showThread(threadId, false);
+            },
+            // "Comment" on the selection, for someone who may comment (the server checks again).
+            ...(mayComment(level)
+              ? {
+                  create: (anchor: DraftAnchor) => {
+                    setPanel(true);
+                    setDraft({ ...anchor });
+                  },
+                }
+              : {}),
+          }
+        : undefined,
+    [comments, level, showThread],
+  );
+  const host = useMemo<EditorHost>(
+    () => ({
+      ...plainHost,
+      ...(presenceHost ? { presence: presenceHost } : {}),
+      ...(commentsHost ? { comments: commentsHost } : {}),
+    }),
+    [plainHost, presenceHost, commentsHost],
+  );
   // A pulled change can make the page newer than this build while it is open: it turns read-only.
   const [newer, setNewer] = useState(doc.readOnly);
   useEffect(() => {
@@ -329,9 +447,15 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
     };
     const onExport = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== page.id) return;
-      void exportAndSave(session, (n, b, ty) => platform.saveFile(n, b, ty), t('page.untitled'), [
-        page.id,
-      ]).catch((error: unknown) => console.error('Export failed:', error));
+      void exportAndSave(
+        session,
+        (n, b, ty) => platform.saveFile(n, b, ty),
+        t('page.untitled'),
+        [page.id],
+        databases?.people(),
+        // Mentions in the Markdown are written with names (Phase 6).
+        together && collab ? collab.people(page.workspaceId).name : undefined,
+      ).catch((error: unknown) => console.error('Export failed:', error));
     };
     pageEvents.addEventListener('history', onHistory);
     pageEvents.addEventListener('export', onExport);
@@ -339,7 +463,7 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
       pageEvents.removeEventListener('history', onHistory);
       pageEvents.removeEventListener('export', onExport);
     };
-  }, [page.id, session, platform, t]);
+  }, [page.id, page.workspaceId, session, platform, t, databases, together, collab]);
 
   // Saved text goes into the search index a moment after typing stops (M1.8).
   useEffect(() => doc.onSaved(() => session.scheduleIndex(page.id)), [doc, session, page.id]);
@@ -376,59 +500,83 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   }, [doc, readOnly, strings]);
 
   return (
-    <article className="cgw-page" aria-label={page.title || t('page.untitled')}>
-      {readOnly && (
-        <div className="cgw-page-notice" role="status" data-testid="page-read-only">
-          {t(newer ? 'page.newerVersion' : 'page.viewOnly')}
-        </div>
-      )}
-      <PageHeader session={session} page={page} readOnly={readOnly} />
-      <TitleField
-        session={session}
-        page={page}
-        readOnly={readOnly}
-        onEnter={() => {
-          // Focus now, not on the next frame as Tiptap's focus does: a key typed at once must land
-          // in the page, not in the title.
-          const editor = editorRef.current?.editor;
-          if (!editor) return;
-          editor.view.focus();
-          editor.commands.focus('start');
-        }}
-      />
-      {isRowRecord(page) && databases && (
-        <Suspense fallback={<div className="cgw-row-props-loading" />}>
-          <RowProperties host={databases} rowId={page.id} editable={!readOnly} />
-        </Suspense>
-      )}
-      <BlockEditorView
-        fragment={readOnly ? undefined : doc.fragment}
-        readOnlyContent={readOnlyContent}
-        host={host}
-        label={t('page.content')}
-        // Read-only: no block handle, toolbar or menus, which would change what is shown.
-        overlays={readOnly ? undefined : (editor) => <EditorOverlays editor={editor} host={host} />}
-        onEditor={(editor) => {
-          // The cold-start budget's end: the first editable page (bench/phase1.mjs reads it).
-          if (editor && !performance.getEntriesByName('cgw-editable').length)
-            performance.mark('cgw-editable');
-          editorRef.current = editor;
-          // The palette's block commands act on an editor that can be edited only.
-          services.editor.current = readOnly ? null : editor;
-          setEditor(editor);
-          onEditor?.(editor, editor ? doc : null);
-        }}
-      />
-      {history && (
-        <HistoryDialog
+    <div className={`cgw-page-layout${panel && comments ? ' has-comments' : ''}`}>
+      <article className="cgw-page" aria-label={page.title || t('page.untitled')}>
+        {readOnly && (
+          <div className="cgw-page-notice" role="status" data-testid="page-read-only">
+            {t(newer ? 'page.newerVersion' : 'page.viewOnly')}
+          </div>
+        )}
+        <PageHeader session={session} page={page} readOnly={readOnly} />
+        <TitleField
           session={session}
-          doc={doc}
-          editor={editor}
-          host={host}
+          page={page}
           readOnly={readOnly}
-          onClose={() => setHistory(false)}
+          onEnter={() => {
+            // Focus now, not on the next frame as Tiptap's focus does: a key typed at once must land
+            // in the page, not in the title.
+            const editor = editorRef.current?.editor;
+            if (!editor) return;
+            editor.view.focus();
+            editor.commands.focus('start');
+          }}
+        />
+        {isRowRecord(page) && databases && (
+          <Suspense fallback={<div className="cgw-row-props-loading" />}>
+            <RowProperties host={databases} rowId={page.id} editable={!readOnly} />
+          </Suspense>
+        )}
+        <BlockEditorView
+          fragment={readOnly ? undefined : doc.fragment}
+          readOnlyContent={readOnlyContent}
+          host={host}
+          label={t('page.content')}
+          // Read-only: no block handle, toolbar or menus, which would change what is shown; for
+          // someone who may comment on the page, the editor's overlays hold "Comment" alone (the
+          // handle and the editing tools stay away from a page that is not editable).
+          overlays={
+            readOnly && !(viewOnly && !newer && host.comments?.create)
+              ? undefined
+              : (editor) => <EditorOverlays editor={editor} host={host} />
+          }
+          onEditor={(editor) => {
+            // The cold-start budget's end: the first editable page (bench/phase1.mjs reads it).
+            if (editor && !performance.getEntriesByName('cgw-editable').length)
+              performance.mark('cgw-editable');
+            editorRef.current = editor;
+            // The palette's block commands act on an editor that can be edited only.
+            services.editor.current = readOnly ? null : editor;
+            setEditor(editor);
+            onEditor?.(editor, editor ? doc : null);
+          }}
+        />
+        {history && (
+          <HistoryDialog
+            session={session}
+            doc={doc}
+            editor={editor}
+            host={plainHost}
+            readOnly={readOnly}
+            onClose={() => setHistory(false)}
+          />
+        )}
+      </article>
+      {panel && comments && (
+        <CommentsPanel
+          store={comments}
+          people={collab ? collab.people(page.workspaceId) : null}
+          session={session}
+          page={page}
+          level={level}
+          selfId={account?.id ?? null}
+          editor={editor}
+          doc={doc}
+          draft={draft}
+          onDraftDone={() => setDraft(null)}
+          focusRequest={focusRequest}
+          onClose={closePanel}
         />
       )}
-    </article>
+    </div>
   );
 }

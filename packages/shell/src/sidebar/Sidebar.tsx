@@ -1,9 +1,13 @@
 import type { Id, PageRecord } from '@cgw/workspace';
 import { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCloud, useOfflineMarks, useRecoveredRevision } from '../cloud/CloudUi';
+import { useAccount, useCloud, useOfflineMarks, useRecoveredRevision } from '../cloud/CloudUi';
+import { SidePresence } from '../collab/Avatars';
+import type { Collab } from '../collab/collab';
+import { collaborates, useCollab, useUnread } from '../collab/context';
+import type { PeopleDirectory } from '../collab/people';
 import { Dialog } from '../Dialog';
-import { navigate, routeHash } from '../route';
+import { navigate, parseRoute, routeHash, useHash } from '../route';
 import type { WorkspaceSession } from '../session';
 import { pageGlyph } from '../database/make';
 import { PageTree } from './PageTree';
@@ -27,11 +31,15 @@ function PageLink({
   page,
   active,
   unavailable,
+  collab,
+  people,
 }: {
   page: PageRecord;
   active: boolean;
   /** Offline, and this device does not hold the page. */
   unavailable: boolean;
+  collab: Collab | null;
+  people: PeopleDirectory | null;
 }) {
   const { t } = useTranslation();
   return (
@@ -46,6 +54,7 @@ function PageLink({
         {page.title || t('page.untitled')}
       </span>
       {unavailable && <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>}
+      {people && <SidePresence collab={collab} pageId={page.id} people={people} />}
     </a>
   );
 }
@@ -67,6 +76,11 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
   const cloud = useCloud();
   const marks = useOfflineMarks(cloud);
   useRecoveredRevision(cloud);
+  // Phase 6: the inbox (signed in), and who has pages open (a workspace in the account).
+  const account = useAccount(cloud);
+  const collab = useCollab();
+  const unread = useUnread(collab);
+  const inboxOpen = parseRoute(useHash()).kind === 'inbox';
   const [switcher, setSwitcher] = useState<{ x: number; y: number } | null>(null);
   const [templates, setTemplates] = useState<{ x: number; y: number } | null>(null);
   const [creating, setCreating] = useState(false);
@@ -80,6 +94,7 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
   const trashCount = session.mirror.trash(workspaceId).length + trashedRows;
   const recoveredCount = cloud ? cloud.recovery.visible().length : 0;
   const unavailable = (page: PageRecord) => !!marks && !marks.has(page.id);
+  const together = !!account && collaborates(collab, session, workspaceId);
   return (
     <div className="cgw-sidebar-inner">
       <button
@@ -98,6 +113,24 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
         <span aria-hidden="true">⌕</span> {t('search.open')}
         <kbd className="cgw-kbd">{t('search.shortcut')}</kbd>
       </button>
+      {collab && account && (
+        <a
+          href={routeHash({ kind: 'inbox' })}
+          className={`cgw-side-button${inboxOpen ? ' is-active' : ''}`}
+          aria-current={inboxOpen ? 'page' : undefined}
+          data-testid="inbox-link"
+        >
+          <span aria-hidden="true">✉</span> {t('inbox.title')}
+          {unread > 0 && (
+            <span className="cgw-count cgw-unread-count">
+              <span aria-hidden="true">{unread}</span>
+              <span className="cgw-visually-hidden">
+                {t('inbox.unreadCount', { count: unread })}
+              </span>
+            </span>
+          )}
+        </a>
+      )}
       <div className="cgw-sidebar-body">
         {favourites.length > 0 && (
           <section className="cgw-side-group" aria-label={t('workspace.favourites')}>
@@ -108,6 +141,8 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
                 page={page}
                 active={page.id === activePageId}
                 unavailable={unavailable(page)}
+                collab={collab}
+                people={together ? (collab?.people(workspaceId) ?? null) : null}
               />
             ))}
           </section>
@@ -116,7 +151,14 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
           <section className="cgw-side-group" aria-label={t('workspace.recent')}>
             <h2 className="cgw-side-heading">{t('workspace.recent')}</h2>
             {recent.map((page) => (
-              <PageLink key={page.id} page={page} active={false} unavailable={unavailable(page)} />
+              <PageLink
+                key={page.id}
+                page={page}
+                active={false}
+                unavailable={unavailable(page)}
+                collab={collab}
+                people={together ? (collab?.people(workspaceId) ?? null) : null}
+              />
             ))}
           </section>
         )}

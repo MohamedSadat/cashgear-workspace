@@ -3,8 +3,9 @@
 // #/invite/{token} (a workspace invitation) and #/s/{token} (a page shared by link), and from
 // Phase 3 #/recovered (pages made of changes the server would not take), from Phase 5 #/workbooks
 // (the workspace's workbooks) and #/erp-link (Cash Gear ERP's link screen; its ticket is taken out
-// of the address before any route is read, erp/linkTicket.ts, and is never part of a route). Tokens
-// are in the hash, so they never reach a server's logs.
+// of the address before any route is read, erp/linkTicket.ts, and is never part of a route), and
+// from Phase 6 #/inbox (the person's notifications). Tokens are in the hash, so they never reach a
+// server's logs.
 import { useSyncExternalStore } from 'react';
 
 export type Route =
@@ -14,6 +15,7 @@ export type Route =
   | { kind: 'recovered' }
   | { kind: 'settings' }
   | { kind: 'workbooks' }
+  | { kind: 'inbox' }
   | { kind: 'erpLink' }
   | { kind: 'invite'; token: string }
   | { kind: 'shared'; token: string; pageId?: string };
@@ -39,6 +41,7 @@ export function parseRoute(hash: string): Route {
   if (kind === 'recovered') return { kind: 'recovered' };
   if (kind === 'settings') return { kind: 'settings' };
   if (kind === 'workbooks') return { kind: 'workbooks' };
+  if (kind === 'inbox') return { kind: 'inbox' };
   // Whatever follows (a ticket not yet taken out) is never read into the route.
   if (kind === 'erp-link') return { kind: 'erpLink' };
   return { kind: 'home' };
@@ -56,6 +59,8 @@ export function routeHash(route: Route): string {
       return '#/settings';
     case 'workbooks':
       return '#/workbooks';
+    case 'inbox':
+      return '#/inbox';
     case 'erpLink':
       return '#/erp-link';
     case 'invite':

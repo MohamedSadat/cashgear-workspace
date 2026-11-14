@@ -13,7 +13,9 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCloud, useOfflineMarks } from '../cloud/CloudUi';
+import { useAccount, useCloud, useOfflineMarks } from '../cloud/CloudUi';
+import { SidePresence } from '../collab/Avatars';
+import { collaborates, useCollab, usePeople } from '../collab/context';
 import { requestCsvImport, requestNewDatabase } from '../database/dialogs';
 import { pageGlyph } from '../database/make';
 import { navigate } from '../route';
@@ -62,7 +64,15 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
   const workspaceId = session.workspaceId!;
   const [expanded, updateExpanded] = useExpanded(session, workspaceId);
   // Offline: the pages this device holds; the others are marked (null when online).
-  const marks = useOfflineMarks(useCloud());
+  const cloud = useCloud();
+  const marks = useOfflineMarks(cloud);
+  // Phase 6: who else has a page open, beside it (a workspace in the account only).
+  const collab = useCollab();
+  const account = useAccount(cloud);
+  const people = usePeople(
+    account && collaborates(collab, session, workspaceId) ? collab : null,
+    workspaceId,
+  );
   const revision = session.mirror.getRevision();
   const rows = useMemo(
     () => treeRows(session.mirror, workspaceId, expanded),
@@ -403,6 +413,7 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
               {unavailable && (
                 <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>
               )}
+              {people && <SidePresence collab={collab} pageId={page.id} people={people} />}
               <span className="cgw-tree-actions">
                 <button
                   type="button"

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
+import { collaborates, useCollab } from '../collab/context';
 import { useDatabaseHost } from '../database/context';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
@@ -15,6 +16,8 @@ export async function exportAndSave(
   pageIds?: string[],
   /** People's names, for a database's CSV (the database host's people). */
   people?: { id: string; name: string }[],
+  /** A mentioned person's name, for the pages' Markdown (the workspace's people directory). */
+  userName?: (userId: string) => string | undefined,
 ) {
   const { exportZip } = await import('./exchange');
   await session.flushAll();
@@ -22,6 +25,7 @@ export async function exportAndSave(
     pageIds,
     untitled,
     people: people && Object.fromEntries(people.map((p) => [p.id, p.name])),
+    ...(userName ? { userName } : {}),
   });
   await save(name, bytes, 'application/zip');
 }
@@ -32,6 +36,8 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
   const cloud = useCloud();
   const account = useAccount(cloud);
   const databases = useDatabaseHost();
+  // Mentions in the export's Markdown are written with names (Phase 6).
+  const collab = useCollab();
   const workspace = session.current;
   // The server decides; the button is offered to those it would answer.
   const serverExport =
@@ -72,6 +78,9 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
               t('page.untitled'),
               undefined,
               databases?.people(),
+              workspace && collaborates(collab, session, workspace.id)
+                ? collab!.people(workspace.id).name
+                : undefined,
             )
               .then(() => setMessage(t('exchange.exported')))
               .catch((error: unknown) => {

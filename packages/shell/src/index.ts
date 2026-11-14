@@ -1,5 +1,6 @@
 import './shell.css';
 import './workspace.css';
+import './collab/collab.css';
 
 export { WorkspaceApp, type WorkspaceAppProps } from './WorkspaceApp';
 export { CommandRegistry, type Command, type CommandGroup } from './commands';

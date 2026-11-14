@@ -151,6 +151,11 @@ export interface ExportOptions {
   untitled: string;
   /** People's names for a CSV's person cells (else their ids). */
   people?: Record<Id, string>;
+  /**
+   * A mentioned person's name for the Markdown (Phase 6: the workspace's people directory), else
+   * `people`'s; a mention with neither writes `@` alone.
+   */
+  userName?: (userId: Id) => string | undefined;
 }
 
 /** The export's files (the manifest among them) and the zip's name. */
@@ -245,6 +250,7 @@ export async function buildExport(
         return path ? relative(base, path) : undefined;
       },
       untitled: options.untitled,
+      userName: (id) => options.userName?.(id) ?? options.people?.[id],
     });
     const heading = `# ${page.icon ? `${page.icon} ` : ''}${page.title || options.untitled}\n\n`;
     files[`${base}.md`] = utf8.encode(heading + markdown);

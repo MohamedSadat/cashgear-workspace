@@ -1,0 +1,536 @@
+/* Phase 6: presence colours and avatars, the comments panel and composer, the inbox. Logical
+   properties only, so everything mirrors in Arabic. */
+
+/* A person's colour (collab/colour.ts): white text on it holds at least 4.5:1 in the light theme,
+   the page's dark text on it in the dark theme; as a cursor or a ring it holds at least 3:1 against
+   the page and the sidebar (collab.test.ts checks every pair). */
+:root,
+[data-cg-theme='light'] {
+  --cgw-presence-1: #b42318;
+  --cgw-presence-2: #b54708;
+  --cgw-presence-3: #027a48;
+  --cgw-presence-4: #026aa2;
+  --cgw-presence-5: #6941c6;
+  --cgw-presence-6: #c11574;
+  --cgw-presence-7: #0e7090;
+  --cgw-presence-8: #4e5ba6;
+  --cgw-presence-text: #ffffff;
+}
+
+[data-cg-theme='dark'] {
+  --cgw-presence-1: #fda29b;
+  --cgw-presence-2: #fdb022;
+  --cgw-presence-3: #6ce9a6;
+  --cgw-presence-4: #7cd4fd;
+  --cgw-presence-5: #bdb4fe;
+  --cgw-presence-6: #faa7e0;
+  --cgw-presence-7: #67e3f9;
+  --cgw-presence-8: #a4bcfd;
+  --cgw-presence-text: #0f141c;
+}
+
+/* The avatar: Track U7's stand-in (PROGRESS.md). Named apart from the database views' person
+   cell avatar: the stylesheets load together, and each package keeps its own names. */
+.cgw-face {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--cgw-face-bg, var(--cgw-presence-4));
+  color: var(--cgw-presence-text);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+.cgw-face.is-tiny {
+  inline-size: 16px;
+  block-size: 16px;
+  font-size: 0.5625rem;
+}
+
+.cgw-face.is-small {
+  inline-size: 24px;
+  block-size: 24px;
+  font-size: 0.6875rem;
+}
+
+.cgw-face.is-medium {
+  inline-size: 32px;
+  block-size: 32px;
+  font-size: 0.8125rem;
+}
+
+.cgw-face.is-more {
+  border: 1px solid var(--cg-border);
+  background: var(--cg-surface-subtle);
+  color: var(--cg-text);
+}
+
+.cgw-presence-bar {
+  display: flex;
+  align-items: center;
+  padding-inline: 4px;
+}
+
+.cgw-presence-bar .cgw-face {
+  box-shadow: 0 0 0 2px var(--cg-surface);
+}
+
+.cgw-presence-bar .cgw-face + .cgw-face {
+  margin-inline-start: -4px;
+}
+
+.cgw-side-presence {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding-inline: 2px;
+}
+
+.cgw-side-presence .cgw-face {
+  box-shadow: 0 0 0 1px var(--cg-surface-subtle);
+}
+
+.cgw-side-presence .cgw-face + .cgw-face {
+  margin-inline-start: -3px;
+}
+
+.cgw-unread-count {
+  min-inline-size: 18px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--cg-accent);
+  color: #ffffff;
+  font-weight: 600;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+[data-cg-theme='dark'] .cgw-unread-count {
+  color: var(--cg-page-bg);
+}
+
+.cgw-side-button.is-active {
+  background: color-mix(in srgb, var(--cg-text) 8%, transparent);
+  color: var(--cg-text);
+}
+
+/* The page with its comments beside it. */
+.cgw-page-layout {
+  display: flex;
+  align-items: flex-start;
+  min-block-size: 100%;
+}
+
+.cgw-page-layout > .cgw-page {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.cgw-comments {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  flex: 0 0 340px;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-block-size: calc(100vh - 45px);
+  border-inline-start: 1px solid var(--cg-border);
+  background: var(--cg-surface);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 1100px) {
+  .cgw-comments {
+    position: fixed;
+    inset-block: 45px 0;
+    inset-inline-end: 0;
+    z-index: 40;
+    inline-size: min(360px, 100vw);
+    max-block-size: none;
+    box-shadow: var(--cg-shadow, 0 6px 24px rgba(0, 0, 0, 0.2));
+  }
+}
+
+.cgw-comments-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-block: 8px;
+  padding-inline: 14px 8px;
+  border-block-end: 1px solid var(--cg-border);
+}
+
+.cgw-comments-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cgw-comments-header h2:focus-visible,
+.cgw-thread:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cgw-comments-notice {
+  margin: 8px 10px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cg-accent) 12%, transparent);
+}
+
+.cgw-comments-body {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: 8px 10px 16px;
+}
+
+.cgw-comments-empty {
+  padding: 8px 4px;
+}
+
+.cgw-thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-thread-list.is-resolved {
+  margin-block-start: 16px;
+}
+
+.cgw-thread {
+  padding: 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 8px;
+  background: var(--cg-surface);
+}
+
+.cgw-thread.is-active {
+  border-color: var(--cg-accent);
+  box-shadow: 0 0 0 1px var(--cg-accent);
+}
+
+.cgw-thread.is-draft {
+  margin-block-end: 8px;
+}
+
+.cgw-thread[data-state='pending'] {
+  opacity: 0.85;
+}
+
+.cgw-thread-quote,
+.cgw-thread-quote-text {
+  display: block;
+  inline-size: 100%;
+  margin: 0 0 8px;
+  padding: 2px 8px;
+  border: 0;
+  border-inline-start: 3px solid var(--cg-border-strong);
+  background: none;
+  color: var(--cg-text-secondary);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.cgw-thread-quote {
+  cursor: pointer;
+}
+
+.cgw-thread-quote:hover {
+  color: var(--cg-text);
+}
+
+.cgw-thread-quote:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 1px;
+}
+
+.cgw-thread-removed {
+  margin: 0 0 6px;
+  color: var(--cg-warning-text, #98600a);
+  font-style: italic;
+}
+
+.cgw-thread-resolved {
+  margin: 0 0 6px;
+}
+
+.cgw-comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+}
+
+.cgw-comment-author {
+  font-weight: 600;
+}
+
+.cgw-comment-body {
+  margin: 4px 0 0;
+  padding-inline-start: 30px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.cgw-comment-mention {
+  border-radius: 4px;
+  color: var(--cg-accent-active, var(--cg-accent));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+[data-cg-theme='dark'] .cgw-comment-mention {
+  color: var(--cg-accent);
+}
+
+a.cgw-comment-mention {
+  text-decoration: underline;
+}
+
+.cgw-comment-actions,
+.cgw-thread-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-block-start: 4px;
+  padding-inline-start: 26px;
+}
+
+.cgw-thread-actions {
+  padding-inline-start: 0;
+  margin-block-start: 8px;
+}
+
+.cgw-comment-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.cgw-link-button.is-danger {
+  color: var(--cg-danger-text, #b42318);
+}
+
+.cgw-comment-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-block-start: 6px;
+  color: var(--cg-danger-text, #b42318);
+}
+
+/* The composer */
+.cgw-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block-start: 8px;
+}
+
+.cgw-composer-area {
+  min-block-size: 2.5em;
+  max-block-size: 12em;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--cg-border-strong);
+  border-radius: 6px;
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  outline: none;
+  cursor: text;
+}
+
+.cgw-composer-area:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: -1px;
+}
+
+.cgw-composer-area[data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--cg-text-secondary);
+  pointer-events: none;
+}
+
+.cgw-composer[data-disabled] .cgw-composer-area {
+  background: var(--cg-disabled-bg, var(--cg-surface-subtle));
+  cursor: default;
+}
+
+.cgw-composer-hint,
+.cgw-composer-count {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.cgw-composer-count.is-over {
+  color: var(--cg-danger-text, #b42318);
+}
+
+.cgw-composer-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.cgw-mention-menu {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: 0;
+  z-index: 45;
+  min-inline-size: 220px;
+  max-inline-size: 100%;
+  max-block-size: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--cg-border);
+  border-radius: 8px;
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  box-shadow: var(--cg-shadow, 0 6px 24px rgba(0, 0, 0, 0.2));
+}
+
+.cgw-mention-heading {
+  padding: 4px 8px 2px;
+  color: var(--cg-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.cgw-mention-option {
+  display: flex;
+  flex-direction: column;
+  padding: 5px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.cgw-mention-option .cgw-muted {
+  font-size: 0.75rem;
+}
+
+.cgw-mention-option.is-active,
+.cgw-mention-option:hover {
+  background: var(--cg-selected, color-mix(in srgb, var(--cg-accent) 14%, transparent));
+}
+
+/* The inbox (#/inbox) */
+.cgw-inbox {
+  max-inline-size: 760px;
+  margin-inline: auto;
+  padding: 32px 24px;
+}
+
+.cgw-inbox h1 {
+  margin-block: 0 16px;
+  font-size: 1.75rem;
+}
+
+.cgw-inbox-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-block-end: 16px;
+}
+
+.cgw-inbox-tools .cgw-button {
+  margin-inline-start: auto;
+}
+
+.cgw-inbox-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-inbox-item a {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.cgw-inbox-item a:hover {
+  background: color-mix(in srgb, var(--cg-text) 6%, transparent);
+}
+
+.cgw-inbox-item a:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 1px;
+}
+
+.cgw-inbox-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.cgw-inbox-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-inbox-item.is-unread .cgw-inbox-line {
+  font-weight: 600;
+}
+
+.cgw-inbox-dot {
+  flex: none;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--cg-accent);
+}
+
+.cgw-inbox-excerpt {
+  overflow: hidden;
+  color: var(--cg-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cgw-inbox time {
+  font-size: 0.75rem;
+}
