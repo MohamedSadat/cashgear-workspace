@@ -89,54 +89,115 @@ requestPreview                ───────▶
 
 ### Contract `sheet-embed.1`
 
-Transport: after the iframe posts `ready`, the parent sends `init` with one end of a
-`MessageChannel`. Everything after that travels on the port. Both sides check `event.origin`
-against an allow-list before the handshake and ignore everything else.
+Written in full on 2026-11-14 (Phase 5, M5.1), before either side ships it. The types and their
+validators are `packages/editor/src/sheet/contract.ts`; the vectors both sides run (Track S5) are
+`packages/editor/vectors/sheet-embed-vectors.json`; the mock embed is `tests/mocks/sheet`.
 
-Parent to embed:
+**The frame.** Workspace draws `<iframe src="{sheet}/embed">` with
+`sandbox="allow-scripts allow-same-origin"` (Sheet needs its own origin for workers and WASM; it is
+a different origin from Workspace, so it gains nothing over the page), `referrerpolicy="no-referrer"`,
+`allow=""`, a `title` for screen readers, and no `name`. `{sheet}` is the one Sheet origin of
+Workspace's build. The address carries nothing: no workbook, no token, no query.
 
-| Message | Fields | Meaning |
+**Sheet's side of the frame (S3).** `/embed` is served with `frame-ancestors` listing Workspace's
+origins and nothing else, where the rest of Sheet keeps `frame-ancestors 'none'`: live
+`https://workspace.cashgearerp.com`, the desktop's `tauri://localhost` and `http://tauri.localhost`;
+in development and tests also `http://127.0.0.1:5273`, `http://127.0.0.1:4273`, `http://localhost:5273`
+and `http://localhost:4273`. The embed accepts `init` only from that same list.
+
+**Handshake.**
+
+1. When its script has run, the embed posts `{type: "ready", contracts: ["sheet-embed.1"]}` to
+   `window.parent` with target origin `"*"`. It holds nothing private, and the embed cannot know
+   the parent's origin before `init` (no referrer is sent).
+2. The parent takes a `ready` only when `event.source` is its frame's window and `event.origin` is
+   its Sheet origin, and only once per frame load. It makes a `MessageChannel` and posts `init`
+   to the frame with target origin `{sheet}`, transferring `port2` (and the bytes, for a `bytes`
+   source).
+3. The embed takes `init` only when `event.source` is `window.parent`, `event.origin` is on its
+   list, a port came with it, and no `init` came before. It ignores every later window message.
+   An `init` whose `contract` it does not speak is answered on the port with `error`
+   `contract.unsupported`, and nothing else happens.
+4. Everything after that, in both directions, is on the port. A message that fails validation is
+   dropped, and neither side logs its content.
+
+Parent to embed (on the port, except `init`):
+
+| Message | Fields | Answer |
 | --- | --- | --- |
-| `init` | `contract: "sheet-embed.1"`, `source`, `view`, `theme` (`light` or `dark`), `direction`, `locale` | Load and draw |
-| `setView` | `view` | Show another sheet, range or chart |
-| `setTheme` | `theme`, `direction`, `locale` | Follow the page |
-| `refresh` | `source` | The workbook has a newer version |
-| `requestPreview` | `maxWidth`, `maxHeight`, `scale` | Ask for a picture of the current view |
+| `init` | `contract: "sheet-embed.1"`, `source`, `view`, `theme`, `direction`, `locale` | `loaded`, or `error` |
+| `setView` | `view` | `loaded`, or `error` |
+| `setTheme` | `theme`, `direction`, `locale` | none; drawn again |
+| `refresh` | `source` | `loaded`, or `error`; a `source` with the ETag already drawn draws nothing new and answers `loaded` |
+| `requestPreview` | `id`, `maxWidth`, `maxHeight`, `scale` | `preview` with the same `id`, or `error` with it |
 
 Embed to parent:
 
 | Message | Fields | Meaning |
 | --- | --- | --- |
-| `ready` | `contracts: string[]` | The versions this embed speaks |
-| `loaded` | `sheets: {name, direction}[]`, `size: {width, height}`, `charts: {id, title}[]` | Drawn |
+| `ready` | `contracts: string[]` | The versions this embed speaks (on the window) |
+| `loaded` | `etag`, `view` (as drawn: the sheet and range resolved), `sheets: {name, direction}[]`, `charts: {id, title, sheet}[]`, `size`, `capped` | Drawn. `capped` is true when a null range was cut to the cell limit |
 | `resize` | `size` | The content's natural size changed |
-| `preview` | `bytes` (PNG, transferred), `viewHash` | Answer to `requestPreview` |
-| `openRequested` | none | The user chose "Open in Cash Gear Sheet" inside the frame |
-| `error` | `code`, `message` | `source.unavailable`, `source.forbidden`, `view.notFound`, `workbook.tooLarge`, `contract.unsupported` |
+| `preview` | `id`, `bytes` (PNG, transferred), `width`, `height`, `etag`, `view` | The picture of the view as drawn |
+| `openRequested` | none | The user chose "Open in Cash Gear Sheet" inside the frame (optional for the embed to offer) |
+| `error` | `code`, `message`, `id` (only in answer to `requestPreview`) | One of the codes below |
 
 Types:
 
 ```ts
 type Source =
-  | { kind: 'url'; url: string; etag: string }          // a short-lived signed URL to the xlsx bytes
-  | { kind: 'bytes'; bytes: ArrayBuffer; etag: string }; // transferred, for desktop and offline
+  | { kind: 'url'; url: string; etag: string }          // a signed URL to exactly one version's xlsx, about 5 minutes
+  | { kind: 'bytes'; bytes: ArrayBuffer; etag: string }; // transferred; for a desktop with the bytes, not used by 0.5.0
 
 type View =
-  | { kind: 'range'; sheet: string; range: string | null } // null: the used range, capped
-  | { kind: 'chart'; chartId: string };
+  | { kind: 'range'; sheet: string | null; range: string | null } // null sheet: the first visible; null range: the used range, capped
+  | { kind: 'chart'; sheet: string | null; chartId: string };
+
+type Theme = 'light' | 'dark';
+type Direction = 'ltr' | 'rtl';                       // the page's; each sheet keeps its own in `sheets`
+type Locale = 'en' | 'ar';
+interface Size { width: number; height: number }      // CSS pixels, positive integers, at most 100,000
 ```
+
+Fields, as the validators check them:
+
+| Field | Rule |
+| --- | --- |
+| `type` | One of the message names above; a message is a plain object |
+| `url` | `https:`, or `http:` on `127.0.0.1` or `localhost`; at most 4,096 characters |
+| `etag` | A quoted entity tag (`"…"`), 3 to 256 characters, as the Workspace API sends it |
+| `sheet` | 1 to 31 characters, no `[ ] : * ? / \`, or null |
+| `range` | A1 notation without a sheet or `$`: `A1` or `A1:D20`, columns `A` to `XFD`, rows 1 to 1,048,576, or null |
+| `chartId` | 1 to 128 characters |
+| `id` | 1 to 64 characters of `[A-Za-z0-9_-]` |
+| `maxWidth`, `maxHeight` | Integers 16 to 4,096 |
+| `scale` | 1, 1.5, 2 or 3 |
+| `bytes` | An `ArrayBuffer`; a preview's starts with the PNG signature and is at most 2 MB |
+| `message` | At most 500 characters, for the log only; Workspace shows its own text by `code` |
+
+Error codes:
+
+| Code | When | Workspace shows |
+| --- | --- | --- |
+| `source.unavailable` | The bytes could not be read (network, 404, 5xx), or are not a workbook Sheet reads | The picture, and "Couldn't load the live view" |
+| `source.forbidden` | Blob Storage refused the URL (403: it expired) | Asks the API for a new URL once and sends `refresh`; then as `source.unavailable` |
+| `view.notFound` | The sheet or chart is not in the workbook | "This sheet or chart is no longer in the workbook", and the view picker |
+| `workbook.tooLarge` | Over 20 MB | The picture and "Open in Cash Gear Sheet" |
+| `range.tooLarge` | A named range over 5,000 cells | The picture and the view picker |
+| `contract.unsupported` | No contract both sides speak | The picture and "Open in Cash Gear Sheet" |
 
 Rules:
 
 - The embed is read-only. It never saves and exposes no editing command.
 - The embed receives no Workspace credential. The parent fetches a signed URL from the Workspace
-  API (after the workbook's own permission check) and passes it in `source`.
-- iframe attributes: `sandbox="allow-scripts allow-same-origin"` (Sheet needs its own origin for
-  workers and WASM; it is a different origin from Workspace, so it gains nothing over the page),
-  `referrerpolicy="no-referrer"`, `loading="lazy"`, a title for screen readers.
-- The embed sizes itself to the view up to the block's height, then scrolls inside.
-- Limits: the embed refuses workbooks over a size both sides agree (default 20 MB) and ranges
-  over 5,000 cells, and says so with `error`.
+  API (after the workbook's own permission check) and passes it in `source`. The embed reads it
+  with `fetch` in `cors` mode, `credentials: 'omit'`, `redirect: 'error'`, no referrer (Blob
+  Storage's CORS rule already allows Sheet's origins for Track S1).
+- A workbook with no version yet is never sent to the embed: Workspace shows "Empty workbook" and
+  "Open in Cash Gear Sheet".
+- The embed sizes itself to the view; Workspace makes the frame that tall, up to the block's
+  `height`, and the embed scrolls inside past it.
+- Limits: 20 MB a workbook, 5,000 cells a range (decisions, 2026-11-14).
 - A contract version is never changed once shipped. A new one is added, and `ready` lists all the
   embed speaks.
 
@@ -150,9 +211,33 @@ A workbook embedded in a page keeps its own identity, storage and permissions (`
 - A reader who can see the page but not the workbook sees "You don't have access to this
   workbook", never a preview.
 - "Insert an existing cloud workbook" lists workbooks the user can read in this workspace.
-- "Create a new workbook" creates the record with a blank xlsx made by Sheet (`blank_workbook`)
-  on first open.
+- "Create a new workbook" creates the record with no version; Sheet opens it blank (right to left
+  for an Arabic session) and the user's first Save makes version 1 with `If-None-Match: *`.
 - "Refresh linked data" re-reads the workbook's current version and redraws.
+- A workbook's access list follows the pages' rules (decisions, 2026-11-14): owners and admins
+  `full`, members `edit`, guests nothing unless named; entries by person or for the whole
+  workspace. It is never shared outside its workspace: a page's share link shows the block as
+  "You don't have access to this workbook".
+
+Workspace's own routes (Phase 5), on the Workspace session:
+
+| Route | Method | Access | Success |
+| --- | --- | --- | --- |
+| `/api/v1/workspaces/{id}/workbooks` | GET | Member; lists those the caller can read (`?trashed=true`: the trash; `?q=`: by name) | 200 `{workbooks: Workbook[]}` |
+| `/api/v1/workspaces/{id}/workbooks` | POST | Member who is not a guest; `{id?, name}` | 201 `Workbook` (no version) |
+| `/api/v1/workbooks/{id}` | GET | Read | 200 `Workbook`, `ETag` |
+| `/api/v1/workbooks/{id}` | PATCH | Edit; `If-Match`; `{name?, trashed?}` | 200 `Workbook` |
+| `/api/v1/workbooks/{id}` | DELETE | Full; to the trash | 204 |
+| `/api/v1/workbooks/{id}/permissions` | GET, PUT | Read (entries shown to `full` only), `full` to change; `If-Match` | 200 |
+| `/api/v1/workbooks/{id}/content` | GET | Read | 200 `{readUrl, etag, size, versionId}` (null with no version) |
+| `/api/v1/workbooks/{id}/previews/{viewHash}` | GET | Read | 200 `{url, versionId, etag, madeAt, width, height}`, or 404 |
+| `/api/v1/workbooks/{id}/previews/{viewHash}` | PUT | Edit; body the PNG; `X-Workbook-Version` | 204 |
+| `/api/v1/workbooks/{id}/launch` | POST | Read; `{}` | 200 `{url}` |
+| `/api/v1/workbooks/{id}/import` | POST | Read the workbook and edit the database; `{databaseId?, sheet, range, header}` | 200 `{databaseId, rows}` |
+| `/api/v1/databases/{id}/workbooks` | POST | Read the database, create workbooks; `{viewId, name}` | 201 `Workbook` (version 1, written by the server) |
+
+`Workbook` is `{id, workspaceId, name, versionId, etag, size, savedAt, savedBy, createdBy,
+createdAt, trashedAt, access}`, where `access` is the caller's level.
 
 ### Opening the full editor
 
@@ -165,20 +250,42 @@ Sheet has no cloud open or save today. Track S adds a third `SheetPlatform` impl
 2. Workspace opens `https://sheet.cashgearerp.com/cloud#launch=<ticket>` in a new tab (desktop:
    the Sheet desktop app by deep link when installed, the web app otherwise).
 3. Sheet removes the ticket from the address bar and redeems it at Workspace's API for a file
-   session: an opaque token, 30 minutes idle and 10 hours at most, scoped to that one workbook.
+   session: an opaque token, 30 minutes idle and 10 hours at most, scoped to that one workbook
+   (or to the copy it saves).
 4. Sheet reads the bytes by signed URL and saves a new version with `If-Match` on the ETag. A
-   stale ETag gets 412 and Sheet offers "save a copy" or "reload".
+   stale ETag gets 412 `version.conflict`, whose body names the current version (`current`:
+   `versionId`, `etag`, `sha256`, `savedBy`, `savedAt`), and Sheet offers "save a copy" (a new
+   workbook beside it, by `…/copies`, to which the session moves; the device if Workspace
+   refuses) or "reload".
 
+The contract is `sheet-session.1`, built by Track S1 and S2 against a mock in Sheet's repo
+(Sheet's `docs/workspace-contract.md` is the reference; its suite is Track S5's to run here).
 Workspace routes for this (Phase 5):
 
 | Route | Method | Caller | Authentication | Success |
 | --- | --- | --- | --- | --- |
-| `/api/v1/workbooks/{id}/launch` | POST | Workspace app | Workspace session | 200 `{url}` |
-| `/api/v1/sheet-sessions/redeem` | POST | Sheet | Anonymous, allow-listed `Origin`, rate-limited | 200 `{token, expiresAt, workbook, access}` |
-| `/api/v1/sheet-sessions/renew` | POST | Sheet | `X-Workspace-File-Session` | 200 |
+| `/api/v1/workbooks/{id}/launch` | POST | Workspace app | Workspace session, read access | 200 `{url}` (`https://sheet.cashgearerp.com/cloud#launch=<ticket>`) |
+| `/api/v1/sheet-sessions/redeem` | POST | Sheet | Anonymous, allow-listed `Origin` (checked before the ticket), rate-limited per IP | 200 `{token, expiresAt, maxExpiresAt, workbook: {id, name}, access, user: {id, name}, language}` |
+| `/api/v1/sheet-sessions/renew` | POST | Sheet | `X-Workspace-File-Session` | 200 `{expiresAt}` |
 | `/api/v1/sheet-sessions/end` | POST | Sheet | `X-Workspace-File-Session` | 204 |
-| `/api/v1/sheet-sessions/workbook` | GET | Sheet | `X-Workspace-File-Session` | 200 `{readUrl, etag, name}` |
-| `/api/v1/sheet-sessions/workbook/versions` | POST | Sheet | `X-Workspace-File-Session`, `If-Match` | 201 `{versionId, etag}`; 412 on a stale ETag |
+| `/api/v1/sheet-sessions/workbook` | GET | Sheet | `X-Workspace-File-Session`, read access now | 200 `{readUrl, etag, name, size}` (null `readUrl`, `etag`, `size` with no version yet), `ETag` |
+| `/api/v1/sheet-sessions/workbook/versions` | POST | Sheet | `X-Workspace-File-Session` of an `edit` session and edit access now; `If-Match` (or `If-None-Match: *` for the first version); body the xlsx | 201 `{versionId, etag}`, `ETag`, `Location`; 412 `version.conflict` with `current` |
+| `/api/v1/sheet-sessions/workbook/copies` | POST | Sheet | `X-Workspace-File-Session`, read access now and the right to create workbooks; body the xlsx | 201 `{workbook: {id, name}, access, versionId, etag}`; the session moves to the copy |
+
+- The ticket is 256 random bits in base64url without padding (43 characters), 120 seconds, one
+  use, stored as SHA-256, bound to the user, the workbook and the access (`full` and `edit` give
+  `edit`; `comment` and `view` give `view`).
+- A copy is named "`<name>` (copy)", in Arabic "`<name>` (نسخة)". A save's body is checked to be a
+  zip, under 100 MB (413 `limit.size` with `limit`), with the xlsx content type.
+- Errors are ProblemDetails with `code`: `request.invalid`, `ticket.invalid`, `session.expired`,
+  `origin.denied`, `access.denied`, `workbook.gone`, `version.conflict`, `version.required`,
+  `limit.size`, `limit.rate`, `server.error`.
+- Every answer has `Cache-Control: no-store` and `X-Correlation-Id`. CORS for
+  `/api/v1/sheet-sessions/*` allows Sheet's origins only and no credentials, apart from the web
+  app's cookie policy: methods `GET, POST`; headers `Content-Type, X-Workspace-File-Session,
+  If-Match, If-None-Match`; exposed `X-Correlation-Id, ETag, Retry-After, Location`. The routes
+  never redirect.
+- Sheet's Arabic texts call the button «فتح في Cash Gear Sheet», as Workspace's catalogue does.
 
 ### Offline and desktop
 
@@ -187,6 +294,9 @@ Workspace routes for this (Phase 5):
   its date.
 - On the desktop, the embed loads from Sheet's web origin when online. The Tauri CSP adds that
   origin to `frame-src` and nothing else.
+- Blob Storage's CORS rule allows `GET` from Sheet's origins (the embed and the cloud platform
+  read signed URLs with `fetch`), and Sheet's CSP must be given the storage account's exact origin
+  once it exists (`docs/OPERATIONS.md`).
 - Spike S9 checks the embed inside an iframe in Chrome and in WebView2, with Sheet's COOP, COEP
   and CORP headers in place. Workspace itself does not send COEP.
 
@@ -204,9 +314,12 @@ Workspace routes for this (Phase 5):
 | --- | --- | --- |
 | S1 | A cloud `SheetPlatform`: open by launch ticket, read by signed URL, save a new version with `If-Match` | Workbooks need a cloud identity before they can be embedded |
 | S2 | The `/cloud` launch route, mirroring the existing `/erp` route and `launch.ts` | "Open the full editor" |
-| S3 | The `/embed` route: read-only load, one range, the `sheet-embed.1` handshake, `resize`, `error` | Live preview |
+| S3 | The `/embed` route: read-only load, one range, the `sheet-embed.1` handshake, `resize`, `error`, `frame-ancestors` for Workspace's origins | Live preview |
 | S4 | `requestPreview` (PNG of the current view) and chart views | Offline picture, live charts |
-| S5 | A contract test suite both repos run against a mock | Either side can change without breaking the other |
+| S5 | A contract test suite both repos run against a mock: `sheet-embed.1`'s vectors and handshake against Sheet's embed and Workspace's mock embed; Sheet's `sheet-session.1` suite against Workspace's real API | Either side can change without breaking the other |
+
+S1 and S2 were built during Phase 4; S3 to S5 in their own session during Phase 5 (decisions,
+2026-11-14).
 
 ## Cash Gear ERP
 
@@ -223,6 +336,9 @@ Workspace routes for this (Phase 5):
 - Permissions: role policies per module, and per-user, per-unit flags (`ViewRec`, `EditRec`,
   `AdvEditRec` and others) checked by `SheetPrivileges`.
 - Missing: rate limiting on UnifiedAPI, signed URLs, a generic field-permission mechanism.
+- Since Sheet's Phases 15 to 19 (its Track E1 to E4, 2026-11-09 to 11): `api/sheet/Session/Redeem`,
+  `Renew`, `End`, Vendors' `Schema`, `Query`, `Commit`, `CommitStatus`, per-IP rate limits on the
+  sheet's routes (`rate.limited`), and CORS for Sheet's origin only on them. Nothing for Workspace.
 
 ### Principles
 
@@ -236,65 +352,102 @@ Workspace routes for this (Phase 5):
 5. **A workspace page is not a second way to post transactions.** Level 2 covers selected fields
    of master data the ERP exposes for it. Posting, approving and workflow steps stay in the ERP.
 
+### Where the ERP is
+
+Workspace's build names two ERP origins and reads no other from anywhere (decisions,
+2026-11-14): the ERP's API (`VITE_CGW_ERP_API`, live `https://api.cashgearerp.com`) and the ERP
+client, whose connect page it opens (`VITE_CGW_ERP_CLIENT`; the live origin is given by Track E).
+Builds for a local API use the mock ERP (`tests/mocks/erp`): its API on `http://127.0.0.1:4282`
+and its client on `http://127.0.0.1:4284`. The ERP's API origin is in `connect-src`, on the web
+and on the desktop. The Workspace API's `Erp__ApiBase` is the only base a link may name.
+
 ### Linking a workspace to a company
 
-A one-time step by someone who is both a Workspace admin and an ERP admin for that company.
+A one-time step by someone who is both a Workspace owner or admin and an ERP admin for that
+company.
 
 1. In the ERP client, the admin chooses "Link Cash Gear Workspace". The ERP makes a link ticket
-   (one use, 120 seconds, bound to the company and the admin) and opens
-   `https://workspace.cashgearerp.com/erp-link#ticket=<ticket>`.
-2. Workspace, signed in as a workspace admin, shows which company and asks to confirm, then
-   redeems the ticket at the ERP with the workspace's id and name.
-3. The ERP records the link (company, workspace id, who, when). Workspace records `ErpLinks`
-   (ERP base URL, company, who, when). Neither stores a secret.
-4. Either side can revoke. The ERP checks the link on every session.
+   (256 random bits, base64url, 43 characters; one use, 120 seconds, stored hashed, bound to the
+   company and the admin) and opens `https://workspace.cashgearerp.com/#/erp-link/<ticket>`. The
+   ticket is in the hash, so it reaches no server's log.
+2. Workspace removes the ticket from the address bar at once (`history.replaceState`), keeps it
+   in memory, and, signed in, asks which workspace to link (those the person owns or administers).
+   On confirm, the browser redeems the ticket at the ERP with the workspace's id and name.
+3. The ERP records the link (its own link id, company, workspace id, who, when) and answers
+   `{linkId, company, companyName}`. Workspace's API records `ErpLinks` (its base, company, the
+   ERP's link id, who, when) and writes an audit entry. Neither stores a secret.
+4. Either side can revoke. Workspace's unlink stops it offering the link; the ERP's revoke, in the
+   ERP client, stops every session for it. The ERP checks its link on every session.
+
+Workspace's routes for links (owners and admins change them; members read them):
+
+| Route | Method | Success |
+| --- | --- | --- |
+| `/api/v1/workspaces/{id}/erp-links` | GET | 200 `{links: ErpLink[]}` (not revoked) |
+| `/api/v1/workspaces/{id}/erp-links` | POST | `{erpLinkId, erpBaseUrl, company, companyName}`; 201 `ErpLink`; 400 `request.invalid` for a base not `Erp__ApiBase`; 409 `conflict` when the company is linked already |
+| `/api/v1/workspaces/{id}/erp-links/{linkId}` | DELETE | 204; sets `RevokedAt` |
+
+`ErpLink` is `{id, erpLinkId, erpBaseUrl, company, companyName, linkedBy, linkedAt}`.
 
 ### A user's session
 
 Each person uses their own ERP identity. There is no shared service account.
 
 1. A page with an ERP block shows "Connect to Cash Gear ERP" until the user has a session.
-2. Workspace opens the ERP client's connect page in a pop-up (desktop: the system browser), with
-   the workspace id and a one-time `state` value.
+2. Workspace opens the ERP client's connect page in a pop-up (desktop: the system browser):
+   `{erpClient}/workspace-connect?workspace=<id>&link=<erpLinkId>&state=<state>&return=web|desktop`,
+   where `state` is 128 random bits in base64url (22 characters), kept in memory, one use.
 3. The ERP client, where the user is already signed in, asks UnifiedAPI for a ticket for the
-   linked workspace and hands it back: in the browser by `postMessage` to the opener, checked by
-   origin and `state`; on the desktop by deep link `cashgear-workspace://erp#ticket=…&state=…`.
+   linked workspace and hands it back. In the browser: `window.opener.postMessage({type:
+   "cgw-erp-connect", ticket, state}, <Workspace origin from the ERP client's own list>)`;
+   Workspace takes it only from its ERP client's origin, from the pop-up's window, with the
+   `state` it sent, once. On the desktop: by deep link `cashgear-workspace://erp#ticket=…&state=…`,
+   which the app reads and never puts in a route or history.
 4. Workspace redeems the ticket at the ERP for a session: an opaque token, 30 minutes idle and
-   10 hours at most, bound to the user, the company and the workspace.
-5. The token is kept in memory only. It is not written to any store. Closing the app ends it.
+   10 hours at most, bound to the user, the company, the link and the workspace.
+5. The token is kept in memory only. It is not written to any store, log, URL or error. Workspace
+   renews it at most every 5 minutes while the person works in the tab, ends it with a `keepalive`
+   request on `pagehide`, and forgets it when the app closes.
 
 This is the Sheet flow with the direction of the first step reversed, so the user starts from
 Workspace.
 
-### Contract `erp-connect.1` (proposed; Track E)
+### Contract `erp-connect.1` (Track E)
 
 Modelled on `vendors.1` in `cashgear-sheet/docs/erp-contract.md`, generalised from one entity
-route to a list of connectors.
+route to a list of connectors. Written in full on 2026-11-14 (Phase 5, M5.1); Track E builds the
+ERP's side to it and may propose changes here. The types and validators are
+`packages/erp/src/contract.ts`; the mock is `tests/mocks/erp`; the suite is `tests/contracts/erp`
+(`pnpm contract:erp`, against the mock or `ERP_BASE_URL`).
 
 | Route | Method | Caller | Authentication | Success |
 | --- | --- | --- | --- | --- |
-| `api/system/WorkspaceLink/CreateTicket` | POST | ERP client | `X-API-Key`, admin | 200 `{url}` |
-| `api/system/WorkspaceLink/Redeem` | POST | Workspace | Anonymous, allow-listed `Origin`, rate-limited | 200 `{company, companyName}` |
-| `api/system/WorkspaceConnect/CreateTicket` | POST | ERP client | `X-API-Key`; the company is linked | 200 `{ticket}` |
-| `api/connect/Session/Redeem` | POST | Workspace | Anonymous, allow-listed `Origin`, rate-limited | 200 `ConnectSession` |
-| `api/connect/Session/Renew` | POST | Workspace | `X-Connect-Session` | 200 |
+| `api/system/WorkspaceLink/CreateTicket` | POST | ERP client | `X-API-Key`, an ERP admin of the company | 200 `{url}` |
+| `api/system/WorkspaceLink/Redeem` | POST | Workspace (browser) | Anonymous, allow-listed `Origin` (checked before the ticket), rate-limited per IP; `{ticket, workspaceId, workspaceName}` | 200 `{linkId, company, companyName}` |
+| `api/system/WorkspaceLink/Revoke` | POST | ERP client | `X-API-Key`, an ERP admin; `{linkId}` | 204 |
+| `api/system/WorkspaceConnect/CreateTicket` | POST | ERP client | `X-API-Key`; `{workspaceId, linkId}`; the link is live | 200 `{ticket}` |
+| `api/connect/Session/Redeem` | POST | Workspace | Anonymous, allow-listed `Origin` (before the ticket), rate-limited; `{ticket, workspaceId}` | 200 `ConnectSession` |
+| `api/connect/Session/Renew` | POST | Workspace | `X-Connect-Session` | 200 `{expiresAt}` |
 | `api/connect/Session/End` | POST | Workspace | `X-Connect-Session` | 204 |
-| `api/connect/Connectors` | GET | Workspace | `X-Connect-Session` | 200 `ConnectorSummary[]` |
+| `api/connect/Connectors` | GET | Workspace | `X-Connect-Session` | 200 `{connectors: ConnectorSummary[]}` (only those the user may view) |
 | `api/connect/Connectors/{id}/Schema` | GET | Workspace | `X-Connect-Session`, View | 200 `ConnectorSchema` |
 | `api/connect/Connectors/{id}/Query` | POST | Workspace | `X-Connect-Session`, View | 200 `QueryResponse` |
-| `api/connect/Connectors/{id}/Commit` | POST | Workspace | `X-Connect-Session`, Edit | 200 `CommitResponse` |
-| `api/connect/Connectors/{id}/CommitStatus/{commitId}` | GET | Workspace | `X-Connect-Session`, View | 200 |
+| `api/connect/Connectors/{id}/Commit` | POST | Workspace | `X-Connect-Session`, Edit | 200 `CommitResponse` (Phase 7) |
+| `api/connect/Connectors/{id}/CommitStatus/{commitId}` | GET | Workspace | `X-Connect-Session`, View | 200 (Phase 7) |
 
 ```ts
 interface ConnectSession {
-  token: string; expiresAt: string; maxExpiresAt: string;
+  token: string;                    // opaque; only ever sent back as X-Connect-Session
+  expiresAt: string;                // ISO 8601: idle expiry, never past maxExpiresAt
+  maxExpiresAt: string;             // ISO 8601: 10 hours after Redeem
+  linkId: string;                   // the ERP's link id
   company: string; companyName: string;
   user: { id: string; displayName: string };
   language: 'en' | 'ar';
 }
 
 interface ConnectorSummary {
-  id: string;                       // 'vendors', 'customers', 'itemsOnHand', 'salesByMonth'
+  id: string;                       // 'vendors', 'customers', 'itemsOnHand'
   kind: 'entity' | 'report';
   label: { en: string; ar: string };
   schemaVersion: string;            // 'vendors.1'
@@ -302,6 +455,7 @@ interface ConnectorSummary {
 }
 
 interface ConnectorSchema {
+  id: string;
   schemaVersion: string;
   keyField: string; idField: string | null;
   maxPageSize: number; maxRecords: number; maxCommitRecords: number;
@@ -317,31 +471,53 @@ interface ConnectorSchema {
 }
 
 interface QueryRequest {
-  filter: Record<string, unknown>;  // 'search' plus equality on filterable fields
-  parameters?: Record<string, unknown>;
-  fields?: string[];                // a subset; the ERP still decides what the user may see
-  sort?: { field: string; direction: 'asc' | 'desc' }[];
-  afterId: string | null; pageSize: number;
+  filter: { search?: string; equals?: Record<string, string | number | boolean | null> };
+  parameters?: Record<string, unknown>;   // reports
+  fields?: string[];                      // a subset; the ERP still decides what the user may see
+  sort?: { field: string; direction: 'asc' | 'desc' }[];   // at most 3, sortable fields only
+  cursor: string | null;                  // opaque, from the last answer; null for the first page
+  pageSize: number;                       // 1 to maxPageSize
 }
 
 interface QueryResponse {
   records: { id: string; key: string; version: string; values: Record<string, unknown> }[];
-  nextAfterId: string | null; total: number;
+  nextCursor: string | null;              // null on the last page
+  total: number;                          // every match, whatever the cursor
 }
 
-interface CommitRequest {
-  commitId: string;                 // idempotency
+interface CommitRequest {                 // Phase 7
+  commitId: string;
   schemaVersion: string;
-  dryRun: boolean;                  // true is Validate
+  dryRun: boolean;
   records: { id: string; key: string; version: string; changes: Record<string, { from: unknown; to: unknown }> }[];
 }
 ```
 
-Carried over unchanged from `vendors.1`: keyset paging, `Cache-Control: no-store`,
-`X-Correlation-Id` on every response, the same error body and codes (`session.expired`,
-`privilege.denied`, `schema.changed`, `record.conflict`, `record.locked`, `lookup.notFound`,
-`request.invalid`), checks in a fixed order with nothing written when one fails, 409 on a version
-conflict, and one audit row per changed field naming the workspace page it came from.
+Rules:
+
+- `search` matches what the ERP's own list of that entity searches; `equals` names filterable
+  fields only, else 400 `request.invalid`. `fields` names schema fields only; the answer's
+  `values` holds those (every schema field when `fields` is absent) and nothing else.
+- Values on the wire are `vendors.1`'s (decimals as strings, dates `YYYY-MM-DD`, date-times with
+  an offset, empty as `null`, versions as base64).
+- The session's company scopes every answer; another company's records are never returned, and
+  the connector applies the ERP's own record rules for that user, so two users may see different
+  rows and fields.
+- Carried over unchanged from `vendors.1`: `Cache-Control: no-store`, `X-Correlation-Id` on every
+  response, the error body `{message, correlationId, errors: [{id?, key?, field?, code,
+  message}]}`, checks in a fixed order with nothing written when one fails, 409 on a version
+  conflict, one audit row per changed field naming the workspace page it came from (Phase 7).
+- Codes: `ticket.invalid` and `session.expired` (401); `origin.denied`, `privilege.denied` and
+  `link.revoked` (403: the link is revoked or the company no longer has Workspace on);
+  `connector.notFound` (404); `request.invalid`, `schema.changed` (400); `batch.tooLarge` (413);
+  `rate.limited` (429, `Retry-After`); and Phase 7's commit codes.
+- CORS for `api/connect/*` and `WorkspaceLink/Redeem`: Workspace's origins only (live
+  `https://workspace.cashgearerp.com`, the desktop's `tauri://localhost` and
+  `http://tauri.localhost`; development `http://127.0.0.1:5273`, `http://127.0.0.1:4273`,
+  `http://localhost:5273`, `http://localhost:4273`), no credentials; methods `GET, POST`; headers
+  `Content-Type, X-Connect-Session`; exposed `X-Correlation-Id, Retry-After`. Never a redirect.
+- Rate limits per client address, as Track E4's: tickets and redeems together; the session's own
+  Renew and End together.
 
 Requirements this contract meets:
 
@@ -350,7 +526,7 @@ Requirements this contract meets:
 | Tenant isolation | The session is bound to one company; the ERP selects the database and filters by `Company`; another company's records are never returned |
 | Record-level permissions | The connector's query applies the ERP's own rules for that user |
 | Field-level permissions | `Schema` lists only fields the user may see, with `editable` already resolved; `Query` returns only those; `Commit` rejects any other |
-| Audit | Per-field audit rows in the ERP; an `AuditLog` entry in Workspace for each commit attempt, without the values |
+| Audit | Per-field audit rows in the ERP; an `AuditLog` entry in Workspace for each link change, and in Phase 7 each commit attempt, without the values |
 | Conflict detection | Each record's `version`; 409 with the current values |
 | Secure authentication | One-time tickets, opaque sessions stored hashed, origin allow-list, CORS without credentials |
 | Explicit commit | `dryRun` to validate, a review screen listing every change, then commit with a `commitId` |
@@ -358,8 +534,9 @@ Requirements this contract meets:
 ### Level 1: read-only ERP blocks (Phase 5)
 
 - Inserting the block lists connectors from `Connectors`. The user picks one, then fields, a
-  filter and a sort. The block stores `linkId`, `connectorId`, `filter`, `fields`, `sort`,
-  `pageSize`.
+  filter and a sort. The block stores `linkId` (Workspace's `ErpLinks` id), `connectorId`,
+  `filter`, `fields`, `sort`, `pageSize`. A filter is what the person typed or picked (a search
+  text, a lookup's code), never a record.
 - Each reader's own session runs the query. Two people looking at the same block may see
   different rows and columns, and that is correct.
 - The block shows a table with paging, the time it was loaded, and "Refresh".
@@ -386,14 +563,18 @@ Requirements this contract meets:
 | --- | --- | --- |
 | E1 | Generalise the Sheet session into an app session with an audience (`sheet` or `workspace`) and a list of connectors, keeping `vendors.1` working | One session mechanism |
 | E2 | Workspace link: tickets, redeem, the link table, revoke | Linking |
-| E3 | The connect flow in the ERP client: the pop-up page and the deep-link return | A user's session |
-| E4 | Read-only connectors: Vendors (reusing `VendorSheetConnector`), then customers and items on hand, then one report | Level 1 |
+| E3 | The connect flow in the ERP client (`ERPClient_React`): the `workspace-connect` page, its `postMessage` to the opener and the deep-link return; "Link Cash Gear Workspace" and its revoke | A user's session |
+| E4 | Read-only connectors: Vendors (reusing `VendorSheetConnector`), then Customers, then Items on hand (Q16, decisions 2026-11-14); a report later | Level 1 |
 | E5 | Rate limiting on the connect routes; CORS allow-list for Workspace's origins | UnifiedAPI has neither today |
 | E6 | Editable connectors and the audit column naming the workspace page | Level 2 |
 | E7 | The contract test suite against UnifiedAPI | As Sheet does |
 
 Workspace builds against a mock ERP that behaves as this document says, as Sheet's
 `tests/erp-mock` does, so Phase 5 can start before Track E lands.
+
+E1 to E5 are built in their own session in `CashGear` and `ERPClient_React` during Phase 5, to
+those repositories' rules, tested on LocalDB only (decisions, 2026-11-14). The suite in
+`tests/contracts/erp` is E7's starting point: Track E runs it against UnifiedAPI on LocalDB.
 
 ## Plugin blocks (Phase 7)
 

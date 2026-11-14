@@ -855,3 +855,31 @@ M4.7 and the proof:
 | Old builds in the specs | v0.2.0 on port 4279 and v0.3.0 on 4278 (`target/old-build/<tag>`); a visit is the only operation an old build may send | Each released build meets the documents of the one after it |
 | The Arabic check | "CSV" is allowed, as key names are | It is the format's name in both languages |
 | The e2e stack's import limit | `RateLimits__import` 10,000, as `push` | The specs and the bench import through the route |
+
+## 2026-11-14: Phase 5
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Q16. Which ERP connectors follow Vendors | Customers, then items on hand, all read-only, in Track E4 for 0.5.0. Reports wait for a later release |
+| Tracks S3 to S5 and E1 to E5: who builds them, and what must pass before v0.5.0 | Two sessions of their own, started now: one in `cashgear-sheet` for S3 to S5, one in `CashGear` and `ERPClient_React` for E1 to E5, each to its repository's rules. In the ERP: LocalDB only, never the live database, and the person's uncommitted files left alone. Workspace builds against its own mocks meanwhile. v0.5.0 is tagged once the contract suites and the acceptance checks pass against both tracks' real code run locally; the check against the deployed Sheet and an ERP test tenant is a step for you after deployment, recorded in `PROGRESS.md` |
+| Whether a workbook can be shared outside its workspace | No. A workbook's own access list follows the pages' rules: owners and admins `full`, members `edit`, guests nothing unless named; entries by person or for the whole workspace, at the same five levels. A page's share link, and a reader without access to the workbook, see "You don't have access to this workbook", never a picture |
+| Limits | 20 MB for a workbook the embed loads, 5,000 cells in one embedded range, 100 MB for a saved version (Sheet's proposal, 413 `limit.size`). A bigger workbook or range shows its picture and "Open in Cash Gear Sheet" instead of a live view |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Range import and view export | The server reads and writes xlsx with `DocumentFormat.OpenXml` (MIT, Microsoft): import reads a range's stored values and their types (a number in a date format is a date), export writes a view's shown properties as the first version of a new workbook. `sheet-embed.1` carries no cell values | One reader and one writer, on the side that holds every row past 5,000; it needs no Track S4; the embed contract stays small |
+| A workbook's picture | Asked of the live embed (`requestPreview`) and sent by someone who may edit the workbook; one per version, view and theme; PNG only, at most 2 MB and 4,096 px a side; kept as a blob beside the workbook and read by signed URL after the workbook's own check. The device keeps the last one it drew with its date, for offline | A reader cannot change what others are shown; offline shows what was last seen |
+| The picture's key | Workspace's own hash of the resolved view and the theme (`viewHash`), not one the embed computes: `sheet-embed.1`'s `preview` carries the view it drew and the version's ETag instead | Two sides need not agree on a hash; the contract is not shipped yet, so it can still change |
+| Where Sheet is | One origin from the build (`VITE_CGW_SHEET`) for `frame-src`, the frame's address and the message check, and the API's `Sheet__Origin` for launch links; live `https://sheet.cashgearerp.com`, a local API's builds the mock Sheet on `http://127.0.0.1:4283` | As Sheet finds Workspace's API: from the build, never from a link |
+| Where the ERP is | From the build: the ERP's API (`VITE_CGW_ERP_API`, live `https://api.cashgearerp.com`, local builds the mock on `http://127.0.0.1:4282`) and the ERP client's connect page (`VITE_CGW_ERP_CLIENT`, local builds the mock on `http://127.0.0.1:4284`; the live origin is given by Track E). The API's `Erp__ApiBase` is the only base a link may name | No ERP address is ever read from a link, a document or a message |
+| ERP links | Several per workspace (a block names its `linkId`). The browser redeems the ERP's link ticket (`#/erp-link/{ticket}`), then a workspace owner or admin records the link; Workspace's record says where to ask, and the ERP checks its own link on every session. Unlinking here stops Workspace offering it; the ERP's own revoke is in the ERP client | Workspace holds no secret and grants nothing; the ERP stays the check |
+| The ERP session | One per link per tab, in memory only, renewed at most every 5 minutes while the person works in the tab, ended on `pagehide` (`keepalive`) and when the app closes; never in a store, a log, a URL or an error | `INTEGRATIONS.md`, a user's session |
+| The ERP view's query | 50 rows a page by default, the connector's `maxPageSize` at most; at most three sort fields; paged by an opaque `cursor` (an ERP may page by keyset or offset) | A sorted list cannot page by id alone |
+| The desktop's "Open in Cash Gear Sheet" | Sheet's web app in the system browser | Sheet's desktop deep link for Workspace is not built yet (Track S notes) |
+| Workbooks and ERP blocks in a local workspace | The block says to sign in; nothing is made | Both live on servers |
+| Workbooks in search | Not in search; the workbook list filters by name | A workbook's content is not Workspace's to index |
+| A workbook's trash | 60 days, then deleted with its versions and pictures by the worker, as pages | One retention rule |
