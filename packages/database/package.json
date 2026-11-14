@@ -1,6 +1,6 @@
 {
   "name": "@cgw/database",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Database views and cell editors: table, board, list, calendar and gallery, property menus, filter, sort and group editors, the row's properties. Given a DatabaseHost; never saves, loads or calls the network.",

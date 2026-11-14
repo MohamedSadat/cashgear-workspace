@@ -491,7 +491,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
 name = "cgw-desktop"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "cgw-native",
  "cgw-store",
@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "cgw-native"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "apple-native-keyring-store",
  "base64 0.23.1",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "cgw-store"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "rusqlite",
  "serde",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "cgw-webview2-host"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "tao",
  "wry",
@@ -543,7 +543,7 @@ dependencies = [
 
 [[package]]
 name = "cgw-ydoc"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde_json",
  "sha2",

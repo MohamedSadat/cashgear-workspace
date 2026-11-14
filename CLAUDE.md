@@ -3,9 +3,10 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 4 are done (0.4.0: the local-first editor; accounts, sync, sharing, server
-search and history; offline, conflicts, migrations and the Mac app; then workspace databases and
-their views); the next step is Phase 5 (Sheet embeds and read-only ERP blocks). Evidence is in
+Status: Phases 0 to 5 are done (0.5.0: the local-first editor; accounts, sync, sharing, server
+search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
+views; then Sheet workbooks embedded in pages and read-only ERP blocks); the next step is Phase 6
+(collaboration: real-time editing, presence, comments, mentions). Evidence is in
 `docs/PROGRESS.md`; spike results and the decisions they changed are in `docs/DECISIONS.md`.
 
 ## Workflow

@@ -4,6 +4,36 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.5.0] - 2026-11-14
+
+Cash Gear Sheet workbooks in your pages, and read-only Cash Gear ERP data, each person seeing what
+the ERP lets them see.
+
+- **Workbooks.** `/workbook` in a page makes a new workbook or picks one from the workspace. The
+  block shows a picture of the workbook with the date it was taken, then the live sheet, drawn by
+  Cash Gear Sheet in a sealed frame; pick a sheet, a range or a chart, and set its height.
+  "Refresh" shows the newest version; "Open in Cash Gear Sheet" opens it there to edit, and what
+  you save shows in the page.
+- **A workbook's own access.** A workbook belongs to the workspace, not to the page: owners and
+  admins manage it, members edit it, guests see it only when named. Someone who can read the page
+  but not the workbook sees "You don't have access to this workbook", and so does a page shared by
+  link. "Workbooks" in the sidebar lists them: rename, trash and restore, and who may open each.
+- **Offline.** The block keeps the last picture it showed on this device, with its date, so a
+  page with workbooks still reads offline.
+- **Between workbooks and databases.** "Import this range into a database" makes rows from a
+  workbook's range, in a new database or an existing one; "Export to a workbook" on a database
+  view makes a new workbook of its rows, ready to open in Cash Gear Sheet.
+- **Cash Gear ERP.** A workspace owner links the workspace to an ERP company from the ERP
+  ("Link Cash Gear Workspace"). `/erp` in a page shows Vendors, Customers or Items on hand, with
+  the fields, filter, sorts and page size you choose, paged, with the time it was loaded and
+  "Refresh". Each reader connects with their own ERP sign-in, so two people may rightly see
+  different rows, and someone without the ERP's permission is told so and sees none.
+- **Nothing of the ERP is kept.** ERP records are never saved in the page, on your device, in
+  search or in history; they are gone when the page closes. Offline, the block says ERP data needs
+  a connection.
+- **Versions.** Pages edited in 0.5.0 move to document version 4, which 0.4.0 opens read-only with
+  the new blocks as placeholders.
+
 ## [0.4.0] - 2026-11-14
 
 Databases: tables of rows with typed properties, inside pages or as pages of their own, shown as

@@ -1,6 +1,6 @@
 {
   "name": "@cgw/erp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Cash Gear ERP for Workspace (erp-connect.1): the contract's types and a guard for every answer, the client, one in-memory session per link, the connect flows, and the views (the ERP view block, the link screen, the settings section) given a host. Keeps no ERP data and no token anywhere but in memory.",
