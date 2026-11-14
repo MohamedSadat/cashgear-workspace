@@ -157,4 +157,46 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // @cgw/erp calls the ERP and keeps what it answers, and the session's token, in memory only
+    // (INTEGRATIONS.md, "Principles" and "A user's session"): no storage, no store, nothing from
+    // the workspace layer, the API, the shell or the editor, and no console. `fetch` is allowed.
+    files: ['packages/erp/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@cgw/shell', '@cgw/shell/*', '@cgw/web', '@cgw/editor', '@cgw/editor/*'],
+              message: '@cgw/erp does not depend on the shell or the editor.',
+            },
+            stores,
+            {
+              group: ['@cgw/workspace', '@cgw/workspace/*', '@cgw/api', '@cgw/api/*'],
+              message: 'No ERP data reaches the workspace layer, its store or the API.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...['localStorage', 'sessionStorage', 'indexedDB', 'caches'].map((name) => ({
+          name,
+          message: 'ERP answers and session tokens are kept in memory only.',
+        })),
+      ],
+      'no-restricted-properties': [
+        'error',
+        ...['window', 'globalThis', 'self'].flatMap((object) =>
+          ['localStorage', 'sessionStorage', 'indexedDB', 'caches'].map((property) => ({
+            object,
+            property,
+            message: 'ERP answers and session tokens are kept in memory only.',
+          })),
+        ),
+      ],
+      'no-console': ['error'],
+    },
+  },
 );

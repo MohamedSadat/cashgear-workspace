@@ -20,6 +20,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "contract:erp": "vitest run tests/contracts/erp",
     "test:e2e": "playwright test",
     "test:e2e:desktop": "playwright test -c playwright.desktop.config.ts",
     "rust:fmt": "cargo fmt --all --check",

@@ -1,0 +1,18 @@
+{
+  "name": "@cgw/erp",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Cash Gear ERP for Workspace (erp-connect.1): the contract's types and a guard for every answer, the client, one in-memory session per link and the connect flows. Keeps no ERP data and no token anywhere but in memory.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2"
+  }
+}

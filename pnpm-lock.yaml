@@ -436,6 +436,12 @@ importers:
         specifier: 31.0.0
         version: 31.0.0
 
+  packages/erp:
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+
   packages/shell:
     dependencies:
       '@cashgear/ui':
