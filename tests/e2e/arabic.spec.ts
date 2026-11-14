@@ -13,6 +13,7 @@ import {
   insertExistingWorkbook,
   linkWorkspace,
   mockErp,
+  mockSheet,
   newWorkbook,
   sessionOf,
   sheetBlock,
@@ -171,6 +172,9 @@ test('the Arabic interface is right to left, with no English of its own', async 
 test('the Arabic workbook and ERP screens have no English of their own', async ({ page }) => {
   test.skip(desktop || REAL_SHEET || REAL_ERP, 'A browser against the mocks');
   test.setTimeout(240000);
+  // The mocks as they start: an earlier spec's unused faults would fail the live view here.
+  await mockSheet.reset();
+  await mockErp.reset();
   const cloud = signers();
   const errors = watchAppErrors(page);
   const account = await newAccount('Rana');

@@ -339,6 +339,8 @@ test.describe('accessibility of workbooks and ERP data', () => {
           await expect(block).toHaveAttribute('data-state', 'error:source.unavailable', {
             timeout: 30000,
           });
+          // The faults the block did not use would fail the next spec's live views.
+          await mockSheet.reset();
           await expect(block.locator('.cgw-sheet-picture img')).toBeVisible();
           problems.push(...(await axe(page, 'workbook picture')));
 
