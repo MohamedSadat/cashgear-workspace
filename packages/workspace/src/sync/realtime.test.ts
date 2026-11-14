@@ -604,6 +604,61 @@ describe('the hub transport', () => {
     transport.stop();
   });
 
+  it('closes the connection when the network goes, and opens again on its schedule or at once', async () => {
+    const sockets: ReturnType<typeof socket>[] = [];
+    const closed: number[] = [];
+    const timers: number[] = [];
+    let fire: (() => void) | null = null;
+    const transport = new HubTransport({
+      open: async () => {
+        const made = socket();
+        const close = made.s.close;
+        made.s.close = async () => {
+          closed.push(sockets.indexOf(made));
+          await close();
+        };
+        sockets.push(made);
+        return made.s;
+      },
+      setTimer: (fn, ms) => {
+        timers.push(ms);
+        fire = fn;
+        return fn;
+      },
+      clearTimer: () => undefined,
+      random: () => 0,
+    });
+    // Not started: nothing to drop.
+    transport.drop();
+    expect(timers).toEqual([]);
+    transport.start();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(transport.state).toBe('connected');
+    // The window's `offline`: closed now (a socket the browser keeps open is not trusted), and the
+    // next attempt after the backoff.
+    transport.drop();
+    expect(transport.state).toBe('disconnected');
+    expect(closed).toEqual([0]);
+    expect(timers).toEqual([500]);
+    // Closed already: a second drop does nothing.
+    transport.drop();
+    expect(timers).toEqual([500]);
+    fire!();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(transport.state).toBe('connected');
+    expect(sockets).toHaveLength(2);
+    // Dropped again and `online` (retryNow): open at once.
+    transport.drop();
+    transport.retryNow();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(transport.state).toBe('connected');
+    expect(sockets).toHaveLength(3);
+    transport.stop();
+  });
+
   it('turns answers into values or SyncHttpError, and carries bytes as base64', async () => {
     const made = socket();
     const transport = new HubTransport({ open: async () => made.s });
@@ -658,6 +713,36 @@ describe('the hub transport', () => {
     const sent = made.invoked.length;
     transport.awareness('p', null);
     expect(made.invoked.length).toBe(sent);
+  });
+
+  it('says synced when a live push lands while a pass counts what waits', async () => {
+    // A key typed as a pass ends: its live push is acknowledged after the pass counted it as
+    // waiting but before the pass is over. The status must not stay "Syncing" until the next pass
+    // (30 s while connected).
+    const t = await team();
+    const store = t.one.store;
+    const count = store.unsentDocUpdates.bind(store);
+    let reports = 0;
+    let typed: Promise<unknown> | null = null;
+    store.unsentDocUpdates = async (limit: number) => {
+      // The status's count (its cap): the pass's first report, then its last.
+      if (limit !== 5000 || ++reports !== 2) return count(limit);
+      typed = type(t.one, t.a.id, ' late');
+      await typed;
+      const stale = await count(limit);
+      // The live push goes through the hub and is acknowledged meanwhile.
+      await new Promise((r) => setTimeout(r, 50));
+      return stale;
+    };
+    // A pass as the loop runs one (its timers are the test's, and never fire).
+    t.one.engine.start();
+    await t.one.engine.syncNow();
+    expect(typed).not.toBeNull();
+    await t.flush();
+    await settle(t.one.engine);
+    expect(t.server.pushes.at(-1)?.via).toBe('hub');
+    expect(await store.unsentDocUpdates(5000)).toEqual([]);
+    expect(t.one.engine.status.state).toBe('synced');
   });
 
   it('settles a device that typed while connected when its last update is sent', async () => {

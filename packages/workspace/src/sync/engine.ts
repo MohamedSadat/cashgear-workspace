@@ -280,6 +280,11 @@ export class SyncEngine {
   private notBefore = 0;
   /** A pass left work for later: the next comes soon. */
   private backlog = false;
+  /**
+   * A live push finished while a pass ran: the pass may have counted its updates as waiting just
+   * before they were acknowledged, so the status is counted again when the pass ends.
+   */
+  private recount = false;
   private storeChecked = false;
   private status_: SyncStatus = { state: 'signedOut', waiting: 0, lastSynced: null };
   /** Reports started, and the latest one shown: one that finishes after a later one is dropped. */
@@ -600,6 +605,12 @@ export class SyncEngine {
       this.running = false;
       this.current = null;
       this.afterPass();
+      if (this.recount) {
+        this.recount = false;
+        // "Synced" as soon as nothing waits, not at the next pass (30 s while connected).
+        if (!this.liveQueued.size && this.status_.state === 'syncing')
+          void this.report('synced', false);
+      }
     });
     this.current = pass;
     return pass;
@@ -2199,8 +2210,10 @@ export class SyncEngine {
           // Left for a pass (or failed): sent over HTTP soon, as any local change is.
           if (!done) this.soon(SOON);
         }
-        if (done && !this.running && !this.liveQueued.size && this.status_.state === 'syncing')
-          await this.report('synced', false);
+        if (done && !this.liveQueued.size && this.status_.state === 'syncing') {
+          if (this.running) this.recount = true;
+          else await this.report('synced', false);
+        }
       }),
     );
   }

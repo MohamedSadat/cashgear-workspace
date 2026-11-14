@@ -387,6 +387,21 @@ export class HubTransport implements RealtimeTransport {
     if (socket) void socket.close().catch(() => undefined);
   }
 
+  /**
+   * The network went (the window's `offline`): the connection is closed now, not when its
+   * keep-alive runs out (a socket the browser keeps open would carry saves while every other
+   * request fails), and the loop tries again on its schedule, or at once on `retryNow`.
+   */
+  drop() {
+    if (!this.started || this.state_ === 'disconnected') return;
+    this.attempt++;
+    const socket = this.socket;
+    this.socket = null;
+    this.setState('disconnected');
+    if (socket) void socket.close().catch(() => undefined);
+    this.retryLater(0);
+  }
+
   /** Tries again at once if disconnected (the network came back, the window was focused). */
   retryNow() {
     if (!this.started || this.state_ !== 'disconnected') return;
