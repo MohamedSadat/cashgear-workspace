@@ -100,6 +100,27 @@ describe('the mock xlsx writer and reader', () => {
     expect(book.sheets[0]!.cells.get('A4')).toBe('Software & tools');
   });
 
+  it('reads prefixed element names, as the server writes them (<x:workbook>)', async () => {
+    const stored = await xlsx.unzip(fixtures.budgetBook());
+    const decoder = new TextDecoder();
+    const prefixed = [...stored].map(([name, bytes]): [string, string | Uint8Array] =>
+      name.endsWith('.xml') && name.startsWith('xl/')
+        ? [
+            name,
+            decoder
+              .decode(bytes)
+              .replace(/<(\/?)(?!\?)([A-Za-z])/g, '<$1x:$2')
+              .replace(/xmlns="/, 'xmlns:x="'),
+          ]
+        : [name, bytes],
+    );
+    expect(decoder.decode(stored.get('xl/workbook.xml'))).not.toContain('<x:');
+    const book = await xlsx.readXlsx(xlsx.zip(prefixed));
+    expect(book.sheets.map((s) => s.name)).toEqual(['Budget', 'الميزانية', 'Hidden notes']);
+    expect(book.sheets[0]!.cells.get('C3')).toBe(280);
+    expect(book.sheets[0]!.cells.get('A4')).toBe('Software & tools');
+  });
+
   it('refuses what is not a workbook', async () => {
     await expect(xlsx.readXlsx(new TextEncoder().encode('not a zip'))).rejects.toThrow();
     await expect(xlsx.readXlsx(xlsx.zip([['a.txt', 'a']]))).rejects.toThrow();

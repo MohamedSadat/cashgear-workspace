@@ -315,6 +315,12 @@ function resolvePart(base, target) {
   return parts.join('/');
 }
 
+/**
+ * A part's XML with element names' namespace prefixes taken off (`<x:sheet>` reads as `<sheet>`):
+ * writers such as DocumentFormat.OpenXml (the server's view export) prefix SpreadsheetML.
+ */
+const unprefixed = (xml) => xml.replace(/<(\/?)[A-Za-z_][\w.-]*:(?=[A-Za-z_])/g, '<$1');
+
 function relationships(files, part) {
   const at = part.split('/');
   const name = at.pop();
@@ -322,7 +328,7 @@ function relationships(files, part) {
   const xml = files.get(path);
   const out = new Map();
   if (!xml) return out;
-  for (const [, body] of decoder.decode(xml).matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+  for (const [, body] of unprefixed(decoder.decode(xml)).matchAll(/<Relationship\b([^>]*)\/?>/g)) {
     const a = attributes(body);
     out.set(a.Id, { type: a.Type ?? '', target: resolvePart(part, a.Target ?? '') });
   }
@@ -338,7 +344,7 @@ export async function readXlsx(bytes) {
   const text = (path) => {
     const data = files.get(path);
     if (!data) throw new Error(`missing ${path}`);
-    return decoder.decode(data);
+    return unprefixed(decoder.decode(data));
   };
   const office = [...relationships(files, '').values()].find((r) =>
     r.type.endsWith('/officeDocument'),
