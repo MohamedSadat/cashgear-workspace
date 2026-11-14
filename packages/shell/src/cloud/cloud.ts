@@ -7,6 +7,12 @@
 // server cannot be reached at start), what is kept offline (offline.ts), recovered pages
 // (recovery.ts), pages this device does not hold fetched when opened, and what an open document
 // reports (a move conflict, updates still pending).
+//
+// Phase 6: the hub's connection (realtime.ts) while someone is signed in: the engine syncs through
+// it beside HTTP, the page on screen is joined (`engine.live`), its saves go out at once
+// (`engine.saved`) and are batched short (`PageDocument.setLive`) while it is joined and
+// connected; presence listens to `realtime` itself. Comments and notifications from the feed are
+// told to `onComments` and `onNotifications`.
 import type { DocEvent, DocJSON } from '@cgw/doc';
 import { NetworkError, createApi, getSigned, type ApiClient } from '@cgw/api';
 import {
@@ -16,6 +22,7 @@ import {
   httpSyncApi,
   type Account,
   type DocCodec,
+  type HubTransport,
   type Id,
   type SyncApi,
   type SyncEvent,
@@ -25,6 +32,7 @@ import type { DatabaseSync } from '../database/host';
 import type { CloudPlatform } from '../platform';
 import { NotOnDeviceError, type RemoteSearchHit, type WorkspaceSession } from '../session';
 import { OfflineState } from './offline';
+import { createRealtime } from './realtime';
 import { Recovery } from './recovery';
 
 export type CloudNotice = {
@@ -39,6 +47,8 @@ export type CloudNotice = {
 export interface CloudOptions {
   /** A recovered page's title from the original's, in the interface language. */
   recoveredTitle?: (title: string) => string;
+  /** The hub's transport (tests give their own); the app's SignalR one otherwise. */
+  realtime?: (api: ApiClient) => HubTransport;
 }
 
 /** How long the first "who is signed in" may take before the app goes on as offline. */
@@ -71,7 +81,17 @@ export class Cloud {
   readonly engine: SyncEngine;
   readonly offline: OfflineState;
   readonly recovery: Recovery;
+  /**
+   * The hub's connection (Phase 6): connected while someone is signed in and the server can be
+   * reached. Presence listens to its `awareness` and `pagePresence` events and sends its own
+   * `awareness` for a page once `onJoined` says the page is joined.
+   */
+  readonly realtime: HubTransport;
   private account_: Account | null = null;
+  /** The page on screen, joined on the hub while connected. */
+  private livePage: Id | null = null;
+  private readonly commentListeners = new Set<(workspaceId: Id, pageId: Id) => void>();
+  private readonly notificationListeners = new Set<(workspaceId: Id) => void>();
   private checked = false;
   /** The server said who is signed in, this session (else the account is the cached one). */
   private verified = false;
@@ -101,12 +121,24 @@ export class Cloud {
     this.sync = httpSyncApi(this.api);
     this.engine = new SyncEngine(session.store, this.sync, codec);
     this.offEngine = this.engine.on((event) => this.onEngine(event));
+    this.realtime = (options.realtime ?? createRealtime)(this.api);
+    this.engine.setRealtime(this.realtime);
+    this.cleanups.push(
+      () => this.realtime.stop(),
+      () => this.engine.setRealtime(null),
+      // Short save batches only while the page on screen is joined and the hub connected.
+      this.engine.onJoined((pageId) => {
+        if (pageId === this.livePage) this.applyLive();
+      }),
+      this.realtime.on('state', () => this.applyLive()),
+    );
     // A 401 pauses the engine (the session ended elsewhere): the app is signed out until the
     // person signs in again; nothing local is touched, and the status counts what waits.
     this.cleanups.push(
       this.engine.onStatus((status) => {
         if (status.state === 'signedOut' && this.account_ && !this.engine.signedIn) {
           this.account_ = null;
+          this.followAccount();
           this.emit();
         }
         // Started offline with the cached account, and the server answers now: who is signed in
@@ -128,6 +160,8 @@ export class Cloud {
       },
       fetchMissing: (pageId) => this.fetchMissing(pageId),
       docEvent: (event) => this.onDocEvent(event),
+      live: (pageId, open) => this.onLive(pageId, open),
+      saved: (pageId) => this.engine.saved(pageId),
     });
     this.session.remoteAssets = (assetId) => this.fetchAsset(assetId);
     this.session.remotePreview = (url) => this.preview(url);
@@ -166,6 +200,55 @@ export class Cloud {
     return () => void this.noticeListeners.delete(listener);
   }
 
+  /** The feed said a page's comments changed (an open comments list reads them again). */
+  onComments(listener: (workspaceId: Id, pageId: Id) => void): () => void {
+    this.commentListeners.add(listener);
+    return () => void this.commentListeners.delete(listener);
+  }
+
+  /** The feed said this person's notifications changed (the inbox reads them again). */
+  onNotifications(listener: (workspaceId: Id) => void): () => void {
+    this.notificationListeners.add(listener);
+    return () => void this.notificationListeners.delete(listener);
+  }
+
+  /**
+   * A page joined on the hub (presence may be sent for it from then on), or no longer; returns
+   * its off.
+   */
+  onJoined(listener: (pageId: Id, joined: boolean) => void): () => void {
+    return this.engine.onJoined(listener);
+  }
+
+  /** The hub's connection runs while someone is signed in, and stops when no one is. */
+  private followAccount() {
+    if (this.account_) this.realtime.start();
+    else this.realtime.stop();
+  }
+
+  /** The page on screen changed: it is joined on the hub (when connected), the last one left. */
+  private onLive(pageId: Id, open: boolean) {
+    if (open) this.livePage = pageId;
+    else if (this.livePage === pageId) this.livePage = null;
+    this.engine.live(pageId, open);
+    // A page no longer on screen goes back to the usual save batches.
+    if (!open) this.setDocLive(pageId, false);
+    else this.applyLive();
+  }
+
+  /** The page on screen saves in short batches while it is joined and the hub is connected. */
+  private applyLive() {
+    const pageId = this.livePage;
+    if (pageId) this.setDocLive(pageId, this.engine.isJoined(pageId));
+  }
+
+  private setDocLive(pageId: Id, live: boolean) {
+    void this.session
+      .openDocument(pageId)
+      ?.then((doc) => doc.setLive(live))
+      .catch(() => undefined);
+  }
+
   private emit() {
     for (const listener of this.listeners) listener();
   }
@@ -202,6 +285,12 @@ export class Cloud {
       case 'offline':
         this.offline.changed(event.workspaceId);
         break;
+      case 'comments':
+        for (const listener of this.commentListeners) listener(event.workspaceId, event.pageId);
+        break;
+      case 'notifications':
+        for (const listener of this.notificationListeners) listener(event.workspaceId);
+        break;
     }
   }
 
@@ -236,7 +325,11 @@ export class Cloud {
     await Promise.race([this.refreshAccount(), this.firstCheck]);
     this.engine.start();
     // Back online after a start without the server: who is signed in is asked again first.
-    const kick = () => (this.verified ? this.engine.kick(0) : void this.refreshAccount());
+    const kick = () => {
+      // The hub's loop tries again at once too (the network is back, the window has focus).
+      this.realtime.retryNow();
+      return this.verified ? this.engine.kick(0) : void this.refreshAccount();
+    };
     const visible = () => document.visibilityState === 'visible' && kick();
     window.addEventListener('online', kick);
     window.addEventListener('focus', kick);
@@ -279,6 +372,7 @@ export class Cloud {
       this.checked = true;
       this.api.resetCsrf();
       this.engine.setAccount(account);
+      this.followAccount();
       this.emit();
       return account;
     } catch (error) {
@@ -300,6 +394,7 @@ export class Cloud {
       this.usingCached = true;
       this.account_ = cached;
       if (cached) this.engine.setAccount(cached, { offline: true });
+      this.followAccount();
     }
     this.checked = true;
     this.firstCheckDone();
@@ -377,6 +472,7 @@ export class Cloud {
       this.verified = true;
       this.usingCached = false;
       this.engine.setAccount(null);
+      this.followAccount();
       this.api.resetCsrf();
       this.emit();
     }

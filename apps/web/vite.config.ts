@@ -12,13 +12,16 @@ const { version } = JSON.parse(
 // The API this build talks to (src/platform/web.ts reads the same variable), and so the
 // Content Security Policy it is served with (ARCHITECTURE.md, Security): scripts and styles from
 // the app itself, images from it or made in it (assets arrive as bytes by signed URL), network
-// only to the API, Blob Storage and Cash Gear ERP's API, frames only from Sheet, no plugins, no
+// only to the API (and its real-time hub, a WebSocket on the API's own host: `ws:`/`wss:`), Blob
+// Storage and Cash Gear ERP's API, frames only from Sheet, no plugins, no
 // forms; no Cross-Origin-Opener-Policy (the ERP's connect pop-up posts to its opener); workers, the
 // service worker among them, only from the app itself. `vite preview` sends the same header, so
 // every e2e run is under the policy that ships; the production build writes it into
 // staticwebapp.config.json for Azure Static Web Apps (docs/OPERATIONS.md).
 const api = process.env.VITE_CGW_API ?? 'http://127.0.0.1:5280';
 const local = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(api);
+// The hub's origin (Phase 6): the API's, as a WebSocket (`http:` to `ws:`, `https:` to `wss:`).
+const apiSocket = api.replace(/^http/, 'ws');
 const blob = local ? 'http://127.0.0.1:10000' : 'https://*.blob.core.windows.net';
 // Cash Gear Sheet's one origin (`VITE_CGW_SHEET`, src/platform/sheet.ts reads the same): the
 // embed's frame and nothing else; a build against a local API frames the mock Sheet.
@@ -36,7 +39,7 @@ const csp = [
   // Tiptap adds its own small stylesheet at run time.
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  `connect-src 'self' ${api} ${blob} ${erpApi}`,
+  `connect-src 'self' ${api} ${apiSocket} ${blob} ${erpApi}`,
   `frame-src ${sheet}`,
   "object-src 'none'",
   "base-uri 'self'",

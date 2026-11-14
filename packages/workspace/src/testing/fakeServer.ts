@@ -31,6 +31,7 @@ import {
   type Account,
   type DocCodec,
   type DocPull,
+  type DocPushRequest,
   type ServerChange,
   type SyncApi,
 } from '../sync/api';
@@ -82,9 +83,20 @@ interface DocRow {
   updateId: Id;
   data: Uint8Array;
   userId: Id;
+  /** The worker refused it (`refuse`): never served; its pusher's pulls list it. */
+  refused?: boolean;
+}
+
+/** A document push as the server takes it, over HTTP or through the hub. */
+export interface ServerPush {
+  pageId: Id;
+  count: number;
+  bytes: number;
+  via: 'http' | 'hub';
 }
 
 interface ServerDoc {
+  pageId: Id;
   epoch: number;
   schemaVersion: number;
   rows: DocRow[];
@@ -140,10 +152,33 @@ export class FakeServer {
   private readonly throttled = new Map<Kind, { status: number; retryAfterMs: number }>();
   private readonly expired = new Set<Id>();
   calls: string[] = [];
-  /** Every document push that reached the server: page, how many updates, how many bytes. */
-  pushes: { pageId: Id; count: number; bytes: number }[] = [];
+  /** Every document push that reached the server: page, how many updates, how many bytes, how. */
+  pushes: ServerPush[] = [];
+  /** What the worker refuses (Q20): set by `refuse`. */
+  private refusing: ((update: { pageId: Id; updateId: Id; data: Uint8Array }) => boolean) | null =
+    null;
+  /** Told after anything the server's feed or documents hold changed (the testing hub relays). */
+  private readonly changeListeners = new Set<() => void>();
 
   constructor(private readonly options: FakeServerOptions = {}) {}
+
+  /** Told whenever the feed or a document moves on; returns its off. */
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => void this.changeListeners.delete(listener);
+  }
+
+  private changedNow() {
+    for (const listener of this.changeListeners) listener();
+  }
+
+  /**
+   * The worker refuses the updates this matches from now on (or none, with null): they are never
+   * served (pulls and the hub's frames leave them out) and their pusher finds them in `rejected`.
+   */
+  refuse(test: ((update: { pageId: Id; updateId: Id; data: Uint8Array }) => boolean) | null) {
+    this.refusing = test;
+  }
 
   // Faults ---------------------------------------------------------------------------------------
 
@@ -212,6 +247,17 @@ export class FakeServer {
   ) {
     const type = entityType === 'page' && space.kinds.get(entityId) === 'row' ? 'row' : entityType;
     space.changes.push({ seq: ++space.seq, entityType: type, entityId, kind, userId });
+    this.changedNow();
+  }
+
+  /** A page's comments changed (a thread or a comment written): a `comments` change. */
+  commentsChanged(workspaceId: Id, pageId: Id) {
+    this.change(this.spaces.get(workspaceId)!, 'comments', pageId);
+  }
+
+  /** A notification for a person was made or read: a `notification` change only they see. */
+  notified(workspaceId: Id, userId: Id, notificationId: Id = uuidv7()) {
+    this.change(this.spaces.get(workspaceId)!, 'notification', notificationId, 'upsert', userId);
   }
 
   /** Whether the account may see a page; a row is seen as its database is. */
@@ -463,13 +509,15 @@ export class FakeServer {
 
   private docOf(pageId: Id): ServerDoc {
     let doc = this.docs.get(pageId);
-    if (!doc) this.docs.set(pageId, (doc = { epoch: 0, schemaVersion: 1, rows: [] }));
+    if (!doc) this.docs.set(pageId, (doc = { pageId, epoch: 0, schemaVersion: 1, rows: [] }));
     return doc;
   }
 
-  /** Everything the server holds of a page's document, in sequence order. */
+  /** Everything the server holds of a page's document (what it serves), in sequence order. */
   docParts(pageId: Id): Uint8Array[] {
-    return (this.docs.get(pageId)?.rows ?? []).map((r) => new Uint8Array(r.data));
+    return (this.docs.get(pageId)?.rows ?? [])
+      .filter((r) => !r.refused)
+      .map((r) => new Uint8Array(r.data));
   }
 
   /** A page route's checks: 410 for a page deleted for good, 404 for one the caller cannot see. */
@@ -480,6 +528,94 @@ export class FakeServer {
       throw new SyncHttpError(404, 'not.found');
     if (edit && space.readers.has(account.id)) throw new SyncHttpError(403, 'access.denied');
     return { space, doc: this.docOf(pageId) };
+  }
+
+  /** A document push, whichever way it came: the same checks and the same sequence (DocService). */
+  private pushDocAs(
+    account: Account,
+    pageId: Id,
+    request: DocPushRequest,
+    via: 'http' | 'hub',
+  ): { acks: { updateId: Id; seq: number }[]; headSeq: number } {
+    const { space, doc } = this.pageGate(account, pageId, true);
+    this.pushes.push({
+      pageId,
+      count: request.updates.length,
+      bytes: request.updates.reduce((n, u) => n + u.data.byteLength, 0),
+      via,
+    });
+    const acks = this.store(account, doc, request, request.updates);
+    this.change(space, 'page', pageId);
+    return { acks, headSeq: doc.rows.at(-1)?.seq ?? 0 };
+  }
+
+  // What the testing hub asks of the server (testing/fakeHub.ts) ----------------------------------
+
+  /** Whether the account's session ended (`expire`): its tickets are refused too. */
+  isExpired(accountId: Id): boolean {
+    return this.expired.has(accountId);
+  }
+
+  /** Whether the account is a member of the workspace. */
+  isMember(account: Account, workspaceId: Id): boolean {
+    return !!this.spaces.get(workspaceId)?.members.has(account.id);
+  }
+
+  /** Whether the account may read the page (a member who sees it; not deleted for good). */
+  canRead(account: Account, pageId: Id): boolean {
+    if (this.gone.has(pageId)) return false;
+    const space = this.spaceOfPage(pageId);
+    return !!space && space.members.has(account.id) && this.visible(account, pageId);
+  }
+
+  /** The workspace a page is in, if any. */
+  workspaceOf(pageId: Id): Id | undefined {
+    const space = this.spaceOfPage(pageId);
+    return space ? [...space.mirror.workspaces.keys()][0] : undefined;
+  }
+
+  /** A workspace's feed head. */
+  feedHead(workspaceId: Id): number {
+    return this.spaces.get(workspaceId)?.seq ?? 0;
+  }
+
+  /** A page's document head and epoch, or null when it is deleted for good. */
+  docHead(pageId: Id): { epoch: number; head: number } | null {
+    if (this.gone.has(pageId)) return null;
+    const doc = this.docs.get(pageId);
+    return { epoch: doc?.epoch ?? 0, head: doc?.rows.at(-1)?.seq ?? 0 };
+  }
+
+  /** The rows in (after, upTo]: those served, and the ids of those refused (everyone's). */
+  docRange(pageId: Id, after: number, upTo: number) {
+    const rows = (this.docs.get(pageId)?.rows ?? []).filter((r) => r.seq > after && r.seq <= upTo);
+    return {
+      updates: rows
+        .filter((r) => !r.refused)
+        .map((r) => ({ seq: r.seq, updateId: r.updateId, data: new Uint8Array(r.data) })),
+      rejected: rows.filter((r) => r.refused).map((r) => r.updateId),
+    };
+  }
+
+  /** `JoinPage`'s checks and answer: as a pull's (404, 410), with the caller's level. */
+  hubJoinPage(account: Account, pageId: Id) {
+    const { space, doc } = this.pageGate(account, pageId, false);
+    const page = space.mirror.pages.get(pageId) ?? space.mirror.rowRecords.get(pageId);
+    const level = space.readers.has(account.id) ? 'view' : (page?.access ?? 'full');
+    return {
+      workspaceId: page?.workspaceId ?? this.workspaceOf(pageId)!,
+      epoch: doc.epoch,
+      headSeq: doc.rows.at(-1)?.seq ?? 0,
+      schemaVersion: doc.schemaVersion,
+      level: level === 'none' ? 'view' : level,
+    };
+  }
+
+  /** `PushUpdates`: exactly the HTTP push (the hub's own limits are the hub's). */
+  hubPush(account: Account, pageId: Id, request: DocPushRequest) {
+    this.calls.push('hub.pushDoc');
+    if (this.expired.has(account.id)) throw new SyncHttpError(401, 'auth.required');
+    return this.pushDocAs(account, pageId, request, 'hub');
   }
 
   private store(
@@ -505,12 +641,15 @@ export class FakeServer {
         updateId: u.updateId,
         data: new Uint8Array(u.data),
         userId: account.id,
+        ...(this.refusing?.({ pageId: doc.pageId, updateId: u.updateId, data: u.data })
+          ? { refused: true }
+          : {}),
       });
       return { updateId: u.updateId, seq };
     });
   }
 
-  private pull(doc: ServerDoc, after: number): DocPull {
+  private pull(doc: ServerDoc, after: number, account: Account): DocPull {
     const rows = doc.rows.filter((r) => r.seq > after);
     const more = rows.length > MAX_PULL;
     const sent = rows.slice(0, MAX_PULL);
@@ -522,12 +661,15 @@ export class FakeServer {
       cursor: more ? sent.at(-1)!.seq : head,
       more,
       snapshot: null,
-      updates: sent.map((r) => ({
-        seq: r.seq,
-        updateId: r.updateId,
-        data: new Uint8Array(r.data),
-      })),
-      rejected: [],
+      updates: sent
+        .filter((r) => !r.refused)
+        .map((r) => ({
+          seq: r.seq,
+          updateId: r.updateId,
+          data: new Uint8Array(r.data),
+        })),
+      // The caller's own refused updates in the range.
+      rejected: sent.filter((r) => r.refused && r.userId === account.id).map((r) => r.updateId),
     };
   }
 
@@ -872,9 +1014,13 @@ export class FakeServer {
         this.gate('changes', account);
         const space = this.space(account, workspaceId);
         if (after < space.prunedSeq) throw new SyncHttpError(410, 'feed.expired');
-        const rows = space.changes
+        const read = space.changes
           .filter((c) => c.seq > after && (!c.userId || c.userId === account.id))
           .slice(0, limit);
+        // A page's comments are told only to whoever can read the page.
+        const rows = read.filter(
+          (c) => c.entityType !== 'comments' || this.visible(account, c.entityId),
+        );
         const m = space.mirror;
         const changes = rows.map((row): ServerChange => {
           switch (row.entityType) {
@@ -1006,6 +1152,22 @@ export class FakeServer {
                     entity: null,
                   };
             }
+            case 'comments':
+              return {
+                seq: row.seq,
+                entityType: 'comments',
+                entityId: row.entityId,
+                kind: 'upsert',
+                entity: null,
+              };
+            case 'notification':
+              return {
+                seq: row.seq,
+                entityType: 'notification',
+                entityId: row.entityId,
+                kind: 'upsert',
+                entity: null,
+              };
             default:
               return {
                 seq: row.seq,
@@ -1016,7 +1178,7 @@ export class FakeServer {
               };
           }
         });
-        const cursor = rows.at(-1)?.seq ?? Math.max(after, space.seq);
+        const cursor = read.at(-1)?.seq ?? Math.max(after, space.seq);
         return this.answer('changes', {
           changes,
           cursor,
@@ -1098,20 +1260,12 @@ export class FakeServer {
       },
       pushDoc: async (pageId, request) => {
         this.gate('pushDoc', account);
-        const { space, doc } = this.pageGate(account, pageId, true);
-        this.pushes.push({
-          pageId,
-          count: request.updates.length,
-          bytes: request.updates.reduce((n, u) => n + u.data.byteLength, 0),
-        });
-        const acks = this.store(account, doc, request, request.updates);
-        this.change(space, 'page', pageId);
-        return this.answer('pushDoc', { acks, headSeq: doc.rows.at(-1)?.seq ?? 0 });
+        return this.answer('pushDoc', this.pushDocAs(account, pageId, request, 'http'));
       },
       pullDoc: async (pageId, after) => {
         this.gate('pullDoc', account);
         const { doc } = this.pageGate(account, pageId, false);
-        return this.answer('pullDoc', this.pull(doc, after));
+        return this.answer('pullDoc', this.pull(doc, after, account));
       },
       docStateHash: async (pageId) => {
         this.gate('docStateHash', account);
@@ -1119,7 +1273,7 @@ export class FakeServer {
         const codec = this.options.codec;
         const hash =
           codec && !this.hashPending.has(pageId)
-            ? await codec.stateHash(doc.rows.map((r) => r.data))
+            ? await codec.stateHash(doc.rows.filter((r) => !r.refused).map((r) => r.data))
             : null;
         return this.answer('docStateHash', {
           epoch: doc.epoch,
@@ -1135,7 +1289,7 @@ export class FakeServer {
           [ack] = this.store(account, doc, request, [request.update]);
           this.change(space, 'page', pageId);
         } else if (request.epoch !== doc.epoch) throw new SyncHttpError(409, 'doc.epochMismatch');
-        return this.answer('repairDoc', { ack, pull: this.pull(doc, 0) });
+        return this.answer('repairDoc', { ack, pull: this.pull(doc, 0, account) });
       },
       fetchBytes: async (url) => {
         this.gate('fetchBytes', account);

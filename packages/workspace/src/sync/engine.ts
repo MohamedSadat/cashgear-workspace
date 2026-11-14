@@ -20,6 +20,14 @@
 // again. Nothing waiting is ever discarded: what the server will not take is set aside (the
 // store's quarantine, which the shell makes recovered pages of) or kept in the corrupt area, and
 // the user is told.
+//
+// Phase 6 (real time, `realtime.1`): with a hub connection open (`setRealtime`), the followed
+// workspaces' feeds say when they move (a pass then, so the periodic one slows to 30 s), the pages
+// the shell has open (`live`) are joined, a save of one (`saved`) goes through the hub at once, and
+// the hub's frames bring others' validated updates as they land: a frame that continues from this
+// device's cursor is taken as a pull's answer would be; a gap, another epoch or an incomplete one
+// makes the page pull over HTTP. A page's pushes, through the hub or in a pass, never overlap, nor
+// do its pulls and frames. With the connection gone or never made, the engine is Phase 3's.
 import { LOCAL_ROW_LIMIT, type DatabaseRecord } from '../db/types';
 import { uuidv7, type Id } from '../ids';
 import { uploadOps } from '../remote';
@@ -53,6 +61,15 @@ import {
   type ServerTree,
   type SyncApi,
 } from './api';
+import {
+  REALTIME_LIMITS,
+  type AccessRevoked,
+  type ChangesAvailable,
+  type JoinedPage,
+  type RealtimeState,
+  type RealtimeTransport,
+  type RelayFrame,
+} from './realtime';
 
 export type SyncState = 'localOnly' | 'signedOut' | 'offline' | 'syncing' | 'synced' | 'error';
 
@@ -79,7 +96,11 @@ export type SyncEvent =
   /** Pins or the pages held here changed: redraw what is available offline. */
   | { kind: 'offline'; workspaceId: Id }
   /** Rows of a database changed here, or its hold did (a fetch moved on): read them again. */
-  | { kind: 'rows'; workspaceId: Id; databaseId: Id };
+  | { kind: 'rows'; workspaceId: Id; databaseId: Id }
+  /** Phase 6: the feed said a page's comments changed; an open comments list reads them again. */
+  | { kind: 'comments'; workspaceId: Id; pageId: Id }
+  /** Phase 6: the person's inbox changed (a notification made or read). */
+  | { kind: 'notifications'; workspaceId: Id };
 
 /** How much of a database this device keeps (`holdProgress`). */
 export interface HoldProgress {
@@ -96,6 +117,8 @@ export interface HoldProgress {
 export interface SyncOptions {
   /** How often a pass runs while nothing else triggers one. */
   intervalMs?: number;
+  /** The same while the hub's connection is open (its feed news runs passes): 30 s. */
+  liveIntervalMs?: number;
   /** For tests. */
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -155,6 +178,29 @@ const WAITING_CAP = 5000;
 /** Rows a request of a database's rows asks for, and such requests a pass makes. */
 const ROWS_PAGE = 1000;
 const ROWS_REQUESTS = 4;
+
+/** The periodic pass while the hub's connection is open. */
+const LIVE_INTERVAL = 30_000;
+/**
+ * A pass the hub's news runs (a feed that moved, access lost) comes no sooner after the last: while
+ * others type, every push moves the feed, and a device reads it at most once a second (Phase 3
+ * polled every 1.5 s); a rename still shows within a second.
+ */
+const WAKE_SPACING = 1000;
+/** What one push through the hub carries: a batch the hub takes; anything more goes over HTTP. */
+const LIVE_LIMITS = {
+  updates: REALTIME_LIMITS.pushUpdates,
+  bytes: REALTIME_LIMITS.pushBytes,
+  alone: REALTIME_LIMITS.pushBytes,
+};
+/** Refusals of a push through the hub that mean what the same refusal over HTTP means. */
+const LIVE_REFUSALS = new Set([
+  'doc.epochMismatch',
+  'access.denied',
+  'not.found',
+  'page.gone',
+  'client.tooOld',
+]);
 
 /** Operations that change a page's whole subtree. */
 const SUBTREE_OPS = new Set(['page.move', 'page.trash', 'page.restore', 'page.delete']);
@@ -275,6 +321,30 @@ export class SyncEngine {
    */
   private readonly later = new Map<string, Later>();
 
+  // Real time (Phase 6) ------------------------------------------------------------------------------
+  private realtime: RealtimeTransport | null = null;
+  private offRealtime: (() => void)[] = [];
+  /** Bumped whenever the hub's connection (or the account) changes: older answers are dropped. */
+  private connection = 0;
+  /** Pages the shell has open, and those of them joined on this connection. */
+  private readonly livePages = new Set<Id>();
+  private readonly joined = new Map<Id, JoinedPage>();
+  private readonly joining = new Set<Id>();
+  /** The workspaces followed on this connection, as a key (sorted ids). */
+  private followed = '';
+  /** Each page's chain: its pushes (live or a pass's), pulls and frames run one at a time. */
+  private readonly pageChains = new Map<Id, Promise<void>>();
+  /** Pages with a live push waiting to start: saves meanwhile ride on it. */
+  private readonly liveQueued = new Set<Id>();
+  /** Updates sent through the hub since this pass began (a pass that read them skips them). */
+  private readonly sentLive = new Set<Id>();
+  /** No push through the hub before this (it asked to be left alone), wall clock. */
+  private liveNotBefore = 0;
+  private readonly joinListeners = new Set<(pageId: Id, joined: boolean) => void>();
+  /** Work outside passes (frames, live pushes, joins): `idle` waits for it too. */
+  private readonly background = new Set<Promise<void>>();
+  private lastPassAt = 0;
+
   constructor(
     private readonly store: LocalStore,
     private readonly api: SyncApi,
@@ -319,6 +389,9 @@ export class SyncEngine {
     void this.store
       .setPref(ACCOUNT_PREF, kept)
       .catch((error: unknown) => console.warn('Could not keep the account:', error));
+    // What was joined was this account's: joined again as the new one (or not at all).
+    this.dropJoins();
+    if (account && this.connected) this.track(this.rejoin(this.connection));
     if (account) {
       this.failures = 0;
       if (options.offline) void this.report('offline');
@@ -354,6 +427,12 @@ export class SyncEngine {
    * (offline: the network's return kicks it).
    */
   changed() {
+    this.waitingOne();
+    if (this.failures === 0) this.kick();
+  }
+
+  /** One more change waits: the status says so at once. */
+  private waitingOne() {
     const state = this.status_.state;
     if (state === 'synced' || state === 'offline' || (state === 'signedOut' && this.known)) {
       this.status_ = {
@@ -363,7 +442,6 @@ export class SyncEngine {
       };
       for (const listener of this.statusListeners) listener(this.status_);
     }
-    if (this.failures === 0) this.kick();
   }
 
   /**
@@ -376,9 +454,26 @@ export class SyncEngine {
     await this.run();
   }
 
-  /** Resolves when no pass is running. */
+  /** Resolves when no pass is running and nothing else is under way (frames, live pushes, joins). */
   async idle(): Promise<void> {
-    while (this.current) await this.current;
+    for (;;) {
+      while (this.current) await this.current;
+      if (!this.background.size) return;
+      await Promise.allSettled([...this.background]);
+    }
+  }
+
+  /** Keeps work outside passes where `idle` sees it; what fails is logged, never thrown. */
+  private track(work: Promise<unknown>) {
+    const done: Promise<void> = work.then(
+      () => undefined,
+      (error: unknown) => {
+        if (!(error instanceof OfflineError) && !(error instanceof SyncHttpError))
+          console.warn('Real-time sync failed:', error);
+      },
+    );
+    this.background.add(done);
+    void done.then(() => this.background.delete(done));
   }
 
   /**
@@ -392,6 +487,20 @@ export class SyncEngine {
       return;
     }
     this.schedule(delayMs);
+  }
+
+  /**
+   * A pass within `delayMs`, never later than one already due (a stream of news must not keep
+   * putting it off), and not while the loop backs off.
+   */
+  private soon(delayMs: number) {
+    if (this.stopped || this.failures) return;
+    if (this.running) {
+      this.again = true;
+      return;
+    }
+    const at = Math.max(this.now() + delayMs, this.notBefore);
+    if (this.timer === null || this.due > at) this.schedule(delayMs);
   }
 
   on(listener: (event: SyncEvent) => void): () => void {
@@ -450,7 +559,8 @@ export class SyncEngine {
     else this.arm(now);
   }
 
-  private async report(state: SyncState) {
+  /** The status, counted from the store; `pass` false: not the end of a pass (`lastSynced` stays). */
+  private async report(state: SyncState, pass = true) {
     // Reports read the store, so they can finish out of order: the sign-out a start begins with
     // must not land after the sign-in that follows it and say "Signed out" while signed in.
     const order = ++this.reportsStarted;
@@ -475,7 +585,7 @@ export class SyncEngine {
       // A pass that ends with changes waiting (made while it ran) has not synced them.
       state: state === 'synced' && waiting > 0 ? 'syncing' : state,
       waiting,
-      lastSynced: state === 'synced' ? this.iso() : this.status_.lastSynced,
+      lastSynced: state === 'synced' && pass ? this.iso() : this.status_.lastSynced,
     };
     for (const listener of this.statusListeners) listener(this.status_);
   }
@@ -485,6 +595,7 @@ export class SyncEngine {
     this.running = true;
     this.again = false;
     this.backlog = false;
+    this.lastPassAt = this.now();
     const pass = this.runPass().finally(() => {
       this.running = false;
       this.current = null;
@@ -515,12 +626,17 @@ export class SyncEngine {
       }
       if (!(error instanceof OfflineError) && !(error instanceof SyncHttpError))
         console.warn('Sync failed:', error);
+      // The hub may answer while HTTP did not: what it should follow and join still is.
+      if (this.connected && this.account) this.track(this.afterPassLive(this.connection));
     }
   }
 
   private afterPass() {
     if (this.stopped) return;
-    const base = this.options.intervalMs ?? 1500;
+    // While the hub's connection is open its news runs passes; the timer is only a safety net.
+    const base = this.connected
+      ? (this.options.liveIntervalMs ?? LIVE_INTERVAL)
+      : (this.options.intervalMs ?? 1500);
     const delay = this.failures
       ? Math.max(
           this.retryAfter,
@@ -556,6 +672,9 @@ export class SyncEngine {
     let held = await this.syncedWorkspaces(account);
     this.mine = new Set(held.map((w) => w.id));
     this.rowRequests = 0;
+    // Whatever went through the hub before now is marked sent in the store, so this pass's reads
+    // leave it out; what goes through it during the pass is kept here to be left out too.
+    this.sentLive.clear();
     await this.report(this.status_.state === 'offline' ? 'offline' : 'syncing');
     if (!this.seen) this.seen = new Set((await this.store.quarantine(null)).map((e) => e.id));
     try {
@@ -609,6 +728,9 @@ export class SyncEngine {
       );
     }
     await this.report('synced');
+    // The workspaces this pass found are followed, and open pages not joined yet (made here and
+    // only now on the server, say) are joined.
+    if (this.connected) this.track(this.afterPassLive(this.connection));
   }
 
   private async lose(workspaceId: Id, notice: boolean) {
@@ -911,7 +1033,25 @@ export class SyncEngine {
   }
 
   /** A page's unsent updates, batch by batch; each batch's answer is kept before the next goes. */
-  private async pushPage(workspaceId: Id, page: PageRecord, all: StoredUpdate[]) {
+  private pushPage(workspaceId: Id, page: PageRecord, all: StoredUpdate[]): Promise<boolean> {
+    return this.onPage(page.id, () => this.pushPageNow(workspaceId, page, all, false));
+  }
+
+  /**
+   * Pushes a page's updates, over HTTP or (`live`) through the hub. True when nothing more of
+   * them is to be sent now; false, through the hub only, when some are left for a pass over HTTP
+   * (more than one push's worth, an update over the hub's 1 MB, the connection gone, a refusal
+   * that is not the page's own, such as 429 or 500).
+   */
+  private async pushPageNow(
+    workspaceId: Id,
+    page: PageRecord,
+    all: StoredUpdate[],
+    live: boolean,
+  ): Promise<boolean> {
+    // Sent through the hub after this pass read them: nothing to send again.
+    all = all.filter((u) => !this.sentLive.has(u.updateId));
+    if (!all.length) return true;
     const ids = [...new Set(all.flatMap((u) => this.codec.clientIds(u.data)))];
     const refused = await this.register(workspaceId, ids);
     let updates = all;
@@ -926,35 +1066,55 @@ export class SyncEngine {
       this.notice('doc.clientTaken', workspaceId, page.id);
       updates = updates.filter((u) => !bad.includes(u));
     }
-    if (!updates.length) return;
+    if (!updates.length) return true;
     let cursor = await this.store.docCursor(page.id);
     const epoch = cursor?.epoch ?? page.docEpoch ?? 0;
-    const queue = pushBatches(updates);
+    const queue = pushBatches(updates, live ? LIVE_LIMITS : PUSH_LIMITS);
     while (queue.length) {
       const batch = queue.shift()!;
+      const request = {
+        epoch,
+        clientSchemaVersion: this.codec.schemaVersion,
+        updates: batch.map((u) => ({ updateId: u.updateId, data: u.data })),
+      };
       try {
-        const answer = await this.api.pushDoc(page.id, {
-          epoch,
-          clientSchemaVersion: this.codec.schemaVersion,
-          updates: batch.map((u) => ({ updateId: u.updateId, data: u.data })),
-        });
+        let answer;
+        if (live) {
+          // The hub takes at most 1 MB a push: a larger update goes over HTTP, in a pass.
+          if (batch.reduce((n, u) => n + u.data.byteLength, 0) > LIVE_LIMITS.bytes) return false;
+          if (!this.realtime) return false;
+          answer = await this.realtime.pushDoc(page.id, request);
+        } else answer = await this.api.pushDoc(page.id, request);
         await this.store.ackDocUpdates(page.id, answer.acks);
+        if (live) for (const u of batch) this.sentLive.add(u.updateId);
         this.edited.add(page.id);
         // The page is now held here: later heads are pulled for it.
         if (!cursor) {
           await this.store.applyRemoteDocUpdates(page.id, { epoch, headSeq: 0, updates: [] });
           cursor = { epoch, headSeq: 0 };
         }
+        // A backlog goes over HTTP, in a pass.
+        if (live && queue.length) return false;
       } catch (error) {
+        if (live && !(error instanceof SyncHttpError && LIVE_REFUSALS.has(error.code))) {
+          // Not the page's own refusal (the connection went, the hub is busy or failed, a size it
+          // will not take): a pass sends it over HTTP, which says what the server makes of it.
+          if (error instanceof SyncHttpError && error.retryAfterMs)
+            this.liveNotBefore = this.now() + error.retryAfterMs;
+          if (!(error instanceof OfflineError) && !(error instanceof SyncHttpError))
+            console.warn('A push through the hub failed:', error);
+          return false;
+        }
         if (!(error instanceof SyncHttpError)) throw error;
         if (error.code === 'limit.size' && batch.length > 1) {
           // Over the request's limit after all: one at a time, so only a too-large one is refused.
           queue.unshift(...batch.map((u) => [u]));
           continue;
         }
-        if (await this.refusedPush(workspaceId, page, error, batch)) return;
+        if (await this.refusedPush(workspaceId, page, error, batch)) return true;
       }
     }
+    return true;
   }
 
   /**
@@ -1300,7 +1460,12 @@ export class SyncEngine {
   }
 
   /** Pulls a page until it holds the server's head; returns how many updates it lacked. */
-  private async pullDoc(page: PageRecord): Promise<number> {
+  private pullDoc(page: PageRecord): Promise<number> {
+    return this.onPage(page.id, () => this.pullDocNow(page));
+  }
+
+  /** `pullDoc` inside the page's chain. */
+  private async pullDocNow(page: PageRecord): Promise<number> {
     this.wanted.delete(page.id);
     let cursor = await this.store.docCursor(page.id);
     let added = 0;
@@ -1347,16 +1512,20 @@ export class SyncEngine {
     if (first) this.heldChanged.add(page.workspaceId);
     if (added.length)
       this.emit({ kind: 'doc', pageId: page.id, updates: added.map((u) => u.data) });
-    if (pull.rejected.length) {
-      const doc = await this.store.loadDoc(page.id);
-      const refused = new Set(pull.rejected);
-      const bad = doc.updates.filter((u) => refused.has(u.updateId)).map((u) => u.localSeq);
-      if (bad.length) {
-        await this.store.quarantineUpdates(page.id, bad, 'doc.refused');
-        this.notice('doc.refused', page.workspaceId, page.id);
-      }
-    }
+    await this.takeRejected(page, pull.rejected);
     return added.length;
+  }
+
+  /** This device's own updates among those the worker refused: kept aside, and the user told. */
+  private async takeRejected(page: PageRecord, rejected: Id[]) {
+    if (!rejected.length) return;
+    const doc = await this.store.loadDoc(page.id);
+    const refused = new Set(rejected);
+    const bad = doc.updates.filter((u) => refused.has(u.updateId)).map((u) => u.localSeq);
+    if (bad.length) {
+      await this.store.quarantineUpdates(page.id, bad, 'doc.refused');
+      this.notice('doc.refused', page.workspaceId, page.id);
+    }
   }
 
   // 4b. Pins ---------------------------------------------------------------------------------------
@@ -1816,6 +1985,331 @@ export class SyncEngine {
     }
   }
 
+  // 6. Real time (Phase 6) ---------------------------------------------------------------------------
+
+  /**
+   * The hub's transport (the shell's SignalR client, a test's in-memory hub), or null for none.
+   * The engine follows its state: connected, it joins and listens; disconnected, it is Phase 3's.
+   */
+  setRealtime(transport: RealtimeTransport | null) {
+    for (const off of this.offRealtime) off();
+    this.offRealtime = [];
+    this.dropJoins();
+    this.realtime = transport;
+    if (!transport) return;
+    this.offRealtime.push(
+      transport.on('state', (state) => this.onRealtimeState(state)),
+      transport.on('updates', (frame) => this.onFrame(frame)),
+      transport.on('changesAvailable', (change) => this.onChangesAvailable(change)),
+      transport.on('accessRevoked', (revoked) => this.onAccessRevoked(revoked)),
+    );
+    if (transport.state === 'connected') this.onRealtimeState('connected');
+  }
+
+  /** Whether the hub's connection is open now. */
+  private get connected(): boolean {
+    return this.realtime?.state === 'connected';
+  }
+
+  /**
+   * The shell opened (`open`) or closed a page: an open one is joined on the hub while it is
+   * connected, so others' edits arrive as they land and its saves go out at once (`saved`).
+   */
+  live(pageId: Id, open: boolean) {
+    if (open) {
+      this.livePages.add(pageId);
+      if (this.connected) this.track(this.joinLive(pageId, this.connection));
+      return;
+    }
+    this.livePages.delete(pageId);
+    if (this.unjoin(pageId) && this.connected && this.realtime)
+      this.track(this.realtime.leavePage(pageId));
+  }
+
+  /**
+   * Told when a page is joined on the hub (presence may be sent for it from then on) and when it
+   * no longer is (left, access lost, the connection gone); returns its off.
+   */
+  onJoined(listener: (pageId: Id, joined: boolean) => void): () => void {
+    this.joinListeners.add(listener);
+    return () => void this.joinListeners.delete(listener);
+  }
+
+  /** Whether the page is joined on the hub now. */
+  isJoined(pageId: Id): boolean {
+    return this.connected && this.joined.has(pageId);
+  }
+
+  private tellJoined(pageId: Id, joined: boolean) {
+    for (const listener of [...this.joinListeners]) {
+      try {
+        listener(pageId, joined);
+      } catch (error) {
+        console.error('A join listener failed:', error);
+      }
+    }
+  }
+
+  /** The page is no longer joined; true when it was. */
+  private unjoin(pageId: Id): boolean {
+    if (!this.joined.delete(pageId)) return false;
+    this.tellJoined(pageId, false);
+    return true;
+  }
+
+  /**
+   * An open page's document was saved. A page joined on the hub sends its new updates through it
+   * at once; anything else is a local change like any (a pass soon, over HTTP).
+   */
+  saved(pageId: Id) {
+    if (
+      !this.account ||
+      !this.connected ||
+      !this.joined.has(pageId) ||
+      this.heldBack.has(pageId) ||
+      this.now() < this.liveNotBefore
+    ) {
+      this.changed();
+      return;
+    }
+    this.waitingOne();
+    this.queueLive(pageId);
+  }
+
+  /** Forgets what was joined (the connection or the account changed). */
+  private dropJoins() {
+    this.connection++;
+    for (const pageId of [...this.joined.keys()]) this.unjoin(pageId);
+    this.joining.clear();
+    this.followed = '';
+  }
+
+  private onRealtimeState(state: RealtimeState) {
+    if (state === 'connected') {
+      this.dropJoins();
+      if (this.account) this.track(this.rejoin(this.connection));
+      return;
+    }
+    if (state !== 'disconnected') return;
+    this.dropJoins();
+    // Exactly Phase 3 again: the next pass within 1.5 s (the timer may be set for the live 30 s),
+    // not at once, so a recycle's clients do not all pass together; what a live push in flight
+    // left asks for its own pass (`queueLive`).
+    const base = this.options.intervalMs ?? 1500;
+    if (this.timer !== null && this.due - this.now() > base) this.soon(base);
+  }
+
+  /**
+   * After a (re)connect: the synced workspaces followed and the open pages joined again, each
+   * caught up at once if it moved meanwhile; a pass only when a feed moved or something waits,
+   * else the periodic pass goes back to the live interval.
+   */
+  private async rejoin(generation: number) {
+    // Connected before the first pass knew which workspaces sync: the store says.
+    if (!this.mine.size && this.account)
+      this.mine = new Set((await this.syncedWorkspaces(this.account)).map((w) => w.id));
+    const behind = await this.followWorkspaces(generation, true);
+    await Promise.all([...this.livePages].map((pageId) => this.joinLive(pageId, generation)));
+    if (generation !== this.connection) return;
+    // A pass already running covers what waits; a feed ahead of this device needs another.
+    if (behind) this.soon(0);
+    else if (this.running) return;
+    else if (this.status_.state !== 'synced' || this.status_.waiting > 0) this.soon(0);
+    else if (this.timer !== null && !this.backlog && !this.again && !this.failures) {
+      const at = this.lastPassAt + (this.options.liveIntervalMs ?? LIVE_INTERVAL);
+      if (at > this.due) this.schedule(at - this.now());
+    }
+  }
+
+  /**
+   * Follows the synced workspaces (at most 50) unless they are followed already. Returns whether
+   * one's feed is ahead of this device (or not read yet).
+   */
+  private async followWorkspaces(generation: number, force = false): Promise<boolean> {
+    const realtime = this.realtime;
+    if (!realtime || !this.account || !this.connected || generation !== this.connection)
+      return false;
+    const ids = [...this.mine].sort().slice(0, REALTIME_LIMITS.workspaces);
+    const key = ids.join(',');
+    if (!ids.length || (!force && key === this.followed)) return false;
+    const answers = await realtime.joinWorkspaces(ids);
+    if (generation !== this.connection) return false;
+    this.followed = key;
+    let behind = false;
+    for (const answer of answers) {
+      const cursor = await this.store.syncCursor(answer.workspaceId);
+      if (cursor === null || answer.seq > cursor) behind = true;
+    }
+    return behind;
+  }
+
+  /** Joins an open page, and catches it up at once if the server's head is past this device's. */
+  private async joinLive(pageId: Id, generation: number) {
+    const realtime = this.realtime;
+    if (!realtime || !this.account || !this.connected || generation !== this.connection) return;
+    if (this.joined.has(pageId) || this.joining.has(pageId)) return;
+    if (this.joined.size >= REALTIME_LIMITS.pages) return;
+    const page = await this.store.getPage(pageId);
+    if (!page || !this.mine.has(page.workspaceId)) return;
+    this.joining.add(pageId);
+    let joined: JoinedPage;
+    try {
+      joined = await realtime.joinPage(pageId);
+    } catch (error) {
+      // Not on the server yet (made here), not readable, or the connection went: not joined; a
+      // later pass tries again.
+      if (!(error instanceof OfflineError) && !(error instanceof SyncHttpError)) throw error;
+      return;
+    } finally {
+      if (generation === this.connection) this.joining.delete(pageId);
+    }
+    if (generation !== this.connection) return;
+    if (!this.livePages.has(pageId)) {
+      // Closed while it was being joined.
+      this.track(realtime.leavePage(pageId));
+      return;
+    }
+    this.joined.set(pageId, joined);
+    this.tellJoined(pageId, true);
+    const cursor = await this.store.docCursor(pageId);
+    if (cursor && (joined.epoch !== cursor.epoch || joined.headSeq > cursor.headSeq))
+      this.track(this.framePull(pageId));
+    // What waits to be sent goes now.
+    if ((await this.store.unsentDocUpdates(PUSH_READ)).some((d) => d.pageId === pageId))
+      this.queueLive(pageId);
+  }
+
+  /** After a pass, while connected: newly synced workspaces followed, open pages joined. */
+  private async afterPassLive(generation: number) {
+    await this.followWorkspaces(generation);
+    await Promise.all([...this.livePages].map((pageId) => this.joinLive(pageId, generation)));
+  }
+
+  /** A live push for the page, unless one waits already (it will read what this save wrote). */
+  private queueLive(pageId: Id) {
+    if (this.liveQueued.has(pageId)) return;
+    this.liveQueued.add(pageId);
+    this.track(
+      this.onPage(pageId, async () => {
+        this.liveQueued.delete(pageId);
+        let done = false;
+        try {
+          done = await this.pushLive(pageId);
+        } finally {
+          // Left for a pass (or failed): sent over HTTP soon, as any local change is.
+          if (!done) this.soon(SOON);
+        }
+        if (done && !this.running && !this.liveQueued.size && this.status_.state === 'syncing')
+          await this.report('synced', false);
+      }),
+    );
+  }
+
+  /** The page's unsent updates through the hub; false when some are left for a pass. */
+  private async pushLive(pageId: Id): Promise<boolean> {
+    if (!this.account || !this.connected || !this.joined.has(pageId)) return false;
+    if (this.now() < this.liveNotBefore) return false;
+    const page = await this.store.getPage(pageId);
+    if (!page || this.heldBack.has(pageId)) return true;
+    const unsent = await this.store.unsentDocUpdates(PUSH_READ);
+    const mine = unsent.find((d) => d.pageId === pageId);
+    if (!mine) {
+      // Nothing of this page among what was read: nothing waits, unless others' crowd it out.
+      return unsent.reduce((n, d) => n + d.updates.length, 0) < PUSH_READ;
+    }
+    return this.pushPageNow(page.workspaceId, page, mine.updates, true);
+  }
+
+  /** A frame from the hub, taken in the page's turn. */
+  private onFrame(frame: RelayFrame) {
+    if (!this.account) return;
+    this.track(this.onPage(frame.pageId, () => this.takeFrame(frame)));
+  }
+
+  /**
+   * A frame for a page this device holds: one that continues from this device's cursor (same
+   * epoch, `after` at or below it, complete) is taken as a pull's answer; anything else (a gap,
+   * another epoch, rows the server could not read) means the page is pulled over HTTP. A frame
+   * that brings nothing new (a duplicate, one overtaken) changes nothing.
+   */
+  private async takeFrame(frame: RelayFrame) {
+    const cursor = await this.store.docCursor(frame.pageId);
+    if (!cursor) return;
+    if (frame.epoch !== cursor.epoch || !frame.complete || frame.after > cursor.headSeq) {
+      await this.framePull(frame.pageId, true);
+      return;
+    }
+    if (frame.cursor <= cursor.headSeq && !frame.rejected.length) return;
+    const page = await this.store.getPage(frame.pageId);
+    if (!page) return;
+    const added = await this.store.applyRemoteDocUpdates(page.id, {
+      epoch: frame.epoch,
+      headSeq: frame.cursor,
+      updates: frame.updates.filter((u) => u.seq > cursor.headSeq),
+    });
+    if (added.length)
+      this.emit({ kind: 'doc', pageId: page.id, updates: added.map((u) => u.data) });
+    await this.takeRejected(page, frame.rejected);
+  }
+
+  /** The page over HTTP now, as a pass would; if that fails, the next pass pulls it. */
+  private async framePull(pageId: Id, inChain = false) {
+    const page = await this.store.getPage(pageId);
+    if (!page || !this.account) return;
+    try {
+      await (inChain ? this.pullDocNow(page) : this.pullDoc(page));
+    } catch (error) {
+      this.wanted.add(pageId);
+      this.soon(SOON);
+      throw error;
+    }
+    if (this.heldChanged.delete(page.workspaceId))
+      this.emit({ kind: 'offline', workspaceId: page.workspaceId });
+  }
+
+  /** A followed workspace's feed moved past this device's cursor: a pass now. */
+  private onChangesAvailable(change: ChangesAvailable) {
+    if (!this.account || !this.mine.has(change.workspaceId)) return;
+    this.track(
+      (async () => {
+        const cursor = await this.store.syncCursor(change.workspaceId);
+        if (cursor !== null && change.seq <= cursor) return;
+        this.wake();
+      })(),
+    );
+  }
+
+  /** The hub took a page (or a workspace) from this connection: a pass reads what changed. */
+  private onAccessRevoked(revoked: AccessRevoked) {
+    if (!this.account) return;
+    if (revoked.pageId) this.unjoin(revoked.pageId);
+    else {
+      for (const [pageId, joined] of [...this.joined])
+        if (joined.workspaceId === revoked.workspaceId) this.unjoin(pageId);
+      this.followed = '';
+    }
+    this.wake();
+  }
+
+  /** A pass at once for the hub's news, but not sooner than `WAKE_SPACING` after the last. */
+  private wake() {
+    this.soon(Math.max(0, this.lastPassAt + WAKE_SPACING - this.now()));
+  }
+
+  /** Runs `fn` after everything queued for the page before it: its pushes, pulls and frames. */
+  private onPage<T>(pageId: Id, fn: () => Promise<T>): Promise<T> {
+    const run = (this.pageChains.get(pageId) ?? Promise.resolve()).then(fn);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.pageChains.set(pageId, tail);
+    void tail.then(() => {
+      if (this.pageChains.get(pageId) === tail) this.pageChains.delete(pageId);
+    });
+    return run;
+  }
+
   // Upload of a local workspace (M2.3) ----------------------------------------------------------
 
   /**
@@ -1989,8 +2483,17 @@ export function batchOf(
     deleteViews: [],
     deleteRows: [],
   };
+  // Phase 6: told of once each per page of the feed, never stored.
+  const comments = new Set<Id>();
+  let notifications = false;
   for (const change of changes) {
     switch (change.entityType) {
+      case 'comments':
+        comments.add(change.entityId);
+        break;
+      case 'notification':
+        notifications = true;
+        break;
       case 'workspace':
         if (change.kind === 'delete') batch.deleteWorkspace = true;
         else if (change.entity)
@@ -2034,5 +2537,7 @@ export function batchOf(
         break;
     }
   }
+  for (const pageId of comments) emit({ kind: 'comments', workspaceId, pageId });
+  if (notifications) emit({ kind: 'notifications', workspaceId });
   return batch;
 }

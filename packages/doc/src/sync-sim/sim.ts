@@ -16,6 +16,13 @@
 // pages' are, and the tree operations may move or trash the database's page. Every client must end
 // with the server's database record, views and rows (values, per-property versions, versions).
 //
+// Phase 6 (`hub: true`): every client also holds a connection to the in-memory hub
+// (testing/fakeHub.ts) and has the pages it opens joined, so its saves go through the hub and
+// others' edits come in its frames; the frames are dropped, duplicated, reordered and delayed, a
+// push's answer is lost with its socket now and then, sockets are cut for spells (always while a
+// client is partitioned), and the whole hub drops every socket at once now and then (a recycle).
+// Convergence must hold all the same: whatever the hub loses, HTTP brings.
+//
 // Seeded and deterministic: every choice comes from the seed, and every delay is a number of
 // microtask turns, so the same seed interleaves the same way (the caller makes ids deterministic
 // by seeding `crypto.getRandomValues` and `Date.now`).
@@ -38,9 +45,11 @@ import {
   type PropertyDef,
   type PropertyType,
   type RowRecord,
+  type RealtimeTransport,
   type SyncApi,
   type Value,
 } from '@cgw/workspace';
+import { FakeHub, NO_HUB_FAULTS } from '../../../workspace/src/testing/fakeHub';
 import { FakeServer } from '../../../workspace/src/testing/fakeServer';
 import {
   PROP,
@@ -65,6 +74,20 @@ export interface Faults {
   partitionEnd: number;
   /** Most microtask turns a request or an answer is held back (answers come back reordered). */
   maxDelay: number;
+  // Over the hub (`hub: true`).
+  /** Chance a frame is dropped, sent twice, or held back and sent after the next tick's. */
+  dropFrame: number;
+  duplicateFrame: number;
+  reorderFrame: number;
+  /** Most microtask turns a frame takes to arrive. */
+  frameDelay: number;
+  /** Chance a hub call is carried out and its answer lost with the socket. */
+  loseHubAnswer: number;
+  /** Per step, the chance a client's socket is cut, and a cut one restored. */
+  cutStart: number;
+  cutEnd: number;
+  /** Per step, the chance the hub drops every socket at once. */
+  storm: number;
 }
 
 export const DEFAULT_FAULTS: Faults = {
@@ -74,6 +97,14 @@ export const DEFAULT_FAULTS: Faults = {
   partitionStart: 0.08,
   partitionEnd: 0.3,
   maxDelay: 12,
+  dropFrame: 0.08,
+  duplicateFrame: 0.08,
+  reorderFrame: 0.08,
+  frameDelay: 12,
+  loseHubAnswer: 0.03,
+  cutStart: 0.08,
+  cutEnd: 0.3,
+  storm: 0.03,
 };
 
 export interface SimOptions {
@@ -81,6 +112,8 @@ export interface SimOptions {
   /** Rounds in which every client acts (edits, tree operations, a pass) at once. */
   steps: number;
   faults?: Faults;
+  /** Phase 6: every client also syncs through the in-memory hub. */
+  hub?: boolean;
 }
 
 export interface SimReport {
@@ -102,6 +135,18 @@ export interface SimReport {
     duplicates: number;
     partitioned: number;
   };
+  /** Over the hub: frames relayed and the faults they met, sockets cut, storms, hub pushes. */
+  hub: {
+    frames: number;
+    dropped: number;
+    duplicated: number;
+    reordered: number;
+    lostAnswers: number;
+    connects: number;
+    cuts: number;
+    storms: number;
+    pushes: number;
+  } | null;
   /** Rounds of syncing it took to settle once the faults stopped. */
   settleRounds: number;
   /** What converged, without ids (for the determinism check). */
@@ -166,7 +211,10 @@ class Client {
   /** Every acknowledgement this client received: what the server said it holds. */
   readonly acked: { pageId: Id; updateId: Id; data: Uint8Array }[] = [];
   partitioned = false;
+  /** Over the hub: this client's socket is cut (for a spell, or while partitioned). */
+  cut = false;
   clientId = 0;
+  readonly transport: ReturnType<FakeHub['transport']> | null;
 
   constructor(
     readonly sim: Simulation,
@@ -178,6 +226,18 @@ class Client {
       clearTimer: () => undefined,
       random: rng.next,
     });
+    // Its own loop's timers never fire here: a dropped socket comes back on the client's next
+    // step (`retryNow`, as the network's return or the window's focus does).
+    this.transport =
+      sim.hub?.transport(account, {
+        setTimer: () => null,
+        clearTimer: () => undefined,
+        random: random(rng.int(1, 1e9)).next,
+      }) ?? null;
+    if (this.transport) {
+      this.engine.setRealtime(this.recording(this.transport));
+      this.transport.start();
+    }
     this.engine.on((event) => {
       if (event.kind === 'doc') {
         const open = this.docs.get(event.pageId);
@@ -191,6 +251,29 @@ class Client {
         }
       } else if (event.kind === 'docReset') this.docs.delete(event.pageId);
     });
+  }
+
+  /** The transport with every acknowledgement it brings recorded, as the HTTP ones are. */
+  private recording(transport: RealtimeTransport): RealtimeTransport {
+    return {
+      get state() {
+        return transport.state;
+      },
+      on: (event, listener) => transport.on(event, listener),
+      joinWorkspaces: (ids) => transport.joinWorkspaces(ids),
+      joinPage: (pageId) => transport.joinPage(pageId),
+      leavePage: (pageId) => transport.leavePage(pageId),
+      pushDoc: async (pageId, request) => {
+        const answer = await transport.pushDoc(pageId, request);
+        this.sim.hubPushes++;
+        for (const ack of answer.acks) {
+          const sent = request.updates.find((u) => u.updateId === ack.updateId);
+          if (sent) this.acked.push({ pageId, updateId: ack.updateId, data: sent.data });
+        }
+        return answer;
+      },
+      awareness: (pageId, state) => transport.awareness(pageId, state),
+    };
   }
 
   /** The page's document, loaded from the store (pulled first if this device does not hold it). */
@@ -222,6 +305,8 @@ class Client {
     open.doc.on('update', (update: Uint8Array, origin: unknown) => {
       if (origin !== LOAD && origin !== REMOTE) open.pending.push(update);
     });
+    // The shell has it open: joined on the hub while connected.
+    this.engine.live(pageId, true);
     return open;
   }
 
@@ -231,7 +316,8 @@ class Client {
     if (!open?.pending.length) return;
     const data = Y.mergeUpdates(open.pending.splice(0));
     await this.store.appendDocUpdates(pageId, [{ updateId: uuidv7(), data }]);
-    this.engine.changed();
+    // Through the hub at once when the page is joined; otherwise a local change, as in Phase 3.
+    this.engine.saved(pageId);
   }
 
   async flushAll() {
@@ -250,12 +336,15 @@ class Client {
 
 export class Simulation {
   readonly server: FakeServer;
+  readonly hub: FakeHub | null;
   readonly clients: Client[];
   workspaceId: Id = '';
   sectionId: Id = '';
   databaseId: Id = '';
   faultsOn = false;
   readonly stats = { lostRequests: 0, lostAnswers: 0, duplicates: 0, partitioned: 0 };
+  readonly hubStats = { cuts: 0, storms: 0 };
+  hubPushes = 0;
   edits = 0;
   treeOps = 0;
   dbOps = 0;
@@ -265,8 +354,10 @@ export class Simulation {
   constructor(
     readonly rng: Random,
     readonly faults: Faults,
+    hub = false,
   ) {
     this.server = new FakeServer({ codec: docCodec, random: rng.next });
+    this.hub = hub ? new FakeHub(this.server, { random: random(rng.int(1, 1e9)).next }) : null;
     this.clients = PEOPLE.map(
       (account, i) => new Client(this, account, random(rng.int(1, 1e9) + i)),
     );
@@ -370,9 +461,45 @@ export class Simulation {
     await carol.engine.pin(made.c.id, false);
   }
 
+  /** The hub's frames meet their faults while the faults are on. */
+  hubFaults(on: boolean) {
+    if (!this.hub) return;
+    const f = this.faults;
+    this.hub.faults = on
+      ? {
+          drop: f.dropFrame,
+          duplicate: f.duplicateFrame,
+          reorder: f.reorderFrame,
+          maxDelay: f.frameDelay,
+          loseAnswer: f.loseHubAnswer,
+        }
+      : NO_HUB_FAULTS;
+  }
+
   /** One round: every client edits, changes the tree and syncs, all at once. */
   async step() {
+    if (this.hub && this.rng.chance(this.faults.storm)) {
+      // An app-pool recycle: every socket drops at once.
+      this.hub.storm();
+      this.hubStats.storms++;
+    }
     await Promise.all(this.clients.map((client) => this.act(client)));
+  }
+
+  /** A client's socket follows its partition and its own cut spells; a dropped one comes back. */
+  private socket(client: Client) {
+    const transport = client.transport;
+    if (!transport || !this.hub) return;
+    const r = client.rng;
+    if (client.cut ? r.chance(this.faults.cutEnd) : r.chance(this.faults.cutStart)) {
+      client.cut = !client.cut;
+      if (client.cut) this.hubStats.cuts++;
+    }
+    if (client.cut || client.partitioned) this.hub.cut(transport);
+    else {
+      this.hub.restore(transport);
+      transport.retryNow();
+    }
   }
 
   private async act(client: Client) {
@@ -380,6 +507,7 @@ export class Simulation {
     const f = this.faults;
     if (client.partitioned ? r.chance(f.partitionEnd) : r.chance(f.partitionStart))
       client.partitioned = !client.partitioned;
+    this.socket(client);
     const pass = r.chance(0.6) ? client.pass() : Promise.resolve();
     const actions = r.int(0, 3);
     for (let i = 0; i < actions; i++) {
@@ -713,11 +841,22 @@ export class Simulation {
   /** The faults stop; everyone syncs until nothing waits and everyone holds the server's head. */
   async settle(): Promise<number> {
     this.faultsOn = false;
-    for (const client of this.clients) client.partitioned = false;
+    this.hubFaults(false);
+    for (const client of this.clients) {
+      client.partitioned = false;
+      client.cut = false;
+      if (client.transport) {
+        this.hub!.restore(client.transport);
+        client.transport.retryNow();
+      }
+    }
+    const engines = this.clients.map((client) => client.engine);
     for (let round = 1; round <= 30; round++) {
       for (const client of this.clients) {
         await client.flushAll();
         await client.pass();
+        // What it sent through the hub, and the frames that came of it, settle too.
+        await this.hub?.flush(engines);
       }
       if (round === 3)
         // Every client holds every page's and row's document, so all of them can be compared.
@@ -879,9 +1018,10 @@ export class Simulation {
 
 /** One seeded run: set up, `steps` rounds under faults, settle, check. */
 export async function simulate(options: SimOptions): Promise<SimReport> {
-  const sim = new Simulation(random(options.seed), options.faults ?? DEFAULT_FAULTS);
+  const sim = new Simulation(random(options.seed), options.faults ?? DEFAULT_FAULTS, !!options.hub);
   await sim.setUp();
   sim.faultsOn = true;
+  sim.hubFaults(true);
   for (let i = 0; i < options.steps; i++) await sim.step();
   const settleRounds = await sim.settle();
   const result = await sim.check();
@@ -898,6 +1038,19 @@ export async function simulate(options: SimOptions): Promise<SimReport> {
     dbOps: sim.dbOps,
     rows: result.rows,
     faults: { ...sim.stats },
+    hub: sim.hub
+      ? {
+          frames: sim.hub.stats.frames,
+          dropped: sim.hub.stats.dropped,
+          duplicated: sim.hub.stats.duplicated,
+          reordered: sim.hub.stats.reordered,
+          lostAnswers: sim.hub.stats.lostAnswers,
+          connects: sim.hub.stats.connects,
+          cuts: sim.hubStats.cuts,
+          storms: sim.hubStats.storms,
+          pushes: sim.hubPushes,
+        }
+      : null,
     settleRounds,
     digest: result.digest,
     problems: result.problems,

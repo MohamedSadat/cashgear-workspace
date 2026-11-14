@@ -89,6 +89,18 @@ export type ServerChange =
       entityId: Id;
       kind: 'upsert' | 'delete';
       entity: RowRecord | null;
+    }
+  // Phase 6. Never stored: an open comments list reads the page's threads again; the inbox, the
+  // person's notifications.
+  /** A page's comments changed (`entityId` is the page). */
+  | { seq: number; entityType: 'comments'; entityId: Id; kind: 'upsert' | 'delete'; entity: null }
+  /** One of this person's notifications was made or read (`entityId` is the notification). */
+  | {
+      seq: number;
+      entityType: 'notification';
+      entityId: Id;
+      kind: 'upsert' | 'delete';
+      entity: null;
     };
 
 export interface ChangesPage {

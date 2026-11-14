@@ -58,6 +58,13 @@ export interface CloudHooks {
   fetchMissing?(pageId: Id): Promise<boolean>;
   /** What an open document reports (a move conflict, updates still pending after the retry). */
   docEvent?(event: DocEvent): void;
+  /**
+   * Phase 6: the page on screen (the document opened last) is `pageId` (`open`), or no longer is
+   * (another page opened, or this one closed): it is joined on the hub while it is shown.
+   */
+  live?(pageId: Id, open: boolean): void;
+  /** Phase 6: an open document was saved: its updates may go out at once (else `changed`). */
+  saved?(pageId: Id): void;
 }
 
 /** A page whose document this device does not hold, opened while it cannot be fetched. */
@@ -133,6 +140,8 @@ export class WorkspaceSession {
   private readonly rowTrash = new Map<Id, { count: number; fresh: boolean; counting: boolean }>();
   private readonly rowTrashListeners = new Set<() => void>();
   private cloud: CloudHooks | null = null;
+  /** The page on screen: the document opened last, until another opens or it closes (Phase 6). */
+  private shown: Id | null = null;
   /** Bytes of an asset this device does not hold, from the server (cloud/cloud.ts). */
   remoteAssets: ((assetId: Id) => Promise<Uint8Array | null>) | null = null;
   /** Server search for a synced workspace, merged after local hits by the palette (M2.7). */
@@ -176,6 +185,21 @@ export class WorkspaceSession {
 
   connect(hooks: CloudHooks) {
     this.cloud = hooks;
+    if (this.shown) hooks.live?.(this.shown, true);
+  }
+
+  /** A page's open document, if the session has it open (or is opening it). */
+  openDocument(pageId: Id): Promise<PageDocument> | undefined {
+    return this.docs.get(pageId);
+  }
+
+  /** The page on screen changed (Phase 6): the cloud joins it on the hub while it is shown. */
+  private show(pageId: Id | null) {
+    if (pageId === this.shown) return;
+    const before = this.shown;
+    this.shown = pageId;
+    if (before) this.cloud?.live?.(before, false);
+    if (pageId) this.cloud?.live?.(pageId, true);
   }
 
   /**
@@ -937,18 +961,25 @@ export class WorkspaceSession {
             // The server's newer state is pulled now.
             void this.cloud?.pullPage(pageId).catch(() => undefined);
           }
-          // Each save is pushed soon after.
-          opened.onSaved(() => this.cloud?.changed());
+          // Each save is pushed soon after (at once through the hub, while the page is live).
+          opened.onSaved(() =>
+            this.cloud?.saved ? this.cloud.saved(pageId) : this.cloud?.changed(),
+          );
           return opened;
         },
       );
       this.docs.set(pageId, doc);
-      doc.catch(() => this.docs.delete(pageId));
+      doc.catch(() => {
+        this.docs.delete(pageId);
+        // Not opened after all (not on this device while offline, say): not on screen either.
+        if (this.shown === pageId) this.show(null);
+      });
     }
     const at = this.order.indexOf(pageId);
     if (at >= 0) this.order.splice(at, 1);
     this.order.push(pageId);
     while (this.order.length > OPEN_LIMIT) this.forget(this.order.shift()!);
+    this.show(pageId);
     return doc;
   }
 
@@ -985,6 +1016,7 @@ export class WorkspaceSession {
   private forget(pageId: Id) {
     const doc = this.docs.get(pageId);
     if (!doc) return;
+    if (this.shown === pageId) this.show(null);
     this.docs.delete(pageId);
     this.editable.delete(pageId);
     const at = this.order.indexOf(pageId);

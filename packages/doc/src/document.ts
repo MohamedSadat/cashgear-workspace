@@ -2,6 +2,8 @@
 // Autosave). The editor changes the Y.Doc; this layer batches the updates for at most 500 ms,
 // merges them and appends one record, then says "saved". The log is the document: opening a page
 // replays the snapshot and every update after it, so a crash loses at most the unsaved batch.
+// Phase 6: while the page is live (joined on the hub, connected: `setLive`), each save goes to the
+// others at once, so batches are short: at most 60 ms, 30 ms after the last change.
 import * as Y from 'yjs';
 import { uuidv7, type Id, type LocalStore } from '@cgw/workspace';
 import { writeJSON, type DocJSON } from './binding';
@@ -53,6 +55,9 @@ export interface DocumentOptions {
   maxDelayMs?: number;
   /** A shorter wait after the last change, so a pause saves at once. */
   idleMs?: number;
+  /** The same two while the page is live (`setLive`): 60 ms and 30 ms. */
+  liveMaxDelayMs?: number;
+  liveIdleMs?: number;
   /** Compact the local log once it holds more updates than this. */
   compactAfter?: number;
   /** Keep a history snapshot after this many saved updates, or this long of editing. */
@@ -92,6 +97,8 @@ export interface OpenReport {
 const defaults = {
   maxDelayMs: 500,
   idleMs: 150,
+  liveMaxDelayMs: 60,
+  liveIdleMs: 30,
   compactAfter: 200,
   historyEvery: { updates: 200, ms: 10 * 60_000 },
   historyKeep: 50,
@@ -142,6 +149,10 @@ export class PageDocument {
   private sinceHistory = 0;
   private historyStarted = 0;
   private closed = false;
+  /** Saves go to others at once (`setLive`): batches are short. */
+  private live = false;
+  /** When the waiting batch's first change came (wall clock). */
+  private batchStarted = 0;
   private readonly listeners = new Set<(state: SaveState) => void>();
   private readonly savedListeners = new Set<() => void>();
   private readonly eventListeners = new Set<(event: DocEvent) => void>();
@@ -328,15 +339,49 @@ export class PageDocument {
     if (handle !== null) (this.options.clearTimer ?? ((h) => clearTimeout(h as number)))(handle);
   }
 
+  /** How long a batch waits now: the live delays while live (never longer than the usual ones). */
+  private delays(): { max: number; idle: number } {
+    const { maxDelayMs, idleMs, liveMaxDelayMs, liveIdleMs } = this.options;
+    return this.live
+      ? { max: Math.min(maxDelayMs, liveMaxDelayMs), idle: Math.min(idleMs, liveIdleMs) }
+      : { max: maxDelayMs, idle: idleMs };
+  }
+
+  /** Whether the page is live now. */
+  get isLive(): boolean {
+    return this.live;
+  }
+
+  /**
+   * The page is live (joined on the hub while it is connected) or no longer: while live, autosave
+   * batches for at most 60 ms (30 ms after the last change) instead of 500 ms (150 ms), since each
+   * save goes to the other editors at once. A batch waiting when it turns live is written by the
+   * live delays, counted from its first change.
+   */
+  setLive(live: boolean): void {
+    if (live === this.live) return;
+    this.live = live;
+    if (!live || this.closed || this.maxTimer === null) return;
+    const { max, idle } = this.delays();
+    const left = Math.max(0, max - (Date.now() - this.batchStarted));
+    this.clear(this.idleTimer);
+    this.clear(this.maxTimer);
+    this.idleTimer = this.timer(() => void this.flush(), Math.min(idle, left));
+    this.maxTimer = this.timer(() => void this.flush(), left);
+  }
+
   private readonly onUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === LOAD || origin === REMOTE || this.closed) return;
     this.pending.push(update);
     this.setState('unsaved');
     if (!this.historyStarted) this.historyStarted = Date.now();
+    const { max, idle } = this.delays();
     this.clear(this.idleTimer);
-    this.idleTimer = this.timer(() => void this.flush(), this.options.idleMs);
-    if (this.maxTimer === null)
-      this.maxTimer = this.timer(() => void this.flush(), this.options.maxDelayMs);
+    this.idleTimer = this.timer(() => void this.flush(), idle);
+    if (this.maxTimer === null) {
+      this.batchStarted = Date.now();
+      this.maxTimer = this.timer(() => void this.flush(), max);
+    }
   };
 
   /** Writes whatever is waiting. Resolves when it is durable (or has failed and will retry). */

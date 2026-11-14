@@ -3,6 +3,9 @@
 // converges on the server's tree, documents, database, views and rows, and nothing the server
 // acknowledged is lost.
 //
+// Phase 6: the same seeds again over the in-memory hub, its frames dropped, duplicated, reordered
+// and delayed, answers lost with their sockets, sockets cut and the hub recycled.
+//
 // A small size by default (a few seconds); larger with SIM_STEPS (rounds per seed), SIM_SEEDS
 // (how many seeds) and SIM_SEED (the first seed), for example
 //   SIM_STEPS=400 SIM_SEEDS=20 pnpm exec vitest run packages/doc/src/sync-sim
@@ -31,12 +34,12 @@ function deterministic(seed: number, base: number) {
 
 let base = Date.UTC(2027, 0, 1);
 
-async function run(seed: number, steps: number): Promise<SimReport> {
+async function run(seed: number, steps: number, hub = false): Promise<SimReport> {
   // Each run's clock starts past the last one's, so uuidv7's own state never repeats an id.
   base += 1e10;
   deterministic(seed, base);
   try {
-    return await simulate({ seed, steps });
+    return await simulate({ seed, steps, hub });
   } finally {
     vi.restoreAllMocks();
   }
@@ -75,3 +78,40 @@ describe('convergence simulator', () => {
     expect({ ...two, digest: '' }).toEqual({ ...one, digest: '' });
   }, 60_000);
 });
+
+describe('convergence simulator over the hub', () => {
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  for (let seed = FIRST; seed < FIRST + SEEDS; seed++)
+    it(`seed ${seed}: three clients converge with frames lost, doubled, reordered and sockets cut`, async () => {
+      const started = performance.now();
+      const report = await run(seed, STEPS, true);
+      const ms = Math.round(performance.now() - started);
+      const hub = report.hub!;
+      console.info(
+        `sim+hub seed=${seed} steps=${STEPS} pages=${report.pages} updates=${report.updates} ` +
+          `acked=${report.acked} edits=${report.edits} hubPushes=${hub.pushes} frames=${hub.frames} ` +
+          `dropped=${hub.dropped} duplicated=${hub.duplicated} reordered=${hub.reordered} ` +
+          `lostAnswers=${hub.lostAnswers} cuts=${hub.cuts} storms=${hub.storms} ` +
+          `connects=${hub.connects} settle=${report.settleRounds} ${ms}ms`,
+      );
+      expect(report.problems).toEqual([]);
+      // The hub carried real work, and met its faults.
+      expect(hub.pushes).toBeGreaterThan(0);
+      expect(hub.frames).toBeGreaterThan(0);
+      expect(hub.dropped + hub.duplicated + hub.reordered).toBeGreaterThan(0);
+      expect(hub.cuts).toBeGreaterThan(0);
+      expect(hub.connects).toBeGreaterThan(PEOPLE_COUNT);
+    }, 120_000);
+
+  it('replays a seed exactly', async () => {
+    const one = await run(FIRST, 12, true);
+    const two = await run(FIRST, 12, true);
+    expect(two.digest).toBe(one.digest);
+    expect({ ...two, digest: '' }).toEqual({ ...one, digest: '' });
+  }, 60_000);
+});
+
+/** The simulation's three people: every reconnect is a connect beyond their first. */
+const PEOPLE_COUNT = 3;
