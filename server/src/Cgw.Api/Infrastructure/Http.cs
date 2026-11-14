@@ -41,11 +41,12 @@ public static class Correlation
 /// <summary>RFC 9457 problems with a stable <c>code</c> and the <c>correlationId</c> (ARCHITECTURE.md).</summary>
 public static class Problems
 {
-    public static ProblemHttpResult From(Failure failure) =>
-        TypedResults.Problem(
-            statusCode: failure.Status,
-            title: failure.Title,
-            extensions: new Dictionary<string, object?> { ["code"] = failure.Code });
+    public static ProblemHttpResult From(Failure failure)
+    {
+        var extensions = new Dictionary<string, object?> { ["code"] = failure.Code };
+        foreach (var (key, value) in failure.Extensions ?? new Dictionary<string, object?>()) extensions[key] = value;
+        return TypedResults.Problem(statusCode: failure.Status, title: failure.Title, extensions: extensions);
+    }
 
     public static ProblemHttpResult Of(string code, int status, string title) => From(new Failure(code, status, title));
 
@@ -159,6 +160,10 @@ public static class RateLimits
     public const string Search = "search";
     public const string Preview = "preview";
     public const string Import = "import";
+    /// <summary>Sheet's ticket redemption, per address: tight, as a ticket is 256 bits but guessing still costs nothing.</summary>
+    public const string Ticket = "ticket";
+    /// <summary>Sheet's file-session routes, per address (a file session is not a user's cookie or token).</summary>
+    public const string Sheet = "sheet";
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -197,6 +202,8 @@ public static class RateLimits
             options.AddPolicy(Search, c => Window("search:" + Who(c), Limit(Search, 240)));
             options.AddPolicy(Preview, c => Window("preview:" + Who(c), Limit(Preview, 60)));
             options.AddPolicy(Import, c => Window("import:" + Who(c), Limit(Import, 20)));
+            options.AddPolicy(Ticket, c => Window("ticket:" + Ip(c), Limit(Ticket, 30)));
+            options.AddPolicy(Sheet, c => Window("sheet:" + Ip(c), Limit(Sheet, 600)));
         });
     }
 }

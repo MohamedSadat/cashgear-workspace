@@ -51,6 +51,13 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<LinkPreview> LinkPreviews => Set<LinkPreview>();
     public DbSet<WorkspaceExport> WorkspaceExports => Set<WorkspaceExport>();
     public DbSet<JobState> JobStates => Set<JobState>();
+    public DbSet<Workbook> Workbooks => Set<Workbook>();
+    public DbSet<WorkbookVersion> WorkbookVersions => Set<WorkbookVersion>();
+    public DbSet<WorkbookPermission> WorkbookPermissions => Set<WorkbookPermission>();
+    public DbSet<WorkbookPreview> WorkbookPreviews => Set<WorkbookPreview>();
+    public DbSet<WorkbookTicket> WorkbookTickets => Set<WorkbookTicket>();
+    public DbSet<FileSession> FileSessions => Set<FileSession>();
+    public DbSet<ErpLink> ErpLinks => Set<ErpLink>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -297,6 +304,70 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.LastError).HasMaxLength(2000);
         });
 
+        // Phase 5: workbooks, Sheet's tickets and file sessions, ERP links.
+        b.Entity<Workbook>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.WorkspaceId, x.TrashedAt, x.UpdatedAt });
+            // The trash retention job's queue, in every workspace.
+            e.HasIndex(x => x.TrashedAt).HasFilter("[TrashedAt] IS NOT NULL").IncludeProperties(x => x.WorkspaceId);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.SearchName).HasMaxLength(200);
+            // A change to the record that raced another is a conflict, not a lost update.
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+        b.Entity<WorkbookVersion>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.WorkbookId, x.SavedAt });
+            e.Property(x => x.BlobKey).HasMaxLength(300);
+            e.Property(x => x.Sha256).HasMaxLength(64).IsUnicode(false);
+        });
+        b.Entity<WorkbookPermission>(e =>
+        {
+            e.HasKey(x => new { x.WorkbookId, x.PrincipalType, x.PrincipalId });
+            e.HasIndex(x => new { x.WorkspaceId, x.PrincipalId });
+            e.Property(x => x.PrincipalType).HasMaxLength(20);
+            e.Property(x => x.Level).HasMaxLength(20);
+        });
+        b.Entity<WorkbookPreview>(e =>
+        {
+            e.HasKey(x => new { x.WorkbookId, x.VersionId, x.ViewHash });
+            e.HasIndex(x => new { x.WorkbookId, x.ViewHash, x.MadeAt });
+            e.Property(x => x.ViewHash).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.BlobKey).HasMaxLength(300);
+        });
+        b.Entity<WorkbookTicket>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            // The clean-up's queue.
+            e.HasIndex(x => x.ExpiresAt);
+            e.Property(x => x.Access).HasMaxLength(10);
+            e.Property(x => x.TokenHash).HasMaxLength(32);
+        });
+        b.Entity<FileSession>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => new { x.WorkspaceId, x.UserId });
+            e.HasIndex(x => x.MaxExpiresAt);
+            e.Property(x => x.Access).HasMaxLength(10);
+            e.Property(x => x.TokenHash).HasMaxLength(32);
+            e.Property(x => x.Language).HasMaxLength(10);
+        });
+        b.Entity<ErpLink>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.WorkspaceId);
+            // One live link per company and ERP in a workspace.
+            e.HasIndex(x => new { x.WorkspaceId, x.ErpBaseUrl, x.Company }).IsUnique().HasFilter("[RevokedAt] IS NULL");
+            e.Property(x => x.ErpLinkId).HasMaxLength(100);
+            e.Property(x => x.ErpBaseUrl).HasMaxLength(300);
+            e.Property(x => x.Company).HasMaxLength(100);
+            e.Property(x => x.CompanyName).HasMaxLength(200);
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -322,6 +393,13 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<WorkspaceDatabase>(b);
         Filter<DatabaseView>(b);
         Filter<DatabaseRow>(b);
+        Filter<Workbook>(b);
+        Filter<WorkbookVersion>(b);
+        Filter<WorkbookPermission>(b);
+        Filter<WorkbookPreview>(b);
+        Filter<WorkbookTicket>(b);
+        Filter<FileSession>(b);
+        Filter<ErpLink>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

@@ -480,6 +480,135 @@ public sealed class WorkspaceExport : ITenantOwned
     public DateTimeOffset? CompletedAt { get; set; }
 }
 
+/// <summary>
+/// A cloud workbook (DATA_MODEL.md, Workbooks; Phase 5): a document of its own, not owned by any
+/// page, with its own access list. Its content is <see cref="WorkbookVersion"/>s; the current one
+/// is the content's ETag (<c>"&lt;versionId&gt;"</c>). Not in the change feed, not in search.
+/// </summary>
+public sealed class Workbook : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>The name normalised as search normalises text, for the list's <c>?q=</c>.</summary>
+    public string SearchName { get; set; } = "";
+    /// <summary>Null until the first save.</summary>
+    public Guid? CurrentVersionId { get; set; }
+    /// <summary>Access comes from the workbook's own list only (members get nothing unless named or a workspace row says so).</summary>
+    public bool Restricted { get; set; }
+    /// <summary>The record's version: rises on a rename, trash, restore and a change to its list (the <c>ETag</c> of <c>GET /workbooks/{id}</c>).</summary>
+    public long Version { get; set; } = 1;
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    /// <summary>Any change, a save included.</summary>
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? TrashedAt { get; set; }
+    public Guid? TrashedBy { get; set; }
+}
+
+/// <summary>One saved xlsx: its blob, size and SHA-256 (lower-case hex, over the stored bytes).</summary>
+public sealed class WorkbookVersion : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid WorkbookId { get; set; }
+    public string BlobKey { get; set; } = "";
+    public long SizeBytes { get; set; }
+    public string Sha256 { get; set; } = "";
+    public Guid SavedBy { get; set; }
+    public DateTimeOffset SavedAt { get; set; }
+}
+
+/// <summary>A workbook's own access list: people and the whole workspace, at the five levels.</summary>
+public sealed class WorkbookPermission : ITenantOwned
+{
+    public Guid WorkbookId { get; set; }
+    /// <summary><c>user</c> or <c>workspace</c>.</summary>
+    public string PrincipalType { get; set; } = "user";
+    public Guid PrincipalId { get; set; }
+    public string Level { get; set; } = Levels.View;
+    public Guid WorkspaceId { get; set; }
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>A picture of one view of one version (a range or chart in a theme), PNG, as a blob beside the workbook.</summary>
+public sealed class WorkbookPreview : ITenantOwned
+{
+    public Guid WorkbookId { get; set; }
+    public Guid VersionId { get; set; }
+    /// <summary>Workspace's own hash of the resolved view and theme: lower-case hex SHA-256.</summary>
+    public string ViewHash { get; set; } = "";
+    public Guid WorkspaceId { get; set; }
+    public string BlobKey { get; set; } = "";
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public long SizeBytes { get; set; }
+    public Guid MadeBy { get; set; }
+    public DateTimeOffset MadeAt { get; set; }
+}
+
+/// <summary>
+/// A one-time ticket to open a workbook in Sheet (sheet-session.1): 256 random bits, kept only as
+/// their SHA-256, 120 seconds, one use, bound to the person, the workbook and the access.
+/// </summary>
+public sealed class WorkbookTicket : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid WorkbookId { get; set; }
+    public Guid UserId { get; set; }
+    /// <summary><c>edit</c> or <c>view</c>.</summary>
+    public string Access { get; set; } = "view";
+    public byte[] TokenHash { get; set; } = [];
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Sheet's file session, redeemed from a ticket: an opaque token kept only as its SHA-256, 30
+/// minutes idle and 10 hours at most, scoped to one workbook (or to the copy it saved). Access is
+/// checked again on every request.
+/// </summary>
+public sealed class FileSession : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid WorkbookId { get; set; }
+    /// <summary><c>edit</c> or <c>view</c>: at most what the ticket carried.</summary>
+    public string Access { get; set; } = "view";
+    public byte[] TokenHash { get; set; } = [];
+    /// <summary><c>en</c> or <c>ar</c>: the person's, for Sheet's texts and a copy's name.</summary>
+    public string Language { get; set; } = "en";
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset IdleExpiresAt { get; set; }
+    public DateTimeOffset MaxExpiresAt { get; set; }
+    public DateTimeOffset? EndedAt { get; set; }
+    public int Renews { get; set; }
+}
+
+/// <summary>
+/// Which ERP company a workspace is linked to (DATA_MODEL.md, ERP links): where to ask and the
+/// ERP's own link id. No key, token or session is stored; the ERP checks its link on every session.
+/// </summary>
+public sealed class ErpLink : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>The ERP's id for the link.</summary>
+    public string ErpLinkId { get; set; } = "";
+    /// <summary>Always the API's <c>Erp__ApiBase</c> when it was made.</summary>
+    public string ErpBaseUrl { get; set; } = "";
+    public string Company { get; set; } = "";
+    public string CompanyName { get; set; } = "";
+    public Guid LinkedBy { get; set; }
+    public DateTimeOffset LinkedAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+    public Guid? RevokedBy { get; set; }
+}
+
 /// <summary>Each worker job's last run, for its lag and the health check.</summary>
 public sealed class JobState
 {

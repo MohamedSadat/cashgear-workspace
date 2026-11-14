@@ -444,8 +444,18 @@ public sealed class AccountSecurityTests(ServerFixture server)
         Assert.Contains(problems, p => p.Contains("DataProtection__Dpapi", StringComparison.Ordinal));
         Assert.Throws<InvalidOperationException>(() => ProductionChecks.Enforce(Settings(), production));
 
-        (string, string)[] complete = [("Web:Origins:0", "https://workspace.cashgearerp.com"), ("Api:PublicUrl", "https://workspace-api.cashgearerp.com"), ("DataProtection:Dpapi", "true")];
+        (string, string)[] complete =
+        [
+            ("Web:Origins:0", "https://workspace.cashgearerp.com"), ("Api:PublicUrl", "https://workspace-api.cashgearerp.com"), ("DataProtection:Dpapi", "true"),
+            ("Sheet:Origin", "https://sheet.cashgearerp.com"), ("Sheet:Origins:0", "https://sheet.cashgearerp.com"), ("Erp:ApiBase", "https://api.cashgearerp.com"),
+        ];
         Assert.Empty(ProductionChecks.Problems(Settings(complete), production, windows: true));
+        // Phase 5: Sheet and the ERP are named here, over https, or Production does not start.
+        Assert.Contains(problems, p => p.Contains("Sheet__Origin ", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Contains("Sheet__Origins__0", StringComparison.Ordinal));
+        Assert.Contains(problems, p => p.Contains("Erp__ApiBase", StringComparison.Ordinal));
+        Assert.Contains(ProductionChecks.Problems(Settings([.. complete, ("Sheet:Origins:1", "http://127.0.0.1:4283")]), production, windows: true), p => p.Contains("Sheet__Origins", StringComparison.Ordinal));
+        Assert.Contains(ProductionChecks.Problems(Settings([.. complete, ("Erp:ApiBase", "http://127.0.0.1:4282")]), production, windows: true), p => p.Contains("Erp__ApiBase", StringComparison.Ordinal));
         Assert.Contains(ProductionChecks.Problems(Settings([.. complete, ("Api:PublicUrl", "http://workspace-api.cashgearerp.com")]), production, windows: true), p => p.Contains("https", StringComparison.Ordinal));
         foreach (var key in Shortcuts.Keys)
             Assert.Contains(ProductionChecks.Problems(Settings([.. complete, (key, "true")]), production, windows: true), p => p.Contains("refused in Production", StringComparison.Ordinal));

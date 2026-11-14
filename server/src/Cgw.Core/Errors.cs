@@ -27,12 +27,26 @@ public static class Codes
     public const string Conflict = "conflict";
     public const string ServerError = "server.error";
 
+    // Phase 5: Sheet's file sessions (sheet-session.1) and workbooks.
+
+    /// <summary>A launch ticket unknown, used or expired (401); the three look the same.</summary>
+    public const string TicketInvalid = "ticket.invalid";
+    /// <summary>A file session ended, expired or unknown (401).</summary>
+    public const string SessionExpired = "session.expired";
+    /// <summary>A ticket redeemed from an <c>Origin</c> not on <c>Sheet__Origins</c> (403).</summary>
+    public const string OriginDenied = "origin.denied";
+    /// <summary>The session's workbook was trashed or deleted since the launch (410).</summary>
+    public const string WorkbookGone = "workbook.gone";
+    /// <summary>A save with neither <c>If-Match</c> nor <c>If-None-Match</c> (428).</summary>
+    public const string VersionRequired = "version.required";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
         AuthRequired, AccessDenied, NotFound, VersionConflict, TreeCycle, TreeParentMissing,
         TreeSection, DocEpochMismatch, ClientTooOld, PageGone, FeedExpired, LimitSize, LimitRate,
         AssetTypeNotAllowed, RequestInvalid, Conflict, ServerError, DbTooLarge,
+        TicketInvalid, SessionExpired, OriginDenied, WorkbookGone, VersionRequired,
     ];
 }
 
@@ -41,6 +55,9 @@ public sealed record Failure(string Code, int Status, string Title)
 {
     /// <summary>For a 429 or 503: when to ask again (the <c>Retry-After</c> header).</summary>
     public TimeSpan? RetryAfter { get; init; }
+
+    /// <summary>Members of the problem body beside <c>code</c> (a 412's <c>current</c>, a 413's <c>limit</c>).</summary>
+    public IReadOnlyDictionary<string, object?>? Extensions { get; init; }
 
     public static Failure NotFound(string what = "Not found") => new(Codes.NotFound, 404, what);
     public static Failure Denied(string why = "Access denied") => new(Codes.AccessDenied, 403, why);

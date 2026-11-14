@@ -40,6 +40,7 @@ public static class WorkerServices
         services.AddSingleton<IJob, WorkspacePurgeJob>();
         services.AddSingleton<IJob, FeedRetentionJob>();
         services.AddSingleton<IJob, TrashRetentionJob>();
+        services.AddSingleton<IJob, WorkbookRetentionJob>();
         services.AddSingleton<IJob, ReconcileJob>();
         services.AddSingleton<IJob, RecomputeJob>();
         services.AddHostedService<JobLoop>();

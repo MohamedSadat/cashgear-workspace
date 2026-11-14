@@ -307,6 +307,60 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("Devices");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.ErpLink", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Company")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CompanyName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ErpBaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ErpLinkId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("LinkedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("LinkedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("RevokedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "ErpBaseUrl", "Company")
+                        .IsUnique()
+                        .HasFilter("[RevokedAt] IS NULL");
+
+                    b.ToTable("ErpLinks");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.Favourite", b =>
                 {
                     b.Property<byte[]>("UserId")
@@ -333,6 +387,66 @@ namespace Cgw.Core.Data.Migrations
                     b.HasIndex("WorkspaceId", "UserId");
 
                     b.ToTable("Favourites");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.FileSession", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Access")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset>("IdleExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTimeOffset>("MaxExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<int>("Renews")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkbookId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MaxExpiresAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("WorkspaceId", "UserId");
+
+                    b.ToTable("FileSessions");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.JobState", b =>
@@ -1001,6 +1115,233 @@ namespace Cgw.Core.Data.Migrations
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.Workbook", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("CurrentVersionId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("Restricted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("SearchName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("TrashedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("TrashedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrashedAt")
+                        .HasFilter("[TrashedAt] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("TrashedAt"), new[] { "WorkspaceId" });
+
+                    b.HasIndex("WorkspaceId", "TrashedAt", "UpdatedAt");
+
+                    b.ToTable("Workbooks");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkbookPermission", b =>
+                {
+                    b.Property<byte[]>("WorkbookId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("PrincipalType")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<byte[]>("PrincipalId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("WorkbookId", "PrincipalType", "PrincipalId");
+
+                    b.HasIndex("WorkspaceId", "PrincipalId");
+
+                    b.ToTable("WorkbookPermissions");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkbookPreview", b =>
+                {
+                    b.Property<byte[]>("WorkbookId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("VersionId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("ViewHash")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("BlobKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("MadeAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("MadeBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("WorkbookId", "VersionId", "ViewHash");
+
+                    b.HasIndex("WorkbookId", "ViewHash", "MadeAt");
+
+                    b.ToTable("WorkbookPreviews");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkbookTicket", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Access")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkbookId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("WorkbookTickets");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkbookVersion", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("BlobKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTimeOffset>("SavedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("SavedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkbookId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkbookId", "SavedAt");
+
+                    b.ToTable("WorkbookVersions");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.Workspace", b =>

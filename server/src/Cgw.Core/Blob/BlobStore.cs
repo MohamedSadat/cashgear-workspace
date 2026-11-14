@@ -52,22 +52,36 @@ public sealed class BlobStore
     /// CORS rules for browsers that read and upload by signed URL. Production sets them on the
     /// storage account (docs/OPERATIONS.md); development and tests set them here.
     /// </summary>
-    public async Task AllowOriginsAsync(IEnumerable<string> origins, CancellationToken ct = default)
+    /// <remarks>
+    /// <paramref name="readers"/> (Sheet's origins, Phase 5) only read: the embed and Sheet's cloud
+    /// platform fetch a workbook's signed URL, and never upload.
+    /// </remarks>
+    public async Task AllowOriginsAsync(IEnumerable<string> origins, IEnumerable<string>? readers = null, CancellationToken ct = default)
     {
         var list = string.Join(",", origins);
-        if (list.Length == 0) return;
+        var readList = string.Join(",", (readers ?? []).Except(origins, StringComparer.Ordinal));
+        if (list.Length == 0 && readList.Length == 0) return;
         var properties = (await service.GetPropertiesAsync(ct)).Value;
-        properties.Cors =
-        [
-            new BlobCorsRule
+        var rules = new List<BlobCorsRule>();
+        if (list.Length > 0)
+            rules.Add(new BlobCorsRule
             {
                 AllowedOrigins = list,
                 AllowedMethods = "GET,HEAD,PUT,OPTIONS",
                 AllowedHeaders = "*",
                 ExposedHeaders = "*",
                 MaxAgeInSeconds = 3600,
-            },
-        ];
+            });
+        if (readList.Length > 0)
+            rules.Add(new BlobCorsRule
+            {
+                AllowedOrigins = readList,
+                AllowedMethods = "GET,HEAD,OPTIONS",
+                AllowedHeaders = "*",
+                ExposedHeaders = "*",
+                MaxAgeInSeconds = 3600,
+            });
+        properties.Cors = rules;
         await service.SetPropertiesAsync(properties, ct);
     }
 
@@ -237,6 +251,15 @@ public sealed class BlobStore
         $"workspaces/{workspaceId}/pages/{pageId}/snapshots/{snapshotId}";
 
     public static string ExportKey(Guid workspaceId, Guid exportId) => $"workspaces/{workspaceId}/exports/{exportId}.zip";
+
+    public static string WorkbookVersionKey(Guid workspaceId, Guid workbookId, Guid versionId) =>
+        $"workspaces/{workspaceId}/workbooks/{workbookId}/versions/{versionId}.xlsx";
+
+    public static string WorkbookPreviewKey(Guid workspaceId, Guid workbookId, Guid versionId, string viewHash) =>
+        $"workspaces/{workspaceId}/workbooks/{workbookId}/previews/{versionId}/{viewHash}.png";
+
+    /// <summary>Everything a workbook owns in storage: its versions and pictures.</summary>
+    public static string WorkbookPrefix(Guid workspaceId, Guid workbookId) => $"workspaces/{workspaceId}/workbooks/{workbookId}/";
 
     /// <summary>Everything a page owns in storage: its snapshots.</summary>
     public static string PagePrefix(Guid workspaceId, Guid pageId) => $"workspaces/{workspaceId}/pages/{pageId}/";

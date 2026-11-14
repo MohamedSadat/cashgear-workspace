@@ -200,6 +200,22 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
     /// <summary>The view's rows in its order as <c>rowsToCsv</c> writes them (no view: every property, no filter).</summary>
     public async Task<Result<(byte[] Bytes, string FileName)>> ExportAsync(Member member, Page database, Guid? viewId, QueryContextDto? given, CancellationToken ct)
     {
+        var result = await ViewRowsAsync(member, database, viewId, given, ct);
+        if (!result.Ok) return result.Failure!;
+        var export = result.Value!;
+        var bytes = Csv.Write(export.Schema, export.Config, export.Rows, export.Lookups);
+        var name = Documents.SafeNames.Name(export.Name, "Database");
+        return (bytes, name + ".csv");
+    }
+
+    /// <summary>
+    /// What an export of the view writes (CSV here, a workbook by the workbooks' export): the rows
+    /// in its filter and sort order, its shown properties, and the names its cells show for ids.
+    /// </summary>
+    public sealed record ViewExport(Schema Schema, JsonObject? Config, List<PropertyDef> Shown, List<RowData> Rows, CsvLookups Lookups, string Name, string? ViewName);
+
+    public async Task<Result<ViewExport>> ViewRowsAsync(Member member, Page database, Guid? viewId, QueryContextDto? given, CancellationToken ct)
+    {
         var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == database.Id, ct);
         if (record is null) return Failure.NotFound("No such database");
         var schema = SchemaOf(record);
@@ -212,7 +228,7 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
         var spec = view is null ? new QuerySpec() : QuerySpec.FromView(view.Config);
         var ctx = Context(given, member, clock);
         var snapshot = await cache.RowsAsync(db, record, ct);
-        var rows = Query.Run(schema, snapshot.Rows.Values, spec, ctx).Rows;
+        var rows = Query.Run(schema, snapshot.Rows.Values, spec, ctx).Rows.Where(r => !r.IsTemplate && !r.Trashed).ToList();
         var config = view is null ? null : JsonNode.Parse(view.Config) as JsonObject;
         var shown = Csv.Shown(schema, config);
 
@@ -231,9 +247,8 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
         foreach (var chunk in Chunked.Of(fileIds))
             foreach (var a in await db.Assets.AsNoTracking().Where(a => chunk.Contains(a.Id)).Select(a => new { a.Id, a.FileName }).ToListAsync(ct))
                 files[a.Id.ToString()] = a.FileName;
-        var bytes = Csv.Write(schema, config, rows, new CsvLookups { People = people, Rows = related, Files = files });
-        var name = Documents.SafeNames.Name(database.Title + (view is null ? "" : " - " + view.Name), "Database");
-        return (bytes, name + ".csv");
+        return new ViewExport(schema, config, shown, rows, new CsvLookups { People = people, Rows = related, Files = files },
+            database.Title + (view is null ? "" : " - " + view.Name), view?.Name);
     }
 
     // Import ----------------------------------------------------------------------------------------

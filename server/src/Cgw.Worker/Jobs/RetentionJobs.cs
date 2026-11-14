@@ -1,4 +1,5 @@
 using Cgw.Core;
+using Cgw.Core.Blob;
 using Cgw.Core.Data;
 using Cgw.Core.Sync;
 using Microsoft.EntityFrameworkCore;
@@ -125,6 +126,76 @@ public sealed class TrashRetentionJob(TimeProvider clock) : IJob
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);
+        return true;
+    }
+}
+
+/// <summary>
+/// Workbooks in the trash for 60 days are deleted for good (DECISIONS.md, 2026-11-14: Phase 5), as
+/// pages are: the record, its versions, pictures, access list, tickets and file sessions, then its
+/// blobs, and an audit entry (<c>workbook.purgedByRetention</c>). A workbook restored meanwhile is
+/// left alone: its row goes first, only while it is still in the trash past the cut-off. Tickets
+/// and file sessions a day past their lives are removed on the way.
+/// </summary>
+public sealed class WorkbookRetentionJob(BlobStore blob, TimeProvider clock) : IJob
+{
+    public string Name => "workbookRetention";
+    public TimeSpan Interval => TimeSpan.FromMinutes(10);
+    public static TimeSpan Keep { get; set; } = TimeSpan.FromDays(60);
+    private const int Batch = 20;
+
+    public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var db = services.GetRequiredService<CgwDb>();
+        var now = clock.GetUtcNow();
+        var cutoff = now - Keep;
+        var due = await db.Workbooks.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(w => w.TrashedAt != null && w.TrashedAt < cutoff)
+            .OrderBy(w => w.TrashedAt).Select(w => new { w.Id, w.WorkspaceId }).Take(Batch).ToListAsync(ct);
+        foreach (var book in due)
+        {
+            db.ChangeTracker.Clear();
+            db.Scope.Switch(book.WorkspaceId);
+            await PurgeAsync(services, db, book.WorkspaceId, book.Id, ct);
+        }
+        db.Scope.Switch(null);
+        var old = now - TimeSpan.FromDays(1);
+        await db.WorkbookTickets.IgnoreQueryFilters([CgwDb.Tenant]).Where(t => t.ExpiresAt < old).ExecuteDeleteAsync(ct);
+        await db.FileSessions.IgnoreQueryFilters([CgwDb.Tenant])
+            .Where(s => s.MaxExpiresAt < old || s.IdleExpiresAt < old || (s.EndedAt != null && s.EndedAt < old)).ExecuteDeleteAsync(ct);
+        return due.Count == Batch;
+    }
+
+    /// <summary>Deletes one workbook for good if it is still due; whether it did.</summary>
+    public async Task<bool> PurgeAsync(IServiceProvider services, CgwDb db, Guid workspaceId, Guid workbookId, CancellationToken ct)
+    {
+        if (db.TenantId != workspaceId) throw new InvalidOperationException("Enter the workspace's scope first.");
+        var audit = services.GetRequiredService<Audit>();
+        var cutoff = clock.GetUtcNow() - Keep;
+        var keys = new List<string>();
+        await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
+        {
+            var book = await db.Workbooks.AsNoTracking().FirstOrDefaultAsync(w => w.Id == workbookId, ct);
+            // The row first, and only if it is still due: a restore that came first keeps it.
+            if (book is null || await db.Workbooks.Where(w => w.Id == workbookId && w.TrashedAt != null && w.TrashedAt < cutoff).ExecuteDeleteAsync(ct) == 0)
+            {
+                await tx.RollbackAsync(ct);
+                return false;
+            }
+            keys.AddRange(await db.WorkbookVersions.Where(v => v.WorkbookId == workbookId).Select(v => v.BlobKey).ToListAsync(ct));
+            keys.AddRange(await db.WorkbookPreviews.Where(p => p.WorkbookId == workbookId).Select(p => p.BlobKey).ToListAsync(ct));
+            await db.WorkbookPreviews.Where(p => p.WorkbookId == workbookId).ExecuteDeleteAsync(ct);
+            await db.WorkbookVersions.Where(v => v.WorkbookId == workbookId).ExecuteDeleteAsync(ct);
+            await db.WorkbookPermissions.Where(r => r.WorkbookId == workbookId).ExecuteDeleteAsync(ct);
+            await db.WorkbookTickets.Where(t => t.WorkbookId == workbookId).ExecuteDeleteAsync(ct);
+            await db.FileSessions.Where(s => s.WorkbookId == workbookId).ExecuteDeleteAsync(ct);
+            audit.Add(Actor.System, "workbook.purgedByRetention", workspaceId, "workbook", workbookId, new { trashedAt = book.TrashedAt });
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        foreach (var key in keys) await blob.DeleteAsync(key, ct);
+        await foreach (var (name, _) in blob.ListAsync(BlobStore.WorkbookPrefix(workspaceId, workbookId), ct))
+            await blob.DeleteAsync(name, ct);
         return true;
     }
 }

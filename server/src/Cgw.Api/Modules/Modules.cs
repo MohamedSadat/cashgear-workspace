@@ -8,6 +8,7 @@ using Cgw.Core.Previews;
 using Cgw.Core.Search;
 using Cgw.Core.Sharing;
 using Cgw.Core.Sync;
+using Cgw.Core.Workbooks;
 using Cgw.Core.Workspaces;
 
 namespace Cgw.Api.Modules;
@@ -35,6 +36,10 @@ public static class Modules
         services.AddScoped<DatabaseOps>();
         services.AddScoped<DatabaseService>();
         services.AddSingleton<DatabaseRowCache>();
+        services.AddScoped<WorkbookAccess>();
+        services.AddScoped<WorkbookService>();
+        services.AddScoped<SheetSessions>();
+        services.AddScoped<ErpLinkService>();
         return services;
     }
 
@@ -46,6 +51,8 @@ public static class Modules
         api.MapSharing();
         api.MapHistory();
         api.MapDatabases();
+        api.MapWorkbooks();
+        api.MapSheetSessions();
         return api;
     }
 }

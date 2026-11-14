@@ -5,6 +5,7 @@ using Cgw.Api.Modules;
 using Cgw.Core;
 using Cgw.Core.Blob;
 using Cgw.Core.Data;
+using Cgw.Core.Workbooks;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -20,6 +21,8 @@ namespace Cgw.Api;
 public static class ApiServices
 {
     public const string CorsPolicy = "web";
+    /// <summary>Sheet's file-session routes: Sheet's origins only, no credentials (sheet-session.1).</summary>
+    public const string SheetCorsPolicy = "sheet";
     public const string Scheme = "cgw";
     public const string DesktopClientId = "cgw-desktop";
     public const string CsrfHeader = "X-CSRF-TOKEN";
@@ -41,13 +44,25 @@ public static class ApiServices
         services.AddSingleton(shortcuts);
         services.AddSingleton(cookies);
         var origins = Origins(configuration);
-        services.AddCors(o => o.AddPolicy(CorsPolicy, p => p
-            .WithOrigins(origins)
-            .AllowCredentials()
-            .WithHeaders("Content-Type", "Authorization", CsrfHeader, Correlation.Header, "If-Match", Cgw.Core.Sharing.SharedReader.Header)
-            .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After")
-            .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
-            .SetPreflightMaxAge(TimeSpan.FromHours(1))));
+        var integrations = Integrations.From(configuration, environment.IsProduction());
+        services.AddSingleton(integrations);
+        services.AddCors(o =>
+        {
+            o.AddPolicy(CorsPolicy, p => p
+                .WithOrigins(origins)
+                .AllowCredentials()
+                .WithHeaders("Content-Type", "Authorization", CsrfHeader, Correlation.Header, "If-Match", Cgw.Core.Sharing.SharedReader.Header, WorkbookEndpoints.PreviewVersionHeader)
+                .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After", "Location")
+                .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+                .SetPreflightMaxAge(TimeSpan.FromHours(1)));
+            o.AddPolicy(SheetCorsPolicy, p => p
+                .WithOrigins([.. integrations.SheetOrigins])
+                .DisallowCredentials()
+                .WithHeaders("Content-Type", SheetSessions.Header, "If-Match", "If-None-Match")
+                .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After", "Location")
+                .WithMethods("GET", "POST")
+                .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
+        });
 
         // Cookies and Identity tokens are protected with keys kept in the database, so every API
         // instance and every restart reads the same ones. On Windows hosts they are encrypted at rest
@@ -332,7 +347,9 @@ internal sealed class StartupTasks(IServiceProvider services, IConfiguration con
         logger.LogInformation("Search uses {Mode}", fullText ? "full-text" : "LIKE");
         var blob = scope.ServiceProvider.GetRequiredService<BlobStore>();
         await blob.EnsureContainerAsync(ct);
-        if (!environment.IsProduction()) await blob.AllowOriginsAsync(ApiServices.Origins(configuration), ct);
+        // Sheet's origins read workbooks by signed URL (the embed, Sheet's cloud platform), and only read.
+        if (!environment.IsProduction())
+            await blob.AllowOriginsAsync(ApiServices.Origins(configuration), services.GetRequiredService<Integrations>().SheetOrigins, ct);
 
         var applications = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
         var descriptor = new OpenIddictApplicationDescriptor

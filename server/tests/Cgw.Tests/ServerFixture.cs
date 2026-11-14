@@ -66,6 +66,8 @@ public sealed class ServerFixture : IAsyncLifetime
         ["RateLimits:anonymous"] = "100000",
         ["RateLimits:preview"] = "100000",
         ["RateLimits:import"] = "100000",
+        ["RateLimits:ticket"] = "100000",
+        ["RateLimits:sheet"] = "100000",
     };
 
     public async ValueTask InitializeAsync()

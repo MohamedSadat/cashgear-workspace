@@ -97,6 +97,13 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
     {
         // Every tenant-owned table; the tenant filter scopes each delete to this workspace.
         if (db.TenantId != workspaceId) throw new InvalidOperationException("Enter the workspace's scope first.");
+        await db.WorkbookPreviews.ExecuteDeleteAsync(ct);
+        await db.WorkbookVersions.ExecuteDeleteAsync(ct);
+        await db.WorkbookPermissions.ExecuteDeleteAsync(ct);
+        await db.WorkbookTickets.ExecuteDeleteAsync(ct);
+        await db.FileSessions.ExecuteDeleteAsync(ct);
+        await db.Workbooks.ExecuteDeleteAsync(ct);
+        await db.ErpLinks.ExecuteDeleteAsync(ct);
         await db.PageDocUpdates.ExecuteDeleteAsync(ct);
         await db.PageDocSnapshots.ExecuteDeleteAsync(ct);
         await db.PageDocDerived.ExecuteDeleteAsync(ct);

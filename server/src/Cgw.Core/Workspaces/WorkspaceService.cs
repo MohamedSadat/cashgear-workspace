@@ -174,6 +174,9 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
         await db.YjsClients.Where(c => c.UserId == userId).ExecuteDeleteAsync(ct);
         // Nothing waits for them if they come back: no rows of theirs, no invitation still open.
         await db.PagePermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        await db.WorkbookPermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        // Their file sessions in Sheet end (each request checks membership anyway).
+        await db.FileSessions.Where(s => s.UserId == userId && s.EndedAt == null).ExecuteUpdateAsync(s => s.SetProperty(x => x.EndedAt, clock.GetUtcNow()), ct);
         var email = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.NormalizedEmail).FirstOrDefaultAsync(ct);
         var now = clock.GetUtcNow();
         if (email is not null)

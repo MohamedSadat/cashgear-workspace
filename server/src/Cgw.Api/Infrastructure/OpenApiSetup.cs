@@ -38,6 +38,29 @@ public sealed partial class RouteParameters : IOpenApiOperationTransformer
 }
 
 /// <summary>
+/// A request body a handler reads itself (Sheet's xlsx, a picture's PNG, Redeem's JSON read after
+/// the <c>Origin</c> check). <c>Accepts</c> would let routing refuse another content type with a
+/// 415 before the handler runs, and outside the route's CORS policy; this only documents it.
+/// </summary>
+public sealed record DocumentedBody(string ContentType, Type? Json = null);
+
+public sealed class DocumentedBodies : IOpenApiOperationTransformer
+{
+    public async Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken ct)
+    {
+        if (context.Description.ActionDescriptor.EndpointMetadata.OfType<DocumentedBody>().FirstOrDefault() is not { } body) return;
+        var schema = body.Json is { } type
+            ? await context.GetOrCreateSchemaAsync(type, null, ct)
+            : new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" };
+        operation.RequestBody = new OpenApiRequestBody
+        {
+            Required = true,
+            Content = new Dictionary<string, OpenApiMediaType> { [body.ContentType] = new() { Schema = schema } },
+        };
+    }
+}
+
+/// <summary>
 /// A collection property whose items are a nullable reference type (<c>IReadOnlyList&lt;string?&gt;</c>:
 /// the import's columns, null for a column not imported) has nullable items in the document; the
 /// generator reads only the property's own nullability.

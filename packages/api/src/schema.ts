@@ -273,6 +273,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/databases/{databaseId}/workbooks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['exportDatabaseWorkbook'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/exports/{exportId}': {
     parameters: {
       query?: never;
@@ -529,6 +545,102 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/sheet-sessions/end': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['endSheetSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sheet-sessions/redeem': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['redeemSheetSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sheet-sessions/renew': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['renewSheetSession'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sheet-sessions/workbook': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getSheetSessionWorkbook'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sheet-sessions/workbook/copies': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['copySheetSessionWorkbook'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/sheet-sessions/workbook/versions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['saveSheetSessionVersion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/version': {
     parameters: {
       query?: never;
@@ -537,6 +649,118 @@ export interface paths {
       cookie?: never;
     };
     get: operations['getVersion'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWorkbook'];
+    put?: never;
+    post?: never;
+    delete: operations['deleteWorkbook'];
+    options?: never;
+    head?: never;
+    patch: operations['updateWorkbook'];
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWorkbookContent'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/launch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['launchWorkbook'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/permissions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWorkbookPermissions'];
+    put: operations['setWorkbookPermissions'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/previews/{viewHash}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWorkbookPreview'];
+    put: operations['putWorkbookPreview'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/range': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWorkbookRange'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/sheets': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listWorkbookSheets'];
     put?: never;
     post?: never;
     delete?: never;
@@ -604,6 +828,38 @@ export interface paths {
     put?: never;
     post?: never;
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/erp-links': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listErpLinks'];
+    put?: never;
+    post: operations['createErpLink'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/erp-links/{linkId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['deleteErpLink'];
     options?: never;
     head?: never;
     patch?: never;
@@ -747,6 +1003,22 @@ export interface paths {
     get: operations['getTree'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/workbooks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listWorkbooks'];
+    put?: never;
+    post: operations['createWorkbook'];
     delete?: never;
     options?: never;
     head?: never;
@@ -898,6 +1170,20 @@ export interface components {
       visit?: null | components['schemas']['VisitDto'];
       workspace?: null | components['schemas']['WorkspaceDto'];
     };
+    ErpLinkDto: {
+      company: string;
+      companyName: string;
+      erpBaseUrl: string;
+      erpLinkId: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      linkedAt: string;
+      linkedBy: components['schemas']['UserRefDto'];
+    };
+    ErpLinksDto: {
+      links: components['schemas']['ErpLinkDto'][];
+    };
     ExportDto: {
       /** Format: uuid */
       id: string;
@@ -910,6 +1196,17 @@ export interface components {
       pageId: string;
       /** Format: uuid */
       workspaceId: string;
+    };
+    FileSessionDto: {
+      access: string;
+      /** Format: date-time */
+      expiresAt: string;
+      language: string;
+      /** Format: date-time */
+      maxExpiresAt: string;
+      token: string;
+      user: components['schemas']['UserRefDto'];
+      workbook: components['schemas']['WorkbookRefDto'];
     };
     ForgotRequest: {
       email: string;
@@ -991,6 +1288,12 @@ export interface components {
       /** Format: int64 */
       sizeBytes: number | string;
     };
+    NewErpLink: {
+      company: null | string;
+      companyName: null | string;
+      erpBaseUrl: null | string;
+      erpLinkId: null | string;
+    };
     NewInvite: {
       email: string;
       role: string;
@@ -1001,6 +1304,11 @@ export interface components {
     };
     NewVersion: {
       kind: null | string;
+      name: null | string;
+    };
+    NewWorkbook: {
+      /** Format: uuid */
+      id: null | string;
       name: null | string;
     };
     NewWorkspace: {
@@ -1276,8 +1584,31 @@ export interface components {
       /** Format: uuid */
       workspaceId: string;
     };
+    SessionCopyDto: {
+      access: string;
+      etag: string;
+      /** Format: uuid */
+      versionId: string;
+      workbook: components['schemas']['WorkbookRefDto'];
+    };
     SessionInfo: {
       account: null | components['schemas']['Me'];
+    };
+    SessionRenewDto: {
+      /** Format: date-time */
+      expiresAt: string;
+    };
+    SessionVersionDto: {
+      etag: string;
+      /** Format: uuid */
+      versionId: string;
+    };
+    SessionWorkbookDto: {
+      etag: null | string;
+      name: string;
+      readUrl: null | string;
+      /** Format: int64 */
+      size: null | number | string;
     };
     SharedPageDto: {
       icon: null | string;
@@ -1331,6 +1662,11 @@ export interface components {
       views: components['schemas']['ViewDto'][];
       visits: components['schemas']['VisitDto'][];
       workspace: components['schemas']['WorkspaceDto'];
+    };
+    UserRefDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
     };
     VersionDetailDto: {
       /** Format: date-time */
@@ -1386,6 +1722,89 @@ export interface components {
       pageId: string;
       /** Format: uuid */
       workspaceId: string;
+    };
+    WorkbookContentDto: {
+      etag: null | string;
+      /** Format: date-time */
+      expiresAt: null | string;
+      readUrl: null | string;
+      /** Format: int64 */
+      size: null | number | string;
+      /** Format: uuid */
+      versionId: null | string;
+    };
+    WorkbookDto: {
+      access: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      createdBy: string;
+      etag: null | string;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** Format: date-time */
+      savedAt: null | string;
+      savedBy: null | components['schemas']['UserRefDto'];
+      /** Format: int64 */
+      size: null | number | string;
+      /** Format: date-time */
+      trashedAt: null | string;
+      /** Format: int64 */
+      version: number | string;
+      /** Format: uuid */
+      versionId: null | string;
+      /** Format: uuid */
+      workspaceId: string;
+    };
+    WorkbookExportRequest: {
+      name: null | string;
+      /** Format: uuid */
+      viewId: null | string;
+    };
+    WorkbookLaunchDto: {
+      /** Format: date-time */
+      expiresAt: string;
+      url: string;
+    };
+    WorkbookListDto: {
+      workbooks: components['schemas']['WorkbookDto'][];
+    };
+    WorkbookPreviewDto: {
+      etag: string;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: int32 */
+      height: number | string;
+      /** Format: date-time */
+      madeAt: string;
+      url: string;
+      /** Format: uuid */
+      versionId: string;
+      /** Format: int32 */
+      width: number | string;
+    };
+    WorkbookRangeDto: {
+      csv: string;
+      range: null | string;
+      sheet: string;
+    };
+    WorkbookRefDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    WorkbookSheetDto: {
+      hidden: boolean;
+      name: string;
+      usedRange: null | string;
+    };
+    WorkbookSheetsDto: {
+      sheets: components['schemas']['WorkbookSheetDto'][];
+    };
+    WorkbookUpdate: {
+      name: null | string;
+      trashed: null | boolean;
     };
     WorkspaceDto: {
       /** Format: int64 */
@@ -1823,6 +2242,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RowsPageDto'];
+        };
+      };
+    };
+  };
+  exportDatabaseWorkbook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkbookExportRequest'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookDto'];
         };
       };
     };
@@ -2278,6 +2723,148 @@ export interface operations {
       };
     };
   };
+  endSheetSession: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Workspace-File-Session'?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  redeemSheetSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          ticket: null | string;
+        };
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FileSessionDto'];
+        };
+      };
+    };
+  };
+  renewSheetSession: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Workspace-File-Session'?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionRenewDto'];
+        };
+      };
+    };
+  };
+  getSheetSessionWorkbook: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Workspace-File-Session'?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionWorkbookDto'];
+        };
+      };
+    };
+  };
+  copySheetSessionWorkbook: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Workspace-File-Session'?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionCopyDto'];
+        };
+      };
+    };
+  };
+  saveSheetSessionVersion: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Workspace-File-Session'?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionVersionDto'];
+        };
+      };
+    };
+  };
   getVersion: {
     parameters: {
       query?: never;
@@ -2294,6 +2881,261 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['VersionInfo'];
+        };
+      };
+    };
+  };
+  getWorkbook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookDto'];
+        };
+      };
+    };
+  };
+  deleteWorkbook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  updateWorkbook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkbookUpdate'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookDto'];
+        };
+      };
+    };
+  };
+  getWorkbookContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookContentDto'];
+        };
+      };
+    };
+  };
+  launchWorkbook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookLaunchDto'];
+        };
+      };
+    };
+  };
+  getWorkbookPermissions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PermissionsDto'];
+        };
+      };
+    };
+  };
+  setWorkbookPermissions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PermissionsUpdate'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PermissionsDto'];
+        };
+      };
+    };
+  };
+  getWorkbookPreview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        viewHash: string;
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookPreviewDto'];
+        };
+      };
+    };
+  };
+  putWorkbookPreview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        viewHash: string;
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'image/png': string;
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getWorkbookRange: {
+    parameters: {
+      query?: {
+        range?: string;
+        sheet?: string;
+      };
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookRangeDto'];
+        };
+      };
+    };
+  };
+  listWorkbookSheets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookSheetsDto'];
         };
       };
     };
@@ -2458,6 +3300,75 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ChangesDto'];
         };
+      };
+    };
+  };
+  listErpLinks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpLinksDto'];
+        };
+      };
+    };
+  };
+  createErpLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewErpLink'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ErpLinkDto'];
+        };
+      };
+    };
+  };
+  deleteErpLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        linkId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -2718,6 +3629,57 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TreeDto'];
+        };
+      };
+    };
+  };
+  listWorkbooks: {
+    parameters: {
+      query?: {
+        q?: string;
+        trashed?: boolean;
+      };
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookListDto'];
+        };
+      };
+    };
+  };
+  createWorkbook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewWorkbook'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookDto'];
         };
       };
     };

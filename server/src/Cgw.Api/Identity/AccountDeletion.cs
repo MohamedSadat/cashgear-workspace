@@ -179,6 +179,8 @@ public sealed class AccountDeletion(
         await db.Favourites.Where(f => f.UserId == userId).ExecuteDeleteAsync(ct);
         await db.PageVisits.Where(v => v.UserId == userId).ExecuteDeleteAsync(ct);
         await db.PagePermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        await db.WorkbookPermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        await db.FileSessions.Where(s => s.UserId == userId && s.EndedAt == null).ExecuteUpdateAsync(s => s.SetProperty(x => x.EndedAt, now), ct);
         changes.Add("member", userId, "delete", 1, userId);
         changes.Add("access", workspaceId, "revoke", 1, userId, userId);
         audit.Add(actor, "member.remove", workspaceId, "user", userId, new { reason = "account.delete" });

@@ -36,7 +36,8 @@ public sealed record Shortcuts(bool AllowHttp, bool EphemeralKeys, bool PublicUr
 /// <summary>
 /// What Production refuses to start without, and what it refuses to start with: the web app's
 /// origins, the public URL mail links are built from, DPAPI over the keys kept in the database (on
-/// Windows), and none of the development <see cref="Shortcuts"/>.
+/// Windows), Sheet's origins and the ERP's base (Phase 5), and none of the development
+/// <see cref="Shortcuts"/>.
 /// </summary>
 public static class ProductionChecks
 {
@@ -51,6 +52,15 @@ public static class ProductionChecks
             problems.Add("Set Api__PublicUrl to the API's public https origin.");
         if (windows && configuration["DataProtection:Dpapi"] != "true")
             problems.Add("Set DataProtection__Dpapi=true: the cookie and token keys in the database are otherwise kept in the clear.");
+        // Phase 5: where Sheet and the ERP are comes from here alone, never from a link.
+        static bool Https(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;
+        if (!Https(configuration[Cgw.Core.Workbooks.Integrations.SheetOriginKey]))
+            problems.Add("Set Sheet__Origin to Sheet's https origin (launch links open it).");
+        var sheetOrigins = configuration.GetSection(Cgw.Core.Workbooks.Integrations.SheetOriginsKey).Get<string[]>() ?? [];
+        if (sheetOrigins.Length == 0 || sheetOrigins.Any(o => !Https(o)))
+            problems.Add("Set Sheet__Origins__0 (and __1, ...) to Sheet's https origins (they redeem tickets and read workbooks).");
+        if (!Https(configuration[Cgw.Core.Workbooks.Integrations.ErpApiBaseKey]))
+            problems.Add("Set Erp__ApiBase to the ERP API's https base (the only ERP a link may name).");
         foreach (var key in Shortcuts.Keys)
             if (string.Equals(configuration[key], "true", StringComparison.OrdinalIgnoreCase))
                 problems.Add($"{key.Replace(":", "__", StringComparison.Ordinal)} is for a developer's machine and is refused in Production.");

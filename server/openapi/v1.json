@@ -1953,6 +1953,815 @@
           }
         }
       }
+    },
+    "/api/v1/workspaces/{workspaceId}/workbooks": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "listWorkbooks",
+        "parameters": [
+          {
+            "name": "trashed",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookListDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "createWorkbook",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewWorkbook"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "getWorkbook",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "updateWorkbook",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkbookUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "deleteWorkbook",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/permissions": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "getWorkbookPermissions",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "setWorkbookPermissions",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/content": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "getWorkbookContent",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookContentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/previews/{viewHash}": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "getWorkbookPreview",
+        "parameters": [
+          {
+            "name": "viewHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookPreviewDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "putWorkbookPreview",
+        "parameters": [
+          {
+            "name": "viewHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/launch": {
+      "post": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "launchWorkbook",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookLaunchDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/sheets": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "listWorkbookSheets",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookSheetsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/range": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "getWorkbookRange",
+        "parameters": [
+          {
+            "name": "sheet",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookRangeDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/databases/{databaseId}/workbooks": {
+      "post": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "exportDatabaseWorkbook",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkbookExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/erp-links": {
+      "get": {
+        "tags": [
+          "ERP links"
+        ],
+        "operationId": "listErpLinks",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpLinksDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ERP links"
+        ],
+        "operationId": "createErpLink",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewErpLink"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpLinkDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/erp-links/{linkId}": {
+      "delete": {
+        "tags": [
+          "ERP links"
+        ],
+        "operationId": "deleteErpLink",
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/sheet-sessions/redeem": {
+      "post": {
+        "tags": [
+          "Sheet sessions"
+        ],
+        "operationId": "redeemSheetSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "required": [
+                  "ticket"
+                ],
+                "type": "object",
+                "properties": {
+                  "ticket": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSessionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sheet-sessions/renew": {
+      "post": {
+        "tags": [
+          "Sheet sessions"
+        ],
+        "operationId": "renewSheetSession",
+        "parameters": [
+          {
+            "name": "X-Workspace-File-Session",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRenewDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sheet-sessions/end": {
+      "post": {
+        "tags": [
+          "Sheet sessions"
+        ],
+        "operationId": "endSheetSession",
+        "parameters": [
+          {
+            "name": "X-Workspace-File-Session",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/sheet-sessions/workbook": {
+      "get": {
+        "tags": [
+          "Sheet sessions"
+        ],
+        "operationId": "getSheetSessionWorkbook",
+        "parameters": [
+          {
+            "name": "X-Workspace-File-Session",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionWorkbookDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sheet-sessions/workbook/versions": {
+      "post": {
+        "tags": [
+          "Sheet sessions"
+        ],
+        "operationId": "saveSheetSessionVersion",
+        "parameters": [
+          {
+            "name": "X-Workspace-File-Session",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionVersionDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sheet-sessions/workbook/copies": {
+      "post": {
+        "tags": [
+          "Sheet sessions"
+        ],
+        "operationId": "copySheetSessionWorkbook",
+        "parameters": [
+          {
+            "name": "X-Workspace-File-Session",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCopyDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2452,6 +3261,57 @@
           }
         }
       },
+      "ErpLinkDto": {
+        "required": [
+          "id",
+          "erpLinkId",
+          "erpBaseUrl",
+          "company",
+          "companyName",
+          "linkedBy",
+          "linkedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "erpLinkId": {
+            "type": "string"
+          },
+          "erpBaseUrl": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string"
+          },
+          "linkedBy": {
+            "$ref": "#/components/schemas/UserRefDto"
+          },
+          "linkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ErpLinksDto": {
+        "required": [
+          "links"
+        ],
+        "type": "object",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErpLinkDto"
+            }
+          }
+        }
+      },
       "ExportDto": {
         "required": [
           "id",
@@ -2492,6 +3352,43 @@
             "format": "uuid"
           },
           "orderKey": {
+            "type": "string"
+          }
+        }
+      },
+      "FileSessionDto": {
+        "required": [
+          "token",
+          "expiresAt",
+          "maxExpiresAt",
+          "workbook",
+          "access",
+          "user",
+          "language"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "maxExpiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workbook": {
+            "$ref": "#/components/schemas/WorkbookRefDto"
+          },
+          "access": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserRefDto"
+          },
+          "language": {
             "type": "string"
           }
         }
@@ -2816,6 +3713,41 @@
           }
         }
       },
+      "NewErpLink": {
+        "required": [
+          "erpLinkId",
+          "erpBaseUrl",
+          "company",
+          "companyName"
+        ],
+        "type": "object",
+        "properties": {
+          "erpLinkId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "erpBaseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "company": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "NewInvite": {
         "required": [
           "email",
@@ -2862,6 +3794,28 @@
             ]
           },
           "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NewWorkbook": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
             "type": [
               "null",
               "string"
@@ -4003,6 +4957,30 @@
           }
         }
       },
+      "SessionCopyDto": {
+        "required": [
+          "workbook",
+          "access",
+          "versionId",
+          "etag"
+        ],
+        "type": "object",
+        "properties": {
+          "workbook": {
+            "$ref": "#/components/schemas/WorkbookRefDto"
+          },
+          "access": {
+            "type": "string"
+          },
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      },
       "SessionInfo": {
         "required": [
           "account"
@@ -4018,6 +4996,69 @@
                 "$ref": "#/components/schemas/Me"
               }
             ]
+          }
+        }
+      },
+      "SessionRenewDto": {
+        "required": [
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SessionVersionDto": {
+        "required": [
+          "versionId",
+          "etag"
+        ],
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      },
+      "SessionWorkbookDto": {
+        "required": [
+          "readUrl",
+          "etag",
+          "name",
+          "size"
+        ],
+        "type": "object",
+        "properties": {
+          "readUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "etag": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -4245,6 +5286,22 @@
           }
         }
       },
+      "UserRefDto": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "VersionDetailDto": {
         "required": [
           "id",
@@ -4436,6 +5493,344 @@
           "lastVisitedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "WorkbookContentDto": {
+        "required": [
+          "readUrl",
+          "etag",
+          "size",
+          "versionId",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "readUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "etag": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "versionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkbookDto": {
+        "required": [
+          "id",
+          "workspaceId",
+          "name",
+          "version",
+          "versionId",
+          "etag",
+          "size",
+          "savedAt",
+          "savedBy",
+          "createdBy",
+          "createdAt",
+          "trashedAt",
+          "access"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "versionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "etag": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "savedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "savedBy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserRefDto"
+              }
+            ]
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "trashedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "access": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkbookExportRequest": {
+        "required": [
+          "viewId",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "WorkbookLaunchDto": {
+        "required": [
+          "url",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkbookListDto": {
+        "required": [
+          "workbooks"
+        ],
+        "type": "object",
+        "properties": {
+          "workbooks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbookDto"
+            }
+          }
+        }
+      },
+      "WorkbookPreviewDto": {
+        "required": [
+          "url",
+          "versionId",
+          "etag",
+          "madeAt",
+          "width",
+          "height",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etag": {
+            "type": "string"
+          },
+          "madeAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "width": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "height": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkbookRangeDto": {
+        "required": [
+          "sheet",
+          "range",
+          "csv"
+        ],
+        "type": "object",
+        "properties": {
+          "sheet": {
+            "type": "string"
+          },
+          "range": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "csv": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkbookRefDto": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkbookSheetDto": {
+        "required": [
+          "name",
+          "usedRange",
+          "hidden"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "usedRange": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkbookSheetsDto": {
+        "required": [
+          "sheets"
+        ],
+        "type": "object",
+        "properties": {
+          "sheets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbookSheetDto"
+            }
+          }
+        }
+      },
+      "WorkbookUpdate": {
+        "required": [
+          "name",
+          "trashed"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trashed": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -4648,6 +6043,15 @@
     },
     {
       "name": "Databases"
+    },
+    {
+      "name": "Workbooks"
+    },
+    {
+      "name": "ERP links"
+    },
+    {
+      "name": "Sheet sessions"
     }
   ]
 }
