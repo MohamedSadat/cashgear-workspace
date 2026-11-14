@@ -930,3 +930,16 @@ Built in M5.1 to M5.7 (the streams' choices, each in its note):
 | The HTTPS binding | By host name (SNI) from `WebHosting` | The host's other sites on 443 and its default binding stay as they are |
 | SQL encryption on the host | `TrustServerCertificate=true` for the local instance | Its certificate is self-signed; the connection never leaves the machine |
 | Storage account | `cashgearworkspace`, Spain Central (as `cashgearstorage`), Standard LRS, soft delete 30 days for blobs and containers, versioning | OPERATIONS.md step 3 |
+
+## 2026-11-14: Phase 6
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Q17. SignalR scale-out | One node until measured: the hub runs in the API's one app pool, with nothing new to host. M6.6 measures 2,000 connections and 20 editors on one page; Azure SignalR Service only if those figures say one node is not enough. This settles D20's open point for 0.6.0 |
+| Where the hub runs | In the API's own IIS site and app pool (`CashGearWorkspaceApi`), at `workspace-api.cashgearerp.com`; `install.ps1` turns on IIS's WebSocket Protocol feature. This settles Q6's "revisit for SignalR" |
+| Notification channels for mentions and comments | In the app only: an inbox, updated live while connected. Email stays on the Later list |
+| Comments for a share link's readers | No: a share link shows the page alone. Comments, mentions and presence are for the workspace's members |
+| Presence in the sidebar | Yes: avatars beside the pages others have open, as well as in the open page's top bar, only on pages the viewer can see |
+| Comments offline | Online only in 0.6.0: read and written while connected; offline the panel says so and keeps what it last showed in the session. No local store change (store schema stays 4) |
