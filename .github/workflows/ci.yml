@@ -133,7 +133,7 @@ jobs:
   windows:
     name: Build and test (Windows)
     runs-on: windows-latest
-    timeout-minutes: 130
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -161,9 +161,10 @@ jobs:
       # Tauri embeds apps/web/dist, so the web build comes before clippy.
       - run: pnpm build
       # The released web builds (target/old-build/<tag>, each from its tag and its own lockfile)
-      # that tests/e2e/old-build.spec.ts serves beside this build: v0.2.0 (Phase 3) and v0.3.0
-      # (Phase 4: a page with a database, and rows it must never see).
-      - name: The old builds (v0.2.0's and v0.3.0's web apps)
+      # that tests/e2e/old-build.spec.ts serves beside this build: v0.2.0 (Phase 3), v0.3.0
+      # (Phase 4: a page with a database, and rows it must never see) and v0.4.0 (Phase 5: a page
+      # with a workbook and ERP data, schema 4).
+      - name: The old builds (v0.2.0's, v0.3.0's and v0.4.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs
@@ -193,7 +194,8 @@ jobs:
           & $tool create MSSQLLocalDB -s
           & $tool info MSSQLLocalDB
       - run: cargo build -p cgw-ydoc --profile ffi
-      # Browser tests use the runner's installed Chrome and Edge.
+      # Browser tests use the runner's installed Chrome and Edge. Phase 5's specs also start the
+      # mock Sheet and the mock ERP (tests/mocks, Playwright's webServer, fresh on CI).
       - run: pnpm test:e2e
       # Kill the app while typing, reopen, check nothing reported saved was lost (25 runs each;
       # 1,000 locally for the exit criterion).
@@ -249,7 +251,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -271,6 +273,12 @@ jobs:
       # server's query budget runs in the server job.
       - name: Phase 4 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase4 -- --desktop --no-server
+      # Phase 5's (bench/phase5.mjs): an embed's first paint of a 1,000-cell range scrolled into
+      # view, typing between ten live embeds, an ERP block's first page less the ERP's own time;
+      # in Chrome and on the desktop app, against the server stack started above and the mocks it
+      # starts.
+      - name: Phase 5 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase5 -- --desktop
       - uses: actions/upload-artifact@v4
         if: always()
         with:

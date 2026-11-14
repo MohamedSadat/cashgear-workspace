@@ -19,6 +19,10 @@
 // opens read-only there, the block drawn as needing a newer version, nothing sent, the server's
 // bytes kept; and it never sees rows: its sidebar, its store and its sync know a database's page
 // as a page, never its rows, while rows change on the server.
+//
+// Phase 5 (v0.4.0, schema version 3, no Sheet or ERP blocks): a page holding a workbook block and
+// an ERP data block (schema 4) opens read-only there, both blocks drawn as needing a newer version,
+// nothing sent but the visit, nothing asked of Sheet or the ERP, the server's bytes kept.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -28,6 +32,20 @@ import { newAccount, signIn, signedIn, syncStatus } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import { oldBuild, originOf, serveOldBuild } from '../../scripts/old-build.mjs';
 import { chooseOptions, fullPage, newDatabase, openRow, showView } from './database';
+import {
+  ERP_API,
+  ERP_CLIENT,
+  MOCK_SHEET,
+  SHEET_ORIGIN,
+  erpBlock,
+  expectLive,
+  insertErpBlock,
+  insertExistingWorkbook,
+  newWorkbook,
+  sheetBlock,
+  watchAppErrors,
+  workbookOf,
+} from './ecosystem';
 
 /** This build's document schema version (the old builds' are in their marker). */
 const CURRENT = Number(
@@ -278,6 +296,15 @@ test('the v0.3.0 build shows a page with a database read-only, sends nothing, an
     (await api.get(`/api/v1/databases/${tasksId}/rows?limit=100`)).rows as { title: string }[]
   ).map((r) => r.title);
   expect(rowTitles).toContain('Review the budget');
+  // The old build shows a newer page from the worker's derived document, a moment behind the
+  // updates: wait until it holds the database block (under load it was a step behind; the old
+  // build then showed the page without its placeholder).
+  await expect
+    .poll(
+      async () => ((await api.get(`/api/v1/pages/${plansId}/doc/json`)) as { json: string }).json,
+      { timeout: 60000 },
+    )
+    .toContain('databaseView');
   const before = await serverState(api, plansId);
 
   // v0.3.0, signed in as the same person on its own copy.
@@ -356,5 +383,109 @@ test('the v0.3.0 build shows a page with a database read-only, sends nothing, an
   expect(nowErrors).toEqual([]);
   await oldContext.close();
   await current.close();
+  await api.dispose();
+});
+
+test('the v0.4.0 build shows a page with a workbook and ERP data read-only, sends nothing but visits, and the server keeps its bytes', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.4.0');
+  const account = await newAccount('Three releases');
+  const api = await apiSession(account);
+
+  // This build: a page holding an ERP data block and a workbook block (schema 4).
+  const current = await browser.newContext();
+  const now = await current.newPage();
+  const nowErrors = watchAppErrors(now);
+  await now.goto('/');
+  await signIn(now, account);
+  await signedIn(now, account);
+  await now.getByLabel('Workspace name').fill('Three releases');
+  await now.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(now)).toBeVisible();
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  const workspaceId = (
+    (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+  ).find((w) => w.name === 'Three releases')!.id;
+  await newWorkbook(api, workspaceId, 'Old budget', workbookOf([['Item'], ['Rent']]));
+  await newPage(now, 'Plans with a workbook');
+  await now.keyboard.type('Written by version four');
+  await now.keyboard.press('Enter');
+  await insertErpBlock(now);
+  await expect(erpBlock(now).getByTestId('erp-no-link')).toBeVisible({ timeout: 30000 });
+  await insertExistingWorkbook(now, 'Old budget');
+  await expectLive(sheetBlock(now), 'Rent');
+  await waitSaved(now);
+  const plansId = pageIdOf(now);
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  await expect
+    .poll(async () => (await pageRecord(api, workspaceId, plansId))?.docSchemaVersion, {
+      timeout: 60000,
+    })
+    .toBe(CURRENT);
+  expect(CURRENT).toBeGreaterThanOrEqual(4);
+  // The worker's derived document has both blocks: the server holds the whole page.
+  await expect
+    .poll(
+      async () => ((await api.get(`/api/v1/pages/${plansId}/doc/json`)) as { json: string }).json,
+      { timeout: 60000 },
+    )
+    .toMatch(/sheetEmbed[\s\S]*erpView|erpView[\s\S]*sheetEmbed/);
+  const before = await serverState(api, plansId);
+  await current.close();
+
+  // v0.4.0, signed in as the same person on its own copy.
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const pushes: string[] = [];
+  const elsewhere: string[] = [];
+  old.on('request', (request) => {
+    const url = request.url();
+    if ([MOCK_SHEET, SHEET_ORIGIN, ERP_API, ERP_CLIENT].some((o) => url.startsWith(o)))
+      elsewhere.push(url);
+    if (/\/workbooks|\/erp-links|\/sheet-sessions/.test(url)) elsewhere.push(url);
+    if (request.method() !== 'POST') return;
+    if (/\/doc\/(updates|repair)$/.test(url)) pushes.push(url);
+    if (/\/ops$/.test(url))
+      for (const op of (request.postDataJSON()?.ops ?? []) as { type: string }[])
+        if (op.type !== 'visit.record') pushes.push(`${op.type} ${url}`);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  const sidebar = old.getByRole('tree', { name: 'Pages' });
+  await sidebar.getByRole('treeitem', { name: /Plans with a workbook/ }).click({ timeout: 30000 });
+  await expect(editor(old)).toContainText('Written by version four', { timeout: 20000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  await expect(
+    editor(old).getByText('This block needs a newer version of Cash Gear Workspace.'),
+  ).toHaveCount(2);
+  await expect(editor(old).locator('iframe')).toHaveCount(0);
+  await expect(old.locator('.cgw-page [contenteditable="true"]')).toHaveCount(0);
+  await expect(old.getByLabel('Page title')).not.toBeEditable();
+  const shown = (await editor(old).textContent())!;
+  await editor(old).click();
+  await old.keyboard.type('typed in the old build');
+  await old.keyboard.press('Enter');
+  await expect(editor(old)).toHaveText(shown);
+  // Started again from its store: still read-only, the same placeholders.
+  await old.reload();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  await expect(
+    editor(old).getByText('This block needs a newer version of Cash Gear Workspace.'),
+  ).toHaveCount(2);
+  await old.waitForTimeout(5000);
+
+  expect(pushes, 'what the old build sent').toEqual([]);
+  expect(elsewhere, 'what the old build asked of Sheet, the ERP or their routes').toEqual([]);
+  expect(await serverState(api, plansId)).toEqual(before);
+  expect(oldErrors).toEqual([]);
+  expect(nowErrors).toEqual([]);
+  await oldContext.close();
   await api.dispose();
 });

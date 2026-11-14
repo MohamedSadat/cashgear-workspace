@@ -10,6 +10,27 @@ export const serverStack = {
   stderr: 'pipe' as const,
 };
 
+/**
+ * Phase 5's mocks (tests/mocks): Cash Gear Sheet on 4283 (the embed and the launch route a
+ * local-API build frames and opens) and Cash Gear ERP's API on 4282 with its client on 4284. Kept
+ * running between local runs, fresh on CI. The specs reset what they use (`/__mock/reset`); the
+ * real-system runs (tests/e2e/README.md) skip the parts that need the mocks' controls.
+ */
+export const mocks = [
+  {
+    command: 'node tests/mocks/sheet/server.mjs',
+    url: 'http://127.0.0.1:4283/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
+  {
+    command: 'node tests/mocks/erp/server.mjs --workspace-url http://127.0.0.1:4273',
+    url: 'http://127.0.0.1:4282/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
+];
+
 // Chrome and Edge are the first-class browsers, as in Sheet. E2E_BASE_URL points the specs at a
 // server that is already running, such as `pnpm dev:web`.
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4273';
@@ -50,5 +71,7 @@ export default defineConfig({
         ]),
     // Phase 2: the API, the worker, a fresh database and Azurite (scripts/server-stack.mjs).
     ...(process.env.E2E_API_URL ? [] : [serverStack]),
+    // Phase 5: the mock Sheet and the mock ERP.
+    ...mocks,
   ],
 });

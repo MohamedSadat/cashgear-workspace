@@ -1,7 +1,27 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { createWorkspace, editor, waitSaved } from './helpers';
+import { createWorkspace, editor, newPage, waitSaved } from './helpers';
+import { newAccount, syncStatus } from './cloud';
+import { signedInWorkspace, signers } from './database';
+import {
+  REAL_ERP,
+  REAL_SHEET,
+  connectErp,
+  erpBlock,
+  expectLive,
+  insertErpBlock,
+  insertExistingWorkbook,
+  linkWorkspace,
+  mockErp,
+  mockSheet,
+  newWorkbook,
+  pictureSent,
+  sessionOf,
+  sheetBlock,
+  workbookOf,
+  workspaceIdOf,
+} from './ecosystem';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -255,6 +275,119 @@ test.describe('accessibility of databases', () => {
         await expect(page.locator('.cgw-row-props')).toBeVisible();
         problems.push(...(await axe(page, 'row page')));
         expect(problems, problems.join('\n')).toEqual([]);
+      });
+    }
+  }
+});
+
+// Phase 5: Axe on the Sheet and ERP screens, in both themes and both languages, against the server
+// stack and the mocks: the workbook block live and as its picture, the workbook picker and list,
+// the ERP block (connect, its table, a refusal), the ERP settings section and the link screen.
+// Everything is made in English, then the language and theme are set and the app loaded again.
+test.describe('accessibility of workbooks and ERP data', () => {
+  const cloud = signers();
+  test.afterEach(() => cloud.close());
+  for (const theme of ['light', 'dark'] as const) {
+    for (const language of ['en', 'ar'] as const) {
+      test(`Axe finds nothing on the Sheet and ERP screens (${theme}, ${language})`, async ({
+        page,
+      }) => {
+        test.skip(REAL_SHEET || REAL_ERP, "The mocks' faults draw the error states");
+        test.setTimeout(240000);
+        await mockSheet.reset();
+        await mockErp.reset();
+        const account = await newAccount('Axe');
+        await signedInWorkspace(page, account, 'Axe space', null, cloud.signer);
+        const api = await sessionOf(account);
+        try {
+          const workspaceId = await workspaceIdOf(api, 'Axe space');
+          const workbookId = await newWorkbook(
+            api,
+            workspaceId,
+            'Axe book',
+            workbookOf([
+              ['Item', 'Amount'],
+              ['Rent', 1200],
+            ]),
+          );
+          await linkWorkspace(api, workspaceId, 'Axe space');
+          await newPage(page, 'Axe page');
+          await page.keyboard.type('Checked by Axe.');
+          await page.keyboard.press('Enter');
+          await insertErpBlock(page);
+          const picture = pictureSent(page, workbookId);
+          await insertExistingWorkbook(page, 'Axe book');
+          await expectLive(sheetBlock(page), 'Rent');
+          await picture;
+          await page.waitForTimeout(1000);
+          await waitSaved(page);
+          await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          const problems: string[] = [];
+          const block = sheetBlock(page);
+          await expect(block).toHaveAttribute('data-state', 'loaded', { timeout: 30000 });
+          const erp = erpBlock(page);
+          await expect(erp.getByTestId('erp-not-connected')).toBeVisible({ timeout: 30000 });
+          problems.push(...(await axe(page, 'workbook live, ERP connect')));
+
+          // The workbook as its picture: the embed fails, the kept picture stays with the note.
+          await mockSheet.fault({ code: 'source.unavailable', times: 3, on: 'init' });
+          await page.reload();
+          await expect(block).toHaveAttribute('data-state', 'error:source.unavailable', {
+            timeout: 30000,
+          });
+          await expect(block.locator('.cgw-sheet-picture img')).toBeVisible();
+          problems.push(...(await axe(page, 'workbook picture')));
+
+          // The workbook picker, from the slash menu.
+          await editor(page).getByText('Checked by Axe.').click();
+          await page.keyboard.press('End');
+          await page.keyboard.press('Enter');
+          await page.keyboard.type(language === 'ar' ? '/مصنف موجود' : '/existing');
+          await page.getByRole('option', { name: /^(Existing workbook|مصنف موجود)/ }).click();
+          const pick = page.getByRole('dialog');
+          await expect(pick.getByRole('option')).toHaveCount(1, { timeout: 30000 });
+          problems.push(...(await axe(page, 'workbook picker')));
+          await page.keyboard.press('Escape');
+          await expect(pick).toHaveCount(0);
+
+          // The ERP block connected: its table; then a refusal of the ERP's.
+          await connectErp(page, erp, 'alice');
+          await erp.locator('[data-connector="vendors"]').click();
+          await expect(erp.getByTestId('erp-table')).toBeVisible({ timeout: 30000 });
+          problems.push(...(await axe(page, 'ERP table')));
+          await mockErp.fault({
+            match: 'Connectors/vendors/Query',
+            status: 403,
+            code: 'privilege.denied',
+            times: 1,
+          });
+          await erp.locator('.cgw-erp-head-end button').click();
+          await expect(erp.getByTestId('erp-query-error')).toBeVisible({ timeout: 30000 });
+          problems.push(...(await axe(page, 'ERP refusal')));
+
+          // The workbook list, the ERP settings section and the link screen.
+          await page.goto('/#/workbooks');
+          await expect(page.getByTestId('workbooks-table')).toBeVisible({ timeout: 30000 });
+          problems.push(...(await axe(page, 'workbook list')));
+          await page.goto('/#/settings');
+          await expect(page.getByTestId('erp-settings').getByTestId('erp-links')).toBeVisible({
+            timeout: 30000,
+          });
+          problems.push(...(await axe(page, 'ERP settings')));
+          const { ticket } = await mockErp.linkTicket('dan');
+          await page.goto(`/#/erp-link/${ticket}`);
+          await expect(page.getByTestId('erp-link-screen').locator('form')).toBeVisible({
+            timeout: 30000,
+          });
+          problems.push(...(await axe(page, 'ERP link screen')));
+          expect(problems, problems.join('\n')).toEqual([]);
+        } finally {
+          await api.dispose();
+        }
       });
     }
   }

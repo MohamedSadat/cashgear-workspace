@@ -119,6 +119,8 @@ export async function apiSession(account) {
       return { status: response.status(), body: await response.text() };
     },
     post: async (path, data) => json(await api.post(path, { data, headers }), path),
+    put: async (path, data) => json(await api.put(path, { data, headers }), path),
+    patch: async (path, data) => json(await api.patch(path, { data, headers }), path),
     del: async (path) => json(await api.delete(path, { headers }), path),
     dispose: () => api.dispose(),
   };

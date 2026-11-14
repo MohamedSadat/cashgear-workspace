@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { serverStack } from './playwright.config';
+import { mocks, serverStack } from './playwright.config';
 
 // The Phase 1 exit criteria on the built desktop app (pnpm test:e2e:desktop, after
 // pnpm desktop:build): the same specs, each test on target/release/cgw-desktop.exe started with
@@ -26,9 +26,10 @@ export default defineConfig({
   use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [{ name: 'desktop' }],
   // The Phase 2 specs need the server stack; the desktop app is built with its address.
-  // (and the web preview, which desktop-cloud.spec.ts opens in a browser beside the app).
+  // (and the web preview, which desktop-cloud.spec.ts opens in a browser beside the app). Phase 5:
+  // the mock Sheet and the mock ERP, which the desktop build frames and calls as the web's does.
   webServer: process.env.E2E_API_URL
-    ? []
+    ? [...mocks]
     : [
         {
           command: 'pnpm preview',
@@ -37,5 +38,6 @@ export default defineConfig({
           timeout: 30000,
         },
         serverStack,
+        ...mocks,
       ],
 });
