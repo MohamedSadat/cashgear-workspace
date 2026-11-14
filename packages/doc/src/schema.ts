@@ -1,17 +1,17 @@
 // The block schema (DATA_MODEL.md, "Page content"), fixed by spike S1:
 //   doc: block*      block: (body | block)*      one textBody node whose `kind` sets the text kind
 // Rules that hold forever: `*` only; every attribute optional with a default; no node or attribute
-// is ever removed or renamed. Schema version 4 (version 3 plus `sheetEmbed` and `erpView`).
+// is ever removed or renamed. Schema version 5 (version 4 plus `userMention`).
 import { Extension, Mark, Node, getSchema, mergeAttributes, type AnyExtension } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { dateMentionText, isDateValue } from './dates';
 
 /**
  * Raised for every change an older client could not draw (DATA_MODEL.md). 1: Phase 1's blocks.
- * 2: `tableOfContents`. 3: `databaseView` and `dateMention`. 4: `sheetEmbed` and `erpView`. Each
- * rise has a migration (migrations.ts) and a fixture (fixtures/).
+ * 2: `tableOfContents`. 3: `databaseView` and `dateMention`. 4: `sheetEmbed` and `erpView`.
+ * 5: `userMention`. Each rise has a migration (migrations.ts) and a fixture (fixtures/).
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const TEXT_KINDS = [
   'paragraph',
@@ -320,13 +320,17 @@ const TableRoles = Extension.create({
     TABLE_ROLES[extension.name] ? { tableRole: TABLE_ROLES[extension.name] } : {},
 });
 // A date's text for ProseMirror's own text reads (`textContent`, `textBetween`): a heading holding
-// a date lists it in a table of contents, and copied text says it. Not part of the stored schema.
+// a date lists it in a table of contents, and copied text says it. A person's mention reads as
+// `@` there: a name is the host's, drawn by the editor (and written by text and Markdown when the
+// writer is given one). Not part of the stored schema.
 const LeafText = Extension.create({
   name: 'leafText',
   extendNodeSchema: (extension) =>
     extension.name === 'dateMention'
       ? { leafText: (node: { attrs: Record<string, unknown> }) => dateMentionText(node.attrs) }
-      : {},
+      : extension.name === 'userMention'
+        ? { leafText: () => '@' }
+        : {},
 });
 
 const Table = Node.create({
@@ -505,6 +509,42 @@ const DateMention = Node.create({
   renderText: ({ node }) => dateMentionText(node.attrs),
 });
 
+/** A user id as read from a pasted `data-userid`: any text with something in it, else none. */
+const userIdOf = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+
+/**
+ * Version 5: a person in a line of text, by user id (Phase 6). Drawn as `@` and the person's name
+ * from the workspace's members (the host), `@` and "someone" when unknown; the document keeps the
+ * id only, so a renamed person is drawn by the new name. Their notification comes from the server
+ * worker, which compares the page's mentions with the ones it saw last (DATA_MODEL.md).
+ */
+const UserMention = Node.create({
+  name: 'userMention',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes: () => ({
+    userId: {
+      default: null,
+      parseHTML: (element: HTMLElement) => userIdOf(element.getAttribute('data-userid')),
+      renderHTML: (attrs: Record<string, unknown>) => {
+        const userId = userIdOf(attrs.userId);
+        return userId ? { 'data-userid': userId } : {};
+      },
+    },
+  }),
+  parseHTML: () => [{ tag: 'span[data-user-mention]' }],
+  // `@` as text inside, so HTML pasted into another program still shows where someone was named.
+  renderHTML: ({ HTMLAttributes }) => [
+    'span',
+    mergeAttributes({ 'data-user-mention': '', class: 'cgw-user-mention' }, HTMLAttributes),
+    '@',
+  ],
+  renderText: () => '@',
+});
+
 const simpleMark = (name: string, tags: string[], render: string, extra = {}) =>
   Mark.create({
     name,
@@ -613,6 +653,7 @@ export function schemaExtensions(): AnyExtension[] {
     HardBreak,
     PageMention,
     DateMention,
+    UserMention,
     Link,
     Bold,
     Italic,

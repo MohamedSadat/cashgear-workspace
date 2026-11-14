@@ -1,0 +1,20 @@
+[
+  {
+    "name": "migrate5",
+    "client": 1001,
+    "data": "AQvpBwyo6QcAAX0Fh+kHAgMFYmxvY2sHAOkHDQMIdGV4dEJvZHkHAOkHDgYEAOkHDwRBc2sgh+kHDwMLdXNlck1lbnRpb24oAOkHFAZ1c2VySWQBdyQwMTk1ZjRhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwZjWH6QcUBgQA6QcWCSBhYm91dCBpdCgA6QcOBGtpbmQBdwlwYXJhZ3JhcGgoAOkHDQJpZAF3DFVtMVVtMlVtM1VtNAHpBwEAAQ==",
+    "why": "the migration to version 5: meta.schemaVersion set to 5 and a person mentioned, in one transaction"
+  },
+  {
+    "name": "mentionOnly",
+    "client": 1001,
+    "data": "AQrpBwyH6QcCAwVibG9jawcA6QcMAwh0ZXh0Qm9keQcA6QcNBgQA6QcOBEFzayCH6QcOAwt1c2VyTWVudGlvbigA6QcTBnVzZXJJZAF3JDAxOTVmNGEwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBmNYfpBxMGBADpBxUJIGFib3V0IGl0KADpBw0Ea2luZAF3CXBhcmFncmFwaCgA6QcMAmlkAXcMVW0xVW0yVW0zVW00AA==",
+    "why": "a mention in a document still at version 1: an element versions 1 to 4 lack"
+  },
+  {
+    "name": "claimsV6",
+    "client": 1001,
+    "data": "AQHpBwyo6QcAAX0GAekHAQAB",
+    "why": "a document claiming version 6, newer than the worker knows"
+  }
+]

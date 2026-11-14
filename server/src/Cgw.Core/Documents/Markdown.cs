@@ -19,6 +19,11 @@ public sealed class TextContext
     public Func<string, string?>? AssetHref { get; init; }
     /// <summary>What an image or file with no name says.</summary>
     public string? Untitled { get; init; }
+    /// <summary>
+    /// A mentioned person's name now (schema version 5): a mention writes <c>@</c> and it, or
+    /// <c>@</c> alone without one.
+    /// </summary>
+    public Func<string, string?>? UserName { get; init; }
 }
 
 /// <summary>
@@ -162,8 +167,23 @@ public static partial class Markdown
             else if (type == "pageMention")
                 output.Append(context.PageTitle?.Invoke(Js.String(Js.Prop(Js.Prop(node, "attrs"), "pageId"), "")) ?? "");
             else if (type == "dateMention") output.Append(DateMentionText(Js.Prop(node, "attrs")));
+            else if (type == "userMention") output.Append(UserMentionText(node, context));
         }
         return output.ToString();
+    }
+
+    /// <summary>
+    /// Schema version 5's user mention (<c>userMentionText</c> in packages/doc/src/text.ts):
+    /// <c>@</c> and the name the writer is given for a user id that is a non-empty string, else
+    /// <c>@</c> alone.
+    /// </summary>
+    private static string UserMentionText(JsonElement node, TextContext context)
+    {
+        var id = Js.Prop(Js.Prop(node, "attrs"), "userId");
+        var name = id is { ValueKind: JsonValueKind.String } v && v.GetString() is { Length: > 0 } userId
+            ? context.UserName?.Invoke(userId)
+            : null;
+        return "@" + (name ?? "");
     }
 
     [GeneratedRegex(@"^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?\z")]
@@ -207,6 +227,12 @@ public static partial class Markdown
             {
                 // Digits, '-', 'T', ':', 'Z', a space and an arrow: nothing Markdown reads as syntax.
                 output.Append(DateMentionText(Js.Prop(node, "attrs")));
+                continue;
+            }
+            if (type == "userMention")
+            {
+                // '@' is not Markdown; a name is escaped as any text is.
+                output.Append(EscapeInline(UserMentionText(node, context)));
                 continue;
             }
             if (type != "text") continue;

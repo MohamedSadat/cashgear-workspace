@@ -351,7 +351,7 @@ public sealed class DocTests(ServerFixture server)
             .ToDictionary(f => f.Name));
 
     [Fact]
-    public async Task Schema_4_is_known_its_bodies_write_no_text_and_a_newer_version_is_not_known()
+    public async Task Schema_4_is_known_and_its_bodies_write_no_text()
     {
         var ws = await Ws.Create(server);
         await Kit.Register(ws.Client, ws.Id);
@@ -419,12 +419,75 @@ public sealed class DocTests(ServerFixture server)
         var (erpOnly, _) = await Decide("erpOnly", 4);
         Assert.Equal(UpdateStatus.Rejected, erpOnly.Status);
         Assert.Contains("erpView", erpOnly.Problem);
-        // Version 5, which this worker does not know, even from an app that says it does.
+        // Version 5 (Phase 6) is known now: a document may claim it from an app that knows it.
         var (five, fivePage) = await Decide("claimsV5", 5);
-        Assert.Equal(UpdateStatus.Rejected, five.Status);
-        Assert.Contains("newer than this worker knows", five.Problem);
-        Assert.Equal(1, fivePage.DocSchemaVersion);
-        Assert.Equal(4, Schema.Latest);
+        Assert.Equal(UpdateStatus.Valid, five.Status);
+        Assert.Equal(5, fivePage.DocSchemaVersion);
+    }
+
+    private static readonly Lazy<Dictionary<string, Fixture>> Schema5 = new(() =>
+        JsonSerializer.Deserialize<List<Fixture>>(
+                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", "schema5.json")),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!
+            .ToDictionary(f => f.Name));
+
+    [Fact]
+    public async Task Schema_5_is_known_its_mentions_write_no_ids_and_a_newer_version_is_not_known()
+    {
+        var ws = await Ws.Create(server);
+        await Kit.Register(ws.Client, ws.Id);
+
+        async Task<(PageDocUpdate Row, Cgw.Core.Data.Page Page)> Decide(string fixture, int clientSchemaVersion)
+        {
+            var page = (await ws.NewPage(fixture)).GetProperty("id").GetGuid();
+            await Kit.PushOk(ws.Client, page, Kit.Update("page"));
+            var id = Guid.CreateVersion7();
+            var pushed = await ws.Client.PostAsJsonAsync($"/api/v1/pages/{page}/doc/updates", new
+            {
+                epoch = 0,
+                clientSchemaVersion,
+                updates = new[] { new { updateId = id, data = Schema5.Value[fixture].Bytes } },
+            });
+            Assert.True(pushed.IsSuccessStatusCode, await pushed.Content.ReadAsStringAsync());
+            await Validate();
+            await using var db = server.NewDb(ws.Id);
+            return (await db.PageDocUpdates.AsNoTracking().SingleAsync(u => u.UpdateId == id), await db.Pages.AsNoTracking().SingleAsync(p => p.Id == page));
+        }
+
+        const string Mentioned = "0195f4a0-0000-7000-8000-0000000000f5";
+        // Version 5 from an app that knows it: a person mentioned, the page raised.
+        var (migrated, page5) = await Decide("migrate5", 5);
+        Assert.Equal(UpdateStatus.Valid, migrated.Status);
+        Assert.Equal(5, page5.DocSchemaVersion);
+        await Kit.Derive(server, ws.Id, page5.Id);
+        var json = (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/pages/{page5.Id}/doc/json")).GetProperty("json").GetString()!;
+        Assert.Contains(Mentioned, json);
+        // The derived text and search write no id (names change; the inbox finds one's mentions).
+        await using (var db = server.NewDb(ws.Id))
+        {
+            var derived = await db.PageDocDerived.SingleAsync(d => d.PageId == page5.Id);
+            foreach (var text in new[] { derived.PlainText, derived.SearchText })
+            {
+                Assert.Contains("ask", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(Mentioned, text);
+            }
+        }
+        // The same from an app that knows only version 4.
+        var (fromOld, oldPage) = await Decide("migrate5", 4);
+        Assert.Equal(UpdateStatus.Rejected, fromOld.Status);
+        Assert.Contains("newer than the app that pushed it", fromOld.Problem);
+        Assert.Equal(1, oldPage.DocSchemaVersion);
+        // A mention in a document still at version 1 is refused.
+        var (mentionOnly, mentionPage) = await Decide("mentionOnly", 5);
+        Assert.Equal(UpdateStatus.Rejected, mentionOnly.Status);
+        Assert.Contains("userMention", mentionOnly.Problem);
+        Assert.Equal(1, mentionPage.DocSchemaVersion);
+        // Version 6, which this worker does not know, even from an app that says it does.
+        var (six, sixPage) = await Decide("claimsV6", 6);
+        Assert.Equal(UpdateStatus.Rejected, six.Status);
+        Assert.Contains("newer than this worker knows", six.Problem);
+        Assert.Equal(1, sixPage.DocSchemaVersion);
+        Assert.Equal(5, Schema.Latest);
     }
 
     [Fact]

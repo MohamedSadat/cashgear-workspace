@@ -4343,6 +4343,602 @@
     "markdown": "Before\n\n1. Item\n\n  Child of an ERP view\n\nAfter\n"
   },
   {
+    "name": "user mentions with names",
+    "context": {
+      "userNames": {
+        "01936f6e-0000-7000-8000-0000000000b1": "Sara Ali",
+        "01936f6e-0000-7000-8000-0000000000b2": "عمر",
+        "01936f6e-0000-7000-8000-0000000000b3": "*Lee* [x] <b>|"
+      },
+      "pageTitles": {
+        "01936f6e-0000-7000-8000-000000000001": "Plans"
+      }
+    },
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ask "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " about it."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " at the start of a line"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Unknown "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000bf"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", none "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": null
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", no attrs "
+                },
+                {
+                  "type": "userMention"
+                },
+                {
+                  "type": "text",
+                  "text": ", a number "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": 7
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": ", empty "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": ""
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Escaped "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b3"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " and "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b2"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "heading",
+                "level": 2
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Owner "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b2"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "checkItem",
+                    "checked": false
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "For "
+                    },
+                    {
+                      "type": "userMention",
+                      "attrs": {
+                        "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "numberedItem"
+              },
+              "content": [
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " first"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "quote"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Quoted "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                },
+                {
+                  "type": "hardBreak"
+                },
+                {
+                  "type": "text",
+                  "text": "next line"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "callout",
+                "icon": "💡",
+                "tone": "info"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ping "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b2"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "table",
+              "attrs": {
+                "headerRow": true
+              },
+              "content": [
+                {
+                  "type": "tableRow",
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Who"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "What"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "tableRow",
+                  "content": [
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "userMention",
+                          "attrs": {
+                            "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "tableCell",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Launch"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "bold ",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  },
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph",
+                "dir": "rtl"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "اسأل "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b2"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " عن "
+                },
+                {
+                  "type": "pageMention",
+                  "attrs": {
+                    "pageId": "01936f6e-0000-7000-8000-000000000001",
+                    "blockId": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "codeBlock",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "in code "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Ask @Sara Ali about it.\n\n@Sara Ali at the start of a line\n\nUnknown @, none @, no attrs @, a number @, empty @\n\nEscaped @\\*Lee\\* \\[x\\] \\<b\\>\\| and @Sara Ali@عمر\n\n## Owner @Sara Ali\n\n- Item @عمر\n\n  - [ ] For @Sara Ali\n\n1. @Sara Ali first\n\n> Quoted @Sara Ali  \n>   next line\n\n> 💡 Ping @عمر\n\n| Who | What |\n| --- | --- |\n| @Sara Ali | Launch |\n\n**bold** @Sara Ali\n\nاسأل @عمر عن Plans\n\n```\nin code @Sara Ali\n```\n"
+  },
+  {
+    "name": "user mentions with no names given",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ask "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " about it."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b2"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "codeBlock",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "in code "
+                },
+                {
+                  "type": "userMention",
+                  "attrs": {
+                    "userId": "01936f6e-0000-7000-8000-0000000000b1"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Ask @ about it.\n\n- Item @\n\n```\nin code @\n```\n"
+  },
+  {
     "name": "an empty document",
     "doc": {
       "type": "doc",

@@ -337,6 +337,13 @@ fn collect_text<T: ReadTxn>(txn: &T, node: &XmlOut, depth: usize, out: &mut Stri
             if matches!(element.tag().as_ref(), "sheetEmbed" | "erpView") {
                 return Ok(());
             }
+            // Schema version 5's user mention writes `@` alone, whatever it holds: names change,
+            // and the inbox is the way to find one's mentions (the doc layer writes the name only
+            // when its writer is given one).
+            if element.tag().as_ref() == "userMention" {
+                out.push('@');
+                return Ok(());
+            }
             let mut inner = String::new();
             for child in element.children(txn) {
                 collect_text(txn, &child, depth + 1, &mut inner)?;
@@ -344,7 +351,9 @@ fn collect_text<T: ReadTxn>(txn: &T, node: &XmlOut, depth: usize, out: &mut Stri
             // Each text body ends a line, so words in two blocks never run together.
             let has_text = element.children(txn).any(|c| match c {
                 XmlOut::Text(_) => true,
-                XmlOut::Element(inline) => inline.tag().as_ref() == "dateMention",
+                XmlOut::Element(inline) => {
+                    matches!(inline.tag().as_ref(), "dateMention" | "userMention")
+                }
                 XmlOut::Fragment(_) => false,
             });
             out.push_str(&inner);

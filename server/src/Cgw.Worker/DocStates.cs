@@ -25,6 +25,8 @@ public static class Schema
         // and an ERP view (an atom body: linkId, connectorId, filter, fields, sort, pageSize)
         // (Phase 5).
         [4] = ["block", "bookmark", "childPage", "codeBlock", "databaseView", "dateMention", "divider", "erpView", "file", "hardBreak", "image", "pageMention", "sheetEmbed", "table", "tableCell", "tableOfContents", "tableRow", "textBody"],
+        // Version 4's and a user mention (an inline atom: userId) (Phase 6).
+        [5] = ["block", "bookmark", "childPage", "codeBlock", "databaseView", "dateMention", "divider", "erpView", "file", "hardBreak", "image", "pageMention", "sheetEmbed", "table", "tableCell", "tableOfContents", "tableRow", "textBody", "userMention"],
     };
 
     /// <summary>The highest version this worker knows: a document may rise to it, never past it.</summary>

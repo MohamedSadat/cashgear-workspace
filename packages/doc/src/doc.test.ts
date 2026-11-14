@@ -71,6 +71,7 @@ describe('schema', () => {
       'hardBreak',
       'pageMention',
       'dateMention',
+      'userMention',
     ])
       expect(nodes.has(name), name).toBe(true);
     for (const name of [
@@ -84,7 +85,7 @@ describe('schema', () => {
       'highlight',
     ])
       expect(marks.has(name), name).toBe(true);
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
   });
 
   it('allows only safe link schemes', () => {

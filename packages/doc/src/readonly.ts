@@ -100,6 +100,9 @@ export function readOnlyView(
           // Where only text goes (a code block), a date is its text.
           const date = dateMentionText(n.attrs);
           if (date) out.push(textNode(date));
+        } else if (type.name === 'userMention') {
+          // And a person's mention its `@` (the name is the host's, drawn by the editor).
+          out.push(textNode('@'));
         }
         return;
       }

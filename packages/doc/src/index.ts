@@ -13,8 +13,10 @@ export {
   type BlockIdStats,
 } from './ids';
 export {
+  absolutePosition,
   fragmentToJSON,
   isRemoteChange,
+  relativePosition,
   redoCommand,
   stopUndoCapturing,
   undoCommand,

@@ -76,7 +76,7 @@ describe('the read-only view from derived JSON', () => {
 
   it('shows an unknown inline node in its line, and keeps the text around it', () => {
     const doc = docOf(
-      paragraph('Ask ', { type: 'userMention', attrs: { userId: 'u1' } }, ' about it'),
+      paragraph('Ask ', { type: 'futureMention', attrs: { userId: 'u1' } }, ' about it'),
       paragraph(
         'Due ',
         { type: 'equation', attrs: { latex: 'x^2' } },
@@ -85,7 +85,7 @@ describe('the read-only view from derived JSON', () => {
       ),
     );
     const { json, unknownNodes } = view(doc);
-    expect(unknownNodes).toEqual(['equation', 'userMention']);
+    expect(unknownNodes).toEqual(['equation', 'futureMention']);
     expect(plainText(json)).toBe(`Ask ${strings.inline} about it\nDue ${strings.inline}\ndone`);
     expect(JSON.stringify(json)).toContain('"bold"');
   });
@@ -116,9 +116,9 @@ describe('the read-only view from derived JSON', () => {
     const body = grid.content![0];
     body.content!.push({ type: 'tableSummaryRow', content: [] });
     body.content![0].content!.push({ type: 'formulaCell', attrs: { f: '=A1' } });
-    body.content![1].content![0].content!.push({ type: 'userMention' });
+    body.content![1].content![0].content!.push({ type: 'futureMention' });
     const { json, unknownNodes } = view(docOf(grid));
-    expect(unknownNodes).toEqual(['formulaCell', 'tableSummaryRow', 'userMention']);
+    expect(unknownNodes).toEqual(['formulaCell', 'futureMention', 'tableSummaryRow']);
     expect(count(json, strings.block)).toBe(2);
     expect(count(json, strings.inline)).toBe(1);
     expect(plainText(json)).toContain('A\tB');

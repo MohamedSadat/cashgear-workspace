@@ -108,6 +108,11 @@ export const dateMention = (date: string, end: string | null = null): DocJSON =>
   type: 'dateMention',
   attrs: { date, end },
 });
+/** Schema version 5: a person in a line, by user id (their name is the host's, drawn when shown). */
+export const userMention = (userId: string | null): DocJSON => ({
+  type: 'userMention',
+  attrs: { userId },
+});
 
 export function table(rows: Inline[][], headerRow = true): DocJSON {
   return block({

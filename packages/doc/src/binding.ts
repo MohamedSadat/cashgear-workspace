@@ -5,7 +5,9 @@
 import { Extension, type AnyExtension } from '@tiptap/core';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
 import {
+  absolutePositionToRelativePosition,
   redo,
+  relativePositionToAbsolutePosition,
   undo,
   yUndoPluginKey,
   ySyncPlugin,
@@ -15,7 +17,8 @@ import {
   prosemirrorJSONToYXmlFragment,
 } from '@tiptap/y-tiptap';
 import type { Schema } from '@tiptap/pm/model';
-import type * as Y from 'yjs';
+import { fromBase64, toBase64 } from 'lib0/buffer';
+import * as Y from 'yjs';
 import { moveIntentPlugin } from './moves';
 
 /** True for a transaction the binding made from a change that came from Yjs. */
@@ -78,6 +81,61 @@ export interface DocJSON {
   content?: DocJSON[];
   marks?: { type: string; attrs?: Record<string, unknown> }[];
   text?: string;
+}
+
+/** The sync plugin's state, once the binding has drawn the fragment (its mapping holds it). */
+function boundState(state: EditorState) {
+  const sync = ySyncPluginKey.getState(state);
+  return sync && sync.binding.mapping.size > 0 ? sync : null;
+}
+
+/**
+ * A ProseMirror position as a Yjs relative position (`Y.encodeRelativePosition`, base64), through
+ * the binding's mapping, so it keeps its place as the document changes on any client: presence's
+ * cursors and a comment's anchor (Phase 6). The binding's own position sticks to the character
+ * before it; inside text, `assoc` 0 makes it stick to the character after it instead (a comment's
+ * start, so text typed just before the range stays out of it). Null when the editor is not bound
+ * to Yjs or the position cannot be named.
+ *
+ * Read it after the binding has written the editor's latest change to Yjs (a plugin view's
+ * `update`, after the sync plugin's), never inside a transaction's `apply`.
+ */
+export function relativePosition(state: EditorState, pos: number, assoc?: number): string | null {
+  const sync = boundState(state);
+  if (!sync || pos < 0 || pos > state.doc.content.size) return null;
+  try {
+    let relative = absolutePositionToRelativePosition(pos, sync.type, sync.binding.mapping);
+    if (assoc !== undefined) {
+      const at = Y.createAbsolutePositionFromRelativePosition(relative, sync.doc);
+      if (at && at.type instanceof Y.XmlText)
+        relative = Y.createRelativePositionFromTypeIndex(at.type, at.index, assoc);
+    }
+    return toBase64(Y.encodeRelativePosition(relative));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where a relative position made by `relativePosition` (on any client) is in this editor's
+ * document now, or null: not bound, not decodable, or its place is gone (the text it stuck to was
+ * deleted with its block, or the block was moved, which writes it anew).
+ */
+export function absolutePosition(state: EditorState, encoded: string): number | null {
+  const sync = boundState(state);
+  if (!sync || !encoded) return null;
+  try {
+    const relative = Y.decodeRelativePosition(fromBase64(encoded));
+    const pos = relativePositionToAbsolutePosition(
+      sync.doc,
+      sync.type,
+      relative,
+      sync.binding.mapping,
+    );
+    return pos === null || pos < 0 || pos > state.doc.content.size ? null : pos;
+  } catch {
+    return null;
+  }
 }
 
 /** Ends the current undo group, so the next change is an undo step of its own (a restore). */

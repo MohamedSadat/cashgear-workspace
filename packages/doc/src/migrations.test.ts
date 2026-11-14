@@ -3,7 +3,7 @@
 // ordinary local edit and loads in this build with nothing lost; a page of a version a build does
 // not know is read-only there and writes nothing (S2's check). Version 2 (Phase 3) added
 // `tableOfContents`; version 3 (Phase 4) `databaseView` and `dateMention`; version 4 (Phase 5)
-// `sheetEmbed` and `erpView`.
+// `sheetEmbed` and `erpView`; version 5 (Phase 6) `userMention`.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MemoryStore, uuidv7 } from '@cgw/workspace';
@@ -30,6 +30,7 @@ const fixtures: Record<number, Fixture> = {
   1: readJSON<Fixture>('fixtures', 'doc-v1.json'),
   2: readJSON<Fixture>('fixtures', 'doc-v2.json'),
   3: readJSON<Fixture>('fixtures', 'doc-v3.json'),
+  4: readJSON<Fixture>('fixtures', 'doc-v4.json'),
 };
 /** The element names each version knows (the server worker's list). */
 const elements = readJSON<Record<string, string[]>>('vectors', 'schema-elements.json');
@@ -68,7 +69,7 @@ function kindsIn(json: DocJSON): Set<string> {
 
 describe('the version list', () => {
   it('has one step per version, each from n to n + 1', () => {
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
     for (let version = 1; version < SCHEMA_VERSION; version++) {
       expect(typeof migrations[version], String(version)).toBe('function');
       expect(fixtures[version], `fixture for version ${version}`).toBeDefined();
@@ -87,7 +88,7 @@ describe('the version list', () => {
   });
 });
 
-describe.each([1, 2, 3])('the version-%i fixture', (version) => {
+describe.each([1, 2, 3, 4])('the version-%i fixture', (version) => {
   const fixture = fixtures[version];
 
   it('is a document of that version holding every one of its block kinds and marks', () => {
@@ -109,7 +110,7 @@ describe.each([1, 2, 3])('the version-%i fixture', (version) => {
   });
 });
 
-describe.each([1, 2, 3])('migration from version %i', (version) => {
+describe.each([1, 2, 3, 4])('migration from version %i', (version) => {
   const fixture = fixtures[version];
   afterEach(() => vi.useRealTimers());
 
@@ -251,6 +252,7 @@ const DATABASE = '01936f6e-0000-7000-8000-0000000000d1';
 const VIEW = '01936f6e-0000-7000-8000-0000000000d2';
 const WORKBOOK = '01936f6e-0000-7000-8000-0000000000e1';
 const LINK = '01936f6e-0000-7000-8000-0000000000e2';
+const PERSON = '01936f6e-0000-7000-8000-0000000000b1';
 const strings = { block: 'Needs a newer version.', inline: '[newer]' };
 
 /** A block holding one body, built in Yjs. */
@@ -353,6 +355,34 @@ const newer: Newer[] = [
     drawn: ([embed, erp]) => {
       placeholderIn(embed, 'SheetEmbed01');
       placeholderIn(erp, 'ErpViewErp01');
+    },
+  },
+  {
+    version: 5,
+    blocks: () => {
+      // A person named in a line, and a line that starts with one.
+      const ask = element('textBody', { kind: 'paragraph' });
+      ask.insert(0, [
+        new Y.XmlText('Ask '),
+        element('userMention', { userId: PERSON }),
+        new Y.XmlText(' about it'),
+      ]);
+      const start = element('textBody', { kind: 'bulletItem' });
+      start.insert(0, [element('userMention', { userId: PERSON }), new Y.XmlText(' to review')]);
+      return [blockOf('UserMention1', ask), blockOf('UserMention2', start)];
+    },
+    unknown: ['userMention'],
+    found: (json) => {
+      expect(JSON.stringify(json).split(`"userId":"${PERSON}"`)).toHaveLength(3);
+      expect(plainText(json)).toContain('Ask @ about it\n@ to review');
+    },
+    drawn: ([ask, start]) => {
+      // Each mention is a placeholder in its line, the text around it and the block's id kept.
+      expect(ask.attrs).toEqual({ id: 'UserMention1' });
+      expect(start.attrs).toEqual({ id: 'UserMention2' });
+      expect(plainText({ type: 'doc', content: [ask, start] })).toBe(
+        `Ask ${strings.inline} about it\n${strings.inline} to review`,
+      );
     },
   },
 ];

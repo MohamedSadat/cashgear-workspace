@@ -18,6 +18,8 @@ public sealed class MarkdownTests(ServerFixture server)
         return new TextContext
         {
             PageTitle = Map("pageTitles"),
+            // Phase 6: a person's name for a userMention, when the writer is given one.
+            UserName = Map("userNames"),
             PageHref = hrefs is null ? null : (id, _) => hrefs(id),
             AssetName = Map("assetNames"),
             AssetHref = Map("assetHrefs"),

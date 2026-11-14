@@ -28,6 +28,12 @@ export const migrations: Record<number, Migration> = {
   3: (doc) => {
     doc.getMap(META).set('schemaVersion', 4);
   },
+  // 4 -> 5: version 5 adds the `userMention` inline atom. No content changes, as above: a
+  // version-4 build opens the page read-only rather than meet it. (Comments add nothing to the
+  // document: a thread is anchored by block id and relative positions, kept by the server.)
+  4: (doc) => {
+    doc.getMap(META).set('schemaVersion', 5);
+  },
 };
 
 export interface MigrationResult {

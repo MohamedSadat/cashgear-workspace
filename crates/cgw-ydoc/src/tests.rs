@@ -290,3 +290,64 @@ fn version_4_bodies_write_no_text_and_only_version_4_knows_them() {
     assert!(refused.contains(&"unknown element <erpView>".to_string()));
     assert_eq!(refused.len(), 2, "{refused:?}");
 }
+
+/// Schema version 5 (the doc layer's `text.ts`): a user mention writes `@` alone in search's
+/// plain text, even with something inside it (names change; the inbox finds one's mentions); a
+/// line holding only a mention still ends; its user id reaches the derived JSON as stored;
+/// version 5's list takes it and version 4's refuses it.
+#[test]
+fn version_5_user_mention_writes_an_at_sign_and_only_version_5_knows_it() {
+    let doc = Doc::with_client_id(5);
+    let content = doc.get_or_insert_xml_fragment(CONTENT);
+    let update = {
+        let mut txn = doc.transact_mut();
+        let first = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        first.insert_attribute(&mut txn, "id", "aaaaaaaaaaaa");
+        let body = first.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        body.push_back(&mut txn, XmlTextPrelim::new("Ask "));
+        let sara = body.push_back(&mut txn, XmlElementPrelim::empty("userMention"));
+        sara.insert_attribute(&mut txn, "userId", "0195f4a0-0000-7000-8000-0000000000b1");
+        // Hostile: an atom holding text. The name is still not the page's text.
+        sara.push_back(&mut txn, XmlTextPrelim::new("Sara Ali"));
+        body.push_back(&mut txn, XmlTextPrelim::new(" about it"));
+        let alone = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        alone.insert_attribute(&mut txn, "id", "bbbbbbbbbbbb");
+        let only = alone.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        only.push_back(&mut txn, XmlElementPrelim::empty("userMention"));
+        let last = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        last.insert_attribute(&mut txn, "id", "cccccccccccc");
+        let after = last.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        after.push_back(&mut txn, XmlTextPrelim::new("After"));
+        txn.encode_update_v1()
+    };
+    assert_eq!(
+        to_plain_text(&update, CONTENT).unwrap(),
+        "Ask @ about it\n@\nAfter\n"
+    );
+
+    let json: Value =
+        serde_json::from_str(&to_prosemirror_json(&update, CONTENT).unwrap()).unwrap();
+    let mention = &json["content"][0]["content"][0]["content"][1];
+    assert_eq!(mention["type"], "userMention");
+    assert_eq!(
+        mention["attrs"]["userId"],
+        "0195f4a0-0000-7000-8000-0000000000b1"
+    );
+
+    let policy = |version: &str| Policy {
+        elements: schema_elements(version),
+        block_ids: true,
+        ..Policy::default()
+    };
+    assert_eq!(
+        validate(&[], &update, &policy("5")).unwrap(),
+        Vec::<String>::new()
+    );
+    // One refusal for each of the two mentions, and nothing else.
+    let refused = validate(&[], &update, &policy("4")).unwrap();
+    assert_eq!(
+        refused,
+        vec!["unknown element <userMention>".to_string(); 2],
+        "{refused:?}"
+    );
+}

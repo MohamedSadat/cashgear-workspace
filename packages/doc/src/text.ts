@@ -12,6 +12,18 @@ export interface TextContext {
   assetHref?: (assetId: string) => string | undefined;
   /** What an image or file with no name says. */
   untitled?: string;
+  /**
+   * A mentioned person's name now (schema version 5): a mention writes `@` and it, or `@` alone
+   * without one. The server's derived text and search write `@` alone (names change).
+   */
+  userName?: (userId: string) => string | undefined;
+}
+
+/** A person's mention as text: `@` and the name the writer is given, else `@` alone. */
+function userMentionText(node: DocJSON, context: TextContext): string {
+  const id = node.attrs?.userId;
+  const name = typeof id === 'string' && id ? context.userName?.(id) : undefined;
+  return `@${name ?? ''}`;
 }
 
 const isBlock = (node: DocJSON) => node.type === 'block';
@@ -26,6 +38,7 @@ function inlineText(nodes: DocJSON[] | undefined, context: TextContext): string 
     else if (node.type === 'pageMention')
       out += context.pageTitle?.(String(node.attrs?.pageId ?? '')) ?? '';
     else if (node.type === 'dateMention') out += dateMentionText(node.attrs);
+    else if (node.type === 'userMention') out += userMentionText(node, context);
   }
   return out;
 }
@@ -123,6 +136,11 @@ function inlineMarkdown(
     if (node.type === 'dateMention') {
       // Digits, `-`, `T`, `:`, `Z`, a space and an arrow: nothing Markdown reads as syntax.
       out += dateMentionText(node.attrs);
+      continue;
+    }
+    if (node.type === 'userMention') {
+      // `@` is not Markdown; a name is escaped as any text is.
+      out += escapeInline(userMentionText(node, context));
       continue;
     }
     if (node.type !== 'text') continue;

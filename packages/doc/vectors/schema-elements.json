@@ -67,5 +67,26 @@
     "tableOfContents",
     "tableRow",
     "textBody"
+  ],
+  "5": [
+    "block",
+    "bookmark",
+    "childPage",
+    "codeBlock",
+    "databaseView",
+    "dateMention",
+    "divider",
+    "erpView",
+    "file",
+    "hardBreak",
+    "image",
+    "pageMention",
+    "sheetEmbed",
+    "table",
+    "tableCell",
+    "tableOfContents",
+    "tableRow",
+    "textBody",
+    "userMention"
   ]
 }

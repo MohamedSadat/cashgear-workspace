@@ -20,6 +20,8 @@ interface Context {
   assetNames?: Record<string, string>;
   assetHrefs?: Record<string, string>;
   untitled?: string;
+  /** Schema version 5: people's names, by user id. */
+  userNames?: Record<string, string>;
 }
 
 interface Vector {
@@ -32,19 +34,20 @@ interface Vector {
 function contextOf(data: Context | undefined): TextContext {
   const context: TextContext = {};
   if (!data) return context;
-  const { pageTitles, pageHrefs, assetNames, assetHrefs, untitled } = data;
+  const { pageTitles, pageHrefs, assetNames, assetHrefs, untitled, userNames } = data;
   if (pageTitles) context.pageTitle = (id) => pageTitles[id];
   if (pageHrefs) context.pageHref = (id) => pageHrefs[id];
   if (assetNames) context.assetName = (id) => assetNames[id];
   if (assetHrefs) context.assetHref = (id) => assetHrefs[id];
   if (untitled !== undefined) context.untitled = untitled;
+  if (userNames) context.userName = (id) => userNames[id];
   return context;
 }
 
 const { docOf, heading, paragraph, bullet, numbered, todo, toggle, quote, callout, divider, code } =
   build;
 const { text, table, textBlock, block, bookmark, childPage, databaseView, dateMention } = build;
-const { sheetEmbed, erpView } = build;
+const { sheetEmbed, erpView, userMention } = build;
 
 const PLANS = '01936f6e-0000-7000-8000-000000000001';
 const EMPTY = '01936f6e-0000-7000-8000-000000000002';
@@ -56,6 +59,10 @@ const TASKS = '01936f6e-0000-7000-8000-0000000000d1';
 const BOARD = '01936f6e-0000-7000-8000-0000000000d2';
 const WORKBOOK = '01936f6e-0000-7000-8000-0000000000e1';
 const LINK = '01936f6e-0000-7000-8000-0000000000e2';
+const SARA = '01936f6e-0000-7000-8000-0000000000b1';
+const OMAR = '01936f6e-0000-7000-8000-0000000000b2';
+const MARKED = '01936f6e-0000-7000-8000-0000000000b3';
+const NOBODY = '01936f6e-0000-7000-8000-0000000000bf';
 
 const coloured = (value: string, type: string, token: string): DocJSON => ({
   type: 'text',
@@ -485,6 +492,58 @@ function cases(): Omit<Vector, 'markdown'>[] {
           paragraph('Child of an ERP view'),
         ]),
         paragraph('After'),
+      ),
+    },
+    {
+      // Schema version 5: a person writes `@` and the name the writer is given, `@` alone without
+      // one (the server's derived text and search write `@` alone); a name is escaped as text.
+      name: 'user mentions with names',
+      context: {
+        userNames: { [SARA]: 'Sara Ali', [OMAR]: 'عمر', [MARKED]: '*Lee* [x] <b>|' },
+        pageTitles: { [PLANS]: 'Plans' },
+      },
+      doc: docOf(
+        paragraph('Ask ', userMention(SARA), ' about it.'),
+        paragraph(userMention(SARA), ' at the start of a line'),
+        paragraph(
+          'Unknown ',
+          userMention(NOBODY),
+          ', none ',
+          userMention(null),
+          ', no attrs ',
+          { type: 'userMention' },
+          ', a number ',
+          { type: 'userMention', attrs: { userId: 7 } },
+          ', empty ',
+          userMention(''),
+        ),
+        paragraph('Escaped ', userMention(MARKED), ' and ', userMention(SARA), userMention(OMAR)),
+        heading(2, 'Owner ', userMention(SARA)),
+        bullet(['Item ', userMention(OMAR)], [todo(false, 'For ', userMention(SARA))]),
+        numbered([userMention(SARA), ' first']),
+        quote('Quoted ', userMention(SARA), hardBreak, 'next line'),
+        callout('💡', 'info', 'Ping ', userMention(OMAR)),
+        table([
+          ['Who', 'What'],
+          [userMention(SARA), 'Launch'],
+        ]),
+        paragraph(text('bold ', 'bold'), {
+          type: 'userMention',
+          attrs: { userId: SARA },
+          marks: [{ type: 'bold' }],
+        }),
+        textBlock('paragraph', ['اسأل ', userMention(OMAR), ' عن ', mention(PLANS)], {
+          dir: 'rtl',
+        }),
+        block({ type: 'codeBlock', content: [text('in code '), userMention(SARA)] }),
+      ),
+    },
+    {
+      name: 'user mentions with no names given',
+      doc: docOf(
+        paragraph('Ask ', userMention(SARA), ' about it.'),
+        bullet(['Item ', userMention(OMAR)]),
+        block({ type: 'codeBlock', content: [text('in code '), userMention(SARA)] }),
       ),
     },
     { name: 'an empty document', doc: { type: 'doc', content: [] } },
