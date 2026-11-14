@@ -1,17 +1,17 @@
 // The block schema (DATA_MODEL.md, "Page content"), fixed by spike S1:
 //   doc: block*      block: (body | block)*      one textBody node whose `kind` sets the text kind
 // Rules that hold forever: `*` only; every attribute optional with a default; no node or attribute
-// is ever removed or renamed. Schema version 3 (version 2 plus `databaseView` and `dateMention`).
+// is ever removed or renamed. Schema version 4 (version 3 plus `sheetEmbed` and `erpView`).
 import { Extension, Mark, Node, getSchema, mergeAttributes, type AnyExtension } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { dateMentionText, isDateValue } from './dates';
 
 /**
  * Raised for every change an older client could not draw (DATA_MODEL.md). 1: Phase 1's blocks.
- * 2: `tableOfContents`. 3: `databaseView` and `dateMention`. Each rise has a migration
- * (migrations.ts) and a fixture (fixtures/).
+ * 2: `tableOfContents`. 3: `databaseView` and `dateMention`. 4: `sheetEmbed` and `erpView`. Each
+ * rise has a migration (migrations.ts) and a fixture (fixtures/).
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const TEXT_KINDS = [
   'paragraph',
@@ -203,9 +203,21 @@ const CodeBlock = Node.create({
   ],
 });
 
+/** An atom body's attribute: its default, and how its `data-` attribute is read (else as text). */
+interface AtomAttr {
+  default: unknown;
+  parse?: (raw: string) => unknown;
+}
+
+/** A size in pixels or a count: a positive finite number, else null (the default). */
+const positiveNumber = (raw: string): number | null => {
+  const value = Number(raw);
+  return raw.trim() !== '' && Number.isFinite(value) && value > 0 ? value : null;
+};
+
 function atomBody(
   name: string,
-  attrs: Record<string, { default: unknown }>,
+  attrs: Record<string, AtomAttr>,
   tag = 'div',
 ): ReturnType<typeof Node.create> {
   return Node.create({
@@ -216,13 +228,14 @@ function atomBody(
     draggable: false,
     addAttributes: () =>
       Object.fromEntries(
-        Object.entries(attrs).map(([key, spec]) => [
+        Object.entries(attrs).map(([key, { parse, ...spec }]) => [
           key,
           {
             ...spec,
             parseHTML: (element: HTMLElement) => {
               const raw = element.getAttribute(`data-${key.toLowerCase()}`);
               if (raw === null) return spec.default;
+              if (parse) return parse(raw);
               if (typeof spec.default === 'number') return Number(raw) || spec.default;
               return raw;
             },
@@ -269,6 +282,33 @@ const TableOfContents = atomBody('tableOfContents', {});
 const DatabaseView = atomBody('databaseView', {
   databaseId: { default: null },
   viewId: { default: null },
+});
+/**
+ * Version 4: a range or chart of a workbook, drawn by Cash Gear Sheet in a sandboxed frame
+ * (INTEGRATIONS.md, `sheet-embed.1`). The workbook is a record of its own, never content of this
+ * page, so deleting the block never deletes it. A `chartId` makes it a chart; a null `sheet` is
+ * the first visible sheet, a null `range` the used range; `height` caps the frame (CSS pixels).
+ */
+const SheetEmbed = atomBody('sheetEmbed', {
+  workbookId: { default: null },
+  sheet: { default: null },
+  range: { default: null },
+  chartId: { default: null },
+  height: { default: null, parse: positiveNumber },
+});
+/**
+ * Version 4: a live, read-only view of an ERP connector through a workspace's ERP link
+ * (INTEGRATIONS.md, "Cash Gear ERP"). Only the link and the settings are stored, never ERP data.
+ * `filter`, `fields` and `sort` are JSON text (`{search?, equals?}`, `string[]`,
+ * `{field, direction}[]`), read by the view, which ignores what it cannot read.
+ */
+const ErpView = atomBody('erpView', {
+  linkId: { default: null },
+  connectorId: { default: null },
+  filter: { default: null },
+  fields: { default: null },
+  sort: { default: null },
+  pageSize: { default: null, parse: positiveNumber },
 });
 
 // Tables (DATA_MODEL.md): cells hold inline content. Header row and column are table attributes,
@@ -568,6 +608,8 @@ export function schemaExtensions(): AnyExtension[] {
     ChildPage,
     TableOfContents,
     DatabaseView,
+    SheetEmbed,
+    ErpView,
     HardBreak,
     PageMention,
     DateMention,
@@ -591,6 +633,8 @@ export const ATOM_BODIES = [
   'childPage',
   'tableOfContents',
   'databaseView',
+  'sheetEmbed',
+  'erpView',
 ] as const;
 
 let cached: Schema | null = null;

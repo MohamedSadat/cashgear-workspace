@@ -44,6 +44,7 @@ function contextOf(data: Context | undefined): TextContext {
 const { docOf, heading, paragraph, bullet, numbered, todo, toggle, quote, callout, divider, code } =
   build;
 const { text, table, textBlock, block, bookmark, childPage, databaseView, dateMention } = build;
+const { sheetEmbed, erpView } = build;
 
 const PLANS = '01936f6e-0000-7000-8000-000000000001';
 const EMPTY = '01936f6e-0000-7000-8000-000000000002';
@@ -53,6 +54,8 @@ const PHOTO = '01936f6e-0000-7000-8000-0000000000a2';
 const UNKNOWN_ASSET = '01936f6e-0000-7000-8000-0000000000af';
 const TASKS = '01936f6e-0000-7000-8000-0000000000d1';
 const BOARD = '01936f6e-0000-7000-8000-0000000000d2';
+const WORKBOOK = '01936f6e-0000-7000-8000-0000000000e1';
+const LINK = '01936f6e-0000-7000-8000-0000000000e2';
 
 const coloured = (value: string, type: string, token: string): DocJSON => ({
   type: 'text',
@@ -363,7 +366,7 @@ function cases(): Omit<Vector, 'markdown'>[] {
             { type: 'divider' },
           ],
         },
-        block({ type: 'sheetEmbed', attrs: { workbookId: 'w' } }),
+        block({ type: 'futureBlock', attrs: { workbookId: 'w' } }),
         block({ type: 'databaseView' }),
         block({
           type: 'textBody',
@@ -440,6 +443,46 @@ function cases(): Omit<Vector, 'markdown'>[] {
         bullet(['Item'], [databaseView(TASKS)]),
         block({ type: 'databaseView', attrs: { databaseId: TASKS } }, [
           paragraph('Child of a database view'),
+        ]),
+        paragraph('After'),
+      ),
+    },
+    {
+      // Schema version 4: a workbook's embed writes nothing (the workbook is a record of its own),
+      // whatever its attributes hold, and its child blocks are still written.
+      name: 'workbook embeds write nothing',
+      doc: docOf(
+        paragraph('Before'),
+        sheetEmbed(WORKBOOK),
+        sheetEmbed(WORKBOOK, { sheet: 'Q3 *draft*', range: 'A1:D20' }, 320),
+        sheetEmbed(WORKBOOK, { sheet: 'المبيعات', chartId: 'Chart 1' }),
+        block({ type: 'sheetEmbed' }),
+        block({ type: 'sheetEmbed', attrs: { workbookId: null, height: 'tall' } }),
+        bullet(['Item'], [sheetEmbed(WORKBOOK, { range: 'B2' })]),
+        block({ type: 'sheetEmbed', attrs: { workbookId: WORKBOOK } }, [
+          paragraph('Child of a workbook embed'),
+        ]),
+        paragraph('After'),
+      ),
+    },
+    {
+      // Schema version 4: an ERP view writes nothing: nothing from the ERP is ever in a document,
+      // and its settings (JSON text) are not the page's text.
+      name: 'ERP views write nothing',
+      doc: docOf(
+        paragraph('Before'),
+        erpView(LINK, 'vendors'),
+        erpView(LINK, 'customers', {
+          filter: '{"search":"*Kit* [Trading] | <b>","equals":{"city":"القاهرة"}}',
+          fields: '["code","name","balance"]',
+          sort: '[{"field":"name","direction":"asc"}]',
+          pageSize: 50,
+        }),
+        block({ type: 'erpView' }),
+        block({ type: 'erpView', attrs: { linkId: LINK, fields: 'not json' } }),
+        numbered(['Item'], [erpView(LINK, 'itemsOnHand')]),
+        block({ type: 'erpView', attrs: { linkId: LINK, connectorId: 'vendors' } }, [
+          paragraph('Child of an ERP view'),
         ]),
         paragraph('After'),
       ),

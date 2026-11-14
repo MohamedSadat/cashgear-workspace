@@ -410,7 +410,7 @@ public sealed class OfflineTests(ServerFixture server)
         Assert.Equal(UpdateStatus.Rejected, toc.Status);
         Assert.Contains("tableOfContents", toc.Problem);
         Assert.Equal(1, tocPage.DocSchemaVersion);
-        // (Version 4, which this worker does not know: DatabaseTests.)
+        // (A version this worker does not know: DocTests.)
     }
 
     // ------------------------------------------------------------------ the trash

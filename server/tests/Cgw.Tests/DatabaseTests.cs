@@ -645,12 +645,12 @@ public sealed class DatabaseTests(ServerFixture server)
         var (date, _) = await Decide("dateOnly", 3);
         Assert.Equal(UpdateStatus.Rejected, date.Status);
         Assert.Contains("dateMention", date.Problem);
-        // Version 4, which this worker does not know, even from an app that says it does.
-        var (four, fourPage) = await Decide("claimsV4", 4);
+        // Version 4 from an app that knows only version 3.
+        var (four, fourPage) = await Decide("claimsV4", 3);
         Assert.Equal(UpdateStatus.Rejected, four.Status);
-        Assert.Contains("newer than this worker knows", four.Problem);
+        Assert.Contains("newer than the app that pushed it", four.Problem);
         Assert.Equal(1, fourPage.DocSchemaVersion);
-        Assert.Equal(3, Cgw.Worker.Schema.Latest);
+        // (Version 4 itself, and a version this worker does not know: DocTests.)
     }
 
     [Fact]

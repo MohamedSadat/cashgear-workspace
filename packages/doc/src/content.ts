@@ -65,6 +65,44 @@ export const childPage = (pageId: string) => block({ type: 'childPage', attrs: {
 /** Schema version 3: a view of a database (a page of kind `database`); null is its first view. */
 export const databaseView = (databaseId: string | null, viewId: string | null = null) =>
   block({ type: 'databaseView', attrs: { databaseId, viewId } });
+/** Schema version 4: a workbook's range (null: the first sheet's used range) or chart. */
+export const sheetEmbed = (
+  workbookId: string | null,
+  view: { sheet?: string | null; range?: string | null; chartId?: string | null } = {},
+  height: number | null = null,
+) =>
+  block({
+    type: 'sheetEmbed',
+    attrs: {
+      workbookId,
+      sheet: view.sheet ?? null,
+      range: view.range ?? null,
+      chartId: view.chartId ?? null,
+      height,
+    },
+  });
+/** Schema version 4: a read-only ERP view through a link; filter, fields and sort as JSON text. */
+export const erpView = (
+  linkId: string | null,
+  connectorId: string | null,
+  settings: {
+    filter?: string | null;
+    fields?: string | null;
+    sort?: string | null;
+    pageSize?: number | null;
+  } = {},
+) =>
+  block({
+    type: 'erpView',
+    attrs: {
+      linkId,
+      connectorId,
+      filter: settings.filter ?? null,
+      fields: settings.fields ?? null,
+      sort: settings.sort ?? null,
+      pageSize: settings.pageSize ?? null,
+    },
+  });
 /** Schema version 3: a date in a line (`YYYY-MM-DD` or a UTC instant), with an optional end. */
 export const dateMention = (date: string, end: string | null = null): DocJSON => ({
   type: 'dateMention',

@@ -3070,7 +3070,7 @@
           },
           "content": [
             {
-              "type": "sheetEmbed",
+              "type": "futureBlock",
               "attrs": {
                 "workbookId": "w"
               }
@@ -3953,6 +3953,394 @@
       ]
     },
     "markdown": "Before\n\n- Item\n\n  Child of a database view\n\nAfter\n"
+  },
+  {
+    "name": "workbook embeds write nothing",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Before"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "sheetEmbed",
+              "attrs": {
+                "workbookId": "01936f6e-0000-7000-8000-0000000000e1",
+                "sheet": null,
+                "range": null,
+                "chartId": null,
+                "height": null
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "sheetEmbed",
+              "attrs": {
+                "workbookId": "01936f6e-0000-7000-8000-0000000000e1",
+                "sheet": "Q3 *draft*",
+                "range": "A1:D20",
+                "chartId": null,
+                "height": 320
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "sheetEmbed",
+              "attrs": {
+                "workbookId": "01936f6e-0000-7000-8000-0000000000e1",
+                "sheet": "المبيعات",
+                "range": null,
+                "chartId": "Chart 1",
+                "height": null
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "sheetEmbed"
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "sheetEmbed",
+              "attrs": {
+                "workbookId": null,
+                "height": "tall"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item"
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "sheetEmbed",
+                  "attrs": {
+                    "workbookId": "01936f6e-0000-7000-8000-0000000000e1",
+                    "sheet": null,
+                    "range": "B2",
+                    "chartId": null,
+                    "height": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "sheetEmbed",
+              "attrs": {
+                "workbookId": "01936f6e-0000-7000-8000-0000000000e1"
+              }
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "paragraph"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Child of a workbook embed"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Before\n\n- Item\n\n  Child of a workbook embed\n\nAfter\n"
+  },
+  {
+    "name": "ERP views write nothing",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Before"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "connectorId": "vendors",
+                "filter": null,
+                "fields": null,
+                "sort": null,
+                "pageSize": null
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "connectorId": "customers",
+                "filter": "{\"search\":\"*Kit* [Trading] | <b>\",\"equals\":{\"city\":\"القاهرة\"}}",
+                "fields": "[\"code\",\"name\",\"balance\"]",
+                "sort": "[{\"field\":\"name\",\"direction\":\"asc\"}]",
+                "pageSize": 50
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView"
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "fields": "not json"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "numberedItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item"
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "erpView",
+                  "attrs": {
+                    "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                    "connectorId": "itemsOnHand",
+                    "filter": null,
+                    "fields": null,
+                    "sort": null,
+                    "pageSize": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "connectorId": "vendors"
+              }
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "paragraph"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Child of an ERP view"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Before\n\n1. Item\n\n  Child of an ERP view\n\nAfter\n"
   },
   {
     "name": "an empty document",

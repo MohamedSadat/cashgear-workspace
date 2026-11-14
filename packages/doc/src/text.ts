@@ -50,7 +50,8 @@ function bodyText(body: DocJSON, context: TextContext): string {
     case 'childPage':
       return context.pageTitle?.(String(body.attrs?.pageId ?? '')) ?? '';
     // A table of contents and a database view hold no text of this page (a database's rows are
-    // pages of their own, searched and exported as such).
+    // pages of their own, searched and exported as such). Nor do a workbook's embed and an ERP
+    // view: a workbook is a record of its own, and nothing from the ERP is ever written.
     default:
       return '';
   }
@@ -241,7 +242,7 @@ function bodyMarkdown(body: DocJSON, context: TextContext, indent: string, numbe
     }
     case 'table':
       return tableMarkdown(body, context, indent);
-    // A table of contents and a database view write nothing (contracts, section 5).
+    // A table of contents, a database view, a workbook's embed and an ERP view write nothing.
     default:
       return '';
   }

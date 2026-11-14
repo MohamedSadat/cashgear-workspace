@@ -30,12 +30,12 @@ describe('the read-only view from derived JSON', () => {
       {
         type: 'block',
         attrs: { id: 'Embed0000001' },
-        content: [{ type: 'sheetEmbed', attrs: { workbookId: 'w' } }],
+        content: [{ type: 'futureBlock', attrs: { workbookId: 'w' } }],
       },
       paragraph('after'),
     );
     const { json, unknownNodes } = view(doc);
-    expect(unknownNodes).toEqual(['sheetEmbed']);
+    expect(unknownNodes).toEqual(['futureBlock']);
     expect(json.content).toHaveLength(3);
     const placeholder = json.content![1];
     expect(placeholder.attrs).toEqual({ id: 'Embed0000001' });

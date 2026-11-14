@@ -65,6 +65,8 @@ describe('schema', () => {
       'childPage',
       'tableOfContents',
       'databaseView',
+      'sheetEmbed',
+      'erpView',
       'text',
       'hardBreak',
       'pageMention',
@@ -82,7 +84,7 @@ describe('schema', () => {
       'highlight',
     ])
       expect(marks.has(name), name).toBe(true);
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
   });
 
   it('allows only safe link schemes', () => {
@@ -208,14 +210,14 @@ describe('content helpers', () => {
         {
           type: 'block',
           attrs: { id: 'aaaaaaaaaaaa' },
-          content: [{ type: 'sheetEmbed', attrs: { workbookId: 'x' } }],
+          content: [{ type: 'futureBlock', attrs: { workbookId: 'x' } }],
         },
         paragraph('kept'),
       ],
     };
     const readable = readableJSON(doc, knownTypes(), 'Needs a newer version');
     expect(JSON.stringify(readable)).toContain('Needs a newer version');
-    expect(JSON.stringify(readable)).not.toContain('sheetEmbed');
+    expect(JSON.stringify(readable)).not.toContain('futureBlock');
     expect(JSON.stringify(readable)).toContain('kept');
   });
 });

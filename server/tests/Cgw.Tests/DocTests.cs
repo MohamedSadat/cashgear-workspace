@@ -344,6 +344,89 @@ public sealed class DocTests(ServerFixture server)
             Assert.Equal(elements, Schema.Elements[int.Parse(version)]);
     }
 
+    private static readonly Lazy<Dictionary<string, Fixture>> Schema4 = new(() =>
+        JsonSerializer.Deserialize<List<Fixture>>(
+                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", "schema4.json")),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!
+            .ToDictionary(f => f.Name));
+
+    [Fact]
+    public async Task Schema_4_is_known_its_bodies_write_no_text_and_a_newer_version_is_not_known()
+    {
+        var ws = await Ws.Create(server);
+        await Kit.Register(ws.Client, ws.Id);
+
+        async Task<(PageDocUpdate Row, Cgw.Core.Data.Page Page)> Decide(string fixture, int clientSchemaVersion)
+        {
+            var page = (await ws.NewPage(fixture)).GetProperty("id").GetGuid();
+            await Kit.PushOk(ws.Client, page, Kit.Update("page"));
+            var id = Guid.CreateVersion7();
+            var pushed = await ws.Client.PostAsJsonAsync($"/api/v1/pages/{page}/doc/updates", new
+            {
+                epoch = 0,
+                clientSchemaVersion,
+                updates = new[] { new { updateId = id, data = Schema4.Value[fixture].Bytes } },
+            });
+            Assert.True(pushed.IsSuccessStatusCode, await pushed.Content.ReadAsStringAsync());
+            await Validate();
+            await using var db = server.NewDb(ws.Id);
+            return (await db.PageDocUpdates.AsNoTracking().SingleAsync(u => u.UpdateId == id), await db.Pages.AsNoTracking().SingleAsync(p => p.Id == page));
+        }
+
+        // Version 4 from an app that knows it: a workbook embed and an ERP view, the page raised.
+        var (migrated, page4) = await Decide("migrate4", 4);
+        Assert.Equal(UpdateStatus.Valid, migrated.Status);
+        Assert.Equal(4, page4.DocSchemaVersion);
+        // The derived JSON keeps both with their attributes; the text search reads holds nothing
+        // of either (cgw-ydoc's plain text), and neither does the export's Markdown.
+        await Kit.Derive(server, ws.Id, page4.Id);
+        var json = (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/pages/{page4.Id}/doc/json")).GetProperty("json").GetString()!;
+        using (var doc = JsonDocument.Parse(json))
+        {
+            var bodies = doc.RootElement.GetProperty("content").EnumerateArray().Select(b => b.GetProperty("content")[0]).ToList();
+            var embed = Assert.Single(bodies, b => b.GetProperty("type").GetString() == "sheetEmbed");
+            Assert.Equal("A1:D20", embed.GetProperty("attrs").GetProperty("range").GetString());
+            Assert.Equal(320, embed.GetProperty("attrs").GetProperty("height").GetDouble());
+            var erp = Assert.Single(bodies, b => b.GetProperty("type").GetString() == "erpView");
+            Assert.Equal("vendors", erp.GetProperty("attrs").GetProperty("connectorId").GetString());
+            Assert.Equal(25, erp.GetProperty("attrs").GetProperty("pageSize").GetDouble());
+            var markdown = Cgw.Core.Documents.Markdown.Write(doc.RootElement);
+            Assert.Contains("Hello", markdown, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("4417", markdown);
+            Assert.DoesNotContain("5521", markdown);
+        }
+        await using (var db = server.NewDb(ws.Id))
+        {
+            var derived = await db.PageDocDerived.SingleAsync(d => d.PageId == page4.Id);
+            foreach (var text in new[] { derived.PlainText, derived.SearchText })
+            {
+                Assert.Contains("hello", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("4417", text);
+                Assert.DoesNotContain("5521", text);
+                Assert.DoesNotContain("vendors", text, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        // The same from an app that knows only version 3.
+        var (fromOld, oldPage) = await Decide("migrate4", 3);
+        Assert.Equal(UpdateStatus.Rejected, fromOld.Status);
+        Assert.Contains("newer than the app that pushed it", fromOld.Problem);
+        Assert.Equal(1, oldPage.DocSchemaVersion);
+        // Their elements in a document still at version 1 are refused.
+        var (embedOnly, embedPage) = await Decide("embedOnly", 4);
+        Assert.Equal(UpdateStatus.Rejected, embedOnly.Status);
+        Assert.Contains("sheetEmbed", embedOnly.Problem);
+        Assert.Equal(1, embedPage.DocSchemaVersion);
+        var (erpOnly, _) = await Decide("erpOnly", 4);
+        Assert.Equal(UpdateStatus.Rejected, erpOnly.Status);
+        Assert.Contains("erpView", erpOnly.Problem);
+        // Version 5, which this worker does not know, even from an app that says it does.
+        var (five, fivePage) = await Decide("claimsV5", 5);
+        Assert.Equal(UpdateStatus.Rejected, five.Status);
+        Assert.Contains("newer than this worker knows", five.Problem);
+        Assert.Equal(1, fivePage.DocSchemaVersion);
+        Assert.Equal(4, Schema.Latest);
+    }
+
     [Fact]
     public async Task A_page_deleted_for_good_answers_410_and_another_workspaces_page_404()
     {

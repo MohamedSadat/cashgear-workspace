@@ -201,3 +201,92 @@ fn plain_text_writes_date_mentions_and_nothing_for_a_database_view() {
         "Due 2026-11-13 → 2026-11-20T09:30:00Z and 2026-12-01\n2026-01-05\nx\n"
     );
 }
+
+/// The element names a schema version knows (`packages/doc/vectors/schema-elements.json`, the
+/// worker's list).
+fn schema_elements(version: &str) -> Vec<String> {
+    let file = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../packages/doc/vectors/schema-elements.json"
+    );
+    let json: Value = serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+    json[version]
+        .as_array()
+        .expect("a list for that version")
+        .iter()
+        .map(|name| name.as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Schema version 4 (the doc layer's `text.ts`): a workbook embed and an ERP view write nothing
+/// in search's plain text, even with something inside them; their attributes reach the derived
+/// JSON as stored; version 4's list takes them and version 3's refuses them.
+#[test]
+fn version_4_bodies_write_no_text_and_only_version_4_knows_them() {
+    let doc = Doc::with_client_id(4);
+    let content = doc.get_or_insert_xml_fragment(CONTENT);
+    let update = {
+        let mut txn = doc.transact_mut();
+        let first = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        first.insert_attribute(&mut txn, "id", "aaaaaaaaaaaa");
+        let before = first.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        before.push_back(&mut txn, XmlTextPrelim::new("Before"));
+        let sheet = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        sheet.insert_attribute(&mut txn, "id", "bbbbbbbbbbbb");
+        let embed = sheet.push_back(&mut txn, XmlElementPrelim::empty("sheetEmbed"));
+        embed.insert_attribute(
+            &mut txn,
+            "workbookId",
+            "0195f4a0-0000-7000-8000-0000000000e1",
+        );
+        embed.insert_attribute(&mut txn, "sheet", "Q3 Sales");
+        embed.insert_attribute(&mut txn, "range", "A1:D20");
+        embed.insert_attribute(&mut txn, "height", 320.0);
+        // Hostile: an atom holding text. It is still not the page's text.
+        embed.push_back(&mut txn, XmlTextPrelim::new("Leaked cell"));
+        let erp = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        erp.insert_attribute(&mut txn, "id", "cccccccccccc");
+        let view = erp.push_back(&mut txn, XmlElementPrelim::empty("erpView"));
+        view.insert_attribute(&mut txn, "linkId", "0195f4a0-0000-7000-8000-0000000000e2");
+        view.insert_attribute(&mut txn, "connectorId", "vendors");
+        view.insert_attribute(
+            &mut txn,
+            "filter",
+            r#"{"search":"Distinctive Vendor 7731"}"#,
+        );
+        view.insert_attribute(&mut txn, "pageSize", 25.0);
+        let inside = view.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        inside.push_back(&mut txn, XmlTextPrelim::new("Vendor 7731"));
+        let last = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        last.insert_attribute(&mut txn, "id", "dddddddddddd");
+        let after = last.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        after.push_back(&mut txn, XmlTextPrelim::new("After"));
+        txn.encode_update_v1()
+    };
+    assert_eq!(to_plain_text(&update, CONTENT).unwrap(), "Before\nAfter\n");
+
+    let json: Value =
+        serde_json::from_str(&to_prosemirror_json(&update, CONTENT).unwrap()).unwrap();
+    let embed = &json["content"][1]["content"][0];
+    assert_eq!(embed["type"], "sheetEmbed");
+    assert_eq!(embed["attrs"]["range"], "A1:D20");
+    assert_eq!(embed["attrs"]["height"].as_f64(), Some(320.0));
+    let view = &json["content"][2]["content"][0];
+    assert_eq!(view["type"], "erpView");
+    assert_eq!(view["attrs"]["connectorId"], "vendors");
+    assert_eq!(view["attrs"]["pageSize"].as_f64(), Some(25.0));
+
+    let policy = |version: &str| Policy {
+        elements: schema_elements(version),
+        block_ids: true,
+        ..Policy::default()
+    };
+    assert_eq!(
+        validate(&[], &update, &policy("4")).unwrap(),
+        Vec::<String>::new()
+    );
+    let refused = validate(&[], &update, &policy("3")).unwrap();
+    assert!(refused.contains(&"unknown element <sheetEmbed>".to_string()));
+    assert!(refused.contains(&"unknown element <erpView>".to_string()));
+    assert_eq!(refused.len(), 2, "{refused:?}");
+}

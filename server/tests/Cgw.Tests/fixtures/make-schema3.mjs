@@ -80,7 +80,7 @@ const out = [
     name: 'claimsV4',
     client: 1001,
     data: b64(edit(1001, (_content, meta) => meta.set('schemaVersion', 4))),
-    why: 'a document claiming version 4, newer than the worker knows',
+    why: 'a document claiming version 4, newer than a version-3 app or worker knows',
   },
 ];
 const file = join(here, 'schema3.json');

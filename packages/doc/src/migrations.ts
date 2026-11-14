@@ -23,6 +23,11 @@ export const migrations: Record<number, Migration> = {
   2: (doc) => {
     doc.getMap(META).set('schemaVersion', 3);
   },
+  // 3 -> 4: version 4 adds the `sheetEmbed` and `erpView` bodies. No content changes, as above: a
+  // version-3 build opens the page read-only rather than meet either.
+  3: (doc) => {
+    doc.getMap(META).set('schemaVersion', 4);
+  },
 };
 
 export interface MigrationResult {

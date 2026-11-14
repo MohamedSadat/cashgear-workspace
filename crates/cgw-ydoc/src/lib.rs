@@ -332,6 +332,11 @@ fn collect_text<T: ReadTxn>(txn: &T, node: &XmlOut, depth: usize, out: &mut Stri
                 out.push_str(&date_mention_text(txn, element));
                 return Ok(());
             }
+            // Schema version 4's workbook embed and ERP view write nothing, whatever they hold:
+            // a workbook is a record of its own, and nothing from the ERP is ever search text.
+            if matches!(element.tag().as_ref(), "sheetEmbed" | "erpView") {
+                return Ok(());
+            }
             let mut inner = String::new();
             for child in element.children(txn) {
                 collect_text(txn, &child, depth + 1, &mut inner)?;

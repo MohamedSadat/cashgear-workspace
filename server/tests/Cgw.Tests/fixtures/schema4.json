@@ -1,0 +1,26 @@
+[
+  {
+    "name": "migrate4",
+    "client": 1001,
+    "data": "ARLpBwyo6QcAAX0Eh+kHAgMFYmxvY2sHAOkHDQMKc2hlZXRFbWJlZCgA6QcOCndvcmtib29rSWQBdyQwMTk1ZjRhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwZTEoAOkHDgVzaGVldAF3E0VtYmVkZGVkIFNoZWV0IDQ0MTcoAOkHDgVyYW5nZQF3BkExOkQyMCgA6QcOB2NoYXJ0SWQBfigA6QcOBmhlaWdodAF9gAUoAOkHDQJpZAF3DFNlMVNlMlNlM1NlNIfpBw0DBWJsb2NrBwDpBxUDB2VycFZpZXcoAOkHFgZsaW5rSWQBdyQwMTk1ZjRhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwZTIoAOkHFgtjb25uZWN0b3JJZAF3B3ZlbmRvcnMoAOkHFgZmaWx0ZXIBdxx7InNlYXJjaCI6IkVycCBGaWx0ZXIgNTUyMSJ9KADpBxYGZmllbGRzAXcPWyJjb2RlIiwibmFtZSJdKADpBxYEc29ydAF3JFt7ImZpZWxkIjoibmFtZSIsImRpcmVjdGlvbiI6ImFzYyJ9XSgA6QcWCHBhZ2VTaXplAX0ZKADpBxUCaWQBdwxFdjFFdjJFdjNFdjQB6QcBAAE=",
+    "why": "the migration to version 4: meta.schemaVersion set to 4, a workbook embed and an ERP view added, in one transaction"
+  },
+  {
+    "name": "embedOnly",
+    "client": 1001,
+    "data": "AQjpBwyH6QcCAwVibG9jawcA6QcMAwpzaGVldEVtYmVkKADpBw0Kd29ya2Jvb2tJZAF3JDAxOTVmNGEwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBlMSgA6QcNBXNoZWV0AXcTRW1iZWRkZWQgU2hlZXQgNDQxNygA6QcNBXJhbmdlAXcGQTE6RDIwKADpBw0HY2hhcnRJZAF+KADpBw0GaGVpZ2h0AX2ABSgA6QcMAmlkAXcMU2UxU2UyU2UzU2U0AA==",
+    "why": "a workbook embed in a document still at version 1: an element versions 1 to 3 lack"
+  },
+  {
+    "name": "erpOnly",
+    "client": 1001,
+    "data": "AQnpBwyH6QcCAwVibG9jawcA6QcMAwdlcnBWaWV3KADpBw0GbGlua0lkAXckMDE5NWY0YTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGUyKADpBw0LY29ubmVjdG9ySWQBdwd2ZW5kb3JzKADpBw0GZmlsdGVyAXcceyJzZWFyY2giOiJFcnAgRmlsdGVyIDU1MjEifSgA6QcNBmZpZWxkcwF3D1siY29kZSIsIm5hbWUiXSgA6QcNBHNvcnQBdyRbeyJmaWVsZCI6Im5hbWUiLCJkaXJlY3Rpb24iOiJhc2MifV0oAOkHDQhwYWdlU2l6ZQF9GSgA6QcMAmlkAXcMRXYxRXYyRXYzRXY0AA==",
+    "why": "an ERP view in a document still at version 1"
+  },
+  {
+    "name": "claimsV5",
+    "client": 1001,
+    "data": "AQHpBwyo6QcAAX0FAekHAQAB",
+    "why": "a document claiming version 5, newer than the worker knows"
+  }
+]
