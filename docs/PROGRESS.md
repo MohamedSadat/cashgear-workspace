@@ -13,12 +13,12 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 1: Core block editor (MVP) | Done, 2026-11-11 (0.1.0; the screen-reader pass is by the accessibility tree) | `phase-1`, `v0.1.0` |
 | Phase 2: Cloud document platform | Done, 2026-11-12 (0.2.0; deployment is yours: the package is rehearsed) | `phase-2`, `v0.2.0` |
 | Phase 3: Offline | Done, 2026-11-12 (0.3.0; the Mac's sign-in and sync against the deployed API are yours) | `phase-3`, `v0.3.0` |
-| Phase 4: Workspace databases | Not started | |
+| Phase 4: Workspace databases | Done, 2026-11-14 (0.4.0; a share link shows a note where a database is) | `phase-4`, `v0.4.0` |
 | Phase 5: Cash Gear ecosystem | Not started | |
 | Phase 6: Collaboration | Not started | |
 | Phase 7: Editable ERP blocks, plugins, AI | Not started | |
 | Track U: `CashGear.React.UI` components | Not started | |
-| Track S: Cash Gear Sheet embed and cloud workbooks | Not started | |
+| Track S: Cash Gear Sheet embed and cloud workbooks | S1 and S2 done in `cashgear-sheet` (2026-11-13); S3 to S5 not started | |
 | Track E: Cash Gear ERP connect contract | Not started | |
 
 ## Planning
@@ -372,25 +372,124 @@ the gate starts with the next one.
 
 ## Phase 4: Workspace databases
 
+Done 2026-11-14. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43534259613
+(commit `c37a2bd`, all jobs green); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43534259587
+(the same commit). Local results are from
+`bench/results/` on the reference machine (Windows 10 19045, 24 threads, Chrome 157, Edge,
+WebView2, SQL Server LocalDB, Azurite), the e2e server stack (`scripts/server-stack.mjs --e2e`)
+on LocalDB. Answers and defaults are in `DECISIONS.md` (2026-11-12: Phase 4); what changed for
+users is in `CHANGELOG.md` (0.4.0).
+
 Milestones
 
-- [ ] M4.1 Model and sync
-- [ ] M4.2 Table view and property editing
-- [ ] M4.3 Filter, sort, group
-- [ ] M4.4 Board and list views
-- [ ] M4.5 Calendar and gallery views
-- [ ] M4.6 Formula, relation, rollup
-- [ ] M4.7 Templates and import
+- [x] M4.1 Model and sync. Commit `d357113` (store schema 4 on memory, IndexedDB and SQLite; the
+      operations; the server's tables, operations, feed and tree; document schema 3; holds, row
+      fetches and row documents in the engine), `7300ad6` (assets before operations)
+- [x] M4.2 Table view and property editing. Commits `d357113`, `7782516` (tab clicks), `7300ad6`
+      (menus, focus, the database page's scroll, a cell edit before the store answers)
+- [x] M4.3 Filter, sort, group. Commit `d357113` (one definition in TypeScript and C#, held by
+      `db-query-vectors.json`; the server's in-memory query engine, keyset paged)
+- [x] M4.4 Board and list views. Commit `d357113`
+- [x] M4.5 Calendar and gallery views. Commit `d357113`
+- [x] M4.6 Formula, relation, rollup. Commit `d357113` (Q14: our own language in TypeScript and
+      C#, `db-formula-vectors.json` and `db-compute-vectors.json`)
+- [x] M4.7 Templates and import. Commits `d357113` (database and row templates, CSV both ways on
+      the device and through the server's routes, export format 2), `7782516`
+
+Notes
+
+- The work ran as nine streams in one checkout (core rules, stores, server, document and editor,
+  sync engine, table, other views, shell, then polish and proof), each to a written contract; the
+  layers interlock, so the feature is one commit (`d357113`) with the fixes after it.
+- The convergence simulator found two bugs no test had: a refused operation's answer carries only
+  its own entity while the planner had changed others with it (reverse relations, converted rows,
+  reverse properties), and a feed record waiting behind an operation whose answer carries another
+  record was dropped (this one older than Phase 4: a page renamed elsewhere stayed stale while a
+  visit to it waited). Both are fixed and scripted.
+- The proof found ten bugs, each fixed with a test that failed before (`7300ad6`): among them a
+  file added to a row lost because its operation reached the server first, a database's own page
+  scrolling at 4.5 frames a second at 50,000 rows, a cell edit shown only after IndexedDB
+  committed, menus cut off at the window's edge (class names shared with the shell's stylesheet),
+  and four Axe findings. The polish stream fixed eight findings of the streams (`7782516`), among
+  them mouse clicks on view tabs (`CgTabs` with `reorderable`, below).
+- The load gate after Phase 4's changes to access and the feed: `loadVisibleP95` 2.26 s locally,
+  2.81 s and 3.26 s on CI (runs 43331388381 and 43336521393), under 5 s. Phase 2's compaction
+  budget read 220 ms locally against 200 (195 ms at Phase 2 on this machine; no compaction code
+  changed; CI reads 61.6 ms).
+- CI runs that failed, and what fixed them: 43331388381 (`d357113`) and 43336521393 (`7782516`), three
+  earlier specs that did not know databases (the tree snapshot, "CSV" in Arabic, the old build
+  expecting the schema version it knew; `fb38c06`); 43422682011 (`8f8c885`), the desktop's narrower
+  window left a column undrawn where the spec looked (`003a8c1`); 43527509783 (`003a8c1`), Phase 3's
+  benchmark pushed version-3 documents as a version-2 client's and the worker refused them
+  (`c37a2bd`).
+- Track S1 and S2 (Q15) were built in their own session in `cashgear-sheet` (commits
+  `b8a2a42..95fc04d`, Sheet CI run 43316697418 green); the contract as built is for Phase 5.
+- Left for later: a share link shows a note where a database is, not its rows; cell copy and
+  paste and multi-cell selection; a server date-range query for large calendars; dragging board
+  columns and gallery cards; a screen-reader pass on the grid (Axe only); pins hold databases'
+  rows, not every row's document.
 
 Exit criteria
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| Every first-release property type in all five views, both languages | | |
-| Offline edits on two devices follow the per-property rule | | |
-| Client and server give the same rows for the same filter and sort | | |
-| 50,000-row database within budget | | |
-| Deleting a property or option never corrupts rows | | |
+| Every first-release property type in all five views, both languages | Pass | `database.spec.ts` "a database with every property type is made, edited and shown in all five views, in English and Arabic" (Chrome, Edge, desktop): 20 properties (text, number, date, checkbox, select, multi-select, status, person, URL, email, phone, files, relation with its reverse, rollup, formula, created and edited time and by) set on a row's page in a synced workspace; the table (scrolled across), board, list, calendar and gallery each show the values; again in Arabic; the server's row holds the values and its computed results. `database-rtl.spec.ts` (Chrome, Edge, desktop): the board right to left, a card dragged by `page.mouse` to another column takes its status; the calendar's week from Saturday on the right, a row dragged two days on takes that date. `a11y.spec.ts` "Axe finds nothing on the database screens" (table, board, list, calendar, gallery, the filter panel, a property menu, a row page; light and dark, English and Arabic). Also in `database.spec.ts`: filter, sort and group; a row as a page; an inline database and a linked view; database and row templates; CSV in and out; rows trashed and restored |
+| Offline edits on two devices follow the per-property rule | Pass | `database-sync.spec.ts` "a database reaches a second device, and offline edits on two devices follow the per-property rule" (Chrome, Edge, desktop): both devices offline, one sets Status and Priority, the other Notes and Priority; online in turn, Status and Notes both stand and Priority is the last to reach the server's, on both devices and the server, its version risen. `packages/workspace/src/sync/conflicts.test.ts` (15 database rows: the same and different properties, a type change racing an offline edit, a property or option deleted while edited, relations, refusals); the convergence simulator with databases, views and rows (4 seeds of 40 rounds in CI; 100 seeds of 200 rounds locally, all converged) |
+| Client and server give the same rows for the same filter and sort | Pass | `db-query-vectors.json` (150 cases) run by `packages/workspace/src/db/vectors.test.ts` and the server's `DatabaseVectorTests`, with the conversion (263), formula (279), compute (31) and CSV (63) vectors; end to end, `database-sync.spec.ts` "the same filter and sort give the same rows here and on the server": a view with a filter and two sorts on 200 rows, the table's rows in order equal `POST /databases/{id}/query` with the view |
+| 50,000-row database within budget | Pass | Below. End to end, `database-sync.spec.ts` "over 5,000 rows…": 6,000 rows imported through the server's route, the table paged by the server's query, a server sort and search, only the window's rows drawn, offline the rows on the device with its notice, the view exported by the server's route |
+| Deleting a property or option never corrupts rows | Pass | `database.spec.ts` "deleting a property or an option never corrupts a row" (Chrome, Edge, desktop): an option deleted reads empty, a property deleted is hidden, the server's row values are unchanged after both, the property restored shows its value again; `DatabaseTests` (the server never rewrites a row on either); `conflicts.test.ts` (deleted while edited on another device) |
+
+Also: `old-build.spec.ts` "the v0.3.0 build shows a page with a database read-only, sends
+nothing, and never sees rows" (Chrome, Edge), beside v0.2.0's case: a schema-3 page opens
+read-only with the block as a placeholder, the database page is a page, no row reaches the old
+build, it sends no document update and no operation but visits, and the server's state hash and
+bytes are unchanged. Store migrations from v1, v2 and v3 (`crates/cgw-store/tests/fixtures/v3`
+written by the v0.3.0 code; IndexedDB from version 3), killed at every moment
+(`scripts/kill-migration.mjs`: 36 runs locally, 0 failures, 1,718 reads equal to the releases').
+
+Benchmarks (`bench/phase4.mjs`, gated in CI against the budgets and the last run on `main`)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| First rows of a 50,000-row database (median of 5 opens after the first) | 500 ms | 74.1 ms | 154.5 ms |
+| First open (the server fills its query cache) | tracked | 1,514 ms | 2,396 ms |
+| Scrolling 50,000 rows: frame interval p95 (60 frames a second) | 17.5 ms | 16.7 ms (60 fps) | 16.8 ms |
+| Server query, 50,000 rows, one filter and one sort, p95 | 300 ms | 240.2 ms (SQL Server, Linux) | 268.4 ms (LocalDB) |
+| Board drag: frame interval p95 | 17.5 ms | 16.8 ms | 16.8 ms |
+| Cell edit, local (Enter to the cell showing the value), p95 | 16 ms | 6.1 ms web, 6.0 ms desktop | 14.9 ms web, 13.3 ms desktop |
+| Cell edit to the next frame, p95 (two frames, as Q19) | 33 ms | 13.9 ms web, 9.6 ms desktop | 21.3 ms web, 19.9 ms desktop |
+| Cell edit durable, p95 | 1 s | 15.8 ms web, 11.7 ms desktop | 24.4 ms web, 28 ms desktop |
+| Import of 50,000 rows through the route | tracked | 14.4 s | 11.1 s |
+
+The browser and desktop figures are the real app over the e2e server stack, the database seeded
+through the import route; the server query is `Phase4Bench` in process (CI: the Linux server job
+on SQL Server). This run was the first with Phase 4's figures, so it had no earlier run on `main`
+to compare with: the regression half of the gate starts with the next one.
+
+Stand-ins waiting on Track U
+
+| Component | Stand-in in | Replaced |
+| --- | --- | --- |
+| A tag box with creatable options and per-option actions (rename, recolour, regroup, reorder, delete), grouped and single choice | `packages/database/src/pickers/OptionPicker.tsx` | |
+| A tag box with caller-drawn chips and caller-supplied results | `packages/database/src/pickers/ListPicker.tsx` | |
+| A menu surface holding inputs and switches, with panels | `packages/database/src/properties/MenuList.tsx` | |
+| A sortable list (handle, arrows) | `packages/database/src/pickers/reorder.ts` | |
+| A text and number editor that keeps no React draft | plain inputs in `packages/database/src/cells/` | |
+| A pointer drag-and-drop helper with a drag copy and edge scrolling | `packages/database/src/views/board/drag.ts` | |
+| A live-region announcer | `Live` in `packages/database/src/views/board/shared.tsx` | |
+| A kanban board | `packages/database/src/views/board/` | |
+| A month calendar that takes zero-length items and inclusive ends, without its own editor (`CgScheduler` assessed) | `packages/database/src/views/calendar/` | |
+| A file picker that only gives the file | the import dialog's `<input type="file">` (`packages/database/src/csv/`) | |
+
+Defects in `@cashgear/ui` worked around here, for Track U
+
+| Defect | Worked around in |
+| --- | --- |
+| `CgTabs` with `reorderable` captures the pointer on the tab's wrapper, so a mouse click never selects a tab | `packages/database/src/DatabaseView.tsx` takes the wrapper's click |
+| `CgFlyout` drops an explicit `width` (its positioned overlay spreads `width: undefined` over it) | `packages/database/src/cells/CellFlyout.tsx` passes it in `style` |
+| `CgFlyout` mounted `open` is not reliably focused through `onAfterOpen` | `CellFlyout.tsx` focuses its first control a frame after mount |
+| `CgFlyout` with an element anchor watches the whole document while mounted, even closed | flyouts mounted only while open |
+| `CgButton appearance="soft"` with the neutral intent draws a nearly invisible label | `outline` or `ghost` instead |
 
 ## Phase 5: Cash Gear ecosystem
 
@@ -470,8 +569,8 @@ Exit criteria
 
 ## Track S: Cash Gear Sheet
 
-- [ ] S1 Cloud platform: open by ticket, save with `If-Match`
-- [ ] S2 `/cloud` launch route
+- [x] S1 Cloud platform: open by ticket, save with `If-Match` (Sheet commits `b8a2a42..95fc04d`, its CI run 43316697418; against a mock of Workspace's routes, which Phase 5 builds)
+- [x] S2 `/cloud` launch route (the same commits)
 - [ ] S3 `/embed` route and `sheet-embed.1`
 - [ ] S4 Preview pictures and chart views
 - [ ] S5 Shared contract suite

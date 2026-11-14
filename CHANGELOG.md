@@ -4,7 +4,7 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
-## [0.4.0] - 2026-11-13
+## [0.4.0] - 2026-11-14
 
 Databases: tables of rows with typed properties, inside pages or as pages of their own, shown as
 a table, a board, a list, a calendar or a gallery.
