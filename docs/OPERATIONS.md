@@ -120,7 +120,7 @@ Installed 2026-11-14. Names only; no setting here is a secret.
 | Database | `CashGearWorkspace` on the host's `MSSQLSERVER01` instance (SQL Server 2019 Standard, no Full-Text Search: search uses `LIKE`) |
 | Blob Storage | Storage account `cashgearworkspace` (Spain Central, Standard LRS, no public access, soft delete and container soft delete 30 days, versioning), container `workspace`, CORS as in step 3 |
 | Blob identity | App registration `cashgear-workspace-api` with Storage Blob Data Contributor and Storage Blob Delegator on that account only; its certificate made on the host, PFX in `C:\CashGearWorkspace\secrets` (expires 2028-11-14; the app registration accepts it until 2027-11-14, so upload it again or make a new one before then) |
-| Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account), with its own Google app password named "Cash Gear Workspace", entered on the host only. Gmail answers a wrong one with `535 5.7.8`; the API logs a failed send only to its console, so test a new password from the host (an SMTP `AUTH` alone sends nothing) before storing it in the app pool's and the worker's `Smtp__Password` |
+| Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account), with its own Google app password named "Cash Gear Workspace", entered on the host only. Gmail answers a wrong one with `535 5.7.8` (in the event log as "A confirm mail was not sent: AuthenticationException…"); test a new password from the host (an SMTP `AUTH` alone sends nothing) before storing it in the app pool's and the worker's `Smtp__Password` |
 
 ## Configuration
 
@@ -143,6 +143,7 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
 | `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
 | `Logging__Format` | `json` for structured logs with the correlation id in every line |
+| `Logging__EventLog__Enabled` | `true` (`install.ps1` sets it and registers the sources): under IIS and as a service the console goes nowhere, so warnings and errors also go to the Application event log, as "Cash Gear Workspace API" and "Cash Gear Workspace worker", and each account mail sent or not sent, by kind only (never its address or link) |
 | `Logging__LogLevel__Microsoft.AspNetCore` | `Warning` (`install.ps1` sets it), so ASP.NET Core's request lines, which hold the query string, are not logged |
 | `Ydoc__Library` | The worker's `cgw_ydoc.dll`, if not beside the worker |
 | `AZURE_*` | The identity for Blob Storage when the host has no managed identity (DefaultAzureCredential) |
@@ -208,6 +209,7 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 
 | Watch | Where | Act when |
 | --- | --- | --- |
+| Mail and errors | Event Viewer, Application log, sources "Cash Gear Workspace API" and "Cash Gear Workspace worker" | "A … mail was not sent": the SMTP account or its password (test from the host) |
 | The worker's lag | `/health/ready` (`worker`); `JobStates` (`LastOkAt` per job) | Degraded: new edits wait to reach other devices (pulls still work). Restart the service; read its event log |
 | Refused updates | Worker log ("Refused N of M updates"); `AuditLog` `doc.forgedClient` | A client sending updates as someone else: look at the device and user |
 | Failed sign-ins and lockouts | `AuditLog` `signin.fail`, `signin.lockedOut` | Many from one IP: block it at the edge |

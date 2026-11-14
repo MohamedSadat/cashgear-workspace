@@ -110,6 +110,9 @@ $environment = [ordered]@{
   # ASP.NET Core's own request lines name the path and query string: confirmation and reset
   # links carry their token there. Warnings and errors still come through.
   'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
+  # The console goes nowhere under IIS or as a service: warnings, errors and each mail sent or not
+  # also go to the Application event log (sources registered below).
+  Logging__EventLog__Enabled = 'true'
 }
 for ($i = 0; $i -lt $SheetOrigins.Count; $i++) { $environment["Sheet__Origins__$i"] = $SheetOrigins[$i] }
 if ($AzureClientId) {
@@ -119,6 +122,11 @@ if ($AzureClientId) {
 }
 # The SMTP password comes from this session's environment, never from a parameter or a file.
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
+
+# The event log sources the API and the worker write to; registering one needs an administrator.
+foreach ($source in 'Cash Gear Workspace API', 'Cash Gear Workspace worker') {
+  if (-not [System.Diagnostics.EventLog]::SourceExists($source)) { New-EventLog -LogName Application -Source $source }
+}
 
 # 1. The migrations, before any new code runs. A failed migration stops here, with the old
 #    version still serving.

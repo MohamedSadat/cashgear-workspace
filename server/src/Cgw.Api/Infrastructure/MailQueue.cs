@@ -27,7 +27,10 @@ public sealed class MailQueue(ILogger<MailQueue> logger)
     }
 }
 
-/// <summary>Sends what <see cref="MailQueue"/> holds, one at a time. A failure is logged by kind only: the message holds a link with a token.</summary>
+/// <summary>
+/// Sends what <see cref="MailQueue"/> holds, one at a time. Each mail is logged by kind only, sent
+/// or not: the message holds a link with a token, and the address is the person's.
+/// </summary>
 public sealed class MailSender(MailQueue queue, Mailer mailer, ILogger<MailSender> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -39,6 +42,7 @@ public sealed class MailSender(MailQueue queue, Mailer mailer, ILogger<MailSende
                 try
                 {
                     await mailer.SendAsync(mail.Message, stoppingToken);
+                    logger.LogInformation("A {Kind} mail was sent", mail.Kind);
                 }
                 catch (Exception e) when (e is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
                 {

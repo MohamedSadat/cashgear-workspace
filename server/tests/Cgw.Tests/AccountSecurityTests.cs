@@ -279,6 +279,24 @@ public sealed class AccountSecurityTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task A_sent_account_mail_is_logged_by_kind_without_its_address_or_link()
+    {
+        var logs = new CapturedLogs();
+        var api = server.Variant(b => b.ConfigureLogging(l => l.AddProvider(logs).AddFilter(typeof(Cgw.Api.Infrastructure.MailSender).FullName, LogLevel.Information)));
+        var account = await server.NewAccount();
+        var client = ServerFixture.ClientOf(api);
+        await client.GetAsync("/api/v1/version");
+        var forgot = await client.PostAsJsonAsync("/api/v1/account/password/forgot", new { email = account.Email });
+        Assert.Equal(HttpStatusCode.Accepted, forgot.StatusCode);
+
+        var sent = await Kit.Eventually(
+            () => Task.FromResult(logs.Entries.FirstOrDefault(e => e.Category.EndsWith("MailSender", StringComparison.Ordinal) && e.Level == LogLevel.Information)),
+            e => e.Message is not null, TimeSpan.FromSeconds(30));
+        Assert.Equal("A reset mail was sent", sent.Message);
+        Assert.DoesNotContain(logs.Entries, e => e.Category.EndsWith("MailSender", StringComparison.Ordinal) && e.Message.Contains(account.Email, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Signing_in_with_an_unknown_address_checks_a_password_all_the_same()
     {
         var hasher = new CountingHasher();

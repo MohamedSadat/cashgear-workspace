@@ -16,6 +16,16 @@ public static class WorkerProgram
             builder.Logging.ClearProviders();
             builder.Logging.AddJsonConsole(o => o.IncludeScopes = true);
         }
+        // A service's console goes nowhere: on a Windows host that asks for it (install.ps1
+        // registers the source), warnings and errors also go to the Application event log.
+        if (OperatingSystem.IsWindows() && builder.Configuration["Logging:EventLog:Enabled"] == "true")
+        {
+            builder.Logging.AddEventLog(s =>
+            {
+                if (OperatingSystem.IsWindows()) s.SourceName = "Cash Gear Workspace worker";
+            });
+            builder.Logging.AddFilter<Microsoft.Extensions.Logging.EventLog.EventLogLoggerProvider>(level => level >= LogLevel.Warning);
+        }
         builder.Services.AddCgwCore(builder.Configuration);
         builder.Services.AddCgwWorker(builder.Configuration);
         builder.Build().Run();
