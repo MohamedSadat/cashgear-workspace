@@ -489,8 +489,9 @@ a.cgw-comment-mention {
   text-decoration: none;
 }
 
+/* Light enough that the excerpt and the time (secondary text) keep 4.5:1 under the pointer. */
 .cgw-inbox-item a:hover {
-  background: color-mix(in srgb, var(--cg-text) 6%, transparent);
+  background: color-mix(in srgb, var(--cg-text) 4%, transparent);
 }
 
 .cgw-inbox-item a:focus-visible {

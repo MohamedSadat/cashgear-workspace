@@ -152,6 +152,9 @@ body {
   display: block;
   inline-size: 100%;
   field-sizing: content;
+  /* It grows with its lines: WebView2 measured it 2 px short of its content and drew a scrollbar
+     beside the title (the desktop app, Phase 6's hand check). */
+  overflow: hidden;
   resize: none;
   border: 0;
   outline: none;

@@ -369,14 +369,22 @@ export function CommentsPanel({
   );
 }
 
+/**
+ * A value set inside a sentence, isolated (FSI ... PDI): an English name followed by a date in an
+ * Arabic sentence otherwise reorders the date's digits around the name.
+ */
+const isolate = (text: string) => `\u2068${text}\u2069`;
+
 const noSubscription = () => () => {};
 const zero = () => 0;
 
 function Quote({ quote }: { quote: string }) {
   const { t } = useTranslation();
+  // The text's own direction on the text, not on the quote: its bar stays on the panel's start
+  // side (an English quote in the Arabic panel had its bar on the left).
   return quote ? (
-    <blockquote className="cgw-thread-quote-text" dir="auto">
-      {quote}
+    <blockquote className="cgw-thread-quote-text">
+      <span dir="auto">{quote}</span>
     </blockquote>
   ) : (
     <p className="cgw-thread-quote-text cgw-muted">{t('comments.onBlock')}</p>
@@ -503,10 +511,12 @@ function ThreadItem({
       {isResolved && (
         <p className="cgw-muted cgw-thread-resolved">
           {t('comments.resolvedBy', {
-            name: thread.resolvedBy
-              ? names.person(thread.resolvedBy.id) || thread.resolvedBy.name
-              : t('presence.someone'),
-            when: format.format(new Date(thread.resolvedAt!)),
+            name: isolate(
+              thread.resolvedBy
+                ? names.person(thread.resolvedBy.id) || thread.resolvedBy.name
+                : t('presence.someone'),
+            ),
+            when: isolate(format.format(new Date(thread.resolvedAt!))),
           })}
         </p>
       )}

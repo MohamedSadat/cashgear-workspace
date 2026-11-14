@@ -1194,8 +1194,9 @@ describe('the comments panel', () => {
     )!;
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     act(() => toggle.click());
+    // The name and the time are isolated (FSI ... PDI) inside the sentence, for right to left.
     expect(container.querySelector('[data-thread-id="t-4"]')?.textContent).toContain(
-      'Resolved by Ben Ali',
+      'Resolved by \u2068Ben Ali\u2069, ',
     );
     // A quote shows its place in the page.
     act(() =>

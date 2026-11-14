@@ -331,11 +331,20 @@ export class Cloud {
       return this.verified ? this.engine.kick(0) : void this.refreshAccount();
     };
     const visible = () => document.visibilityState === 'visible' && kick();
+    // The network went: the hub's connection is closed now (a socket the browser keeps open would
+    // carry live saves while every other request fails, and the live pass is only every 30 s), and
+    // a pass runs at once, which says "Offline" as Phase 3 did. `online` brings both back.
+    const gone = () => {
+      this.realtime.drop();
+      if (this.verified) this.engine.kick(0);
+    };
     window.addEventListener('online', kick);
+    window.addEventListener('offline', gone);
     window.addEventListener('focus', kick);
     document.addEventListener('visibilitychange', visible);
     this.cleanups.push(() => {
       window.removeEventListener('online', kick);
+      window.removeEventListener('offline', gone);
       window.removeEventListener('focus', kick);
       document.removeEventListener('visibilitychange', visible);
     });
