@@ -137,10 +137,21 @@ if ($LASTEXITCODE -ne 0) { throw "The migration failed ($LASTEXITCODE); nothing 
 # 2. Stop the worker and the site, copy the new files.
 if (Get-Service $ServiceName -ErrorAction SilentlyContinue) { Stop-Service $ServiceName -Force }
 if (Test-Path "IIS:\Sites\$SiteName") { Stop-WebSite $SiteName }
+# A stopped site leaves its app pool's process running with the old files loaded: stop the pool
+# too, and wait for it, or the copy meets locked files.
+if (Test-Path "IIS:\AppPools\$SiteName") {
+  if ((Get-WebAppPoolState $SiteName).Value -ne 'Stopped') { Stop-WebAppPool $SiteName }
+  $deadline = (Get-Date).AddSeconds(60)
+  while ((Get-WebAppPoolState $SiteName).Value -ne 'Stopped') {
+    if ((Get-Date) -gt $deadline) { throw "The app pool $SiteName did not stop within a minute" }
+    Start-Sleep -Seconds 1
+  }
+}
 foreach ($part in 'api', 'worker') {
   $target = Join-Path $Root $part
   New-Item -ItemType Directory -Force $target | Out-Null
-  robocopy (Join-Path $package $part) $target /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+  # A few short retries, not robocopy's default of a million 30-second waits.
+  robocopy (Join-Path $package $part) $target /MIR /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
   if ($LASTEXITCODE -ge 8) { throw "Copying $part failed ($LASTEXITCODE)" }
 }
 
@@ -222,6 +233,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [$identity];
 }
 
 # 6. Start, then check.
+if ((Get-WebAppPoolState $SiteName).Value -ne 'Started') { Start-WebAppPool $SiteName }
 Start-WebSite $SiteName
 Start-Service $ServiceName
 Start-Sleep -Seconds 5
