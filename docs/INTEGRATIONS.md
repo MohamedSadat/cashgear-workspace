@@ -198,6 +198,17 @@ Rules:
 - The embed sizes itself to the view; Workspace makes the frame that tall, up to the block's
   `height`, and the embed scrolls inside past it.
 - Limits: 20 MB a workbook, 5,000 cells a range (decisions, 2026-11-14).
+- Track S's readings of the open points, agreed on 2026-11-14: a preview shows the view cut from
+  its top-left (top-right on a right-to-left sheet) to `maxWidth` x `maxHeight` CSS pixels, not
+  scaled; `width` and `height` are the CSS pixels shown; its density falls (2, 1.5, 1, less)
+  until the PNG is under 2 MB; it is drawn in the file's own light colours whatever `setTheme`
+  says. `sheets` lists visible worksheets in tab order; sheet names match without case and
+  `loaded.view.sheet` gives the file's spelling. A chart's `id` is its name in the file
+  (`Chart 1`, then ` (2)` for a repeat on a sheet). A null range over 5,000 cells keeps the
+  top-left corner (every column up to 50, else `max(50, floor(5000 / rows))`, then the rows that
+  fit); an empty sheet is `A1`; `loaded.view.range` is written top-left first. An `init` that fails
+  validation does not count as the one `init`; one with another `contract` and a port does.
+  `requestPreview` after an `error` answers that `error`. The full readings are Sheet's.
 - A contract version is never changed once shipped. A new one is added, and `ready` lists all the
   embed speaks.
 
@@ -356,7 +367,8 @@ S1 and S2 were built during Phase 4; S3 to S5 in their own session during Phase 
 
 Workspace's build names two ERP origins and reads no other from anywhere (decisions,
 2026-11-14): the ERP's API (`VITE_CGW_ERP_API`, live `https://api.cashgearerp.com`) and the ERP
-client, whose connect page it opens (`VITE_CGW_ERP_CLIENT`; the live origin is given by Track E).
+client, whose connect page it opens (`VITE_CGW_ERP_CLIENT`, live `https://erp.cashgearerp.com`; the same build also answers at
+`https://app.cashgearerp.com`).
 Builds for a local API use the mock ERP (`tests/mocks/erp`): its API on `http://127.0.0.1:4282`
 and its client on `http://127.0.0.1:4284`. The ERP's API origin is in `connect-src`, on the web
 and on the desktop. The Workspace API's `Erp__ApiBase` is the only base a link may name.
@@ -425,7 +437,8 @@ ERP's side to it and may propose changes here. The types and validators are
 | `api/system/WorkspaceLink/CreateTicket` | POST | ERP client | `X-API-Key`, an ERP admin of the company | 200 `{url}` |
 | `api/system/WorkspaceLink/Redeem` | POST | Workspace (browser) | Anonymous, allow-listed `Origin` (checked before the ticket), rate-limited per IP; `{ticket, workspaceId, workspaceName}` | 200 `{linkId, company, companyName}` |
 | `api/system/WorkspaceLink/Revoke` | POST | ERP client | `X-API-Key`, an ERP admin; `{linkId}` | 204 |
-| `api/system/WorkspaceConnect/CreateTicket` | POST | ERP client | `X-API-Key`; `{workspaceId, linkId}`; the link is live | 200 `{ticket}` |
+| `api/system/WorkspaceLink/Status` | GET | ERP client | `X-API-Key` | 200 `{enabled, links: [{linkId, workspaceId, workspaceName, linkedBy, linkedAt}]}` (shows or hides "Link Cash Gear Workspace"; Workspace never calls it) |
+| `api/system/WorkspaceConnect/CreateTicket` | POST | ERP client | `X-API-Key`; `{workspaceId, linkId, language?}` (the ERP client's language, `en` by default); the link is live | 200 `{ticket}` |
 | `api/connect/Session/Redeem` | POST | Workspace | Anonymous, allow-listed `Origin` (before the ticket), rate-limited; `{ticket, workspaceId}` | 200 `ConnectSession` |
 | `api/connect/Session/Renew` | POST | Workspace | `X-Connect-Session` | 200 `{expiresAt}` |
 | `api/connect/Session/End` | POST | Workspace | `X-Connect-Session` | 204 |
@@ -498,6 +511,14 @@ Rules:
 - `search` matches what the ERP's own list of that entity searches; `equals` names filterable
   fields only, else 400 `request.invalid`. `fields` names schema fields only; the answer's
   `values` holds those (every schema field when `fields` is absent) and nothing else.
+- Agreed with Track E on 2026-11-14: `link.revoked` at `WorkspaceConnect/CreateTicket` and
+  `Session/Redeem` when the link is revoked, unknown or another company's, or Workspace is off for
+  the company; `Session/Redeem` with a `workspaceId` other than the ticket's is 401
+  `ticket.invalid` and uses the ticket up; a link `Redeem` for a company and workspace already
+  linked answers the same `linkId`; `Revoke` of an unknown link is 400 `request.invalid`, and twice
+  is 204; until Phase 7 every connector's `access` is `view` and every field `editable: false`
+  with `editReason: notEditable`; the cursor is offset-based and bound to its query's filter,
+  sort and fields, so another query's cursor is 400 `request.invalid`.
 - Values on the wire are `vendors.1`'s (decimals as strings, dates `YYYY-MM-DD`, date-times with
   an offset, empty as `null`, versions as base64).
 - The session's company scopes every answer; another company's records are never returned, and
