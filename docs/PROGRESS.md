@@ -14,12 +14,12 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 2: Cloud document platform | Done, 2026-11-12 (0.2.0; deployment is yours: the package is rehearsed) | `phase-2`, `v0.2.0` |
 | Phase 3: Offline | Done, 2026-11-12 (0.3.0; the Mac's sign-in and sync against the deployed API are yours) | `phase-3`, `v0.3.0` |
 | Phase 4: Workspace databases | Done, 2026-11-14 (0.4.0; a share link shows a note where a database is) | `phase-4`, `v0.4.0` |
-| Phase 5: Cash Gear ecosystem | Not started | |
+| Phase 5: Cash Gear ecosystem | Done, 2026-11-14 (0.5.0; proven against the mocks in CI and against the real Sheet and ERP run locally; the deployed check, and pushing Track E, are yours) | `phase-5`, `v0.5.0` |
 | Phase 6: Collaboration | Not started | |
 | Phase 7: Editable ERP blocks, plugins, AI | Not started | |
 | Track U: `CashGear.React.UI` components | Not started | |
-| Track S: Cash Gear Sheet embed and cloud workbooks | S1 and S2 done in `cashgear-sheet` (2026-11-13); S3 to S5 not started | |
-| Track E: Cash Gear ERP connect contract | Not started | |
+| Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
+| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), committed there and not pushed; E6 and E7 for Phase 7 | |
 
 ## Planning
 
@@ -439,6 +439,10 @@ Exit criteria
 | 50,000-row database within budget | Pass | Below. End to end, `database-sync.spec.ts` "over 5,000 rows…": 6,000 rows imported through the server's route, the table paged by the server's query, a server sort and search, only the window's rows drawn, offline the rows on the device with its notice, the view exported by the server's route |
 | Deleting a property or option never corrupts rows | Pass | `database.spec.ts` "deleting a property or an option never corrupts a row" (Chrome, Edge, desktop): an option deleted reads empty, a property deleted is hidden, the server's row values are unchanged after both, the property restored shows its value again; `DatabaseTests` (the server never rewrites a row on either); `conflicts.test.ts` (deleted while edited on another device) |
 
+By hand: the sheet and ERP blocks were used once in the browser, in English and Arabic, light and
+dark (the UI streams' notes), against the dev stack and the mocks; on the desktop app the features
+ran through the desktop e2e specs (the offline picture, nothing stored), not by hand.
+
 Also: `old-build.spec.ts` "the v0.3.0 build shows a page with a database read-only, sends
 nothing, and never sees rows" (Chrome, Edge), beside v0.2.0's case: a schema-3 page opens
 read-only with the block as a placeholder, the database page is a page, no row reaches the old
@@ -493,27 +497,99 @@ Defects in `@cashgear/ui` worked around here, for Track U
 
 ## Phase 5: Cash Gear ecosystem
 
+Done 2026-11-14. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43599137638 (commit `a24ebd7`, all jobs green); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43599137591 (the same commit). Local results are from
+the reference machine (Windows 10 19045, Chrome 157, Edge, WebView2, SQL Server LocalDB,
+Azurite), the e2e server stack (`scripts/server-stack.mjs --e2e`) and the mocks (`tests/mocks`).
+Answers and defaults are in `DECISIONS.md` (2026-11-14: Phase 5); the contracts as built in
+`INTEGRATIONS.md`; what changed for users in `CHANGELOG.md` (0.5.0).
+
 Milestones
 
-- [ ] M5.1 Contracts and mocks
-- [ ] M5.2 Workbooks as documents
-- [ ] M5.3 Sheet block, stage 5a
-- [ ] M5.4 Sheet block, stage 5b
-- [ ] M5.5 Sheet block, stage 5c
-- [ ] M5.6 ERP link and session
-- [ ] M5.7 ERP view block
+- [x] M5.1 Contracts and mocks. Commits `99aef32` (`sheet-embed.1` and `erp-connect.1` written in
+      full), `3e4d760` (the embed's types, validators and 288 shared vectors, `SheetEmbed`, the mock
+      Sheet), `790b47f` (`@cgw/erp`'s contract and client, the mock ERP, the `erp-connect.1` suite),
+      `0b4182c` (the points agreed with Tracks S and E), `2ecc5a6` (the mock reads prefixed xlsx)
+- [x] M5.2 Workbooks as documents. Commits `585c485` (the tables, access by the pages' rules,
+      every route, Sheet's `sheet-session.1` routes, xlsx with `DocumentFormat.OpenXml`, ERP links),
+      `d993100` (document schema 4), `4970e0b` (real tickets for Sheet's suite)
+- [x] M5.3 Sheet block, stage 5a. Commit `2a6a39a` (the picture, the name, "Open in Cash Gear
+      Sheet", the workbook picker and `#/workbooks`)
+- [x] M5.4 Sheet block, stage 5b. Commit `2a6a39a` (the live embed near the viewport, the view
+      picker, refresh, every error, the picture offline)
+- [x] M5.5 Sheet block, stage 5c. Commit `2a6a39a` (charts from `loaded.charts` in the view picker,
+      range import through the CSV import, a view exported to a workbook); no test draws a chart
+      yet (the mock draws none; Sheet's own suite draws them)
+- [x] M5.6 ERP link and session. Commits `790b47f`, `2a6a39a` (the link screen and settings, the
+      pop-up and the desktop's deep link, sessions in memory)
+- [x] M5.7 ERP view block. Commits `2a6a39a`, `8c1590f` (the nothing-stored proof)
+
+Notes
+
+- The work ran as nine streams in one checkout to a written contract (document, server, Sheet
+  contract, ERP contract, sheet UI, ERP UI, the launcher, proof), and Tracks S3 to S5 and E1 to E5
+  ran in sessions of their own in `cashgear-sheet` and in `CashGear` and `ERPClient_React`
+  (decisions, 2026-11-14).
+- Track S3 to S5: Sheet commits `960bd8b..f35c5a8` and `610d104` (prefixed SpreadsheetML), Sheet's
+  CI green on `86cf903` (run 43583125944) and `610d104`; `/embed` framed by Workspace's origins
+  alone, previews, charts, and Workspace's 288 vectors passing Sheet's own validators.
+- Track E1 to E5: ERP commits `024c53e2`, `ce60be80`, `10a7393b`, `719f1289`, `d6a1a684` and `06620e76` (the seed Workspace's runs use)
+  in `CashGear` and `008fe3b` in `ERPClient_React`, **committed locally, not pushed**: `CashGear`'s
+  `main` held eleven of your own commits ahead of GitHub, and a push of `ERPClient_React` queues
+  its production deploys. The ERP's tests: SQLite 127 passed, LocalDB 145 passed (the failures
+  left are your uncommitted `appsettings.json` and `VendorModel.cs` edits, as before); Sheet's own
+  ERP suite still 44 passed, 16 skipped, 0 failed against it.
+- The proof found and fixed one product bug (the workbook list's buttons named without their
+  visible words, Axe, `825924f`) and two test races (the v0.3.0 old-build spec waiting for the
+  worker, `8c1590f`; the mock Sheet's faults left by the Axe test, `a24ebd7`).
+- CI runs that failed, and what fixed them: 43583091634 (`4970e0b`), one of 25 desktop starts in
+  the kill test during sync timed out, retried and passed (a WebView2 start flake; nothing lost);
+  43588695481 (`2a6a39a`), the Arabic check met the product name in «بيانات ERP» (allowed,
+  `8c1590f`) and `database.spec.ts`'s "a row opens as a page" was flaky once (10 of 10 since);
+  43596327091 (`99bbcd4`), the Axe test's unused mock faults failed the next spec (`a24ebd7`).
+  43582232706 (`0b4182c`) was cancelled by a newer push.
+- Left for later: a page's share link shows a placeholder where a workbook or ERP view is (by
+  design: neither is shared outside its workspace); the desktop's "Open in Cash Gear Sheet" opens
+  the web app (Sheet's desktop deep link is not built); ERP reports (Q16: entities first); the
+  ERP's Query reads a company's whole table per page (Track E's note, before large tenants); a
+  workbook's version history in Workspace; the workspace export does not include workbooks; the
+  desktop's ERP connect through the system browser is tested from the deep-link event on, not
+  through the OS (the test app has no single-instance plugin).
 
 Exit criteria
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| Insert, preview, open in Sheet, save, refresh | | |
-| No preview without access to the workbook | | |
-| Stored picture offline | | |
-| ERP block respects the user's privileges | | |
-| No ERP data in any Workspace store after viewing | | |
-| Origins off the allow-list cannot drive either integration | | |
-| Contract suites pass against the real Sheet and ERP | | |
+| Insert, preview, open in Sheet, save, refresh | Pass | `sheet.spec.ts` "a new workbook is opened in Sheet, saved there, and shown live after Refresh with its picture sent" (Chrome, Edge): `/workbook` → New workbook → "Open in Cash Gear Sheet" (`POST …/launch`, Sheet's `/cloud#launch=<43>` in a new tab, the ticket gone from its address) → saved in Sheet → Refresh: the live frame (sandboxed, no referrer) draws the saved value, "Saved … by" its maker, the picture `PUT` for that version; saved again → the new value and a new picture. Also "an existing workbook is picked and its view changed" (Arabic and dark right to left) and "a range is imported into a database, and a view is exported to a workbook and opened in Sheet". Against the real Sheet run locally: 16 passed, 2 mock-only skipped, 0 failed (below) |
+| No preview without access to the workbook | Pass | `sheet.spec.ts` "a reader without access to the workbook sees no picture, and neither does the page's share link": a member who can read the page but not the restricted workbook sees "You don't have access to this workbook", no picture, no frame, no Open, and their tab never asked for `previews`, `content` or `launch`; the share link the same. `WorkbookAccessTests` (4 roles × 7 access lists × 11 routes) |
+| Stored picture offline | Pass | `sheet.spec.ts` "offline, the block shows the stored picture with its date, and again after a reload" (Chrome, Edge and the desktop app): the picture, "Offline: the picture from <date>", the workbook's name, no frame |
+| ERP block respects the user's privileges | Pass | `erp.spec.ts` "an ERP block shows vendors to a user with the privilege, refuses one without, and two users see different customers" (Chrome, Edge): vendors paged, sorted, filtered, refreshed for alice; carol "Your Cash Gear ERP account has no access to this data." and no table; alice 240 customers with the credit limit, bob 48 and without it. Also the link from the ERP client with the ticket never in the address or history, and offline, an expired session and a revoked link each with their message and no data. Against the real UnifiedAPI and ERP client: every case of `erp.spec.ts` and `integrations-origins.spec.ts` that runs with `CGW_E2E_REAL_ERP` passed in Chrome and Edge, 12 of 12, the 4 skipped being the mock's (the real client's link page behind its own sign-in, the mock's clock and revoke): UnifiedAPI on LocalDB and the real ERP client, run by the Track E session (its runs 1 to 4 found two assumptions of the specs, a grouped total and the real ERP's field rule, and a seed with fewer than a page of customers; all fixed) |
+| No ERP data in any Workspace store after viewing | Pass | `erp.spec.ts` "nothing stored: after viewing ERP data, none of it is in any store, the document, its history or search" (Chrome, Edge and the desktop app): after three connectors, two pages, a sort, a filter and refreshes, none of the ERP's distinctive values in any IndexedDB database or store, web storage, Cache Storage, the desktop's SQLite file, its WAL, asset files, rows and FTS terms, the server's derived document, update bytes, a version, or server and local search, each scan proved by a positive control. `@cgw/erp`'s lint keeps the package off every store. Against the real ERP: passed in Chrome and Edge (its value "Delta Supplies" first looked stored, but is the sample company of Workspace's own Contacts template, in the build's cached files; the spec now checks Cache Storage holds only the app's files and never tests a value the build holds) |
+| Origins off the allow-list cannot drive either integration | Pass | `integrations-origins.spec.ts` (Chrome, Edge): a page on another origin cannot frame the embed nor make it take `init`; Workspace ignores a window posing as Sheet and frames no other origin; the ERP connect takes its ticket only from the ERP client's pop-up with its own state; the sheet-session and ERP Redeems refuse another origin before reading the ticket, which then works once from an allowed one. Message validation: 288 vectors (`packages/editor/src/sheet`), `@cgw/erp`'s validators, `SheetSessionTests` |
+| Contract suites pass against the real Sheet and ERP | Pass, locally (the person's decision) | Workspace's end-to-end specs against the real Sheet (Sheet's own preview build, `610d104`): 16 passed, 0 failed; against the real ERP (UnifiedAPI on LocalDB and the real ERP client): 12 passed, 0 failed; the skips mock-only. `erp-connect.1` (`tests/contracts/erp`, `790b47f`) against UnifiedAPI on LocalDB: 39 passed, 17 mock-only skipped, 0 failed, and its 2 rate-limit cases against the live limits. Sheet's `sheet-session.1` suite against Workspace's real API (`4970e0b`, the launcher): 12 passed, 1 mock-only skipped. Workspace's 288 `sheet-embed.1` vectors through Sheet's validators: all pass (Sheet `86cf903`). The check against the deployed Sheet and an ERP test tenant is yours after deployment |
+
+Also: `old-build.spec.ts` "the v0.4.0 build shows a page with a workbook and ERP data read-only,
+sends nothing but visits, and the server keeps its bytes" (Chrome, Edge), beside v0.2.0's and
+v0.3.0's. `a11y.spec.ts` "Axe finds nothing on the Sheet and ERP screens" (light and dark, English
+and Arabic); `arabic.spec.ts` "the Arabic workbook and ERP screens have no English of their own".
+
+Benchmarks (`bench/phase5.mjs`, gated in CI against the budgets and the last run on `main`)
+
+| Budget | Limit | CI | Local, mocks | Local, real Sheet |
+| --- | --- | --- | --- | --- |
+| Embed first paint, a 1,000-cell range, from scrolling it into view, p95 | 2 s | 125.8 ms web, 184 ms desktop | 251.5 ms web, 269.7 ms desktop | 639.3 ms web |
+| A page with 10 live embeds: editor work per keystroke, p95 | 8 ms | 2.5 ms web, 4.9 ms desktop | 4.4 ms web, 3.9 ms desktop | 4.3 ms |
+| A page with 10 live embeds: keystroke to the next frame, p95 | 33 ms | 15.6 ms web, 14.5 ms desktop | 19.5 ms web, 17.9 ms desktop | 19.4 ms |
+| ERP block's first page, less the ERP's own time, p95 | 1 s | 77.5 ms web (the mock's own 10.3 ms) | 101.6 ms web (the mock's own 39 ms) | 160.3 ms (the mock's own 33.4 ms) |
+
+The first run with Phase 5's figures had no earlier run on `main`, so the regression half of the
+gate starts with the next one.
+
+Stand-ins and defects for Track U
+
+| Item | Where |
+| --- | --- |
+| `CgContextMenu` in the dark theme draws dark text on the dark surface (the colour variables it reads are never set by the app); the database views' menus too | the workbook block's own menu is fixed in `packages/shell/src/sheet`; the rest stand |
+| The share dialog's "restricted" check box uses `cgw-check`, the editor's to-do class, so its label may sit wrong where the editor's CSS is loaded | the workbook access dialog uses a class of its own |
 
 ## Phase 6: Collaboration
 
@@ -571,16 +647,16 @@ Exit criteria
 
 - [x] S1 Cloud platform: open by ticket, save with `If-Match` (Sheet commits `b8a2a42..95fc04d`, its CI run 43316697418; against a mock of Workspace's routes, which Phase 5 builds)
 - [x] S2 `/cloud` launch route (the same commits)
-- [ ] S3 `/embed` route and `sheet-embed.1`
-- [ ] S4 Preview pictures and chart views
-- [ ] S5 Shared contract suite
+- [x] S3 `/embed` route and `sheet-embed.1` (Sheet commits `960bd8b..f35c5a8`, CI run 43583125944)
+- [x] S4 Preview pictures and chart views (the same commits; `610d104` reads prefixed SpreadsheetML)
+- [x] S5 Shared contract suite (Workspace's 288 vectors through Sheet's validators; Sheet's `sheet-session.1` suite against Workspace's real API, 12 passed)
 
 ## Track E: Cash Gear ERP
 
-- [ ] E1 App session with an audience and connectors
-- [ ] E2 Workspace link
-- [ ] E3 Connect flow in the ERP client
-- [ ] E4 Read-only connectors
-- [ ] E5 Rate limiting and CORS on the connect routes
+- [x] E1 App session with an audience and connectors (CashGear `10a7393b`, local)
+- [x] E2 Workspace link (`ce60be80`, `10a7393b`; the DB script `Create_WorkspaceConnect.sql`)
+- [x] E3 Connect flow in the ERP client (ERPClient_React `008fe3b`, local)
+- [x] E4 Read-only connectors: Vendors, Customers, Items on hand (`10a7393b`, `d6a1a684`)
+- [x] E5 Rate limiting and CORS on the connect routes (`10a7393b`); Workspace's `erp-connect.1` suite against UnifiedAPI on LocalDB: 39 passed, 0 failed
 - [ ] E6 Editable connectors and audit
 - [ ] E7 Contract suite against UnifiedAPI
