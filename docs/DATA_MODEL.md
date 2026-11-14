@@ -137,7 +137,7 @@ Notes:
 | Mark | `textColour`, `highlight` | `token` (a named colour from the theme, not a hex value, so dark mode works) |
 | Inline atom | `hardBreak` | none |
 | Inline atom | `pageMention` | `pageId`, optional `blockId` |
-| Inline atom | `userMention` | `userId` (Phase 6) |
+| Inline atom | `userMention` | `userId` (Phase 6, schema version 5; default null): drawn as `@` and the person's name from the workspace's members, `@` and "someone" when unknown; text and Markdown write `@` and the name when the writer knows it, the server's derived text and search `@` only |
 | Inline atom | `dateMention` | `date`, `end` (Phase 4, schema version 3): `YYYY-MM-DD` or a UTC instant, both default null; drawn in the interface language; text and Markdown write the date (and ` → end`) |
 
 ### Future blocks
@@ -194,6 +194,11 @@ As built in Phase 5: version 4 adds `sheetEmbed` and `erpView`; step 3 → 4 onl
 `meta.schemaVersion`, by the same path. Fixture: `packages/doc/fixtures/doc-v3.json`; a build that
 knows only version 3 opens a version-4 page read-only with both new nodes as placeholders, kept.
 
+As built in Phase 6: version 5 adds `userMention`; step 4 → 5 only raises `meta.schemaVersion`, by
+the same path. Fixture: `packages/doc/fixtures/doc-v4.json`; a build that knows only version 4
+opens a version-5 page read-only with the mention as a placeholder, kept. Comments add nothing to
+the document: a thread is anchored relationally (Comments, below), so no comment mark exists.
+
 ## Relational records
 
 Column lists give the fields that matter to the design, not final DDL. Every table has
@@ -246,7 +251,7 @@ document is loaded to draw the tree.
 | --- | --- | --- |
 | `PageDocUpdates` | (`PageId`, `Seq`), `UpdateId` (unique), `Epoch`, `UserId`, `DeviceId`, `Data` (`varbinary(max)`), `Status`, `Problem`, `CreatedAt` | `Status` is pending until the worker decides: valid (served) or refused (never served; `Problem` says why). Rows are deleted once a snapshot covers them |
 | `PageDocSnapshots` | `Id`, `PageId`, `Epoch`, `UpToSeq`, `BlobKey`, `SizeBytes`, `Kind`, `Name`, `CreatedBy`, `CreatedAt` | `Kind` is `compaction`, `auto` (kept as history) or `named` |
-| `PageDocDerived` | `PageId`, `UpToSeq`, `Json` (compressed ProseMirror JSON), `PlainText`, `SearchText`, `Outgoing` (JSON: linked page ids, asset ids) | Written by the worker. `SearchText` is the normalised text the full-text index reads |
+| `PageDocDerived` | `PageId`, `UpToSeq`, `Json` (compressed ProseMirror JSON), `PlainText`, `SearchText`, `Outgoing` (JSON: linked page ids, asset ids), `Mentions` (Phase 6: JSON, the `[blockId, userId]` pairs of its `userMention`s) | Written by the worker. `SearchText` is the normalised text the full-text index reads; `Mentions` is what the next derive compares with to find new mentions |
 | `PageLinks` | (`FromPageId`, `ToPageId`) | Backlinks, rebuilt by the worker from `Outgoing` |
 | `PageDocCommands` | `Id`, `PageId`, `Kind`, `SnapshotId`, `RequestedBy`, `Status`, `Error` | Work the worker does on a document: a hard restore |
 
@@ -471,10 +476,20 @@ store after viewing (`PROGRESS.md`, Phase 5).
 
 ### Comments (Phase 6)
 
+As built (`server/src/Cgw.Core/Comments`, `Cgw.Core/Notifications`, migration
+`Phase6Collaboration`); every table here but `RealtimeTickets` is tenant-owned.
+
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `CommentThreads` | `Id`, `PageId`, `BlockId`, `AnchorPosition` (optional, a Yjs relative position), `Quote`, `ResolvedAt` | Anchored on the block id. The relative position narrows it within the block; the quoted text is the fallback when the position no longer resolves |
-| `Comments` | `Id`, `ThreadId`, `AuthorUserId`, `Body` (JSON, the same inline schema), `EditedAt`, `DeletedAt` | |
+| `CommentThreads` | `Id`, `WorkspaceId`, `PageId`, `BlockId`, `AnchorStart`, `AnchorEnd` (each optional, a Yjs relative position of at most 256 bytes, never decoded on the server), `Quote` (at most 1,000 characters), `CreatedBy`, `CreatedAt`, `ResolvedAt`, `ResolvedBy`, `Version`, `DeletedAt` | Anchored on the block id. The two positions narrow it to a range inside the block; the quoted text finds it when they no longer resolve (a moved block is written to Yjs anew); failing both, the thread is on the whole block. A block that no longer exists leaves the thread listed as on a removed block |
+| `Comments` | `Id`, `WorkspaceId`, `ThreadId`, `PageId`, `AuthorUserId`, `Body` (JSON), `CreatedAt`, `EditedAt`, `DeletedAt` | `Body` is a subset of the document's inline nodes as ProseMirror JSON: text without marks or line breaks, `hardBreak`, `userMention`, `pageMention`; not empty, at most 4,000 characters of text and 50 mentions, stored canonically after the server's check. Deleting a thread's first comment deletes the thread |
+| `Notifications` | `Id`, `Seq` (identity: the inbox's order and cursor), `WorkspaceId`, `UserId` (the recipient), `Kind` (`mention`, `commentMention`, `reply`), `PageId`, `BlockId`, `ThreadId`, `CommentId`, `ActorUserId`, `Excerpt` (at most 200 characters, mentions as `@`), `DedupeKey` (unique per recipient), `CreatedAt`, `ReadAt` | A page mention is found by the worker when it derives the page (new `(blockId, userId)` pairs against `PageDocDerived.Mentions`, the last derive's); a comment's by the API. Never for the actor or someone who cannot read the page; one for a page the person later loses is not shown |
+| `RealtimeTickets` | `Id`, `UserId`, `DeviceId`, `TokenHash`, `ExpiresAt`, `UsedAt`, `CreatedAt` | A hub ticket: 32 random bytes kept only as SHA-256, 60 seconds, one use; deleted a day after it expires |
+
+Writes to threads and comments append a `comments` change to the feed (the page's id), shown to
+whoever can read the page; a new or read notification a per-person `notification` change. Neither
+is kept in a local store: comments are online only in 0.6.0 (DECISIONS.md, Phase 6). Presence and
+awareness are never stored anywhere. A page's share link reaches none of this.
 
 ## Local stores
 

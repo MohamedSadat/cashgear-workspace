@@ -203,8 +203,8 @@ The server does not decode updates on this path. The rows are stored as pending;
 validates them in sequence order (see "What the server checks") and moves the page's validated
 head past them, so they are served to other clients only once they have passed (Q20): spike S7
 showed that one update with a node type the schema lacks stops every client's binding from
-syncing that page. The worker polls for pending rows every 100 ms, and while it finds some its
-passes run back to back. Who may edit is remembered per workspace between passes and read again
+syncing that page. The worker polls for pending rows every 25 ms (100 ms until Phase 6, whose
+relay waits on it), and while it finds some its passes run back to back. Who may edit is remembered per workspace between passes and read again
 only when an access, member or workspace change has committed since (every change to who may
 edit writes one: the same rule the check under the lock rests on).
 
@@ -670,6 +670,76 @@ channel; they are not part of the Yjs document.
 
 Scaling past one server node needs Azure SignalR Service or a backplane (Q17). The design does
 not depend on which.
+
+### As built in Phase 6 (`realtime.1`)
+
+One rule changed from the sketch above: the hub does not relay what it was just given. A pushed
+update is served to anyone else only once the worker has validated it (Q20 still holds, for the
+same reason: one bad update stops every other client's binding), so the relay follows the
+validated head, not the push.
+
+**Connecting.** The client asks `POST /api/v1/realtime/tickets` (signed in as for any call:
+cookie with antiforgery, or bearer) for a ticket: 32 random bytes, kept only as SHA-256,
+60 seconds, one use. It then opens `/api/v1/realtime?ticket=…` over WebSockets, with no
+negotiation (SignalR, JSON protocol, bytes as base64). The connection is the ticket's person and
+device and nothing else: no cookie or bearer token is read on that path, and the one credential
+in the address is spent by the time anything could log it. The upgrade's `Origin` must be one of
+the web app's. Every reconnect takes a new ticket; the client reconnects on its own (1 s doubling
+to 30 s, with jitter; at once when the network returns or the window gains focus), then follows
+its workspaces and joins its open pages again.
+
+**Methods.** Each answers `{ ok: true, value }` or `{ ok: false, status, code, title }`, which the
+client turns into the same error the HTTP route would give, so the engine handles a refusal on
+either path alike.
+
+| Method | Does | Checked |
+| --- | --- | --- |
+| `JoinWorkspaces(ids)` | Follows the workspaces' feeds; answers each one's feed head and who has which page open | Membership |
+| `JoinPage(pageId)` | Joins the page: its validated head and epoch, the caller's level, who is there | As a pull: at least `view` |
+| `LeavePage(pageId)` | Leaves it | Nothing |
+| `PushUpdates(pageId, push)` | Exactly the HTTP push: the same method, transaction, sequence lock and limits; at most 1 MB a call (larger goes over HTTP) | At least `edit`, read again for this call |
+| `Awareness(pageId, state)` | Relays `{ clientId, cursor: { anchor, head } \| null }` (Yjs relative positions, base64) to the page's others, with the sender's person stamped by the server; never stored | Joined, and at least `view` at the last check; 1 KB, 20 a second |
+
+**Events.** `Updates` (a frame for (after, cursor]: the valid updates in order, the refused ones'
+ids, and whether it is complete), `Awareness`, `ChangesAvailable` (a followed workspace's feed
+moved), `PagePresence` (who has a page open, sent only to people who can read it: the sidebar's
+avatars) and `AccessRevoked`.
+
+**The relay.** A loop in the API (every 20 ms, `Realtime__RelayMs`) reads the validated heads of
+the pages this node's connections joined and the feed heads of the workspaces they follow. When a
+page's head moves, one frame carries what moved it (its rows read once, never decoded; at most
+1,000 rows and 2 MB, else `complete: false` and the client pulls) to this node's connections of
+that page; a new epoch is a frame `{ after: 0, complete: false }`. When a workspace's feed moves,
+`ChangesAvailable` goes to its followers, at most every 250 ms a workspace with the newest head.
+Frames and `PagePresence` name this node's own connections, so a second node would relay only to
+its own; `Awareness` goes through the page's group. The worker's validation loop runs every
+25 ms when idle, so an update reaches the other editors in well under 300 ms.
+
+**The client** (`@cgw/workspace`'s `RealtimeTransport`, implemented in the shell over
+`@microsoft/signalr`). While connected, the periodic pass slows to every 30 s:
+`ChangesAvailable`, a local change, focus and the network's return run passes at once. An open
+page's document saves every 60 ms at most (30 ms after the last key) instead of 500 ms, and each
+save's updates go through the hub at once; a page's pushes, live or in a pass, never overlap. A
+frame that continues from where the device is (same epoch, `after` at most its cursor, complete)
+is stored and applied as a pull's answer would be; anything else (a gap, a new epoch, a frame
+that could not be read whole) pulls the page over HTTP. Frames that come twice, late or not at all
+change nothing: the store keeps the cursor monotonic and skips what it holds. With the socket
+down the client is exactly the Phase 3 client.
+
+**Presence.** A client sends its selection on every change (at most every 50 ms), every 10 s
+while on the page, and null when it leaves or the editor loses focus; others drop it after 30 s
+of silence, and the server says null for a connection that leaves, drops or loses access. Names
+and colours come from the workspace's members, never from the message.
+
+**Permissions.** Each connection's device, membership and joined pages are checked again at most
+every 60 seconds, and at once when the feed shows an access, member or workspace change. A lost
+page or workspace is left (`AccessRevoked`, and `Awareness` null to the others); a device signed
+out or an account removed closes the connection. Every push is checked when it is made and again
+by the worker when it is decided, so a revoke cannot be outrun.
+
+**Comments and the inbox** travel on the change feed: a `comments` change (its entity id the
+page's, shown to whoever can read the page) and a per-person `notification` change. Clients from
+before Phase 6 ignore both.
 
 ## Tests that guard this design
 

@@ -34,7 +34,8 @@ API's host and no token is in JavaScript (Q5).
 ## First installation
 
 1. **Host prerequisites.** Windows Server with IIS, the ASP.NET Core Module and the .NET 10
-   runtime (the Hosting Bundle). A group managed service account (gMSA), say
+   runtime (the Hosting Bundle). From 0.6.0, IIS's WebSocket Protocol feature (`Web-WebSockets`),
+   for the real-time hub: `install.ps1` turns it on when it is off. A group managed service account (gMSA), say
    `DOMAIN\cgw-workspace$`, for both the app pool and the worker. A host outside a domain has no
    gMSA: leave out `-ServiceAccount` and the app pool runs as its own `IIS AppPool\<site>`, the
    worker as `NT SERVICE\<service>`; `install.ps1` gives both their SQL login and user (the roles
@@ -136,7 +137,9 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `OpenIddict__SigningCertificateThumbprint`, `OpenIddict__EncryptionCertificateThumbprint` | Certificates in `LocalMachine\My`; the API refuses to issue tokens without them in production |
 | `DataProtection__Dpapi` | `true`: the cookie and token keys (kept in the database) are encrypted with the machine's DPAPI |
 | `Smtp__Host`, `__Port`, `__User`, `__Password`, `__From` | Mail (Q8); `Smtp__PickupDirectory` writes mail to a folder instead, for development and tests only |
-| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import`, `__ticket`, `__sheet` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person; `ticket` Sheet's Redeem, 30 a minute an address; `sheet` Sheet's session routes, 600 a minute an address); leave unset in production |
+| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import`, `__ticket`, `__sheet`, `__realtime` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person; `ticket` Sheet's Redeem, 30 a minute an address; `sheet` Sheet's session routes, 600 a minute an address; `realtime` hub tickets, 60 a minute a person; the hub's pushes count against a budget the size of `push`, apart from HTTP); leave unset in production |
+| `Realtime__RelayMs`, `__RecheckSeconds`, `__SweepSeconds`, `__ChangesMs` | Phase 6, the hub: how often the relay reads joined pages' and followed workspaces' heads (20 ms); the longest a connection's access is trusted unchecked (60 s) and how often the sweep looks (10 s); `ChangesAvailable` at most this often a workspace (250 ms). Leave unset in production |
+| `Realtime__Metrics` | `true` maps `GET`/`DELETE /api/v1/realtime/metrics` (relay times, connections) for the bench; ignored in Production |
 | `Sheet__Origin`, `Sheet__Origins__N` | Phase 5: Cash Gear Sheet's origin for launch links (`{origin}/cloud#launch=…`), and the origins allowed to redeem them, to call the sheet-session routes (CORS without credentials) and, outside production, to read Azurite. Required, https, in production |
 | `Workbooks__MaxSaveBytes` | The largest version Sheet may save (100 MB; 413 `limit.size` above it). The API's `web.config` lets IIS take bodies up to 110 MB, so the API's own limit answers first |
 | `Erp__ApiBase` | The one ERP API an ERP link may name (`https://api.cashgearerp.com`). Required, https, in production. The server never calls it |
@@ -180,6 +183,17 @@ origins (First installation, step 3); `install.ps1` sets `Sheet__Origin`, `Sheet
 `Erp__ApiBase` (the live ones by default), without which the API refuses to start. The worker gains
 `workbookRetention` (workbooks in the trash for 60 days). The web app is built with the three
 `VITE_CGW_SHEET`, `VITE_CGW_ERP_*` variables above.
+
+Version 0.6.0's migration (`Phase6Collaboration`) adds `RealtimeTickets`, `CommentThreads`,
+`Comments`, `Notifications` and the column `PageDocDerived.Mentions`, in a transaction like the
+others. `install.ps1` turns on IIS's WebSocket Protocol feature first (a server feature: no
+restart). The hub is `wss://workspace-api.cashgearerp.com/api/v1/realtime`, in the same site and
+app pool; `Web__Origins` also decides which sites may open it, so it must keep the web app's
+origin and the desktop's two (`install.ps1` sets all three). The app pool stays one process (no
+web garden): the hub's connections live in that process, and a recycle only makes clients
+reconnect and catch up. The worker's validation loop runs every 25 ms when idle (a small query
+each time), and gains `ticketCleanup` (every 10 minutes). The web app's CSP gains the API's
+`wss:` origin, from the same `VITE_CGW_API`.
 
 The ERP's side (Track E, in its repositories, deployed by you): run
 `CashGear.IdentitySystem/DbScripts/Create_WorkspaceConnect.sql` on CGService before deploying a

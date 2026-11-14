@@ -121,6 +121,7 @@ flowchart LR
   end
 
   WS -- "HTTPS: ops, changes, doc updates" --> API
+  WS -- "WebSocket: realtime.1 (Phase 6)" --> API
   Client -- "signed URL: assets, snapshots" --> Blob
   Client -- "iframe + messages" --> Sheet["Cash Gear Sheet<br/>embed route"]
   Client -- "session: Schema, Query, Commit" --> ERP["Cash Gear ERP<br/>UnifiedAPI"]
@@ -298,12 +299,12 @@ One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
 
 | Process | Does | Never |
 | --- | --- | --- |
-| API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing | Loads a Yjs library |
-| Worker | Compaction, snapshots, validation of updates (on a loop of its own), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports | Serves requests |
+| API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox | Loads a Yjs library, or decodes an update, a presence state or a relative position |
+| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports | Serves requests |
 
 Modules, each with its own folder, services and tests: Identity, Workspaces, Pages, Documents,
 Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), Workbooks and ErpLinks (Phase 5,
-`Cgw.Core/Workbooks`), and later Realtime, Ai. The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
+`Cgw.Core/Workbooks`), Realtime, Comments and Notifications (Phase 6: `Cgw.Api/Realtime`, `Cgw.Core/Comments`, `Cgw.Core/Notifications`), and later Ai. The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
 (coercion, conversion, queries, formulas, rollups, CSV) held to the TypeScript by shared vectors,
 the operations on databases, views and rows, and the query engine: a database's rows cached in
 memory per database and rows version, evaluated by the ported `queryRows`, keyset paged.
@@ -340,6 +341,7 @@ Conventions:
 | Desktop app | Authorisation code with PKCE through the system browser, back to a loopback listener on a port the app picks (RFC 8252, 7.3). The API's page asks the signed-in person to confirm the desktop's sign-in ("as {email}?") and issues the code only on that form's POST, so a link cannot sign a desktop in silently. The native side (`crates/cgw-native`, `apps/desktop/src-tauri/src/auth.rs`) exchanges and refreshes the tokens; the API bases it may talk to are fixed at build time | Refresh token in the OS keychain (Windows Credential Manager; the login keychain on macOS), never in the webview; access token in memory |
 | Sheet (opening a workbook) | One-time launch ticket → file session (`sheet-session.1`): the API's own routes under `/api/v1/sheet-sessions`, a CORS policy for Sheet's origins without credentials | In memory, in Sheet's tab |
 | ERP blocks | One-time ticket from the ERP client (a pop-up's `postMessage`, or the desktop's deep link `cashgear-workspace://erp#…`) → an ERP session the browser holds (`erp-connect.1`); Workspace's server never calls the ERP | In memory, per link per tab |
+| The real-time hub (Phase 6) | A single-use ticket (60 s) asked for with the client's own session, in the WebSocket's address; the hub reads nothing else, and the upgrade's `Origin` must be the web app's or the desktop's | Nothing: a new ticket per connection |
 
 Accounts are ASP.NET Core Identity. OpenIddict issues tokens. Sign-in is rate-limited and locks
 out after repeated failures. Passkeys and external providers can be added through Identity later.
@@ -447,9 +449,9 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Links | Scheme allow-list checked when parsed, when drawn and when clicked; external links open with `noopener noreferrer` |
 | Embedded content | Sandboxed iframes from an allow-list of origins; bookmarks are static cards, with previews fetched by the server |
 | Link previews | Server-side fetch behind an SSRF guard: public addresses only, no redirects to private ranges, size and time limits |
-| Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the one Sheet origin of the build (`VITE_CGW_SHEET`); `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and the ERP's API (`VITE_CGW_ERP_API`, Phase 5). No COEP. On the web it is made from the build's API address (`apps/web/vite.config.ts`): `vite preview` sends it, so e2e runs under it, and the build writes it into `staticwebapp.config.json` with `nosniff`, a referrer policy and `frame-ancestors 'none'`; the desktop's is in `tauri.conf.json`. The API's own sign-in pages send a CSP of their own (no script at all; forms only to itself, the web app and the loopback listener) |
+| Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the one Sheet origin of the build (`VITE_CGW_SHEET`); `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development) and their `wss:`/`ws:` forms for the hub (Phase 6), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and the ERP's API (`VITE_CGW_ERP_API`, Phase 5). No COEP. On the web it is made from the build's API address (`apps/web/vite.config.ts`): `vite preview` sends it, so e2e runs under it, and the build writes it into `staticwebapp.config.json` with `nosniff`, a referrer policy and `frame-ancestors 'none'`; the desktop's is in `tauri.conf.json`. The API's own sign-in pages send a CSP of their own (no script at all; forms only to itself, the web app and the loopback listener) |
 | Tauri | Minimal capabilities; typed commands only; no command takes SQL, a path outside the app's data directory, or a URL to fetch; `frame-src` as on the web. The macOS acceptance run drives the app through a test-only bridge (cargo feature `e2e-bridge`): `build.rs` refuses it in a release build and the release check fails a binary that holds it |
-| Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption (`ticket`, per address), push and search; Sheet's session routes in a bucket of their own (`sheet`) |
+| Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption (`ticket`, per address), push and search; Sheet's session routes in a bucket of their own (`sheet`); hub tickets (`realtime`, per person), and the hub's pushes against a budget the size of `push` |
 | Audit | Append-only log of sign-ins, member and role changes, sharing changes, exports, restores, permanent deletions, ERP link changes, with a correlation id |
 | Token storage | Web: cookie only. Desktop: OS keychain. ERP and file sessions: memory only. Tickets and sessions are stored hashed on the server |
 | Secrets | Not in the repo and not in settings files. Environment or a secret store; managed identity for Blob where the host allows it. A check fails on a secret in the repository (`scripts/check-secrets.mjs`, first in `pnpm check` and in CI): private keys, storage keys and SAS signatures, tokens, the updater's key, connection-string passwords, key and environment files |
@@ -537,6 +539,13 @@ cold start and the kill tests' durability; a figure over its budget, or worse th
   a drawer (`CgDrawer`).
 - **Top bar.** Breadcrumbs, search, favourite, page menu (history, export, move, delete), save
   and connection status.
+- **Collaboration (Phase 6).** The others on the page as avatars in the top bar, and beside pages
+  others have open in the sidebar (only pages the viewer can see); their cursors and selections in
+  the editor, named and coloured from the workspace's members. A comments panel beside the page
+  (Ctrl+Alt+Shift+M, or a highlight clicked): threads in reading order, those on removed blocks
+  marked, resolved ones behind a toggle; "Comment" on a selection (Ctrl+Alt+M). The inbox
+  (`#/inbox`, its unread count in the sidebar) lists mentions in pages and comments and replies.
+  Members only: a share link shows none of this. Comments need a connection in 0.6.0.
 - **No ribbon.** A bubble toolbar on selection, a slash menu, and a block handle menu.
 - **Themes.** Light and dark through `data-cg-theme` and the `--cg-*` tokens; follows the system
   or a manual choice. Text and highlight colours in documents are named tokens, so a document
