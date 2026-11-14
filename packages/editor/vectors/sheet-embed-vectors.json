@@ -1,0 +1,5168 @@
+{
+  "about": "sheet-embed.1 validator vectors (docs/INTEGRATIONS.md, \"Contract `sheet-embed.1`\"). `parent`: messages a Workspace page sends (init on the window, the rest on the port), run through parseParentMessage; `embed`: messages Sheet sends, through parseEmbedMessage. `valid` is the verdict. An object that is exactly {\"$bytes\": \"<base64>\"} stands for an ArrayBuffer of those bytes; {\"$bytes\": \"<base64>\", \"$length\": n} for those bytes followed by zero bytes up to n bytes in all. Keys such as \"__proto__\" are own properties (as JSON.parse and a structured clone make them): decode with defineProperty, never assignment.",
+  "contract": "sheet-embed.1",
+  "parent": [
+    {
+      "name": "null",
+      "message": null,
+      "valid": false
+    },
+    {
+      "name": "a string",
+      "message": "init",
+      "valid": false
+    },
+    {
+      "name": "a number",
+      "message": 1,
+      "valid": false
+    },
+    {
+      "name": "true",
+      "message": true,
+      "valid": false
+    },
+    {
+      "name": "an array holding a valid init",
+      "message": [
+        {
+          "type": "init",
+          "contract": "sheet-embed.1",
+          "source": {
+            "kind": "url",
+            "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+            "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+          },
+          "view": {
+            "kind": "range",
+            "sheet": "Budget",
+            "range": "A1:D20"
+          },
+          "theme": "light",
+          "direction": "ltr",
+          "locale": "en"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "bytes instead of an object",
+      "message": {
+        "$bytes": "UEsDBBQAAAAIAA=="
+      },
+      "valid": false
+    },
+    {
+      "name": "no type",
+      "message": {
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "type is not a string",
+      "message": {
+        "type": 1,
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "an unknown type",
+      "message": {
+        "type": "save",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "type in another case",
+      "message": {
+        "type": "Init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "an embed message (ready) sent by the parent",
+      "message": {
+        "type": "ready",
+        "contracts": ["sheet-embed.1"]
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a signed URL and a named range",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: the first sheet and its used range (null sheet and range)",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": null
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: a chart",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "chart",
+          "sheet": "Budget",
+          "chartId": "Chart 1"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: a chart on the first sheet holding it (null sheet)",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "chart",
+          "sheet": null,
+          "chartId": "Chart 1"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: bytes (transferred)",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "bytes",
+          "bytes": {
+            "$bytes": "UEsDBBQAAAAIAA=="
+          },
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: empty bytes are a valid message (the embed answers source.unavailable)",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "bytes",
+          "bytes": {
+            "$bytes": ""
+          },
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: dark, right to left, Arabic",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "dark",
+        "direction": "rtl",
+        "locale": "ar"
+      },
+      "valid": true
+    },
+    {
+      "name": "init: another contract (an embed answers contract.unsupported; the vector is the validator's verdict)",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.2",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no contract",
+      "message": {
+        "type": "init",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: contract is a number",
+      "message": {
+        "type": "init",
+        "contract": 1,
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: contract is a list",
+      "message": {
+        "type": "init",
+        "contract": ["sheet-embed.1"],
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no source",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no view",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no theme",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no direction",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no locale",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: theme \"Dark\"",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "Dark",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: theme \"auto\"",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "auto",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: direction \"auto\"",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "auto",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: locale \"fr\"",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "fr"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: locale \"en-US\"",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en-US"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: locale null",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: an extra field (no field beyond the table's)",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en",
+        "workbookId": "0193a1c0-0000-7000-8000-0000000b0001"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: an own \"__proto__\" key",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en",
+        "__proto__": {
+          "polluted": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a \"constructor\" key",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en",
+        "constructor": {
+          "prototype": {
+            "polluted": true
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a \"prototype\" key",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en",
+        "prototype": {
+          "polluted": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "init: deep junk in an extra field",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en",
+        "junk": {
+          "junk": {
+            "junk": {
+              "junk": {
+                "junk": {
+                  "junk": {
+                    "junk": {
+                      "junk": {
+                        "junk": {
+                          "junk": {
+                            "junk": {
+                              "junk": {
+                                "junk": {
+                                  "junk": {
+                                    "junk": {
+                                      "junk": {
+                                        "junk": {
+                                          "junk": {
+                                            "junk": {
+                                              "junk": {
+                                                "junk": {
+                                                  "junk": {
+                                                    "junk": {
+                                                      "junk": {
+                                                        "junk": {
+                                                          "junk": {
+                                                            "junk": {
+                                                              "junk": {
+                                                                "junk": {
+                                                                  "junk": {
+                                                                    "junk": {
+                                                                      "junk": {
+                                                                        "junk": {
+                                                                          "junk": {
+                                                                            "junk": {
+                                                                              "junk": {
+                                                                                "junk": {
+                                                                                  "junk": {
+                                                                                    "junk": {
+                                                                                      "junk": {
+                                                                                        "junk": {
+                                                                                          "junk": {
+                                                                                            "junk": {
+                                                                                              "junk": {
+                                                                                                "junk": {
+                                                                                                  "junk": {
+                                                                                                    "junk": {
+                                                                                                      "junk": {
+                                                                                                        "junk": {
+                                                                                                          "junk": {
+                                                                                                            "junk": {
+                                                                                                              "junk": {
+                                                                                                                "junk": {
+                                                                                                                  "junk": {
+                                                                                                                    "junk": {
+                                                                                                                      "junk": {
+                                                                                                                        "junk": {
+                                                                                                                          "junk": {
+                                                                                                                            "junk": {
+                                                                                                                              "junk": {
+                                                                                                                                "junk": {
+                                                                                                                                  "junk": {
+                                                                                                                                    "junk": {
+                                                                                                                                      "junk": {
+                                                                                                                                        "junk": "bottom"
+                                                                                                                                      }
+                                                                                                                                    }
+                                                                                                                                  }
+                                                                                                                                }
+                                                                                                                              }
+                                                                                                                            }
+                                                                                                                          }
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "init: deep arrays as the view",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": [
+          [
+            [
+              [
+                [
+                  [
+                    [
+                      [
+                        [
+                          [
+                            [
+                              [
+                                [
+                                  [
+                                    [
+                                      [
+                                        [
+                                          [
+                                            [
+                                              [
+                                                [
+                                                  [
+                                                    [
+                                                      [
+                                                        [
+                                                          [
+                                                            [
+                                                              [
+                                                                [
+                                                                  [
+                                                                    [
+                                                                      [
+                                                                        [
+                                                                          [
+                                                                            [
+                                                                              [
+                                                                                [
+                                                                                  [
+                                                                                    [
+                                                                                      [
+                                                                                        [
+                                                                                          [
+                                                                                            [
+                                                                                              [
+                                                                                                [
+                                                                                                  [
+                                                                                                    [
+                                                                                                      [
+                                                                                                        [
+                                                                                                          [
+                                                                                                            [
+                                                                                                              [
+                                                                                                                [
+                                                                                                                  [
+                                                                                                                    [
+                                                                                                                      [
+                                                                                                                        [
+                                                                                                                          [
+                                                                                                                            [
+                                                                                                                              [
+                                                                                                                                [
+                                                                                                                                  [
+                                                                                                                                    [
+                                                                                                                                      [
+                                                                                                                                        []
+                                                                                                                                      ]
+                                                                                                                                    ]
+                                                                                                                                  ]
+                                                                                                                                ]
+                                                                                                                              ]
+                                                                                                                            ]
+                                                                                                                          ]
+                                                                                                                        ]
+                                                                                                                      ]
+                                                                                                                    ]
+                                                                                                                  ]
+                                                                                                                ]
+                                                                                                              ]
+                                                                                                            ]
+                                                                                                          ]
+                                                                                                        ]
+                                                                                                      ]
+                                                                                                    ]
+                                                                                                  ]
+                                                                                                ]
+                                                                                              ]
+                                                                                            ]
+                                                                                          ]
+                                                                                        ]
+                                                                                      ]
+                                                                                    ]
+                                                                                  ]
+                                                                                ]
+                                                                              ]
+                                                                            ]
+                                                                          ]
+                                                                        ]
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: deep junk inside the source",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+          "junk": {
+            "junk": {
+              "junk": {
+                "junk": {
+                  "junk": {
+                    "junk": {
+                      "junk": {
+                        "junk": {
+                          "junk": {
+                            "junk": {
+                              "junk": {
+                                "junk": {
+                                  "junk": {
+                                    "junk": {
+                                      "junk": {
+                                        "junk": {
+                                          "junk": {
+                                            "junk": {
+                                              "junk": {
+                                                "junk": {
+                                                  "junk": {
+                                                    "junk": {
+                                                      "junk": {
+                                                        "junk": {
+                                                          "junk": {
+                                                            "junk": {
+                                                              "junk": {
+                                                                "junk": {
+                                                                  "junk": {
+                                                                    "junk": {
+                                                                      "junk": {
+                                                                        "junk": {
+                                                                          "junk": {
+                                                                            "junk": {
+                                                                              "junk": {
+                                                                                "junk": {
+                                                                                  "junk": {
+                                                                                    "junk": {
+                                                                                      "junk": {
+                                                                                        "junk": {
+                                                                                          "junk": {
+                                                                                            "junk": {
+                                                                                              "junk": {
+                                                                                                "junk": {
+                                                                                                  "junk": {
+                                                                                                    "junk": {
+                                                                                                      "junk": {
+                                                                                                        "junk": {
+                                                                                                          "junk": {
+                                                                                                            "junk": {
+                                                                                                              "junk": {
+                                                                                                                "junk": {
+                                                                                                                  "junk": {
+                                                                                                                    "junk": {
+                                                                                                                      "junk": {
+                                                                                                                        "junk": {
+                                                                                                                          "junk": {
+                                                                                                                            "junk": {
+                                                                                                                              "junk": {
+                                                                                                                                "junk": {
+                                                                                                                                  "junk": {
+                                                                                                                                    "junk": {
+                                                                                                                                      "junk": {
+                                                                                                                                        "junk": {
+                                                                                                                                          "junk": "bottom"
+                                                                                                                                        }
+                                                                                                                                      }
+                                                                                                                                    }
+                                                                                                                                  }
+                                                                                                                                }
+                                                                                                                              }
+                                                                                                                            }
+                                                                                                                          }
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: an own \"__proto__\" key inside the view",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20",
+          "__proto__": {
+            "kind": "range"
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "source: https to any host",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "source: http on 127.0.0.1 with a port (Azurite)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://127.0.0.1:10000/devstoreaccount1/workbooks/b1.xlsx?sig=x",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "source: http on localhost",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://localhost:4281/blob/b1?sig=x",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "source: a URL of 4,096 characters",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "source: a URL of 4,097 characters",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: http to another host",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: http to 127.0.0.2",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://127.0.0.2/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: http to [::1] (only 127.0.0.1 and localhost)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://[::1]:10000/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: http to a host ending in localhost",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://localhost.evil.test/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: http to a host starting with localhost",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "http://localhost@evil.test/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: a user name and password (reading: never in a signed URL)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://user:secret@example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: ftp",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "ftp://example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: javascript",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "javascript:alert(1)",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: data",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "data:application/octet-stream;base64,UEsDBA==",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: blob",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "blob:https://example.com/0193a1c0",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: a relative URL",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "/workbooks/b1.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: the scheme in capitals (reading: written https:// or http://)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "HTTPS://example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: https without slashes (reading: written https://)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https:example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: a space in the URL (reading: visible ASCII only)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://example.com/my book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: a leading space",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": " https://example.com/book.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: a non-ASCII character (reading: visible ASCII only)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://example.com/دفتر.xlsx",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: an empty URL",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: URL is not a string",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": 1,
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: 3 characters",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"a\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "etag: 256 characters",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "etag: 257 characters",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: empty quotes",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: not quoted",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "0193a1c0-0000-7000-8000-0000000b1001"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: weak (reading: the API sends strong tags)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "W/\"0193a1c0\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: a quote inside",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"ab\"cd\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: a space inside",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"ab cd\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: a non-ASCII character (reading: visible ASCII only)",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"نسخة\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "etag: null",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: no etag",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: another kind",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "blob",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: no kind",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: a URL source carrying bytes too",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+          "bytes": {
+            "$bytes": "UEsDBBQAAAAIAA=="
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: kind url with bytes instead of a URL",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "bytes": {
+            "$bytes": "UEsDBBQAAAAIAA=="
+          },
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: bytes as base64 text",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "bytes",
+          "bytes": "UEsDBBQAAAAIAA==",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: bytes as a list of numbers",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "bytes",
+          "bytes": [80, 75, 3, 4],
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "source: null",
+      "message": {
+        "type": "refresh",
+        "source": null
+      },
+      "valid": false
+    },
+    {
+      "name": "setView: a named range",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "setView: the used range of the first sheet",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "setView: a chart",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": "Budget",
+          "chartId": "Chart 1"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "setView: no view",
+      "message": {
+        "type": "setView"
+      },
+      "valid": false
+    },
+    {
+      "name": "setView: view null",
+      "message": {
+        "type": "setView",
+        "view": null
+      },
+      "valid": false
+    },
+    {
+      "name": "setView: an extra field",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: an unknown kind",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "table",
+          "sheet": null,
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: no kind",
+      "message": {
+        "type": "setView",
+        "view": {
+          "sheet": null,
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: no sheet key (reading: a null field is written, never left out)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "range": "A1"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: no range key",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: a range view with a chartId",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20",
+          "chartId": "Chart 1"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: a chart view with a range",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": "Budget",
+          "chartId": "Chart 1",
+          "range": "A1"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "view: a chart view without chartId",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": "Budget"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "chartId: 128 characters",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": null,
+          "chartId": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "chartId: 129 characters",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": null,
+          "chartId": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "chartId: empty",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": null,
+          "chartId": ""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "chartId: null",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "chart",
+          "sheet": null,
+          "chartId": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: 1 character",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "A",
+          "range": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "sheet: 31 characters",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "sssssssssssssssssssssssssssssss",
+          "range": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "sheet: 32 characters",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "ssssssssssssssssssssssssssssssss",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: empty",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: Arabic",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "الميزانية",
+          "range": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "sheet: spaces, dots and apostrophes (only [ ] : * ? / \\ are refused)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "'Q1 2026. Plan'",
+          "range": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "sheet: 15 characters outside the BMP (30 UTF-16 code units)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "📊📊📊📊📊📊📊📊📊📊📊📊📊📊📊",
+          "range": null
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "sheet: 16 characters outside the BMP (32 UTF-16 code units; lengths count code units)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "📊📊📊📊📊📊📊📊📊📊📊📊📊📊📊📊",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds [",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q[1]",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds ]",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q1]",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds :",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q1:Q2",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds *",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q*",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds ?",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q?",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds /",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q1/Q2",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: holds \\",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": "Q1\\Q2",
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "sheet: a number",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": 1,
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: one cell",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "range: two corners",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "range: the last cell",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "XFD1048576"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "range: the whole sheet (a valid message; the embed answers range.tooLarge)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1:XFD1048576"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "range: corners in either order",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "D20:A1"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "range: one cell written as two corners",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "B2:B2"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "range: column past XFD",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "XFE1"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: four letters",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "AAAA1"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: row past 1,048,576",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1048577"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: row 0",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A0"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: a leading zero (reading: rows without leading zeros)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A01"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: small letters (reading: capitals only)",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "a1:d20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: with $",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "$A$1:$D$20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: with a sheet",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "Budget!A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: whole columns",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A:D"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: whole rows",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "1:20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: a corner missing",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1:"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: three corners",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1:B2:C3"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: spaces",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": " A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: R1C1",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "R1C1"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: empty",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": ""
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "range: a number",
+      "message": {
+        "type": "setView",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": 1
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "setTheme: dark, right to left, Arabic",
+      "message": {
+        "type": "setTheme",
+        "theme": "dark",
+        "direction": "rtl",
+        "locale": "ar"
+      },
+      "valid": true
+    },
+    {
+      "name": "setTheme: light, left to right, English",
+      "message": {
+        "type": "setTheme",
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": true
+    },
+    {
+      "name": "setTheme: no locale",
+      "message": {
+        "type": "setTheme",
+        "theme": "dark",
+        "direction": "rtl"
+      },
+      "valid": false
+    },
+    {
+      "name": "setTheme: no direction",
+      "message": {
+        "type": "setTheme",
+        "theme": "dark",
+        "locale": "ar"
+      },
+      "valid": false
+    },
+    {
+      "name": "setTheme: theme \"high-contrast\"",
+      "message": {
+        "type": "setTheme",
+        "theme": "high-contrast",
+        "direction": "rtl",
+        "locale": "ar"
+      },
+      "valid": false
+    },
+    {
+      "name": "setTheme: an extra field",
+      "message": {
+        "type": "setTheme",
+        "theme": "dark",
+        "direction": "rtl",
+        "locale": "ar",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "refresh: a new signed URL",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "refresh: bytes",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "bytes",
+          "bytes": {
+            "$bytes": "UEsDBBQAAAAIAA=="
+          },
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "refresh: no source",
+      "message": {
+        "type": "refresh"
+      },
+      "valid": false
+    },
+    {
+      "name": "refresh: an extra view",
+      "message": {
+        "type": "refresh",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "requestPreview",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "id: 64 characters",
+      "message": {
+        "type": "requestPreview",
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "id: every allowed character",
+      "message": {
+        "type": "requestPreview",
+        "id": "AZaz09_-",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "id: 65 characters",
+      "message": {
+        "type": "requestPreview",
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "id: empty",
+      "message": {
+        "type": "requestPreview",
+        "id": "",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "id: a dot",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview.1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "id: a space",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview 1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "id: a number",
+      "message": {
+        "type": "requestPreview",
+        "id": 1,
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "requestPreview: no id",
+      "message": {
+        "type": "requestPreview",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxWidth: 16",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 16,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "maxWidth: 4,096",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 4096,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "maxWidth: 15",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 15,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxWidth: 4,097",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 4097,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxWidth: not an integer",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800.5,
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxWidth: text",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": "800",
+        "maxHeight": 600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxHeight: 16",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 16,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "maxHeight: 4,096",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 4096,
+        "scale": 2
+      },
+      "valid": true
+    },
+    {
+      "name": "maxHeight: 15",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 15,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxHeight: 4,097",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 4097,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "maxHeight: negative",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": -600,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "requestPreview: no maxHeight",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "scale: 1",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 1
+      },
+      "valid": true
+    },
+    {
+      "name": "scale: 1.5",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 1.5
+      },
+      "valid": true
+    },
+    {
+      "name": "scale: 3",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 3
+      },
+      "valid": true
+    },
+    {
+      "name": "scale: 2.5",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2.5
+      },
+      "valid": false
+    },
+    {
+      "name": "scale: 0",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 0
+      },
+      "valid": false
+    },
+    {
+      "name": "scale: 4",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 4
+      },
+      "valid": false
+    },
+    {
+      "name": "scale: text",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": "2"
+      },
+      "valid": false
+    },
+    {
+      "name": "requestPreview: no scale",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600
+      },
+      "valid": false
+    },
+    {
+      "name": "requestPreview: an extra theme",
+      "message": {
+        "type": "requestPreview",
+        "id": "preview-1",
+        "maxWidth": 800,
+        "maxHeight": 600,
+        "scale": 2,
+        "theme": "light"
+      },
+      "valid": false
+    }
+  ],
+  "embed": [
+    {
+      "name": "null",
+      "message": null,
+      "valid": false
+    },
+    {
+      "name": "a string",
+      "message": "ready",
+      "valid": false
+    },
+    {
+      "name": "an array",
+      "message": [
+        {
+          "type": "ready",
+          "contracts": ["sheet-embed.1"]
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "bytes instead of an object",
+      "message": {
+        "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+      },
+      "valid": false
+    },
+    {
+      "name": "no type",
+      "message": {
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "an unknown type",
+      "message": {
+        "type": "saved",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+      },
+      "valid": false
+    },
+    {
+      "name": "type in another case",
+      "message": {
+        "type": "Ready",
+        "contracts": ["sheet-embed.1"]
+      },
+      "valid": false
+    },
+    {
+      "name": "a parent message (init) sent by the embed",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "source": {
+          "kind": "url",
+          "url": "https://cgwstore.blob.core.windows.net/workbooks/0193a1c0-0000-7000-8000-0000000b0001/0193a1c0-0000-7000-8000-0000000b1001.xlsx?sv=2025-07-05&se=2026-11-14T10%3A05%3A00Z&sr=b&sp=r&skoid=0193&sig=k3Jd%2B9%2FqX0aZ%3D",
+          "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\""
+        },
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "locale": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "an own \"__proto__\" key holding a type",
+      "message": {
+        "__proto__": {
+          "type": "openRequested"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: sheet-embed.1",
+      "message": {
+        "type": "ready",
+        "contracts": ["sheet-embed.1"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: several contracts",
+      "message": {
+        "type": "ready",
+        "contracts": ["sheet-embed.1", "sheet-embed.2"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: only a later contract (a valid message; the parent finds none in common)",
+      "message": {
+        "type": "ready",
+        "contracts": ["sheet-embed.2"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: 16 contracts (reading: at most 16)",
+      "message": {
+        "type": "ready",
+        "contracts": [
+          "sheet-embed.1",
+          "sheet-embed.2",
+          "sheet-embed.3",
+          "sheet-embed.4",
+          "sheet-embed.5",
+          "sheet-embed.6",
+          "sheet-embed.7",
+          "sheet-embed.8",
+          "sheet-embed.9",
+          "sheet-embed.10",
+          "sheet-embed.11",
+          "sheet-embed.12",
+          "sheet-embed.13",
+          "sheet-embed.14",
+          "sheet-embed.15",
+          "sheet-embed.16"
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: 17 contracts",
+      "message": {
+        "type": "ready",
+        "contracts": [
+          "sheet-embed.1",
+          "sheet-embed.2",
+          "sheet-embed.3",
+          "sheet-embed.4",
+          "sheet-embed.5",
+          "sheet-embed.6",
+          "sheet-embed.7",
+          "sheet-embed.8",
+          "sheet-embed.9",
+          "sheet-embed.10",
+          "sheet-embed.11",
+          "sheet-embed.12",
+          "sheet-embed.13",
+          "sheet-embed.14",
+          "sheet-embed.15",
+          "sheet-embed.16",
+          "sheet-embed.17"
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: a contract name of 64 characters (reading: 1 to 64)",
+      "message": {
+        "type": "ready",
+        "contracts": ["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: a contract name of 65 characters",
+      "message": {
+        "type": "ready",
+        "contracts": ["ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: no contracts (reading: at least one)",
+      "message": {
+        "type": "ready",
+        "contracts": []
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: an empty contract name",
+      "message": {
+        "type": "ready",
+        "contracts": [""]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: a contract that is not a string",
+      "message": {
+        "type": "ready",
+        "contracts": [1]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: contracts as one string",
+      "message": {
+        "type": "ready",
+        "contracts": "sheet-embed.1"
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: no contracts field",
+      "message": {
+        "type": "ready"
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: an extra field",
+      "message": {
+        "type": "ready",
+        "contracts": ["sheet-embed.1"],
+        "version": "0.5.0"
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: a range",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "loaded: one cell",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "loaded: a used range cut to the limit",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:AX100"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": true
+      },
+      "valid": true
+    },
+    {
+      "name": "loaded: a chart",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "chart",
+          "sheet": "Budget",
+          "chartId": "Chart 1"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "Spending by month",
+            "sheet": "Budget"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "loaded: a chart on a chart sheet, no worksheets listed",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "chart",
+          "sheet": "Chart1",
+          "chartId": "Chart 1"
+        },
+        "sheets": [],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "Chart 1",
+            "sheet": "Chart1"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "loaded: 40 sheets (the table sets no bound on the lists)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "S1",
+            "direction": "ltr"
+          },
+          {
+            "name": "S2",
+            "direction": "ltr"
+          },
+          {
+            "name": "S3",
+            "direction": "ltr"
+          },
+          {
+            "name": "S4",
+            "direction": "ltr"
+          },
+          {
+            "name": "S5",
+            "direction": "ltr"
+          },
+          {
+            "name": "S6",
+            "direction": "ltr"
+          },
+          {
+            "name": "S7",
+            "direction": "ltr"
+          },
+          {
+            "name": "S8",
+            "direction": "ltr"
+          },
+          {
+            "name": "S9",
+            "direction": "ltr"
+          },
+          {
+            "name": "S10",
+            "direction": "ltr"
+          },
+          {
+            "name": "S11",
+            "direction": "ltr"
+          },
+          {
+            "name": "S12",
+            "direction": "ltr"
+          },
+          {
+            "name": "S13",
+            "direction": "ltr"
+          },
+          {
+            "name": "S14",
+            "direction": "ltr"
+          },
+          {
+            "name": "S15",
+            "direction": "ltr"
+          },
+          {
+            "name": "S16",
+            "direction": "ltr"
+          },
+          {
+            "name": "S17",
+            "direction": "ltr"
+          },
+          {
+            "name": "S18",
+            "direction": "ltr"
+          },
+          {
+            "name": "S19",
+            "direction": "ltr"
+          },
+          {
+            "name": "S20",
+            "direction": "ltr"
+          },
+          {
+            "name": "S21",
+            "direction": "ltr"
+          },
+          {
+            "name": "S22",
+            "direction": "ltr"
+          },
+          {
+            "name": "S23",
+            "direction": "ltr"
+          },
+          {
+            "name": "S24",
+            "direction": "ltr"
+          },
+          {
+            "name": "S25",
+            "direction": "ltr"
+          },
+          {
+            "name": "S26",
+            "direction": "ltr"
+          },
+          {
+            "name": "S27",
+            "direction": "ltr"
+          },
+          {
+            "name": "S28",
+            "direction": "ltr"
+          },
+          {
+            "name": "S29",
+            "direction": "ltr"
+          },
+          {
+            "name": "S30",
+            "direction": "ltr"
+          },
+          {
+            "name": "S31",
+            "direction": "ltr"
+          },
+          {
+            "name": "S32",
+            "direction": "ltr"
+          },
+          {
+            "name": "S33",
+            "direction": "ltr"
+          },
+          {
+            "name": "S34",
+            "direction": "ltr"
+          },
+          {
+            "name": "S35",
+            "direction": "ltr"
+          },
+          {
+            "name": "S36",
+            "direction": "ltr"
+          },
+          {
+            "name": "S37",
+            "direction": "ltr"
+          },
+          {
+            "name": "S38",
+            "direction": "ltr"
+          },
+          {
+            "name": "S39",
+            "direction": "ltr"
+          },
+          {
+            "name": "S40",
+            "direction": "ltr"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "loaded: a sheet entry that is not an object",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": ["Budget"],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: the view's sheet not resolved (null)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: the view's range not resolved (null)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": null
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: a range not written top-left first",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "D20:A1"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: a range written bottom-left to top-right",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A20:D1"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: one cell written as two corners (drawn as A1)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:A1"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: a chart view's sheet not resolved (null)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "chart",
+          "sheet": null,
+          "chartId": "Chart 1"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: no view",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: an invalid etag",
+      "message": {
+        "type": "loaded",
+        "etag": "v1",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: no etag",
+      "message": {
+        "type": "loaded",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: 1 by 1",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 1,
+          "height": 1
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "size: 100,000 by 100,000",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 100000,
+          "height": 100000
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "size: width 0",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 0,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: height 100,001",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 100001
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: a fraction",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640.5,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: negative",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": -640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: no height",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: an extra field",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420,
+          "scale": 2
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: text",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": "640",
+          "height": "420"
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "size: a list",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": [640, 420],
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: an entry without direction",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: direction \"auto\"",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "auto"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: a name of 32 characters",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "ssssssssssssssssssssssssssssssss",
+            "direction": "ltr"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: a name holding /",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Q1/Q2",
+            "direction": "ltr"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: an entry with an extra field",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr",
+            "hidden": false
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: a string",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": "Budget",
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "sheets: missing",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "charts: a title of 255 characters (reading: 1 to 255)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+            "sheet": "Budget"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "charts: a title of 256 characters",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+            "sheet": "Budget"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "charts: an empty title (reading: the chart's name when it has none)",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "",
+            "sheet": "Budget"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "charts: an id of 128 characters",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "title": "Spending by month",
+            "sheet": "Budget"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": true
+    },
+    {
+      "name": "charts: an id of 129 characters",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "title": "Spending by month",
+            "sheet": "Budget"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "charts: a null sheet",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "Spending by month",
+            "sheet": null
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "charts: an entry with an extra field",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [
+          {
+            "id": "Chart 1",
+            "title": "Spending by month",
+            "sheet": "Budget",
+            "kind": "bar"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "charts: missing",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "capped: text",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": "true"
+      },
+      "valid": false
+    },
+    {
+      "name": "capped: missing",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: an extra field",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false,
+        "workbook": {
+          "name": "Budget.xlsx"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: an own \"__proto__\" key",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "width": 640,
+          "height": 420
+        },
+        "capped": false,
+        "__proto__": {
+          "capped": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "loaded: deep junk as the size",
+      "message": {
+        "type": "loaded",
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "sheets": [
+          {
+            "name": "Budget",
+            "direction": "ltr"
+          },
+          {
+            "name": "الميزانية",
+            "direction": "rtl"
+          }
+        ],
+        "charts": [],
+        "size": {
+          "junk": {
+            "junk": {
+              "junk": {
+                "junk": {
+                  "junk": {
+                    "junk": {
+                      "junk": {
+                        "junk": {
+                          "junk": {
+                            "junk": {
+                              "junk": {
+                                "junk": {
+                                  "junk": {
+                                    "junk": {
+                                      "junk": {
+                                        "junk": {
+                                          "junk": {
+                                            "junk": {
+                                              "junk": {
+                                                "junk": {
+                                                  "junk": {
+                                                    "junk": {
+                                                      "junk": {
+                                                        "junk": {
+                                                          "junk": {
+                                                            "junk": {
+                                                              "junk": {
+                                                                "junk": {
+                                                                  "junk": {
+                                                                    "junk": {
+                                                                      "junk": {
+                                                                        "junk": {
+                                                                          "junk": {
+                                                                            "junk": {
+                                                                              "junk": {
+                                                                                "junk": {
+                                                                                  "junk": {
+                                                                                    "junk": {
+                                                                                      "junk": {
+                                                                                        "junk": {
+                                                                                          "junk": {
+                                                                                            "junk": {
+                                                                                              "junk": {
+                                                                                                "junk": {
+                                                                                                  "junk": {
+                                                                                                    "junk": {
+                                                                                                      "junk": {
+                                                                                                        "junk": {
+                                                                                                          "junk": {
+                                                                                                            "junk": {
+                                                                                                              "junk": {
+                                                                                                                "junk": {
+                                                                                                                  "junk": {
+                                                                                                                    "junk": {
+                                                                                                                      "junk": {
+                                                                                                                        "junk": {
+                                                                                                                          "junk": {
+                                                                                                                            "junk": {
+                                                                                                                              "junk": {
+                                                                                                                                "junk": {
+                                                                                                                                  "junk": {
+                                                                                                                                    "junk": {
+                                                                                                                                      "junk": {
+                                                                                                                                        "junk": "bottom"
+                                                                                                                                      }
+                                                                                                                                    }
+                                                                                                                                  }
+                                                                                                                                }
+                                                                                                                              }
+                                                                                                                            }
+                                                                                                                          }
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "resize",
+      "message": {
+        "type": "resize",
+        "size": {
+          "width": 640,
+          "height": 900
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "resize: no size",
+      "message": {
+        "type": "resize"
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: width 0",
+      "message": {
+        "type": "resize",
+        "size": {
+          "width": 0,
+          "height": 900
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: an extra field",
+      "message": {
+        "type": "resize",
+        "size": {
+          "width": 640,
+          "height": 900
+        },
+        "capped": false
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: a PNG",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "preview: a PNG of exactly 2 MiB (2,097,152 bytes)",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+          "$length": 2097152
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "preview: a PNG of 2,097,153 bytes",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+          "$length": 2097153
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: only the PNG signature (the validator checks the signature and the size)",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgo="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "preview: 7 bytes of the signature",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: a JPEG",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: no bytes",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": ""
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: bytes as base64 text",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: bytes missing",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: 4,096 by 4,096 CSS pixels",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 4096,
+        "height": 4096,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "preview: 1 by 1",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 1,
+        "height": 1,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "preview: width 4,097",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 4097,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: width 0",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 0,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: height a fraction",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420.5,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: an invalid id",
+      "message": {
+        "type": "preview",
+        "id": "preview 1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: no id",
+      "message": {
+        "type": "preview",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: an invalid etag",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: the view not resolved",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": null,
+          "range": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "preview: an extra scale",
+      "message": {
+        "type": "preview",
+        "id": "preview-1",
+        "bytes": {
+          "$bytes": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="
+        },
+        "width": 640,
+        "height": 420,
+        "etag": "\"0193a1c0-0000-7000-8000-0000000b1001\"",
+        "view": {
+          "kind": "range",
+          "sheet": "Budget",
+          "range": "A1:D20"
+        },
+        "scale": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "openRequested",
+      "message": {
+        "type": "openRequested"
+      },
+      "valid": true
+    },
+    {
+      "name": "openRequested: an extra field",
+      "message": {
+        "type": "openRequested",
+        "workbookId": "b1"
+      },
+      "valid": false
+    },
+    {
+      "name": "error: source.unavailable",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "HTTP 404"
+      },
+      "valid": true
+    },
+    {
+      "name": "error: source.forbidden",
+      "message": {
+        "type": "error",
+        "code": "source.forbidden",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: view.notFound",
+      "message": {
+        "type": "error",
+        "code": "view.notFound",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: workbook.tooLarge",
+      "message": {
+        "type": "error",
+        "code": "workbook.tooLarge",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: range.tooLarge",
+      "message": {
+        "type": "error",
+        "code": "range.tooLarge",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: contract.unsupported",
+      "message": {
+        "type": "error",
+        "code": "contract.unsupported",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: with the id of a requestPreview",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "",
+        "id": "preview-1"
+      },
+      "valid": true
+    },
+    {
+      "name": "error: a message of 500 characters",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+      },
+      "valid": true
+    },
+    {
+      "name": "error: a message of 501 characters",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+      },
+      "valid": false
+    },
+    {
+      "name": "error: no message (reading: the field is always there, possibly empty)",
+      "message": {
+        "type": "error",
+        "code": "view.notFound"
+      },
+      "valid": false
+    },
+    {
+      "name": "error: message is not a string",
+      "message": {
+        "type": "error",
+        "code": "view.notFound",
+        "message": 404
+      },
+      "valid": false
+    },
+    {
+      "name": "error: an unknown code",
+      "message": {
+        "type": "error",
+        "code": "timeout",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: a Workspace API code",
+      "message": {
+        "type": "error",
+        "code": "access.denied",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: no code",
+      "message": {
+        "type": "error",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: an invalid id",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "",
+        "id": "p/1"
+      },
+      "valid": false
+    },
+    {
+      "name": "error: id null (reading: left out when not answering a requestPreview)",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "",
+        "id": null
+      },
+      "valid": false
+    },
+    {
+      "name": "error: an extra field",
+      "message": {
+        "type": "error",
+        "code": "source.unavailable",
+        "message": "",
+        "status": 404
+      },
+      "valid": false
+    },
+    {
+      "name": "error: an own \"__proto__\" key",
+      "message": {
+        "type": "error",
+        "code": "view.notFound",
+        "message": "",
+        "__proto__": {
+          "code": "view.notFound"
+        }
+      },
+      "valid": false
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="cgw-api" content="%CGW_API%" />
+    <title>Mock Cash Gear Sheet</title>
+    <style>
+      body {
+        margin: 16px;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        color: #1f2328;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 2px 12px;
+      }
+      dt {
+        color: #59636e;
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      table {
+        border-collapse: collapse;
+        margin-block: 12px;
+      }
+      th,
+      td {
+        border: 1px solid #d0d5dd;
+        padding: 2px 8px;
+        text-align: start;
+      }
+      #error:empty {
+        display: none;
+      }
+      #error {
+        color: #b42318;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mock Cash Gear Sheet</h1>
+    <p id="status" data-state="starting">Starting</p>
+    <dl>
+      <dt>Workbook</dt>
+      <dd id="name"></dd>
+      <dt>Access</dt>
+      <dd id="access"></dd>
+      <dt>User</dt>
+      <dd id="user"></dd>
+      <dt>ETag</dt>
+      <dd id="etag"></dd>
+    </dl>
+    <p>
+      <button id="save" type="button" disabled>Save</button>
+      <button id="reload" type="button" disabled>Reload</button>
+    </p>
+    <p id="error" role="alert"></p>
+    <div id="sheet"></div>
+    <script type="module" src="/cloud.js"></script>
+  </body>
+</html>

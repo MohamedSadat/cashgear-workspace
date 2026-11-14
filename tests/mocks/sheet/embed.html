@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock Cash Gear Sheet embed</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --head: #f1f3f5;
+        --line: #d0d5dd;
+      }
+      :root[data-theme='dark'] {
+        color-scheme: dark;
+        --bg: #16181d;
+        --fg: #e6e8eb;
+        --head: #23262d;
+        --line: #3a3f48;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          13px/1.4 system-ui,
+          sans-serif;
+      }
+      :root[lang='ar'] body {
+        font-size: 15px;
+      }
+      table {
+        border-collapse: collapse;
+        width: max-content;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 2px 6px;
+        min-width: 48px;
+        height: 20px;
+        white-space: nowrap;
+        text-align: start;
+      }
+      th {
+        background: var(--head);
+        font-weight: 500;
+      }
+      td.number {
+        text-align: end;
+        font-variant-numeric: tabular-nums;
+      }
+      #bar {
+        position: fixed;
+        inset-block-end: 4px;
+        inset-inline-end: 4px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        font-size: 11px;
+        opacity: 0.85;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="bar">
+      <span id="status" data-state="waiting"></span>
+      <button id="open" type="button">Open in Cash Gear Sheet</button>
+    </div>
+    <script type="module" src="/embed.js"></script>
+  </body>
+</html>

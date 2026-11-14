@@ -87,6 +87,68 @@ export interface DatabaseRef {
   viewId: string | null;
 }
 
+/**
+ * What a frame the host draws into gives back (schema version 4's blocks): `update` takes the
+ * block's attributes when they change without anything that needs a new frame (a sheet's view,
+ * an ERP view's fields), `destroy` removes what was drawn.
+ */
+export interface MountedFrame<Options> {
+  update(options: Options): void;
+  destroy(): void;
+}
+
+/** A sheet embed block's view (schema version 4): which part of the workbook it shows. */
+export interface SheetBlockAttrs {
+  /** Null: the first visible sheet. */
+  sheet: string | null;
+  /** A1 notation without a sheet; null: the used range, capped at 5,000 cells. */
+  range: string | null;
+  /** Shows this chart instead of a range when set. */
+  chartId: string | null;
+  /** The frame's most height in CSS pixels; null: the host's default. */
+  height: number | null;
+}
+
+/** What a sheet embed block gives the host to draw into its frame. */
+export interface SheetMountOptions extends SheetBlockAttrs {
+  workbookId: string;
+  /** The block holding the embed, for anything the host keeps per block. */
+  blockId: string | null;
+  /** Whether the page is editable here; the workbook's own access is the host's to check. */
+  editable: boolean;
+  /** Changes the block's view or height, as an ordinary edit; nothing when not editable. */
+  setAttrs(attrs: Partial<SheetBlockAttrs>): void;
+}
+
+/** A workbook and the view a new block shows: what creating or picking one gives. */
+export interface WorkbookRef extends Partial<SheetBlockAttrs> {
+  workbookId: string;
+}
+
+/**
+ * An ERP view block's settings (schema version 4). Never ERP data: which link and connector,
+ * and what the person typed or picked. `filter`, `fields` and `sort` are JSON text
+ * (`{search?, equals?}`, `string[]`, `{field, direction}[]`), null when unset.
+ */
+export interface ErpBlockAttrs {
+  /** Workspace's `ErpLinks` id. */
+  linkId: string | null;
+  connectorId: string | null;
+  filter: string | null;
+  fields: string | null;
+  sort: string | null;
+  /** Rows a page; null: 50. */
+  pageSize: number | null;
+}
+
+/** What an ERP view block gives the host to draw into its frame. */
+export interface ErpMountOptions extends ErpBlockAttrs {
+  blockId: string | null;
+  editable: boolean;
+  /** Changes the block's settings, as an ordinary edit; nothing when not editable. */
+  setAttrs(attrs: Partial<ErpBlockAttrs>): void;
+}
+
 export interface EditorHost {
   strings?: EditorStrings;
   /** The interface language (BCP 47) dates are drawn in; else the document's `lang`. */
@@ -133,6 +195,29 @@ export interface EditorHost {
     create?(): Promise<DatabaseRef | null>;
     /** Asks which database (and view) to show ("Linked view"), or null when cancelled. */
     pick?(): Promise<DatabaseRef | null>;
+  };
+  /**
+   * Workbooks (schema version 4), drawn by the shell into a sheet embed block's frame: the
+   * picture, the live embed (`SheetEmbed`, sheet-embed.1), the view picker. Without `mount` the
+   * block draws a placeholder. The editor never deletes a workbook: removing the block only
+   * destroys what was drawn. `mount` is called when the block comes near the viewport (and
+   * again after it went far away and came back) and when its workbook, block id or editability
+   * changes; a change to its view or height goes to `update`.
+   */
+  workbooks?: {
+    mount?(element: HTMLElement, options: SheetMountOptions): MountedFrame<SheetMountOptions>;
+    /** Makes a new workbook in this workspace ("New workbook"), or null. */
+    create?(): Promise<WorkbookRef | null>;
+    /** Asks which workbook (and view) to show ("Existing workbook"), or null when cancelled. */
+    pick?(): Promise<WorkbookRef | null>;
+  };
+  /**
+   * ERP views (schema version 4), drawn by the shell (`@cgw/erp`) into an ERP view block's
+   * frame, from the reader's own ERP session, in memory only. Without `mount` the block draws a
+   * placeholder. Mounted and updated as `workbooks` are, by link, block id and editability.
+   */
+  erp?: {
+    mount?(element: HTMLElement, options: ErpMountOptions): MountedFrame<ErpMountOptions>;
   };
   /** The slash menu reads the shell's command registry through this. */
   slash?: {
