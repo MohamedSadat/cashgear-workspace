@@ -36,6 +36,12 @@ param(
   [string] $SmtpFrom = 'Cash Gear Workspace <no-reply@cashgearerp.com>',
   [string] $SiteName = 'CashGearWorkspaceApi',
   [string] $ServiceName = 'CashGearWorkspaceWorker',
+  # Phase 5: where Cash Gear Sheet is (its launch links, and the origins allowed to redeem them and
+  # to read workbooks) and the one ERP API an ERP link may name. The server refuses to start
+  # without them in Production.
+  [string] $SheetOrigin = 'https://sheet.cashgearerp.com',
+  [string[]] $SheetOrigins = @('https://sheet.cashgearerp.com'),
+  [string] $ErpApiBase = 'https://api.cashgearerp.com',
   # A group managed service account (gMSA) or a domain account; the app pool runs as the same.
   [Parameter(Mandatory)] [string] $ServiceAccount
 )
@@ -58,6 +64,8 @@ $environment = [ordered]@{
   Web__Origins__0 = $WebOrigin
   Web__Origins__1 = 'http://tauri.localhost'
   Web__Origins__2 = 'tauri://localhost'
+  Sheet__Origin = $SheetOrigin
+  Erp__ApiBase = $ErpApiBase
   OpenIddict__SigningCertificateThumbprint = $SigningThumbprint
   OpenIddict__EncryptionCertificateThumbprint = $EncryptionThumbprint
   DataProtection__Dpapi = 'true'
@@ -70,6 +78,7 @@ $environment = [ordered]@{
   # links carry their token there. Warnings and errors still come through.
   'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
 }
+for ($i = 0; $i -lt $SheetOrigins.Count; $i++) { $environment["Sheet__Origins__$i"] = $SheetOrigins[$i] }
 # The SMTP password comes from this session's environment, never from a parameter or a file.
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
 
