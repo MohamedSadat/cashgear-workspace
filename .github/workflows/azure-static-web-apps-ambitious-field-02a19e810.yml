@@ -9,29 +9,56 @@ on:
     branches:
       - main
 
+concurrency:
+  group: swa-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build_and_deploy_job:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     name: Build and Deploy Job
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
           lfs: false
+      # Oryx can't build this app: `apps/web` depends on the other packages through pnpm's
+      # `workspace:*`, so the app is built here and the action only uploads apps/web/dist.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      # The third-party notices `pnpm build` writes read the crates through `cargo metadata`.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - run: pnpm install --frozen-lockfile
+      # The origins the build talks to, written into the CSP of staticwebapp.config.json
+      # (docs/OPERATIONS.md, step 8).
+      - run: pnpm build
+        env:
+          VITE_CGW_API: https://workspace-api.cashgearerp.com
+          VITE_CGW_SHEET: https://sheet.cashgearerp.com
+          VITE_CGW_ERP_API: https://api.cashgearerp.com
+          VITE_CGW_ERP_CLIENT: https://erp.cashgearerp.com
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_FIELD_02A19E810 }}
           repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
-          action: "upload"
-          ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
+          action: 'upload'
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "./apps/web" # App source code path
-          api_location: "" # Api source code path - optional
-          output_location: "dist" # Built app content directory - optional
-          ###### End of Repository/Build Configurations ######
+          app_location: 'apps/web/dist' # The built app, with the staticwebapp.config.json the build writes
+          api_location: ''
+          output_location: ''
+          skip_app_build: true
+          skip_api_build: true
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
@@ -43,4 +70,4 @@ jobs:
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_FIELD_02A19E810 }}
-          action: "close"
+          action: 'close'
