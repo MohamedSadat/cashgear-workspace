@@ -56,6 +56,26 @@
         }
       }
     },
+    "/api/v1/realtime/tickets": {
+      "post": {
+        "tags": [
+          "Realtime"
+        ],
+        "operationId": "createRealtimeTicket",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeTicketDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/account/register": {
       "post": {
         "tags": [
@@ -2762,6 +2782,306 @@
           }
         }
       }
+    },
+    "/api/v1/pages/{pageId}/comments/threads": {
+      "get": {
+        "tags": [
+          "Comments"
+        ],
+        "operationId": "listCommentThreads",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Comments"
+        ],
+        "operationId": "createCommentThread",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewThreadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/comments/threads/{threadId}": {
+      "patch": {
+        "tags": [
+          "Comments"
+        ],
+        "operationId": "updateCommentThread",
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/comments/threads/{threadId}/comments": {
+      "post": {
+        "tags": [
+          "Comments"
+        ],
+        "operationId": "createComment",
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewCommentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/comments/{commentId}": {
+      "patch": {
+        "tags": [
+          "Comments"
+        ],
+        "operationId": "updateComment",
+        "parameters": [
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Comments"
+        ],
+        "operationId": "deleteComment",
+        "parameters": [
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/account/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "listNotifications",
+        "parameters": [
+          {
+            "name": "unread",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/account/notifications/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "readNotifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadNotificationsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2940,6 +3260,76 @@
           },
           "more": {
             "type": "boolean"
+          }
+        }
+      },
+      "CommentAnchorDto": {
+        "required": [
+          "start",
+          "end"
+        ],
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "end": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CommentDto": {
+        "required": [
+          "id",
+          "threadId",
+          "author",
+          "body",
+          "createdAt",
+          "editedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "threadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "author": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "body": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "editedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "CommentUpdateRequest": {
+        "required": [
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/JsonElement"
           }
         }
       },
@@ -3713,6 +4103,22 @@
           }
         }
       },
+      "NewCommentRequest": {
+        "required": [
+          "id",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "body": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
       "NewErpLink": {
         "required": [
           "erpLinkId",
@@ -3780,6 +4186,47 @@
           }
         }
       },
+      "NewThreadRequest": {
+        "required": [
+          "id",
+          "blockId",
+          "anchor",
+          "quote",
+          "comment"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blockId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "quote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "comment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NewCommentRequest"
+              }
+            ]
+          }
+        }
+      },
       "NewVersion": {
         "required": [
           "name",
@@ -3839,6 +4286,110 @@
             "type": "string"
           },
           "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "NotificationDto": {
+        "required": [
+          "id",
+          "kind",
+          "workspaceId",
+          "pageId",
+          "pageTitle",
+          "blockId",
+          "threadId",
+          "commentId",
+          "actor",
+          "excerpt",
+          "createdAt",
+          "readAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageTitle": {
+            "type": "string"
+          },
+          "blockId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "threadId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "commentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "readAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "NotificationsDto": {
+        "required": [
+          "notifications",
+          "unread",
+          "next"
+        ],
+        "type": "object",
+        "properties": {
+          "notifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationDto"
+            }
+          },
+          "unread": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "next": {
             "type": [
               "null",
               "string"
@@ -4232,6 +4783,22 @@
           }
         }
       },
+      "PersonRef": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "PullResponse": {
         "required": [
           "epoch",
@@ -4485,6 +5052,47 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "ReadNotificationsRequest": {
+        "required": [
+          "ids",
+          "all"
+        ],
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "all": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "RealtimeTicketDto": {
+        "required": [
+          "ticket",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -5224,6 +5832,107 @@
           }
         }
       },
+      "ThreadDto": {
+        "required": [
+          "id",
+          "pageId",
+          "blockId",
+          "anchor",
+          "quote",
+          "createdBy",
+          "createdAt",
+          "resolvedAt",
+          "resolvedBy",
+          "version",
+          "comments"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blockId": {
+            "type": "string"
+          },
+          "anchor": {
+            "$ref": "#/components/schemas/CommentAnchorDto"
+          },
+          "quote": {
+            "type": "string"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/PersonRef"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "resolvedBy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PersonRef"
+              }
+            ]
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentDto"
+            }
+          }
+        }
+      },
+      "ThreadsDto": {
+        "required": [
+          "threads"
+        ],
+        "type": "object",
+        "properties": {
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThreadDto"
+            }
+          }
+        }
+      },
+      "ThreadUpdateRequest": {
+        "required": [
+          "resolved"
+        ],
+        "type": "object",
+        "properties": {
+          "resolved": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
       "TreeDto": {
         "required": [
           "workspace",
@@ -5283,6 +5992,22 @@
             "items": {
               "$ref": "#/components/schemas/ViewDto"
             }
+          }
+        }
+      },
+      "UnreadDto": {
+        "required": [
+          "unread"
+        ],
+        "type": "object",
+        "properties": {
+          "unread": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -6021,6 +6746,9 @@
       "name": "Workspaces"
     },
     {
+      "name": "Realtime"
+    },
+    {
       "name": "Account"
     },
     {
@@ -6052,6 +6780,12 @@
     },
     {
       "name": "Sheet sessions"
+    },
+    {
+      "name": "Comments"
+    },
+    {
+      "name": "Notifications"
     }
   ]
 }

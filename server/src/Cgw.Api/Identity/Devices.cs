@@ -27,7 +27,7 @@ public sealed class DeviceGate(CgwDb db, IMemoryCache cache)
 }
 
 /// <summary>A desktop install or browser profile (DATA_MODEL.md, Devices); signing one out ends its session.</summary>
-public sealed class Devices(CgwDb db, DeviceGate gate, IOpenIddictAuthorizationManager authorizations, Audit audit, TimeProvider clock)
+public sealed class Devices(CgwDb db, DeviceGate gate, IOpenIddictAuthorizationManager authorizations, Audit audit, TimeProvider clock, Cgw.Api.Realtime.RealtimeRegistry realtime)
 {
     public async Task<Device> CreateAsync(Guid userId, string platform, string name)
     {
@@ -83,6 +83,9 @@ public sealed class Devices(CgwDb db, DeviceGate gate, IOpenIddictAuthorizationM
             await db.SaveChangesAsync();
         }
         gate.Forget(deviceId);
+        // Its hub connections are checked at once on this node, and closed (Phase 6); on any other
+        // node the access sweep closes them within a minute.
+        realtime.DeviceEnded(deviceId);
         return true;
     }
 

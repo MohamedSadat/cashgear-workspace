@@ -199,3 +199,21 @@ public sealed class WorkbookRetentionJob(BlobStore blob, TimeProvider clock) : I
         return true;
     }
 }
+
+/// <summary>
+/// The hub's tickets (Phase 6): used or expired ones are of no use to anyone after a minute, and
+/// go a day later, as Sheet's launch tickets do.
+/// </summary>
+public sealed class TicketCleanupJob(TimeProvider clock) : IJob
+{
+    public string Name => "ticketCleanup";
+    public TimeSpan Interval => TimeSpan.FromMinutes(10);
+
+    public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var db = services.GetRequiredService<CgwDb>();
+        var old = clock.GetUtcNow() - TimeSpan.FromDays(1);
+        await db.RealtimeTickets.Where(t => t.ExpiresAt < old).ExecuteDeleteAsync(ct);
+        return false;
+    }
+}

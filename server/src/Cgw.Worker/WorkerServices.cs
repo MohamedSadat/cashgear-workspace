@@ -43,6 +43,7 @@ public static class WorkerServices
         services.AddSingleton<IJob, WorkbookRetentionJob>();
         services.AddSingleton<IJob, ReconcileJob>();
         services.AddSingleton<IJob, RecomputeJob>();
+        services.AddSingleton<IJob, TicketCleanupJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }
@@ -64,10 +65,15 @@ public sealed class JobLoop(IServiceProvider services, IEnumerable<IJob> jobs, I
         await Task.WhenAll(loops);
     }
 
+    /// <summary>The longest a loop sleeps with nothing due.</summary>
+    private static readonly TimeSpan Idle = TimeSpan.FromMilliseconds(50);
+
     private async Task LoopAsync(IReadOnlyList<IJob> list, CancellationToken ct)
     {
         var due = list.ToDictionary(j => j.Name, _ => DateTimeOffset.MinValue);
         var records = list.ToDictionary(j => j.Name, _ => new JobRecord());
+        // A loop of its own sleeps no longer than its job's interval (validation: 25 ms).
+        var sleep = list.Count == 0 ? Idle : TimeSpan.FromTicks(Math.Min(Idle.Ticks, list.Min(j => j.Interval.Ticks)));
         while (!ct.IsCancellationRequested)
         {
             var busy = false;
@@ -80,7 +86,7 @@ public sealed class JobLoop(IServiceProvider services, IEnumerable<IJob> jobs, I
             }
             // A job with more to do goes again at once (validation under load: an edit waits for
             // the pass after the one running when it came, and no longer).
-            if (!busy) await Task.Delay(TimeSpan.FromMilliseconds(50), ct);
+            if (!busy) await Task.Delay(sleep, ct);
         }
     }
 

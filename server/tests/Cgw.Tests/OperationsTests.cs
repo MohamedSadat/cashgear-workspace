@@ -109,6 +109,8 @@ public sealed class OperationsTests(ServerFixture server)
         await Kit.Share(ws, page, false, ("user", member.Id, "view"));
         await ws.Client.PostAsJsonAsync($"/api/v1/pages/{page}/share-links", new { });
         await ws.Client.PostAsJsonAsync($"/api/v1/pages/{page}/versions", new { name = "v1" });
+        // Phase 6: a thread, and the notification its mention wrote.
+        await CommentTests.CreateOk(ws.Client, page, CommentTests.NewThread(body: [CommentTests.Text("See "), CommentTests.Mention(member.Id)]));
         await server.RunJob<SnapshotJob>();
         await Kit.InWorker(server, ws.Id, async (services, db) =>
         {
@@ -141,6 +143,9 @@ public sealed class OperationsTests(ServerFixture server)
             Assert.False(await db.AssetRefs.AnyAsync(r => r.PageId == page));
             Assert.False(await db.PagePermissions.AnyAsync(r => r.PageId == page));
             Assert.False(await db.ShareLinks.AnyAsync(l => l.PageId == page));
+            Assert.False(await db.CommentThreads.AnyAsync(t => t.PageId == page));
+            Assert.False(await db.Comments.AnyAsync(c => c.PageId == page));
+            Assert.False(await db.Notifications.AnyAsync(n => n.PageId == page));
             var tombstone = await db.Pages.SingleAsync(p => p.Id == page);
             Assert.NotNull(tombstone.PurgedAt);
             Assert.Equal("", tombstone.Title);
@@ -154,8 +159,9 @@ public sealed class OperationsTests(ServerFixture server)
     public async Task A_workspace_deleted_over_30_days_ago_loses_every_row_and_blob()
     {
         var ws = await Ws.Create(server);
-        await Kit.Join(server, ws, "member");
+        var member = await Kit.Join(server, ws, "member");
         var page = await Kit.PageWithText(server, ws);
+        await CommentTests.CreateOk(ws.Client, page, CommentTests.NewThread(body: [CommentTests.Mention(member.Id)]));
         await AssetTests.Upload(ws, AssetTests.Png, "image/png");
         await ws.Client.PostAsJsonAsync($"/api/v1/pages/{page}/versions", new { });
         await server.RunJob<SnapshotJob>();
@@ -185,6 +191,9 @@ public sealed class OperationsTests(ServerFixture server)
                 ["changes"] = await db.WorkspaceChanges.CountAsync(),
                 ["applied"] = await db.AppliedOps.CountAsync(),
                 ["yjsClients"] = await db.YjsClients.CountAsync(),
+                ["threads"] = await db.CommentThreads.CountAsync(),
+                ["comments"] = await db.Comments.CountAsync(),
+                ["notifications"] = await db.Notifications.CountAsync(),
             };
             Assert.All(counts, c => Assert.True(c.Value == 0, $"{c.Key}: {c.Value} left"));
             // The audit log is append-only.

@@ -177,6 +177,8 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
         await db.WorkbookPermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
         // Their file sessions in Sheet end (each request checks membership anyway).
         await db.FileSessions.Where(s => s.UserId == userId && s.EndedAt == null).ExecuteUpdateAsync(s => s.SetProperty(x => x.EndedAt, clock.GetUtcNow()), ct);
+        // Their inbox here (never shown to a non-member anyway); their comments stay, as their edits do.
+        await db.Notifications.Where(n => n.UserId == userId).ExecuteDeleteAsync(ct);
         var email = await db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.NormalizedEmail).FirstOrDefaultAsync(ct);
         var now = clock.GetUtcNow();
         if (email is not null)

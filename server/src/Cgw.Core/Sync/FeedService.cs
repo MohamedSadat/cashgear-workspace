@@ -10,6 +10,8 @@ namespace Cgw.Core.Sync;
 /// A row is a page, and every change to one is logged as a <c>page</c> change (the worker's head
 /// moves included): it is sent as a <c>row</c> change with the row, never as a page (Phase 4
 /// contracts, section 4). Databases and views are sent to those who may see their database's page.
+/// Phase 6: a page's <c>comments</c> change goes to those who can read the page, and a person's
+/// <c>notification</c> changes to that person only.
 /// </summary>
 public sealed class FeedService(CgwDb db, Access access)
 {
@@ -40,7 +42,7 @@ public sealed class FeedService(CgwDb db, Access access)
             .Concat(mine.Where(r => r.EntityType == "access"))
             .OrderBy(r => r.Seq).ToList();
 
-        var pageIds = latest.Where(r => r.EntityType is "page" or "row" or "favourite" or "visit").Select(r => r.EntityId).Distinct().ToList();
+        var pageIds = latest.Where(r => r.EntityType is "page" or "row" or "favourite" or "visit" or "comments").Select(r => r.EntityId).Distinct().ToList();
         var pages = new Dictionary<Guid, Page>();
         foreach (var chunk in Chunked.Of(pageIds))
             foreach (var page in await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id)).ToListAsync(ct))
@@ -143,6 +145,19 @@ public sealed class FeedService(CgwDb db, Access access)
                 case "access":
                     // A grant or revoke naming the root of what changed: the client refetches it.
                     changes.Add(new ChangeDto(row.Seq, "access", row.EntityId, row.Kind, null));
+                    break;
+                case "comments":
+                {
+                    // A page's comments changed (Phase 6): told only to those who can read the page,
+                    // as its own changes are; the client reads its threads again if it shows them.
+                    var page = pages.GetValueOrDefault(row.EntityId);
+                    if (page is not null && page.DeletedAt is null && PageLevel(page) != Levels.None)
+                        changes.Add(new ChangeDto(row.Seq, "comments", row.EntityId, "upsert", null));
+                    break;
+                }
+                case "notification":
+                    // The caller's own inbox changed (a per-person row, so only theirs come here).
+                    changes.Add(new ChangeDto(row.Seq, "notification", row.EntityId, "upsert", null));
                     break;
             }
         }

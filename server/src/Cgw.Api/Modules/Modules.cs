@@ -1,9 +1,12 @@
 using Cgw.Core;
+using Cgw.Api.Realtime;
 using Cgw.Core.Assets;
+using Cgw.Core.Comments;
 using Cgw.Core.Databases;
 using Cgw.Core.Documents;
 using Cgw.Core.Exports;
 using Cgw.Core.History;
+using Cgw.Core.Notifications;
 using Cgw.Core.Previews;
 using Cgw.Core.Search;
 using Cgw.Core.Sharing;
@@ -40,6 +43,9 @@ public static class Modules
         services.AddScoped<WorkbookService>();
         services.AddScoped<SheetSessions>();
         services.AddScoped<ErpLinkService>();
+        services.AddScoped<PageGate>();
+        services.AddScoped<CommentService>();
+        services.AddScoped<NotificationService>();
         return services;
     }
 
@@ -53,6 +59,8 @@ public static class Modules
         api.MapDatabases();
         api.MapWorkbooks();
         api.MapSheetSessions();
+        api.MapComments();
+        api.MapRealtimeTickets();
         return api;
     }
 }

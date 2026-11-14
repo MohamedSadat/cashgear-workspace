@@ -252,6 +252,12 @@ public sealed class PageDocDerived : ITenantOwned
     public string SearchText { get; set; } = "";
     /// <summary>JSON: <c>{"pages":[...],"assets":[...]}</c>.</summary>
     public string Outgoing { get; set; } = "{}";
+    /// <summary>
+    /// JSON: the <c>[blockId, userId]</c> pairs of the <c>userMention</c>s in <see cref="Json"/>
+    /// (Phase 6), so the next derive writes a notification for a new pair only; null before the
+    /// first derive that read them.
+    /// </summary>
+    public string? Mentions { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
@@ -607,6 +613,97 @@ public sealed class ErpLink : ITenantOwned
     public DateTimeOffset LinkedAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
     public Guid? RevokedBy { get; set; }
+}
+
+/// <summary>
+/// A one-time ticket to open the real-time hub (Phase 6 contracts, section 1): 32 random bytes kept
+/// only as their SHA-256, 60 seconds, one use. The connection's person and device come from it alone.
+/// Not tenant-owned: a connection follows any of its person's workspaces.
+/// </summary>
+public sealed class RealtimeTicket
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? DeviceId { get; set; }
+    public byte[] TokenHash { get; set; } = [];
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A comment thread on a block of a page (DATA_MODEL.md, Comments; Phase 6): anchored on the block
+/// id, narrowed by two Yjs relative positions the server never decodes, with the quoted text as the
+/// fallback. Its id is the client's (UUIDv7).
+/// </summary>
+public sealed class CommentThread : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid PageId { get; set; }
+    /// <summary>12 base-62 characters (the block-id plugin's).</summary>
+    public string BlockId { get; set; } = "";
+    /// <summary>A Yjs relative position, as the client encoded it; null for the whole block.</summary>
+    public byte[]? AnchorStart { get; set; }
+    public byte[]? AnchorEnd { get; set; }
+    /// <summary>The text the comment was made on, at most 1,000 characters; empty for a whole block.</summary>
+    public string Quote { get; set; } = "";
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public Guid? ResolvedBy { get; set; }
+    /// <summary>Rises on every change to the thread or its comments.</summary>
+    public long Version { get; set; } = 1;
+    /// <summary>Set when its first comment is deleted: the thread goes with it.</summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+}
+
+/// <summary>A comment in a thread; its body is the document's inline nodes as ProseMirror JSON (a strict subset).</summary>
+public sealed class Comment : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid ThreadId { get; set; }
+    public Guid PageId { get; set; }
+    public Guid AuthorUserId { get; set; }
+    /// <summary>JSON: the body as the server wrote it back after checking it.</summary>
+    public string Body { get; set; } = "[]";
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? EditedAt { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+}
+
+public static class NotificationKinds
+{
+    /// <summary>The person was mentioned in a page (the worker's mention pass).</summary>
+    public const string Mention = "mention";
+    public const string CommentMention = "commentMention";
+    public const string Reply = "reply";
+}
+
+/// <summary>
+/// An entry in a person's inbox (Phase 6 contracts, section 5). <see cref="DedupeKey"/> is unique per
+/// recipient: a mention is written once per page, block and person, a comment's once per comment.
+/// </summary>
+public sealed class Notification : ITenantOwned
+{
+    public Guid Id { get; set; }
+    /// <summary>The inbox's order and cursor (an identity column).</summary>
+    public long Seq { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>The recipient.</summary>
+    public Guid UserId { get; set; }
+    public string Kind { get; set; } = NotificationKinds.Mention;
+    public Guid PageId { get; set; }
+    public string? BlockId { get; set; }
+    public Guid? ThreadId { get; set; }
+    public Guid? CommentId { get; set; }
+    public Guid ActorUserId { get; set; }
+    /// <summary>The block's or the comment's plain text, at most 200 characters.</summary>
+    public string Excerpt { get; set; } = "";
+    public string DedupeKey { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ReadAt { get; set; }
 }
 
 /// <summary>Each worker job's last run, for its lag and the health check.</summary>

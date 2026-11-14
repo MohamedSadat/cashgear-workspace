@@ -48,14 +48,30 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
     /// <summary>Updates per minute to one page, from everyone (SYNC_DESIGN.md, What the server checks).</summary>
     public const int PerPagePerMinute = 1200;
 
-    public async Task<Result<PushResponse>> PushAsync(Member member, Page page, PushRequest request, Guid? deviceId, CancellationToken ct = default)
+    /// <summary>
+    /// The push both transports make (Phase 6 contracts, section 1): the HTTP route and the hub's
+    /// <c>PushUpdates</c> each read the caller's level fresh (<see cref="PageGate"/>), then come here,
+    /// so a refusal is the same over either. The hub allows 1 MB of updates a call (the client sends
+    /// anything larger over HTTP).
+    /// </summary>
+    public async Task<Result<PushResponse>> PushCheckedAsync(PageAccess access, PushRequest request, Guid? deviceId, long maxRequestBytes = MaxRequestBytes, CancellationToken ct = default)
+    {
+        if (!Levels.AtLeast(access.Level, Levels.Edit)) return Failure.Denied("This page is read-only for you");
+        return await PushAsync(access.Member, access.Page, request, deviceId, maxRequestBytes, ct);
+    }
+
+    public async Task<Result<PushResponse>> PushAsync(Member member, Page page, PushRequest request, Guid? deviceId, CancellationToken ct = default) =>
+        await PushAsync(member, page, request, deviceId, MaxRequestBytes, ct);
+
+    private async Task<Result<PushResponse>> PushAsync(Member member, Page page, PushRequest request, Guid? deviceId, long maxRequestBytes, CancellationToken ct)
     {
         if (request.Epoch != page.DocEpoch) return Failure.Conflict(Codes.DocEpochMismatch, $"The page's document is at epoch {page.DocEpoch}");
         if (request.ClientSchemaVersion < page.DocSchemaVersion) return new Failure(Codes.ClientTooOld, 426, "The document needs a newer version of the app");
         if (request.Updates is null || request.Updates.Count == 0) return Failure.Invalid("No updates");
         if (request.Updates.Any(u => u.Data is null || u.Data.Length == 0)) return Failure.Invalid("An update is empty");
         if (request.Updates.Any(u => u.Data.Length > MaxUpdateBytes)) return new Failure(Codes.LimitSize, 413, "An update is over 1 MB");
-        if (request.Updates.Sum(u => (long)u.Data.Length) > MaxRequestBytes) return new Failure(Codes.LimitSize, 413, "The updates are over 4 MB together");
+        if (request.Updates.Sum(u => (long)u.Data.Length) > maxRequestBytes)
+            return new Failure(Codes.LimitSize, 413, $"The updates are over {maxRequestBytes / (1024 * 1024)} MB together");
         var second = clock.GetUtcNow().ToUnixTimeSeconds();
         var count = cache.GetOrCreate(("push", page.Id, second / 60), e =>
         {
@@ -180,7 +196,7 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
         if (request.Update is { } update)
         {
             if (!canEdit) return Failure.Denied("This page is read-only for you");
-            var pushed = await PushAsync(member, page, new PushRequest(request.Epoch, request.ClientSchemaVersion, [update]), deviceId, ct);
+            var pushed = await PushAsync(member, page, new PushRequest(request.Epoch, request.ClientSchemaVersion, [update]), deviceId, MaxRequestBytes, ct);
             if (!pushed.Ok) return pushed.Failure!;
             ack = pushed.Value!.Acks[0];
         }

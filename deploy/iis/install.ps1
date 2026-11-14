@@ -128,6 +128,23 @@ foreach ($source in 'Cash Gear Workspace API', 'Cash Gear Workspace worker') {
   if (-not [System.Diagnostics.EventLog]::SourceExists($source)) { New-EventLog -LogName Application -Source $source }
 }
 
+# Phase 6: the real-time hub (/api/v1/realtime) is a WebSocket in the API's own site, which IIS
+# passes on only with its WebSocket Protocol feature. Turned on once, before the site starts; a
+# host that has it is left as it is.
+if (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) {
+  # Windows Server.
+  if (-not (Get-WindowsFeature Web-WebSockets).Installed) {
+    Write-Host 'Turning on IIS WebSocket Protocol...'
+    Install-WindowsFeature Web-WebSockets | Out-Null
+  }
+} else {
+  # Client Windows (a test host).
+  if ((Get-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets).State -ne 'Enabled') {
+    Write-Host 'Turning on IIS WebSocket Protocol...'
+    Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebSockets -All -NoRestart | Out-Null
+  }
+}
+
 # 1. The migrations, before any new code runs. A failed migration stops here, with the old
 #    version still serving.
 Write-Host 'Migrating the database...'

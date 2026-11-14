@@ -180,6 +180,110 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("AuditLog", (string)null);
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.Comment", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("AuthorUserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("EditedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("PageId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("ThreadId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ThreadId", "CreatedAt");
+
+                    b.HasIndex("WorkspaceId", "PageId");
+
+                    b.ToTable("Comments");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.CommentThread", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("AnchorEnd")
+                        .HasMaxLength(256)
+                        .HasColumnType("varbinary(256)");
+
+                    b.Property<byte[]>("AnchorStart")
+                        .HasMaxLength(256)
+                        .HasColumnType("varbinary(256)");
+
+                    b.Property<string>("BlockId")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .IsUnicode(false)
+                        .HasColumnType("char(12)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("PageId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Quote")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("ResolvedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "PageId", "CreatedAt");
+
+                    b.ToTable("CommentThreads");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.DatabaseRow", b =>
                 {
                     b.Property<byte[]>("PageId")
@@ -515,6 +619,83 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("LinkPreviews");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.Notification", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("ActorUserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("BlockId")
+                        .HasMaxLength(12)
+                        .IsUnicode(false)
+                        .HasColumnType("char(12)")
+                        .IsFixedLength();
+
+                    b.Property<byte[]>("CommentId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("DedupeKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Excerpt")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<byte[]>("PageId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long>("Seq")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Seq"));
+
+                    b.Property<byte[]>("ThreadId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DedupeKey")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Seq");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("UserId", "Seq"), new[] { "WorkspaceId", "PageId", "ReadAt" });
+
+                    b.HasIndex("WorkspaceId", "PageId");
+
+                    b.ToTable("Notifications");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.Page", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -727,6 +908,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<byte[]>("Json")
                         .IsRequired()
                         .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("Mentions")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Outgoing")
                         .IsRequired()
@@ -941,6 +1125,43 @@ namespace Cgw.Core.Data.Migrations
                     b.HasIndex("WorkspaceId", "UserId");
 
                     b.ToTable("PageVisits");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.RealtimeTicket", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("DeviceId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("RealtimeTickets");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.Section", b =>

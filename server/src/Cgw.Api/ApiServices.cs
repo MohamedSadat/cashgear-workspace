@@ -2,6 +2,7 @@ using System.Security.Cryptography.X509Certificates;
 using Cgw.Api.Identity;
 using Cgw.Api.Infrastructure;
 using Cgw.Api.Modules;
+using Cgw.Api.Realtime;
 using Cgw.Core;
 using Cgw.Core.Blob;
 using Cgw.Core.Data;
@@ -117,11 +118,15 @@ public static class ApiServices
                 o.DefaultChallengeScheme = Scheme;
                 o.DefaultForbidScheme = Scheme;
             })
-            // A request with a bearer token is the desktop app; anything else is the web cookie.
+            // A request with a bearer token is the desktop app; anything else is the web cookie. The
+            // hub's own path reads its single-use ticket only, never a cookie or a token (Phase 6).
             .AddPolicyScheme(Scheme, "Cookie or bearer", o => o.ForwardDefaultSelector = context =>
-                context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.Ordinal)
-                    ? OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
-                    : IdentityConstants.ApplicationScheme)
+                RealtimeGate.IsHub(context.Request.Path)
+                    ? RealtimeTicketHandler.SchemeName
+                    : context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.Ordinal)
+                        ? OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
+                        : IdentityConstants.ApplicationScheme)
+            .AddScheme<AuthenticationSchemeOptions, RealtimeTicketHandler>(RealtimeTicketHandler.SchemeName, null)
             .AddIdentityCookies();
         services.ConfigureApplicationCookie(o =>
         {
@@ -212,6 +217,7 @@ public static class ApiServices
         services.AddHostedService<MailSender>();
         services.AddHostedService<StartupTasks>();
         services.AddCgwModules(configuration);
+        services.AddCgwRealtime(configuration, environment);
         return services;
     }
 
@@ -247,6 +253,7 @@ public static class ApiServices
         app.MapAccountPages();
         app.MapConnect();
         api.MapCgwModules();
+        app.MapCgwRealtime();
         // Browsers ask for it on the sign-in pages; nothing to give, and a 404 would be logged.
         app.MapGet("/favicon.ico", () => TypedResults.NoContent())
             .AllowAnonymous().RequireRateLimiting(RateLimits.Anonymous).ExcludeFromDescription();

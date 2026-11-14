@@ -3,6 +3,7 @@ using Cgw.Core;
 using Cgw.Core.Blob;
 using Cgw.Core.Data;
 using Cgw.Core.Documents;
+using Cgw.Core.Notifications;
 using Cgw.Core.Sync;
 using Cgw.Ydoc;
 using Microsoft.Data.SqlClient;
@@ -34,7 +35,8 @@ namespace Cgw.Worker.Jobs;
 public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) : IJob
 {
     public string Name => "validate";
-    public TimeSpan Interval => TimeSpan.FromMilliseconds(100);
+    /// <summary>Every 25 ms when idle (Phase 6): a push reaches the other editors well within 300 ms.</summary>
+    public TimeSpan Interval => TimeSpan.FromMilliseconds(25);
     /// <summary>On a loop of its own: a long derive or export never holds an edit back from others.</summary>
     public bool OwnLoop => true;
     private const int Batch = 50;
@@ -561,14 +563,31 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
         // A row's files are shown by its page too: they stay referenced (and readable) by it.
         if (page.Kind == PageKinds.Row) assets.AddRange((await RowFilesAsync(db, pageId, ct)).Except(assets));
         var derived = await db.PageDocDerived.FirstOrDefaultAsync(d => d.PageId == pageId, ct);
+        // The mention pass (Phase 6): the pairs the last derive saw, against these.
+        var before = Mentions.Parse(derived?.Mentions);
+        var mentioned = Mentions.InDocument(json);
+        var since = derived?.UpToSeq ?? 0;
         if (derived is null) db.PageDocDerived.Add(derived = new PageDocDerived { PageId = pageId, WorkspaceId = page.WorkspaceId });
         derived.UpToSeq = page.DocHeadSeq;
         derived.Json = DocService.Gzip(json);
         derived.PlainText = text.Length > 1_000_000 ? text[..1_000_000] : text;
         derived.SearchText = TextNormaliser.Normalise(derived.PlainText);
         derived.Outgoing = JsonSerializer.Serialize(new { pages, assets });
+        derived.Mentions = Mentions.Serialize(mentioned);
         derived.UpdatedAt = clock.GetUtcNow();
+        var fresh = mentioned.Where(m => !before.Contains((m.BlockId, m.UserId))).ToList();
+        var notices = fresh.Count > 0 ? await MentionNoticesAsync(db, page, fresh, since, ct) : [];
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        if (notices.Count > 0)
+        {
+            // The workspace's lock first, as every writer takes it: a notification's feed change, and
+            // its once-only check, are exact under it.
+            var changes = new ChangeLog(db, clock);
+            await changes.LockAsync(page.WorkspaceId, ct);
+            await NotificationService.AddAsync(db, changes, notices, ct);
+            await db.SaveChangesAsync(ct);
+            await changes.FlushAsync(ct);
+        }
         await db.SaveChangesAsync(ct);
         await db.PageLinks.Where(l => l.FromPageId == pageId).ExecuteDeleteAsync(ct);
         db.PageLinks.AddRange(pages.Where(id => id != pageId).Select(id => new PageLink { FromPageId = pageId, ToPageId = id, WorkspaceId = page.WorkspaceId }));
@@ -578,6 +597,37 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
         db.AssetRefs.AddRange(known.Except(held).Select(id => new AssetRef { AssetId = id, PageId = pageId, WorkspaceId = page.WorkspaceId }));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// A notification for each person newly mentioned in a block (Phase 6 contracts, section 5): a
+    /// member who can read the page, and not the actor, the pusher of the newest update in the range
+    /// this derive covers. Once per person, page and block (<see cref="NotificationService.MentionKey"/>).
+    /// </summary>
+    private async Task<List<Notification>> MentionNoticesAsync(CgwDb db, Page page, List<BlockMention> fresh, long since, CancellationToken ct)
+    {
+        var (id, head) = (page.Id, page.DocHeadSeq);
+        var valid = db.PageDocUpdates.AsNoTracking().Where(u => u.PageId == id && u.Seq <= head && u.Status == UpdateStatus.Valid);
+        // The newest valid update this derive covers; the newest before it when a compaction removed
+        // those rows; the page's last editor when none is left.
+        var actor = await valid.Where(u => u.Seq > since).OrderByDescending(u => u.Seq).Select(u => (Guid?)u.UserId).FirstOrDefaultAsync(ct)
+            ?? await valid.OrderByDescending(u => u.Seq).Select(u => (Guid?)u.UserId).FirstOrDefaultAsync(ct)
+            ?? page.UpdatedBy;
+        var readers = await new Access(db).ReadersAsync(page.WorkspaceId, page.Id, fresh.Select(m => m.UserId).Where(u => u != actor), ct);
+        var now = clock.GetUtcNow();
+        return fresh.Where(m => m.UserId != actor && readers.Contains(m.UserId)).Select(m => new Notification
+        {
+            Id = Guid.CreateVersion7(),
+            WorkspaceId = page.WorkspaceId,
+            UserId = m.UserId,
+            Kind = NotificationKinds.Mention,
+            PageId = page.Id,
+            BlockId = m.BlockId,
+            ActorUserId = actor,
+            Excerpt = m.Excerpt,
+            DedupeKey = NotificationService.MentionKey(page.Id, m.BlockId),
+            CreatedAt = now,
+        }).ToList();
     }
 
     /// <summary>The assets a row's files properties hold.</summary>

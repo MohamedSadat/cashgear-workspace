@@ -164,6 +164,8 @@ public static class RateLimits
     public const string Ticket = "ticket";
     /// <summary>Sheet's file-session routes, per address (a file session is not a user's cookie or token).</summary>
     public const string Sheet = "sheet";
+    /// <summary>Hub tickets, per person: one each connect and reconnect (Phase 6).</summary>
+    public const string Realtime = "realtime";
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -204,6 +206,7 @@ public static class RateLimits
             options.AddPolicy(Import, c => Window("import:" + Who(c), Limit(Import, 20)));
             options.AddPolicy(Ticket, c => Window("ticket:" + Ip(c), Limit(Ticket, 30)));
             options.AddPolicy(Sheet, c => Window("sheet:" + Ip(c), Limit(Sheet, 600)));
+            options.AddPolicy(Realtime, c => Window("realtime:" + Who(c), Limit(Realtime, 60)));
         });
     }
 }

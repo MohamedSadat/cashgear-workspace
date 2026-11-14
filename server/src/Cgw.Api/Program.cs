@@ -2,12 +2,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Cgw.Api;
 using Cgw.Api.Infrastructure;
+using Cgw.Api.Realtime;
 using Cgw.Core;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 // The API process (ARCHITECTURE.md, The backend): authentication, authorisation, operations, the
-// change feed, document push and pull, asset tickets, search, sharing, versions. It never loads a
-// Yjs library; the worker does that.
+// change feed, document push and pull, asset tickets, search, sharing, versions, and (Phase 6) the
+// real-time hub, comments and notifications. It never loads a Yjs library; the worker does that.
 var builder = WebApplication.CreateBuilder(args);
 
 if (builder.Configuration["Logging:Format"] == "json")
@@ -64,6 +65,8 @@ app.UseStatusCodePages();
 if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing")) app.UseHsts();
 app.UseCgwSecurityHeaders();
 app.UseCors(ApiServices.CorsPolicy);
+// The hub's path: WebSockets only, no negotiation, an allowed Origin, before its ticket is read.
+app.UseCgwRealtimeGate();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

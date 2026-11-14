@@ -8,7 +8,7 @@ namespace Cgw.Worker.Jobs;
 /// <summary>
 /// Pages deleted for good (DATA_MODEL.md; SYNC_DESIGN.md: "permanent deletion of a page removes
 /// its rows and blobs"): their update rows, snapshots and blobs, derived row, links, asset
-/// references, permissions and share links go. The page row stays as a tombstone, with nothing of
+/// references, permissions and share links go, and (Phase 6) their comments and notifications. The page row stays as a tombstone, with nothing of
 /// its content left, so a late push still gets 410. Rows first, then blobs, so no row names a
 /// missing blob; a blob left by a crash is the reconcile job's.
 /// </summary>
@@ -51,6 +51,10 @@ public sealed class PagePurgeJob(DocStates states, BlobStore blob, TimeProvider 
             await db.PageAncestors.Where(a => a.PageId == pageId || a.AncestorPageId == pageId).ExecuteDeleteAsync(ct);
             // A row's record stays until now (emptied, so the query cache saw it go).
             await db.DatabaseRows.Where(r => r.PageId == pageId).ExecuteDeleteAsync(ct);
+            // Phase 6: its comments, and every inbox entry that points at it.
+            await db.Comments.Where(c => c.PageId == pageId).ExecuteDeleteAsync(ct);
+            await db.CommentThreads.Where(t => t.PageId == pageId).ExecuteDeleteAsync(ct);
+            await db.Notifications.Where(n => n.PageId == pageId).ExecuteDeleteAsync(ct);
             var now = clock.GetUtcNow();
             await db.Pages.Where(p => p.Id == pageId).ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.PurgedAt, now)
@@ -104,6 +108,9 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.FileSessions.ExecuteDeleteAsync(ct);
         await db.Workbooks.ExecuteDeleteAsync(ct);
         await db.ErpLinks.ExecuteDeleteAsync(ct);
+        await db.Comments.ExecuteDeleteAsync(ct);
+        await db.CommentThreads.ExecuteDeleteAsync(ct);
+        await db.Notifications.ExecuteDeleteAsync(ct);
         await db.PageDocUpdates.ExecuteDeleteAsync(ct);
         await db.PageDocSnapshots.ExecuteDeleteAsync(ct);
         await db.PageDocDerived.ExecuteDeleteAsync(ct);

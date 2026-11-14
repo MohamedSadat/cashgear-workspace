@@ -81,6 +81,38 @@ export interface paths {
     patch: operations['updateMe'];
     trace?: never;
   };
+  '/api/v1/account/notifications': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listNotifications'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/account/notifications/read': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['readNotifications'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/account/password/forgot': {
     parameters: {
       query?: never;
@@ -209,6 +241,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/comments/{commentId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['deleteComment'];
+    options?: never;
+    head?: never;
+    patch: operations['updateComment'];
+    trace?: never;
+  };
+  '/api/v1/comments/threads/{threadId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['updateCommentThread'];
+    trace?: never;
+  };
+  '/api/v1/comments/threads/{threadId}/comments': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['createComment'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/databases/{databaseId}/export': {
     parameters: {
       query?: never;
@@ -315,6 +395,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['acceptInvite'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pages/{pageId}/comments/threads': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listCommentThreads'];
+    put?: never;
+    post: operations['createCommentThread'];
     delete?: never;
     options?: never;
     head?: never;
@@ -491,6 +587,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['restoreVersion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/realtime/tickets': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['createRealtimeTicket'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1092,6 +1204,25 @@ export interface components {
       cursor: number | string;
       more: boolean;
     };
+    CommentAnchorDto: {
+      end: null | string;
+      start: null | string;
+    };
+    CommentDto: {
+      author: components['schemas']['PersonRef'];
+      body: components['schemas']['JsonElement'];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      editedAt: null | string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      threadId: string;
+    };
+    CommentUpdateRequest: {
+      body: components['schemas']['JsonElement'];
+    };
     ConfirmRequest: {
       code: string;
       /** Format: uuid */
@@ -1288,6 +1419,11 @@ export interface components {
       /** Format: int64 */
       sizeBytes: number | string;
     };
+    NewCommentRequest: {
+      body: components['schemas']['JsonElement'];
+      /** Format: uuid */
+      id: string;
+    };
     NewErpLink: {
       company: null | string;
       companyName: null | string;
@@ -1301,6 +1437,14 @@ export interface components {
     NewShareLink: {
       /** Format: int32 */
       expiresInDays: null | number | string;
+    };
+    NewThreadRequest: {
+      anchor: components['schemas']['JsonElement'];
+      blockId: null | string;
+      comment: null | components['schemas']['NewCommentRequest'];
+      /** Format: uuid */
+      id: string;
+      quote: null | string;
     };
     NewVersion: {
       kind: null | string;
@@ -1316,6 +1460,33 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+    };
+    NotificationDto: {
+      actor: components['schemas']['PersonRef'];
+      blockId: null | string;
+      /** Format: uuid */
+      commentId: null | string;
+      /** Format: date-time */
+      createdAt: string;
+      excerpt: string;
+      /** Format: uuid */
+      id: string;
+      kind: string;
+      /** Format: uuid */
+      pageId: string;
+      pageTitle: string;
+      /** Format: date-time */
+      readAt: null | string;
+      /** Format: uuid */
+      threadId: null | string;
+      /** Format: uuid */
+      workspaceId: string;
+    };
+    NotificationsDto: {
+      next: null | string;
+      notifications: components['schemas']['NotificationDto'][];
+      /** Format: int32 */
+      unread: number | string;
     };
     OperationDto: {
       /** Format: int64 */
@@ -1411,6 +1582,11 @@ export interface components {
       entries: null | components['schemas']['PermissionEntryIn'][];
       restricted: boolean;
     };
+    PersonRef: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
     PullResponse: {
       /** Format: int64 */
       cursor: number | string;
@@ -1466,6 +1642,15 @@ export interface components {
       rows: components['schemas']['RowDto'][];
       /** Format: int64 */
       total: number | string;
+    };
+    ReadNotificationsRequest: {
+      all: null | boolean;
+      ids: null | string[];
+    };
+    RealtimeTicketDto: {
+      /** Format: date-time */
+      expiresAt: string;
+      ticket: string;
     };
     RegisterRequest: {
       displayName: string;
@@ -1652,6 +1837,30 @@ export interface components {
       /** Format: int64 */
       upToSeq: number | string;
     };
+    ThreadDto: {
+      anchor: components['schemas']['CommentAnchorDto'];
+      blockId: string;
+      comments: components['schemas']['CommentDto'][];
+      /** Format: date-time */
+      createdAt: string;
+      createdBy: components['schemas']['PersonRef'];
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      pageId: string;
+      quote: string;
+      /** Format: date-time */
+      resolvedAt: null | string;
+      resolvedBy: null | components['schemas']['PersonRef'];
+      /** Format: int64 */
+      version: number | string;
+    };
+    ThreadsDto: {
+      threads: components['schemas']['ThreadDto'][];
+    };
+    ThreadUpdateRequest: {
+      resolved: null | boolean;
+    };
     TreeDto: {
       /** Format: int64 */
       cursor: number | string;
@@ -1662,6 +1871,10 @@ export interface components {
       views: components['schemas']['ViewDto'][];
       visits: components['schemas']['VisitDto'][];
       workspace: components['schemas']['WorkspaceDto'];
+    };
+    UnreadDto: {
+      /** Format: int32 */
+      unread: number | string;
     };
     UserRefDto: {
       /** Format: uuid */
@@ -1973,6 +2186,54 @@ export interface operations {
       };
     };
   };
+  listNotifications: {
+    parameters: {
+      query?: {
+        after?: string;
+        limit?: number | string;
+        unread?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationsDto'];
+        };
+      };
+    };
+  };
+  readNotifications: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReadNotificationsRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UnreadDto'];
+        };
+      };
+    };
+  };
   forgotPassword: {
     parameters: {
       query?: never;
@@ -2139,6 +2400,104 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AssetUrlDto'];
+        };
+      };
+    };
+  };
+  deleteComment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        commentId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  updateComment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        commentId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CommentUpdateRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CommentDto'];
+        };
+      };
+    };
+  };
+  updateCommentThread: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ThreadUpdateRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadDto'];
+        };
+      };
+    };
+  };
+  createComment: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewCommentRequest'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CommentDto'];
         };
       };
     };
@@ -2314,6 +2673,56 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorkspaceDto'];
+        };
+      };
+    };
+  };
+  listCommentThreads: {
+    parameters: {
+      query?: {
+        state?: string;
+      };
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadsDto'];
+        };
+      };
+    };
+  };
+  createCommentThread: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewThreadRequest'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadDto'];
         };
       };
     };
@@ -2649,6 +3058,26 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RestoreDto'];
+        };
+      };
+    };
+  };
+  createRealtimeTicket: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RealtimeTicketDto'];
         };
       };
     };

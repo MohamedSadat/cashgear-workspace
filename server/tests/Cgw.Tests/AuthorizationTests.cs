@@ -160,6 +160,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var me = await ws.Client.GetFromJsonAsync<JsonElement>("/api/v1/account/me");
         var database = await DatabaseTests.NewDatabase(ws, "Secret table");
         var workbook = (await Books.Create(ws, "Secret book")).GetProperty("id").GetGuid();
+        var thread = await CommentTests.CreateOk(ws.Client, page, CommentTests.NewThread());
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -173,6 +174,8 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["databaseId"] = database.ToString(),
             ["workbookId"] = workbook.ToString(),
             ["viewHash"] = new string('a', 64),
+            ["threadId"] = thread.GetProperty("id").GetString()!,
+            ["commentId"] = thread.GetProperty("comments")[0].GetProperty("id").GetString()!,
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };

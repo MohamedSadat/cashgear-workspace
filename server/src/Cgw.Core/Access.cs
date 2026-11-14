@@ -83,6 +83,32 @@ public sealed class Access(CgwDb db)
             .Select(m => m.UserId).ToHashSet());
     }
 
+    /// <summary>
+    /// Which of these people are members of the page's workspace who can read the page now (at
+    /// least <c>view</c>), in a few queries however many there are: who a mention or a reply may
+    /// notify, who may be told who has a page open. The same rules as <see cref="PageLevelAsync"/>.
+    /// </summary>
+    public async Task<HashSet<Guid>> ReadersAsync(Guid workspaceId, Guid pageId, IEnumerable<Guid> userIds, CancellationToken ct = default)
+    {
+        var levels = await LevelsOfAsync(workspaceId, pageId, userIds, ct);
+        return levels.Where(l => Levels.AtLeast(l.Value, Levels.View)).Select(l => l.Key).ToHashSet();
+    }
+
+    /// <summary>Each of these people's level on the page; <c>none</c> for someone not a member.</summary>
+    public async Task<Dictionary<Guid, string>> LevelsOfAsync(Guid workspaceId, Guid pageId, IEnumerable<Guid> userIds, CancellationToken ct = default)
+    {
+        var users = userIds.ToHashSet();
+        var members = new List<Member>();
+        foreach (var chunk in Chunked.Of(users))
+            members.AddRange((await db.WorkspaceMembers.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+                    .Where(m => m.WorkspaceId == workspaceId && chunk.Contains(m.UserId))
+                    .Join(db.Workspaces.Where(w => w.DeletedAt == null), m => m.WorkspaceId, w => w.Id, (m, _) => m)
+                    .ToListAsync(ct))
+                .Select(m => new Member(m.WorkspaceId, m.UserId, m.Role)));
+        var levels = await LevelsAsync(members, [pageId], ct);
+        return users.ToDictionary(u => u, u => levels.GetValueOrDefault((pageId, u), Levels.None));
+    }
+
     /// <summary>One person's level on each of these pages, in four queries: the feed's pages.</summary>
     public async Task<Dictionary<Guid, string>> LevelsAsync(Member member, IReadOnlyCollection<Guid> pageIds, CancellationToken ct = default) =>
         (await LevelsAsync([member], pageIds, ct)).ToDictionary(l => l.Key.Page, l => l.Value);

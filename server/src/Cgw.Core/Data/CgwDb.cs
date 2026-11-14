@@ -58,6 +58,10 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<WorkbookTicket> WorkbookTickets => Set<WorkbookTicket>();
     public DbSet<FileSession> FileSessions => Set<FileSession>();
     public DbSet<ErpLink> ErpLinks => Set<ErpLink>();
+    public DbSet<RealtimeTicket> RealtimeTickets => Set<RealtimeTicket>();
+    public DbSet<CommentThread> CommentThreads => Set<CommentThread>();
+    public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -368,6 +372,46 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.CompanyName).HasMaxLength(200);
         });
 
+        // Phase 6: the hub's tickets, comments, notifications.
+        b.Entity<RealtimeTicket>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            // The clean-up's queue.
+            e.HasIndex(x => x.ExpiresAt);
+            e.Property(x => x.TokenHash).HasMaxLength(32);
+        });
+        b.Entity<CommentThread>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // A page's threads, in the order they were made.
+            e.HasIndex(x => new { x.WorkspaceId, x.PageId, x.CreatedAt });
+            e.Property(x => x.BlockId).HasMaxLength(12).IsFixedLength().IsUnicode(false);
+            e.Property(x => x.AnchorStart).HasMaxLength(256);
+            e.Property(x => x.AnchorEnd).HasMaxLength(256);
+            e.Property(x => x.Quote).HasMaxLength(1000);
+        });
+        b.Entity<Comment>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.ThreadId, x.CreatedAt });
+            e.HasIndex(x => new { x.WorkspaceId, x.PageId });
+        });
+        b.Entity<Notification>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Seq).UseIdentityColumn();
+            // Once per recipient and key, however many derives or retries write it.
+            e.HasIndex(x => new { x.UserId, x.DedupeKey }).IsUnique();
+            // A person's inbox, newest first, across their workspaces.
+            e.HasIndex(x => new { x.UserId, x.Seq }).IncludeProperties(x => new { x.WorkspaceId, x.PageId, x.ReadAt });
+            e.HasIndex(x => new { x.WorkspaceId, x.PageId });
+            e.Property(x => x.Kind).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.BlockId).HasMaxLength(12).IsFixedLength().IsUnicode(false);
+            e.Property(x => x.Excerpt).HasMaxLength(200);
+            e.Property(x => x.DedupeKey).HasMaxLength(200).IsUnicode(false);
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -400,6 +444,9 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<WorkbookTicket>(b);
         Filter<FileSession>(b);
         Filter<ErpLink>(b);
+        Filter<CommentThread>(b);
+        Filter<Comment>(b);
+        Filter<Notification>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

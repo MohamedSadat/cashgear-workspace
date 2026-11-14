@@ -1,0 +1,21 @@
+{
+  "people": {
+    "a": "00000000-0000-7000-8000-00000000000a",
+    "b": "00000000-0000-7000-8000-00000000000b",
+    "o": "00000000-0000-7000-8000-00000000000c"
+  },
+  "updates": [
+    {
+      "name": "mentions",
+      "client": 1001,
+      "data": "ARHpBwyo6QcAAX0Fh+kHAgMFYmxvY2sHAOkHDQMIdGV4dEJvZHkHAOkHDgYEAOkHDw5Mb29rIGF0IHRoaXMsIIfpBw8DC3VzZXJNZW50aW9uKADpBx4GdXNlcklkAXckMDAwMDAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhh+kHHgYEAOkHIAUgYW5kIIfpByADC3VzZXJNZW50aW9uKADpByYGdXNlcklkAXckMDAwMDAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBih+kHJgYEAOkHKAcsIGZyb20gh+kHKAMLdXNlck1lbnRpb24oAOkHMAZ1c2VySWQBdyQwMDAwMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMGMoAOkHDgRraW5kAXcJcGFyYWdyYXBoKADpBw0CaWQBdwxNbjFNbjJNbjNNbjQB6QcBAAE=",
+      "why": "a block mentioning a, b and o (the writer), raising the document to version 5"
+    },
+    {
+      "name": "mentionAgain",
+      "client": 1001,
+      "data": "AQjpBzSH6QcNAwVibG9jawcA6Qc0Awh0ZXh0Qm9keQcA6Qc1BgQA6Qc2CUFsc28gZm9yIIfpBzYDC3VzZXJNZW50aW9uKADpB0AGdXNlcklkAXckMDAwMDAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhKADpBzUEa2luZAF3CXBhcmFncmFwaCgA6Qc0AmlkAXcMTW41TW42TW43TW44AekHAQAB",
+      "why": "on top of mentions: a second block mentioning a again"
+    }
+  ]
+}

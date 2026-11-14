@@ -40,6 +40,11 @@ public static class Codes
     /// <summary>A save with neither <c>If-Match</c> nor <c>If-None-Match</c> (428).</summary>
     public const string VersionRequired = "version.required";
 
+    // Phase 6: comments.
+
+    /// <summary>A comment's body or a thread's anchor that fails the rules (400).</summary>
+    public const string CommentInvalid = "comment.invalid";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -47,6 +52,7 @@ public static class Codes
         TreeSection, DocEpochMismatch, ClientTooOld, PageGone, FeedExpired, LimitSize, LimitRate,
         AssetTypeNotAllowed, RequestInvalid, Conflict, ServerError, DbTooLarge,
         TicketInvalid, SessionExpired, OriginDenied, WorkbookGone, VersionRequired,
+        CommentInvalid,
     ];
 }
 
