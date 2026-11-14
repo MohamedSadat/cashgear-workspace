@@ -1,9 +1,9 @@
 // The old builds against what this build writes: an older desktop app meeting newer documents
 // and data must show them read-only, push nothing, and leave the server's bytes as they were. The
 // old builds are the web builds of the releases (scripts/old-build.mjs, in target/old-build/<tag>,
-// served on 127.0.0.1:4279 for v0.2.0 and :4278 for v0.3.0), each running the same document code
-// as that release's desktop app (the app embeds that very build). Both builds talk to the e2e
-// server stack as the same person.
+// served on 127.0.0.1:4279 for v0.2.0, :4278 for v0.3.0, :4277 for v0.4.0 and :4276 for v0.5.0),
+// each running the same document code as that release's desktop app (the app embeds that very
+// build). Both builds talk to the e2e server stack as the same person.
 //
 // Phase 3 (v0.2.0, schema version 1): the page is made by the old build at version 1; this build
 // opens it, which migrates it to this build's version (an ordinary edit, pushed; the worker raises
@@ -23,6 +23,11 @@
 // Phase 5 (v0.4.0, schema version 3, no Sheet or ERP blocks): a page holding a workbook block and
 // an ERP data block (schema 4) opens read-only there, both blocks drawn as needing a newer version,
 // nothing sent but the visit, nothing asked of Sheet or the ERP, the server's bytes kept.
+//
+// Phase 6 (v0.5.0, schema version 4, no people in pages): a page naming a person (a
+// `userMention`, schema 5) opens read-only there, the mention drawn in its line as needing a newer
+// version, nothing sent but the visit, the server's bytes kept; and the feed's new kinds of change
+// (a page's `comments`, a person's `notification`) pass it by: it stays synced.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -41,6 +46,7 @@ import {
   expectLive,
   insertErpBlock,
   insertExistingWorkbook,
+  invite,
   newWorkbook,
   sheetBlock,
   watchAppErrors,
@@ -487,5 +493,160 @@ test('the v0.4.0 build shows a page with a workbook and ERP data read-only, send
   expect(oldErrors).toEqual([]);
   expect(nowErrors).toEqual([]);
   await oldContext.close();
+  await api.dispose();
+});
+
+/** A UUIDv7, as the app makes its ids: the comment routes take no other. */
+function uuidv7(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const ms = Date.now();
+  for (let i = 0; i < 6; i++) bytes[i] = Math.floor(ms / 2 ** (8 * (5 - i))) % 256;
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+test('the v0.5.0 build shows a version-5 page read-only, sends nothing but visits, and the server keeps its bytes', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.5.0');
+  const account = await newAccount('Four releases');
+  const colleagueAccount = await newAccount('Colleague');
+  const api = await apiSession(account);
+  const me = (await api.get('/api/v1/account/me')) as { id: string };
+
+  // This build: a page naming a colleague (schema 5).
+  const current = await browser.newContext();
+  const now = await current.newPage();
+  const nowErrors = watchAppErrors(now);
+  await now.goto('/');
+  await signIn(now, account);
+  await signedIn(now, account);
+  await now.getByLabel('Workspace name').fill('Four releases');
+  await now.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(now)).toBeVisible();
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  const workspaceId = (
+    (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+  ).find((w) => w.name === 'Four releases')!.id;
+  const colleague = await invite(api, workspaceId, colleagueAccount);
+  const them = (await colleague.get('/api/v1/account/me')) as { id: string };
+  await newPage(now, 'Plans with a person');
+  await now.keyboard.type('Written by version five');
+  await now.keyboard.press('Enter');
+  // The mention as the clipboard brings it (the "@" menu's people are the shell's).
+  await editor(now).evaluate((root, userId) => {
+    const data = new DataTransfer();
+    data.setData(
+      'text/html',
+      `<p>Ask <span data-user-mention="" data-userid="${userId}">@</span> to review</p>`,
+    );
+    root.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+    );
+  }, them.id);
+  await expect(editor(now).locator('.cgw-user-mention')).toHaveCount(1);
+  await expect(editor(now)).toContainText('Ask @');
+  await waitSaved(now);
+  const plansId = pageIdOf(now);
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  await expect
+    .poll(async () => (await pageRecord(api, workspaceId, plansId))?.docSchemaVersion, {
+      timeout: 60000,
+    })
+    .toBe(CURRENT);
+  expect(CURRENT).toBeGreaterThanOrEqual(5);
+  // The worker's derived document has the mention: the server holds the whole page.
+  await expect
+    .poll(
+      async () => {
+        // 404 until the worker has derived the page.
+        const { status, body } = await api.raw(`/api/v1/pages/${plansId}/doc/json`);
+        if (status !== 200) return false;
+        const { json } = JSON.parse(body) as { json: string };
+        return json.includes('"userMention"') && json.includes(them.id);
+      },
+      { timeout: 60000 },
+    )
+    .toBe(true);
+  // The colleague comments on the page and names its maker: a `comments` change in the feed, and
+  // a `notification` change in the maker's own feed.
+  const blockId = (await editor(now).locator('[data-block]').nth(1).getAttribute('data-block-id'))!;
+  const comment = (text: string) => [
+    { type: 'text', text },
+    { type: 'userMention', attrs: { userId: me.id } },
+  ];
+  const threadId = uuidv7();
+  await colleague.post(`/api/v1/pages/${plansId}/comments/threads`, {
+    id: threadId,
+    blockId,
+    anchor: { start: null, end: null },
+    quote: '',
+    comment: { id: uuidv7(), body: comment('Shall we, ') },
+  });
+  await expect
+    .poll(
+      async () =>
+        ((await api.get('/api/v1/account/notifications?unread=true')) as { unread: number }).unread,
+      { timeout: 30000 },
+    )
+    .toBeGreaterThanOrEqual(1);
+  const before = await serverState(api, plansId);
+  await current.close();
+
+  // v0.5.0, signed in as the same person on its own copy.
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const pushes: string[] = [];
+  old.on('request', (request) => {
+    const url = request.url();
+    if (request.method() !== 'POST') return;
+    if (/\/doc\/(updates|repair)$/.test(url)) pushes.push(url);
+    if (/\/ops$/.test(url))
+      for (const op of (request.postDataJSON()?.ops ?? []) as { type: string }[])
+        if (op.type !== 'visit.record') pushes.push(`${op.type} ${url}`);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  const sidebar = old.getByRole('tree', { name: 'Pages' });
+  await sidebar.getByRole('treeitem', { name: /Plans with a person/ }).click({ timeout: 30000 });
+  await expect(editor(old)).toContainText('Written by version five', { timeout: 20000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  // The mention is a placeholder in its line; the text around it stays.
+  await expect(editor(old)).toContainText('Ask [needs a newer version] to review');
+  await expect(editor(old).locator('.cgw-user-mention')).toHaveCount(0);
+  await expect(old.locator('.cgw-page [contenteditable="true"]')).toHaveCount(0);
+  await expect(old.getByLabel('Page title')).not.toBeEditable();
+  const shown = (await editor(old).textContent())!;
+  await editor(old).click();
+  await old.keyboard.type('typed in the old build');
+  await old.keyboard.press('Enter');
+  await expect(editor(old)).toHaveText(shown);
+  // A reply while it is open: more of the new kinds of change, passed by.
+  await colleague.post(`/api/v1/comments/threads/${threadId}/comments`, {
+    id: uuidv7(),
+    body: comment('or later, '),
+  });
+  await old.waitForTimeout(5000);
+  await expect(syncStatus(old)).toHaveText('Synced');
+  // Started again from its store: still read-only, the same placeholder.
+  await old.reload();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  await expect(editor(old)).toContainText('Ask [needs a newer version] to review');
+  await old.waitForTimeout(5000);
+
+  expect(pushes, 'what the old build sent').toEqual([]);
+  expect(await serverState(api, plansId)).toEqual(before);
+  expect(oldErrors).toEqual([]);
+  expect(nowErrors).toEqual([]);
+  await oldContext.close();
+  await colleague.dispose();
   await api.dispose();
 });

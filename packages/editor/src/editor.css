@@ -23,6 +23,11 @@
   --cgw-red-bg: #fdebec;
   --cgw-code-bg: rgba(135, 131, 120, 0.15);
   --cgw-selection: rgba(35, 131, 226, 0.14);
+  /* Phase 6: comment highlights. (A person's colours, --cgw-presence-1 to -8 and the ink on
+     them, --cgw-presence-text, are the shell's theme tokens: the host names one per cursor.) */
+  --cgw-commented: rgba(242, 178, 0, 0.2);
+  --cgw-commented-active: rgba(242, 178, 0, 0.45);
+  --cgw-commented-line: rgba(196, 140, 0, 0.75);
 }
 
 [data-cg-theme='dark'] {
@@ -46,6 +51,9 @@
   --cgw-red-bg: #522e2a;
   --cgw-code-bg: rgba(255, 255, 255, 0.08);
   --cgw-selection: rgba(35, 131, 226, 0.28);
+  --cgw-commented: rgba(255, 200, 60, 0.16);
+  --cgw-commented-active: rgba(255, 200, 60, 0.36);
+  --cgw-commented-line: rgba(255, 200, 60, 0.7);
 }
 
 .cgw-editor {
@@ -74,6 +82,9 @@
 .cgw-editor > .cgw-block {
   content-visibility: auto;
   contain-intrinsic-size: auto 28px;
+  /* content-visibility clips what a block paints to its box: a cursor's name over the first
+     line of a block may paint this far outside it, where the browser takes the margin. */
+  overflow-clip-margin: 24px;
 }
 
 .cgw-block > .cgw-block {
@@ -1188,4 +1199,137 @@ h3.cgw-body {
 }
 .cgw-date-mention[data-invalid='true'] {
   text-decoration: line-through;
+}
+
+/* Phase 6: a person in a line (schema version 5), their name from the workspace's members. */
+.cgw-user-mention {
+  border-radius: 4px;
+  padding-inline: 2px;
+  color: var(--cg-accent);
+  white-space: nowrap;
+  cursor: default;
+}
+.cgw-user-mention[data-unknown='true'] {
+  color: var(--cg-text-secondary);
+}
+.cgw-user-mention.ProseMirror-selectednode {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 1px;
+}
+
+/* Phase 6: the others on this page. A caret in their colour with their name over it, which fades
+   a moment after it last moved (and shows again on hover); their selection tinted; a block they
+   selected whole outlined. Names are drawn by CSS, so they are not text of the page. */
+.cgw-presence-caret {
+  position: relative;
+  margin-inline: -1px;
+  border-inline-start: 2px solid var(--cgw-presence-colour, var(--cg-accent));
+  pointer-events: none;
+  word-break: normal;
+}
+.cgw-presence-caret::after {
+  content: attr(data-name);
+  position: absolute;
+  inset-block-end: 100%;
+  inset-inline-start: -2px;
+  padding: 1px 4px;
+  border-radius: 3px 3px 3px 0;
+  background: var(--cgw-presence-colour, var(--cg-accent));
+  color: var(--cgw-presence-text, #ffffff);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+  unicode-bidi: plaintext;
+  pointer-events: auto;
+  animation: cgw-presence-name 3s forwards;
+}
+/* The square corner under the caret, on its side in right-to-left text (alone in its rule: a
+   browser that does not know :dir() drops the whole rule). */
+.cgw-presence-caret:dir(rtl)::after {
+  border-radius: 3px 3px 0 3px;
+}
+.cgw-presence-caret:hover::after {
+  animation: none;
+  opacity: 1;
+}
+@keyframes cgw-presence-name {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cgw-presence-caret::after {
+    animation-timing-function: steps(1, end);
+  }
+}
+.cgw-presence-selection {
+  background: color-mix(in srgb, var(--cgw-presence-colour, var(--cg-accent)) 22%, transparent);
+}
+.cgw-body.is-presence-selected {
+  outline: 2px solid var(--cgw-presence-colour, var(--cg-accent));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Phase 6: comments. The text a thread is on, stronger for the one the panel has selected, with a
+   small marker at its end (a button: Enter or a click opens the thread); a block whose text is no
+   longer found, tinted. */
+.cgw-commented {
+  background: var(--cgw-commented);
+  border-block-end: 2px solid var(--cgw-commented-line);
+  cursor: pointer;
+}
+.cgw-commented.is-active {
+  background: var(--cgw-commented-active);
+}
+.cgw-body.is-commented {
+  background: var(--cgw-commented);
+  border-radius: 4px;
+}
+.cgw-body.is-comment-active {
+  background: var(--cgw-commented-active);
+}
+.cgw-commented-pin {
+  display: inline-block;
+  inline-size: 1.1em;
+  block-size: 1.1em;
+  margin-inline-start: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--cgw-commented-line);
+  font: inherit;
+  font-size: 0.75em;
+  line-height: 1;
+  vertical-align: super;
+  opacity: 0.75;
+  cursor: pointer;
+  user-select: none;
+}
+.cgw-commented-pin::before {
+  content: '💬';
+}
+.cgw-commented-pin:hover,
+.cgw-commented-pin.is-active {
+  opacity: 1;
+}
+.cgw-commented-pin:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 1px;
+  opacity: 1;
+}
+/* On a block with no text (an image, an embed): at its top corner, inside the block. */
+.cgw-block > .cgw-commented-pin {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+  z-index: 1;
+  font-size: 14px;
+  vertical-align: baseline;
 }

@@ -50,7 +50,31 @@ export interface EditorStrings {
   datePick: string;
   datePicker: string;
   dateInvalid: string;
+  /**
+   * Phase 6: what a mention of a person this page cannot name says after its `@`; the "@"
+   * menu's group of people; "Comment" in the bubble toolbar and the block menu; a comment
+   * marker's name. Read through `editorString`: a catalogue without them yet gets the English of
+   * `EDITOR_STRING_DEFAULTS`.
+   */
+  someone: string;
+  mentionPeople: string;
+  comment: string;
+  commentOpen: string;
   [key: string]: string;
+}
+
+/** English for the strings added in Phase 6, used while the host's catalogue lacks them. */
+export const EDITOR_STRING_DEFAULTS = {
+  someone: 'someone',
+  mentionPeople: 'People',
+  comment: 'Comment',
+  commentOpen: 'Open the comment',
+} as const;
+
+/** One of the Phase 6 strings: the host's, else the English default. */
+export function editorString(host: EditorHost, key: keyof typeof EDITOR_STRING_DEFAULTS): string {
+  // A catalogue cast to these strings may still lack the Phase 6 keys.
+  return (host.strings?.[key] as string | undefined) || EDITOR_STRING_DEFAULTS[key];
 }
 
 export interface AssetInfo {
@@ -73,6 +97,50 @@ export interface SlashItem {
   group?: string;
   shortcut?: string;
 }
+
+/** A person, as the "@" menu lists them (Phase 6): the workspace's members the reader may see. */
+export interface PersonRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * Another session's cursor on this page (Phase 6, presence), as the host has it now: already
+ * filtered (not this session, not stale), the name and colour from the workspace's members,
+ * never from the message.
+ */
+export interface PresenceCursor {
+  /** One per person and Yjs client: what tells two of the same person's cursors apart. */
+  key: string;
+  userId: string;
+  name: string;
+  /** A CSS colour: a theme token (`var(--cgw-presence-3)`, or `--cgw-presence-3`) or a value. */
+  colour: string;
+  /** The selection's ends, as `Y.encodeRelativePosition` in base64 (`relativePosition`). */
+  anchor: string;
+  head: string;
+}
+
+/**
+ * Where a comment thread is (Phase 6, contracts section 3): the block, by id, and in it the
+ * range's ends as Yjs relative positions (base64), or null for the whole block; the text it was
+ * made on ("" for a whole block), the fallback when the positions no longer resolve.
+ */
+export interface CommentAnchor {
+  blockId: string;
+  start: string | null;
+  end: string | null;
+  quote: string;
+}
+
+/** A thread to draw: an open one, `active` for the one the comments panel has selected. */
+export interface CommentThreadAnchor extends CommentAnchor {
+  id: string;
+  active: boolean;
+}
+
+/** How a thread was found in the page (`anchorsInOrder`), by the rule of contracts section 3. */
+export type AnchorFound = 'range' | 'quote' | 'block' | 'missing';
 
 /** Tells a node view when the editor is given another host (`setHost`); returns the unsubscribe. */
 export type OnHostChange = (listener: () => void) => () => void;
@@ -250,4 +318,40 @@ export interface EditorHost {
   linkPreview?: (url: string) => Promise<LinkPreview | null>;
   openExternal?: (url: string) => void;
   onLinkRequest?: () => void;
+  /**
+   * People (Phase 6): a person's mention draws their name now (and again when `subscribe` says
+   * the names changed, never per transaction); the "@" menu lists them first. Without it, a
+   * mention reads `@` and "someone", and the menu lists pages and dates only.
+   */
+  people?: {
+    /** The person's display name, or undefined when unknown. */
+    name(userId: string): string | undefined;
+    /** The "@" menu: people whose name or address starts with the query (folded), at most 8. */
+    search(query: string): PersonRef[];
+    subscribe(listener: () => void): () => void;
+  };
+  /**
+   * Presence (Phase 6): the others' cursors, drawn as decorations (recomputed only when the host
+   * says they changed or the document does), and this editor's selection told to the host.
+   */
+  presence?: {
+    /** Others' cursors on this page now (already filtered: not this session, not stale). */
+    cursors(): PresenceCursor[];
+    subscribe(listener: () => void): () => void;
+    /** This editor's selection as relative positions (base64), or null when it is not focused. Throttled by the host. */
+    setLocal(cursor: { anchor: string; head: string } | null): void;
+  };
+  /**
+   * Comments (Phase 6): the open threads, drawn as decorations over the text or block each is
+   * anchored to (found by contracts section 3's rule), and "Comment" on the selection.
+   */
+  comments?: {
+    /** The threads to draw: open ones, and `active` for the one the panel has selected. */
+    threads(): CommentThreadAnchor[];
+    subscribe(listener: () => void): () => void;
+    /** "Comment" on the selection (bubble toolbar, block menu, Ctrl+Alt+M). Undefined: the person may not comment. */
+    create?(anchor: CommentAnchor): void;
+    /** A highlighted range (or its marker) was clicked or reached by keyboard. */
+    open(threadId: string): void;
+  };
 }

@@ -6,7 +6,13 @@ import { Extension } from '@tiptap/core';
 import { DOMSerializer, Fragment, Slice, type Node as PMNode, type Schema } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { looksLikeMarkdown, parseMarkdown, toMarkdown, type DocJSON } from '@cgw/doc';
+import {
+  looksLikeMarkdown,
+  parseMarkdown,
+  toMarkdown,
+  type DocJSON,
+  type TextContext,
+} from '@cgw/doc';
 import { insertFiles } from './actions';
 import { withoutIds } from './blocks';
 import { blockSelectionKey, blockSelectionSlice } from './blockSelection';
@@ -44,16 +50,25 @@ function sliceAsDoc(slice: Slice, schema: Schema): DocJSON {
 
 /**
  * The text of an inline leaf in copied plain text: a line break, a date as stored (its
- * `leafText`), a page mention's title now.
+ * `leafText`), a page mention's title now, a person's mention as `@` and their name now.
  */
 function leafText(host: () => EditorHost) {
   return (node: PMNode): string => {
     if (node.type.name === 'hardBreak') return '\n';
     if (node.type.name === 'pageMention')
       return host().pages?.title(String(node.attrs.pageId ?? '')) ?? '';
+    if (node.type.name === 'userMention') {
+      const id = node.attrs.userId as string | null;
+      return `@${(id && host().people?.name(id)) || ''}`;
+    }
     return node.type.spec.leafText?.(node) ?? '';
   };
 }
+
+/** Copied Markdown names the people mentioned, as the host has them now. */
+const markdownContext = (host: () => EditorHost): TextContext => ({
+  userName: (userId) => host().people?.name(userId),
+});
 
 function writeClipboard(
   view: EditorView,
@@ -74,7 +89,7 @@ function writeClipboard(
   data.setData(
     'text/plain',
     blocks > 1
-      ? toMarkdown(doc).trimEnd()
+      ? toMarkdown(doc, markdownContext(host)).trimEnd()
       : slice.content.textBetween(0, slice.content.size, '\n', leafText(host)),
   );
 }
@@ -100,7 +115,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
           clipboardTextSerializer: (slice, view) => {
             const doc = sliceAsDoc(slice, view.state.schema);
             return (doc.content?.length ?? 0) > 1
-              ? toMarkdown(doc).trimEnd()
+              ? toMarkdown(doc, markdownContext(host)).trimEnd()
               : slice.content.textBetween(0, slice.content.size, '\n', leafText(host));
           },
           handleDOMEvents: {

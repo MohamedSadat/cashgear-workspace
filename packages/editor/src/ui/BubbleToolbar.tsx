@@ -1,6 +1,8 @@
-// The bubble toolbar on a text selection: marks, link, colour and "turn into". A stand-in for
-// Track U2's selection toolbar (a CgToolbar in a CgFlyout that follows a rectangle). Mousedown is
-// prevented everywhere, so the editor keeps its selection while the toolbar is used.
+// The bubble toolbar on a text selection: marks, link, colour, "turn into" and, when the host lets
+// this person comment (Phase 6), "Comment". A stand-in for Track U2's selection toolbar (a
+// CgToolbar in a CgFlyout that follows a rectangle). Mousedown is prevented everywhere, so the
+// editor keeps its selection while the toolbar is used. On a page this person may comment on but
+// not edit (or in a code block, where marks do not apply), it holds "Comment" alone.
 import { CgIcon } from '@cashgear/ui';
 import { COLOUR_TOKENS, safeHref, type ColourToken } from '@cgw/doc';
 import type { Editor } from '@tiptap/core';
@@ -15,38 +17,51 @@ import {
 } from 'react';
 import { BLOCK_ACTIONS } from '../actions';
 import { currentBlock, firstBody } from '../blocks';
+import { commentOnSelection } from '../comments';
 import type { BlockEditor } from '../editor';
-import type { EditorHost } from '../host';
+import { editorString, type EditorHost } from '../host';
 import { slashState } from '../slash';
 
 type Panel = null | 'link' | 'colour' | 'turnInto';
 
 interface Snapshot {
   show: boolean;
+  /** Every tool, or "Comment" alone (not editable here, or in a code block). */
+  commentOnly: boolean;
   key: string;
 }
 
-function snapshot(editor: Editor, focused: boolean): Snapshot {
+function snapshot(editor: Editor, focused: boolean, canComment: boolean): Snapshot {
   const { state } = editor;
   const { selection } = state;
-  const inLink = editor.isActive('link');
-  const show =
-    editor.isEditable &&
-    focused &&
-    selection instanceof TextSelection &&
-    (!selection.empty || inLink) &&
-    !selection.$from.parent.type.spec.code &&
-    !slashState(state).active;
+  const text = selection instanceof TextSelection;
+  const inCode = !!selection.$from.parent.type.spec.code;
+  let show = false;
+  let commentOnly = false;
+  if (editor.isEditable) {
+    const inLink = editor.isActive('link');
+    show = focused && text && (!selection.empty || inLink) && !inCode && !slashState(state).active;
+    if (!show && canComment && focused && text && !selection.empty && inCode)
+      show = commentOnly = true;
+  } else if (canComment && text && !selection.empty) {
+    // Read-only here, but this person may comment: a selection is read without focus.
+    show = commentOnly = true;
+  }
   // Hidden, the snapshot stays the same as the caret moves: no React render per keystroke (each
   // commit while the editor has focus reads its selection offsets, which walks the page's DOM).
   return {
     show,
-    key: show ? `${selection.from}:${selection.to}:${state.doc.content.size}` : 'hidden',
+    commentOnly,
+    key: show
+      ? `${selection.from}:${selection.to}:${state.doc.content.size}:${commentOnly}`
+      : 'hidden',
   };
 }
 
-function useSelectionSnapshot(editor: Editor): Snapshot {
-  const cache = useRef<Snapshot>({ show: false, key: '' });
+function useSelectionSnapshot(editor: Editor, canComment: boolean): Snapshot {
+  const cache = useRef<Snapshot>({ show: false, commentOnly: false, key: '' });
+  const comments = useRef(canComment);
+  comments.current = canComment;
   const focused = useRef(editor.isFocused);
   // One subscription for the editor's life: a new one each render would re-read the focus and
   // close the toolbar while its own link field has it.
@@ -74,7 +89,7 @@ function useSelectionSnapshot(editor: Editor): Snapshot {
     [editor],
   );
   return useSyncExternalStore(subscribe, () => {
-    const next = snapshot(editor, focused.current || editor.isFocused);
+    const next = snapshot(editor, focused.current || editor.isFocused, comments.current);
     if (next.key !== cache.current.key) cache.current = next;
     return cache.current;
   });
@@ -117,7 +132,7 @@ export function BubbleToolbar({
   host: EditorHost;
 }) {
   const editor = blockEditor.editor;
-  const snap = useSelectionSnapshot(editor);
+  const snap = useSelectionSnapshot(editor, !!host.comments?.create);
   const [panel, setPanel] = useState<Panel>(null);
   const [href, setHref] = useState('');
   const [invalid, setInvalid] = useState(false);
@@ -143,6 +158,31 @@ export function BubbleToolbar({
   }, [snap, editor, panel]);
 
   if (!snap.show || !s) return null;
+
+  const comment = host.comments?.create ? (
+    <Button
+      label={editorString(host, 'comment')}
+      onPress={() => {
+        commentOnSelection(editor.state, host);
+        setPanel(null);
+      }}
+    >
+      <CgIcon name="comment" />
+    </Button>
+  ) : null;
+  if (snap.commentOnly)
+    return (
+      <div
+        ref={bar}
+        className="cgw-bubble"
+        role="toolbar"
+        aria-label={s.formatting}
+        style={{ top: place.top, left: place.left }}
+        onMouseDown={(event) => event.preventDefault()}
+      >
+        <div className="cgw-bubble-row">{comment}</div>
+      </div>
+    );
 
   const mark = (name: string) => () => editor.chain().focus().toggleMark(name).run();
   const block = currentBlock(editor.state);
@@ -245,6 +285,12 @@ export function BubbleToolbar({
         >
           <CgIcon name="text-color" /> ▾
         </Button>
+        {comment && (
+          <>
+            <span className="cgw-bubble-sep" />
+            {comment}
+          </>
+        )}
       </div>
       {panel === 'link' && (
         <form

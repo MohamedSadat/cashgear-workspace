@@ -3,7 +3,10 @@ import './editor.css';
 export { createBlockEditor, type BlockEditor, type BlockEditorOptions } from './editor';
 export { BlockEditorView, type BlockEditorViewProps } from './BlockEditorView';
 export type {
+  AnchorFound,
   AssetInfo,
+  CommentAnchor,
+  CommentThreadAnchor,
   DatabaseMountOptions,
   DatabaseRef,
   EditorHost,
@@ -11,10 +14,14 @@ export type {
   ErpBlockAttrs,
   ErpMountOptions,
   MountedFrame,
+  PersonRef,
+  PresenceCursor,
   SheetBlockAttrs,
   SheetMountOptions,
   WorkbookRef,
 } from './host';
+export { EDITOR_STRING_DEFAULTS, editorString } from './host';
+export { QUOTE_MAX, commentAnchorFor, resolveAnchor, type ResolvedAnchor } from './comments';
 export * as blocks from './blocks';
 export { EditorOverlays } from './ui/EditorOverlays';
 export { CommandMenu, type CommandMenuProps } from './ui/SlashMenu';

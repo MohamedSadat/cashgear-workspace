@@ -12,13 +12,15 @@ import {
 import type * as Y from 'yjs';
 import { BlockSelection } from './blockSelection';
 import { Clipboard } from './clipboard';
+import { Comments, anchorsInOrder, scrollToThread } from './comments';
 import { DateMentions, dateMentionView, type DateUi } from './dates';
 import { BlockDecorations, StableTyping } from './decorations';
 import { BlockHandle, type HandleUi } from './handle';
-import type { EditorHost, OnHostChange } from './host';
+import type { AnchorFound, EditorHost, OnHostChange } from './host';
 import { MarkdownShortcuts } from './inputRules';
 import { BlockKeymap } from './keymap';
-import { Mentions, pageMentionView } from './mention';
+import { Mentions, pageMentionView, userMentionView } from './mention';
+import { Presence } from './presence';
 import { SlashCommands, type SlashKeys } from './slash';
 import { bookmarkView, childPageView, codeBlockView, fileView, imageView } from './nodeviews/atoms';
 import { databaseViewView } from './nodeviews/database';
@@ -59,6 +61,13 @@ export interface BlockEditor {
   /** The callbacks the editor was given, as they are now. */
   host(): EditorHost;
   setHost(host: EditorHost): void;
+  /**
+   * Phase 6: the host's comment threads as the page reads (by where each was found; those on a
+   * removed block last, `missing`), for the comments panel.
+   */
+  anchorsInOrder(): { threadId: string; found: AnchorFound; pos: number | null }[];
+  /** Scrolls a thread's range or block into view; false when it is not in the page. */
+  scrollToThread(threadId: string): boolean;
   destroy(): void;
 }
 
@@ -95,6 +104,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     erpView: (h) => erpViewView(h, onHostChange),
     pageMention: pageMentionView,
     dateMention: (h) => dateMentionView(h, () => ui, onHostChange),
+    userMention: (h) => userMentionView(h, onHostChange),
   };
   const schema = schemaExtensions().map((extension) => {
     const view = views[extension.name];
@@ -135,6 +145,8 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       TableOfContents,
       Clipboard.configure({ host: getHost }),
       BlockHandle.configure({ host: getHost, ui: () => ui }),
+      Presence.configure({ host: getHost, onHostChange }),
+      Comments.configure({ host: getHost, onHostChange }),
       ...(options.extensions?.(getHost) ?? []),
     ],
     content: bound ? undefined : (options.readOnlyContent ?? null),
@@ -172,6 +184,8 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       host = next;
       for (const listener of [...hostListeners]) listener();
     },
+    anchorsInOrder: () => anchorsInOrder(editor.state),
+    scrollToThread: (threadId) => scrollToThread(editor.view, threadId),
     destroy() {
       editor.destroy();
     },

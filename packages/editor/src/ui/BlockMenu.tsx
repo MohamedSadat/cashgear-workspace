@@ -1,6 +1,7 @@
 // The block menu, from the handle or Ctrl+/: turn into, colour, duplicate, delete, move up and
-// down, copy a link to the block. Part of the Track U3 stand-in. Arrow keys move through it;
-// Escape returns to the editor.
+// down, copy a link to the block, and (Phase 6, when the host lets this person comment) comment on
+// the whole block. Part of the Track U3 stand-in. Arrow keys move through it; Escape returns to
+// the editor.
 import { COLOUR_TOKENS } from '@cgw/doc';
 import { NodeSelection } from '@tiptap/pm/state';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -13,8 +14,9 @@ import {
   moveSibling,
   type BlockInfo,
 } from '../blocks';
+import { commentOnBlock } from '../comments';
 import type { BlockEditor } from '../editor';
-import type { EditorHost } from '../host';
+import { editorString, type EditorHost } from '../host';
 
 interface Opened {
   pos: number;
@@ -198,6 +200,17 @@ export function BlockMenu({
             host.copyBlockLink?.(block.id!);
             close();
           })}
+        {block.id &&
+          host.comments?.create &&
+          item(
+            editorString(host, 'comment'),
+            () => {
+              // The host opens its composer, which takes the focus.
+              commentOnBlock(editor.state, host, opened.pos);
+              close(false);
+            },
+            host.shortcut?.('Mod+Alt+KeyM'),
+          )}
         {item(
           s.deleteBlock,
           () => act((b) => deleteBlock(editor.state, b)),

@@ -1,12 +1,13 @@
-// Mentions: typing `@` opens a picker at the caret. A chosen page goes in as a pageMention node
-// holding its id, its title drawn from the host (D6); a chosen date (schema version 3) goes in as
-// a dateMention holding the date (dates.ts).
+// Mentions: typing `@` opens a picker at the caret. A chosen person (schema version 5) goes in as
+// a userMention holding their user id, their name drawn from the host; a chosen page as a
+// pageMention holding its id, its title drawn from the host (D6); a chosen date (schema version 3)
+// as a dateMention holding the date (dates.ts).
 import { Extension, type NodeViewRenderer } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { localDate } from '@cgw/doc';
 import { insertDateMention, openDatePicker, type DateUi } from './dates';
-import type { EditorHost, SlashItem } from './host';
+import { editorString, type EditorHost, type OnHostChange, type SlashItem } from './host';
 import type { SlashKeys } from './slash';
 
 export interface MentionState {
@@ -24,15 +25,21 @@ export function closeMention(view: EditorView) {
   if (mentionState(view.state).active) view.dispatch(view.state.tr.setMeta(mentionKey, closed));
 }
 
-/** Replaces `@query` with a mention of the page. */
-export function insertMention(view: EditorView, pageId: string) {
+/** Replaces `@query` with a mention of the page, or (`person`) of the person. */
+export function insertMention(view: EditorView, id: string, person = false) {
   const { from, active } = mentionState(view.state);
   if (!active) return;
-  const node = view.state.schema.nodes.pageMention.create({ pageId });
+  const { schema } = view.state;
+  const node = person
+    ? schema.nodes.userMention.create({ userId: id })
+    : schema.nodes.pageMention.create({ pageId: id });
   const tr = view.state.tr.replaceWith(from, view.state.selection.from, node).insertText(' ');
   view.dispatch(tr.setMeta(mentionKey, closed).scrollIntoView());
   view.focus();
 }
+
+/** A person's item id in the "@" menu: pages and people both have UUIDs. */
+const PERSON = 'person:';
 
 /** The "@" menu's date items: today and tomorrow on this device, or a date from the picker. */
 const DATE_ITEMS = [
@@ -50,9 +57,11 @@ const fold = (text: string) =>
     .trim();
 
 /**
- * What the "@" menu lists for a query: pages whose titles match (from the host), and the dates
- * whose names (in the interface language, or in English) start with it. With nothing typed, the
- * pages come first; when a date's name was typed, the dates do.
+ * What the "@" menu lists for a query: people whose name or address starts with it (from the
+ * host, which folds both), pages whose titles match (from the host), and the dates whose names
+ * (in the interface language, or in English) start with it. People come first; then the pages,
+ * unless a date's name was typed, when the dates come before them. Groups are named when more
+ * than one kind is listed.
  */
 export function mentionItems(host: EditorHost, query: string): SlashItem[] {
   const strings = host.strings;
@@ -69,19 +78,31 @@ export function mentionItems(host: EditorHost, query: string): SlashItem[] {
     glyph: item.glyph,
     group: strings?.mentionDates,
   }));
-  const pages: SlashItem[] = (host.pages?.search(query) ?? []).slice(0, 12).map((page) => ({
+  const found = (host.people?.search(query) ?? []).slice(0, 8);
+  const pageList = (host.pages?.search(query) ?? []).slice(0, 12);
+  const people: SlashItem[] = found.map((person) => ({
+    id: `${PERSON}${person.id}`,
+    label: person.name || editorString(host, 'someone'),
+    glyph: '👤',
+    group: dates.length || pageList.length ? editorString(host, 'mentionPeople') : undefined,
+  }));
+  const pages: SlashItem[] = pageList.map((page) => ({
     id: page.id,
     label: page.title || (strings?.untitled ?? ''),
     glyph: page.icon ?? '📄',
-    group: dates.length ? strings?.mentionPages : undefined,
+    group: dates.length || people.length ? strings?.mentionPages : undefined,
   }));
-  return typed && dates.length ? [...dates, ...pages] : [...pages, ...dates];
+  return typed && dates.length ? [...people, ...dates, ...pages] : [...people, ...pages, ...dates];
 }
 
 /** Puts the chosen item in place of `@query`: a page mention, or a date (and its picker). */
 export function chooseMention(view: EditorView, ui: DateUi, id: string): void {
   const { from, active } = mentionState(view.state);
   if (!active) return;
+  if (id.startsWith(PERSON)) {
+    insertMention(view, id.slice(PERSON.length), true);
+    return;
+  }
   const item = DATE_ITEMS.find((d) => d.id === id);
   if (!item) {
     insertMention(view, id);
@@ -188,6 +209,59 @@ export function pageMentionView(host: () => EditorHost): NodeViewRenderer {
       },
       ignoreMutation: () => true,
       destroy: () => unsubscribe?.(),
+    };
+  };
+}
+
+/**
+ * A person's mention: `@` and their name from the host now, `@` and "someone" when the host
+ * cannot name them. Drawn again when the host's people change (or another host is given), only
+ * if the name it shows changed; never per transaction.
+ */
+export function userMentionView(
+  host: () => EditorHost,
+  onHostChange: OnHostChange = () => () => {},
+): NodeViewRenderer {
+  return ({ node: initial }) => {
+    let node = initial;
+    const dom = document.createElement('span');
+    dom.className = 'cgw-user-mention';
+    dom.contentEditable = 'false';
+    // Isolated: a name in one script inside text of the other direction.
+    dom.dir = 'auto';
+    let drawn: string | null = null;
+    const draw = () => {
+      const current = host();
+      const userId = typeof node.attrs.userId === 'string' ? node.attrs.userId : null;
+      const name = userId ? current.people?.name(userId) : undefined;
+      const text = `@${name || editorString(current, 'someone')}`;
+      if (text === drawn) return;
+      drawn = text;
+      dom.textContent = text;
+      dom.dataset.userId = userId ?? '';
+      dom.dataset.unknown = String(!name);
+    };
+    let unsubscribe = host().people?.subscribe(draw);
+    const offHost = onHostChange(() => {
+      unsubscribe?.();
+      unsubscribe = host().people?.subscribe(draw);
+      draw();
+    });
+    draw();
+    return {
+      dom,
+      update(next) {
+        if (next.type !== node.type) return false;
+        const changed = next.attrs.userId !== node.attrs.userId;
+        node = next;
+        if (changed) draw();
+        return true;
+      },
+      ignoreMutation: () => true,
+      destroy() {
+        unsubscribe?.();
+        offHost();
+      },
     };
   };
 }

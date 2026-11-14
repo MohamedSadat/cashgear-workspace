@@ -1,18 +1,18 @@
 // The released web apps that tests/e2e/old-build.spec.ts runs beside this build: v0.2.0 (Phase 3's
 // "an old build against a migrated document"), v0.3.0 (Phase 4's: a schema-3 page and a database
-// met by the release before them) and v0.4.0 (Phase 5's: a schema-4 page with a workbook embed and
-// an ERP view). Each is the web build of its tag: the same document code (@cgw/doc at that
-// release's schema version, its gate and its sync engine) as that release's desktop app, which
-// embeds this very build.
+// met by the release before them), v0.4.0 (Phase 5's: a schema-4 page with a workbook embed and
+// an ERP view) and v0.5.0 (Phase 6's: a schema-5 page with a person mentioned in it). Each is the
+// web build of its tag: the same document code (@cgw/doc at that release's schema version, its
+// gate and its sync engine) as that release's desktop app, which embeds this very build.
 //   node scripts/old-build.mjs                 every tag's tree into target/old-build/<tag>,
 //                                              installed from its own lockfile, and its web app
 //                                              built (apps/web/dist)
-//   node scripts/old-build.mjs --tag v0.4.0    one of them
-//   node scripts/old-build.mjs --serve [--tag v0.4.0]
+//   node scripts/old-build.mjs --tag v0.5.0    one of them
+//   node scripts/old-build.mjs --serve [--tag v0.5.0]
 //                                              that build (v0.2.0 unless named) on its port
 //                                              (the tag's own `vite preview`, so under its own
 //                                              Content Security Policy): v0.2.0 on 4279, v0.3.0
-//                                              on 4278, v0.4.0 on 4277
+//                                              on 4278, v0.4.0 on 4277, v0.5.0 on 4276
 // The API a build talks to is fixed at build time: VITE_CGW_API, 127.0.0.1:5280 (the e2e stack,
 // which must allow each build's origin: scripts/server-stack.mjs) unless set.
 import { spawn, spawnSync } from 'node:child_process';
@@ -26,6 +26,7 @@ export const OLD_BUILDS = {
   'v0.2.0': { port: 4279 },
   'v0.3.0': { port: 4278 },
   'v0.4.0': { port: 4277 },
+  'v0.5.0': { port: 4276 },
 };
 export const OLD_TAG = 'v0.2.0';
 export const originOf = (tag = OLD_TAG) => `http://127.0.0.1:${OLD_BUILDS[tag].port}`;
