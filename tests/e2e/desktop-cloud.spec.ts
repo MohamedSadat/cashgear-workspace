@@ -3,9 +3,25 @@
 // the app's loopback listener; the workspace goes to the account and a browser sees its pages.
 import { existsSync, readFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
+import { apiSession } from '../../scripts/cloud-account.mjs';
 import { test, expect, desktop } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved } from './helpers';
-import { newAccount, signIn, signedIn, syncStatus } from './cloud';
+import { newAccount, signIn, signedIn, signInDesktop, syncStatus } from './cloud';
+import { signOutDesktop } from './database';
+import { workspaceIdOf } from './ecosystem';
+import {
+  blockBody,
+  caretIn,
+  delays,
+  hubFrames,
+  keysOf,
+  member,
+  openPage,
+  seenOf,
+  seesOnPage,
+  watchBlock,
+  type Person,
+} from './collab';
 
 test.skip(!desktop, 'The browser signs in with a cookie: cloud.spec.ts');
 
@@ -58,4 +74,86 @@ test('signs in through the browser, syncs a workspace, and a browser sees its pa
       .getByRole('navigation', { name: 'Sidebar' })
       .getByRole('button', { name: 'Sign in to sync' }),
   ).toBeVisible();
+});
+
+// Phase 6 on the desktop app: it joins the hub through its own path (a ticket asked for with its
+// bearer token, no cookie), shows a browser person's edits live (each key timed from the typist's
+// key to the desktop's DOM change: p95 within 300 ms) and their presence, and they see the
+// desktop's person.
+test('joins the hub with its bearer token and shows a browser person typing live, and their presence', async ({
+  page,
+  authUrlFile,
+}, testInfo) => {
+  test.setTimeout(300000);
+  const signer = await chromium.launch({ channel: 'chrome' });
+  const tickets: { authorization?: string; cookie?: string }[] = [];
+  page.on('request', (request) => {
+    if (/\/api\/v1\/realtime\/tickets$/.test(request.url())) tickets.push(request.headers());
+  });
+  const frames = hubFrames(page);
+  let ben: Person | null = null;
+  try {
+    const ada = await newAccount('Ada');
+    await createWorkspace(page, 'Desktop team');
+    await signInDesktop(page, signer, authUrlFile!, ada);
+    await page.getByRole('button', { name: 'Upload to my account' }).click();
+    await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+    const adaApi = await apiSession(ada);
+    try {
+      const workspaceId = await workspaceIdOf(adaApi, 'Desktop team');
+      ben = await member(signer, adaApi, workspaceId, 'Ben');
+      await newPage(page, 'Live from the browser');
+      await page.keyboard.type('123 456');
+      await waitSaved(page);
+      await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+      const block = (await editor(page)
+        .locator('[data-block]')
+        .first()
+        .getAttribute('data-block-id'))!;
+      await openPage(ben.page, 'Live from the browser', '123 456');
+      // Each sees the other on the page, through the hub.
+      await seesOnPage(page, ['Ben']);
+      await seesOnPage(ben.page, ['Ada']);
+      expect(frames.sockets).toBeGreaterThan(0);
+      expect(tickets.length).toBeGreaterThan(0);
+      for (const headers of tickets) {
+        expect(headers.authorization).toMatch(/^Bearer /);
+        expect(headers.cookie).toBeUndefined();
+      }
+      // Ben types: every key reaches the desktop's page.
+      await watchBlock(page, block);
+      await caretIn(ben.page, block, 'end');
+      await caretIn(page, block, 'start');
+      await expect(
+        editor(ben.page).locator(`[data-block-id="${block}"] .cgw-presence-caret[data-name="Ada"]`),
+      ).toHaveCount(1, { timeout: 10000 });
+      await keysOf(ben.page);
+      const typed = 'FROMTHEBROWSERTOTHEDESKTOPLIVEKEYS';
+      await ben.page.keyboard.type(typed, { delay: 120 });
+      await expect(blockBody(page, block)).toHaveText(`123 456${typed}`, { timeout: 15000 });
+      const d = delays(await keysOf(ben.page), await seenOf(page), /[A-Z]/);
+      testInfo.annotations.push({
+        type: 'browser to desktop',
+        description: `${d.count} keys: p50 ${d.p50} ms, p95 ${d.p95} ms, max ${d.max} ms, over 300 ms: ${d.over300}`,
+      });
+      console.log(
+        `Browser to desktop: ${d.count} keys: p50 ${d.p50} ms, p95 ${d.p95} ms, max ${d.max} ms, over 300 ms: ${d.over300}, never seen: ${d.missing}`,
+      );
+      expect(d.missing).toBe(0);
+      expect(d.p95).toBeLessThanOrEqual(300);
+      // Ben's cursor is drawn on the desktop, named.
+      await expect(
+        editor(page).locator(`[data-block-id="${block}"] .cgw-presence-caret[data-name="Ben"]`),
+      ).toHaveCount(1, { timeout: 10000 });
+      expect(frames.frames.some((f) => f.target === 'Updates')).toBe(true);
+      expect(ben.errors).toEqual([]);
+    } finally {
+      await adaApi.dispose();
+      await ben?.api.dispose();
+      await ben?.context.close();
+    }
+  } finally {
+    await signOutDesktop(page);
+    await signer.close();
+  }
 });

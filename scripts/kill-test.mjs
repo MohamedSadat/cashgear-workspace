@@ -380,10 +380,14 @@ async function launch({ blocked = false } = {}) {
   if (!page) page = await context.waitForEvent('page');
   const cdp = await context.newCDPSession(page);
   await cdp.send('Network.enable');
-  const block = async (on) =>
-    cdp.send('Network.setBlockedURLs', {
+  const block = async (on) => {
+    await cdp.send('Network.setBlockedURLs', {
       urls: on ? [`${API.replace(/^https?:\/\//, '*')}/*`] : [],
     });
+    // The `offline` event the system would fire (CDP's blocking fires none): from Phase 6 the app
+    // closes the hub's connection on it, which the blocking leaves open, so a cut is a cut.
+    if (on) await page.evaluate(() => window.dispatchEvent(new Event('offline'))).catch(() => {});
+  };
   if (blocked) await block(true);
   const app = { child, browser, page, block, events: [], inflight: new Map() };
   await page.exposeBinding('__cgwProbe', (_source, event) => app.onProbe?.(event));

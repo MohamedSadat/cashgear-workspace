@@ -8,8 +8,8 @@
 // The network: in a browser, Playwright's offline mode for the whole context (the app then starts
 // from its service worker, after one visit online); on the desktop, the API's address blocked in
 // the window through CDP and the window started again (a reload: the store stays in the app's
-// process), and when it comes back, the `online` event the system would fire (CDP's blocking
-// fires none). The other device is a second browser profile signed in as the same person.
+// process), with the `offline` and `online` events the system would fire (CDP's blocking fires
+// none). The other device is a second browser profile signed in as the same person.
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
@@ -64,8 +64,12 @@ async function network(page: Page, context: BrowserContext) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   return {
-    off: () =>
-      cdp.send('Network.setBlockedURLs', { urls: [`${API.replace(/^https?:\/\//, '*')}/*`] }),
+    // The `offline` event the system would fire (CDP's blocking fires none): from Phase 6 the
+    // app closes the hub's connection on it, which the blocking leaves open.
+    off: async () => {
+      await cdp.send('Network.setBlockedURLs', { urls: [`${API.replace(/^https?:\/\//, '*')}/*`] });
+      await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+    },
     on: async () => {
       await cdp.send('Network.setBlockedURLs', { urls: [] });
       await page.evaluate(() => window.dispatchEvent(new Event('online')));

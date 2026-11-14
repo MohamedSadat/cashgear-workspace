@@ -3,6 +3,7 @@ import { desktop, expect, test } from './fixtures';
 import { editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount } from './cloud';
 import { signedInWorkspace, signers } from './database';
+import { commentScene, select } from './collab';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -255,5 +256,63 @@ test('the Arabic workbook and ERP screens have no English of their own', async (
   } finally {
     await api.dispose();
     await cloud.close();
+  }
+});
+
+// Phase 6's screens in Arabic: the comments panel (open threads with a reply and a mention, the
+// resolved one, a draft), the presence bar and the sidebar's avatars, the inbox; against the
+// server stack, two people on a page (collab.ts's scene, made in English).
+test('the Arabic comments, inbox and presence have no English of their own', async ({ page }) => {
+  test.skip(desktop, 'Two people in browser profiles of their own');
+  test.setTimeout(240000);
+  const scene = await commentScene(page);
+  try {
+    const { ids, t } = scene;
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(editor(page)).toContainText('A second paragraph to resolve.', { timeout: 30000 });
+    await expect(page.getByTestId('presence-bar')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByTestId('side-presence').first()).toBeVisible();
+    await editor(page).locator('[data-block] > .cgw-body').first().click();
+    await page.keyboard.press('Control+Alt+Shift+KeyM');
+    const comments = page.getByTestId('comments-panel');
+    await expect(comments.locator('[data-thread-id][data-state="saved"]')).toHaveCount(1, {
+      timeout: 20000,
+    });
+    await comments.locator('.cgw-comments-header button[aria-pressed]').click();
+    await expect(comments.locator('[data-thread-id]')).toHaveCount(2);
+    await select(page, ids[1], 2, 6);
+    await page.keyboard.press('Control+Alt+KeyM');
+    await expect(comments.getByTestId('comment-draft')).toBeVisible();
+    // What the people wrote and are called, and the workspace's names (made in English).
+    const theirs = {
+      within: [
+        '.cgw-comment-body',
+        '.cgw-thread-quote',
+        '.cgw-thread-quote-text',
+        '.cgw-composer-area',
+        '.cgw-inbox-excerpt',
+      ],
+      names: [
+        t.owner.account.email,
+        ...t.members.map((m) => m.account.email),
+        'Team space',
+        'Workspace',
+        'Private',
+        'Ada',
+        'Ben',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    found.push(...(await english(page, 'comments panel, presence', theirs)));
+    await page.keyboard.press('Escape');
+    await page.goto('/#/inbox');
+    await expect(page.getByTestId('inbox-list').locator('li')).toHaveCount(2, { timeout: 20000 });
+    found.push(...(await english(page, 'inbox', theirs)));
+    expect(found, found.join('\n')).toEqual([]);
+    expect(t.owner.errors).toEqual([]);
+  } finally {
+    await scene.t.close();
   }
 });

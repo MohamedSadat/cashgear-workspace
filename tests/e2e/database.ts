@@ -337,8 +337,12 @@ export async function network(page: Page, context: BrowserContext) {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   return {
-    off: () =>
-      cdp.send('Network.setBlockedURLs', { urls: [`${API.replace(/^https?:\/\//, '*')}/*`] }),
+    // The `offline` and `online` events the system would fire (CDP's blocking fires none): from
+    // Phase 6 the app closes the hub's connection on `offline`, which the blocking leaves open.
+    off: async () => {
+      await cdp.send('Network.setBlockedURLs', { urls: [`${API.replace(/^https?:\/\//, '*')}/*`] });
+      await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+    },
     on: async () => {
       await cdp.send('Network.setBlockedURLs', { urls: [] });
       await page.evaluate(() => window.dispatchEvent(new Event('online')));

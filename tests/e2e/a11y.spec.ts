@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures';
+import { desktop, expect, test } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved } from './helpers';
 import { newAccount, syncStatus } from './cloud';
 import { signedInWorkspace, signers } from './database';
@@ -22,6 +22,7 @@ import {
   workbookOf,
   workspaceIdOf,
 } from './ecosystem';
+import { commentScene, select } from './collab';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -393,4 +394,62 @@ test.describe('accessibility of workbooks and ERP data', () => {
       });
     }
   }
+});
+
+// Phase 6: Axe on the comments panel (open threads, a reply, a draft, a resolved thread shown),
+// the inbox and the presence bar, in both themes and both languages, against the server stack:
+// two people on a page (collab.ts's scene, made in English), then the language and theme set and
+// the app loaded again for each.
+test.describe('accessibility of comments, the inbox and presence', () => {
+  let scene: Awaited<ReturnType<typeof commentScene>> | null = null;
+  test.afterEach(async () => {
+    await scene?.t.close();
+    scene = null;
+  });
+  test('Axe finds nothing on the comments panel, the inbox and the presence bar (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop, 'Two people in browser profiles of their own');
+    test.setTimeout(360000);
+    scene = await commentScene(page);
+    const { ids } = scene;
+    const problems: string[] = [];
+    for (const theme of ['light', 'dark'] as const) {
+      for (const language of ['en', 'ar'] as const) {
+        const screen = `${theme}, ${language}`;
+        await page.goto(`/#/p/${scene.pageId}`);
+        await setTheme(page, theme);
+        await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+        await page.reload();
+        await expect(editor(page)).toContainText('A second paragraph to resolve.', {
+          timeout: 30000,
+        });
+        await expect(page.getByTestId('presence-bar')).toBeVisible({ timeout: 20000 });
+        // The panel (by its shortcut, the same in both languages), the resolved ones shown, and a
+        // draft on a selection.
+        await editor(page).locator('[data-block] > .cgw-body').first().click();
+        await page.keyboard.press('Control+Alt+Shift+KeyM');
+        const comments = page.getByTestId('comments-panel');
+        await expect(comments.locator('[data-thread-id][data-state="saved"]')).toHaveCount(1, {
+          timeout: 20000,
+        });
+        await comments.locator('.cgw-comments-header button[aria-pressed]').click();
+        await expect(comments.locator('[data-thread-id]')).toHaveCount(2);
+        await select(page, ids[1], 2, 6);
+        await page.keyboard.press('Control+Alt+KeyM');
+        await expect(comments.getByTestId('comment-draft')).toBeVisible();
+        await page.keyboard.type('A draft');
+        problems.push(...(await axe(page, `comments panel, presence bar (${screen})`)));
+        await page.keyboard.press('Escape');
+        await page.goto('/#/inbox');
+        await expect(page.getByTestId('inbox-list').locator('li')).toHaveCount(2, {
+          timeout: 20000,
+        });
+        // An entry under the pointer: its secondary text on the hover colour too.
+        await page.getByTestId('inbox-list').getByRole('link').first().hover();
+        problems.push(...(await axe(page, `inbox (${screen})`)));
+      }
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
 });

@@ -2,11 +2,24 @@
 // SQL Server, Azurite): sign-up to a second device seeing an edit within 5 seconds, a local
 // workspace uploaded intact, an invited member, and a page shared with a guest and by a view
 // link.
+import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus, mailTo, link } from './cloud';
 
 test.skip(desktop, 'The desktop signs in through the system browser: desktop-cloud.spec.ts');
+
+/**
+ * A workspace made while signed in, on the page signing in landed on (as offline.spec.ts makes
+ * one): `createWorkspace` loads the app again first, and a workspace made before that start's
+ * account check has answered stays on this device only (seen on CI's Edge from Phase 6).
+ */
+async function workspaceHere(page: Page, name: string) {
+  await page.getByLabel('Workspace name').fill(name);
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(page)).toBeVisible();
+  await expect(page.getByLabel('Page title')).toHaveValue('Getting started');
+}
 
 test('signs up, keeps a workspace in the account, and a second device sees an edit within 5 seconds', async ({
   page,
@@ -17,7 +30,7 @@ test('signs up, keeps a workspace in the account, and a second device sees an ed
   await page.goto('/');
   await signIn(page, account);
   await signedIn(page, account);
-  await createWorkspace(page, 'Cloud workspace');
+  await workspaceHere(page, 'Cloud workspace');
   // Made while signed in: the workspace goes to the account at once.
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   await newPage(page, 'Shared notes');
@@ -92,7 +105,7 @@ test('an invited member sees the workspace; signing out keeps the pages on the d
   await page.goto('/');
   await signIn(page, owner);
   await signedIn(page, owner);
-  await createWorkspace(page, 'Team space');
+  await workspaceHere(page, 'Team space');
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   const member = await newAccount('Member');
   await page.goto('/#/settings');
@@ -138,7 +151,7 @@ test('a guest sees only the page shared with them; a view link opens it read-onl
   await page.goto('/');
   await signIn(page, owner);
   await signedIn(page, owner);
-  await createWorkspace(page, 'Client space');
+  await workspaceHere(page, 'Client space');
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   await newPage(page, 'Private plan');
   await page.keyboard.type('Not for guests');
@@ -230,7 +243,7 @@ test('a version kept in the account is viewed and restored, and the restore can 
   await page.goto('/');
   await signIn(page, account);
   await signedIn(page, account);
-  await createWorkspace(page, 'Versioned');
+  await workspaceHere(page, 'Versioned');
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   await newPage(page, 'Minutes');
   await page.keyboard.type('First draft');

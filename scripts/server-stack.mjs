@@ -6,8 +6,13 @@
 //   node scripts/server-stack.mjs --e2e   a fresh database cgw_e2e, data and mail in .cgw-dev/e2e
 // (outside Playwright's test-results, which it empties when a run starts, a reused stack too)
 // Mail is written to a pickup folder, never sent. Ctrl+C stops all three.
+// With --e2e only, a control port on 127.0.0.1:5289 (CGW_STACK_CONTROL_PORT) lets the Phase 6
+// specs and bench/phase6.mjs recycle the API process while the worker keeps running
+// (scripts/stack-control.mjs): GET /api (its pid), POST /api/restart (killed, started again,
+// answered once its health answers). The development stack has no such port.
 import { spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import net from 'node:net';
 import { basename, join } from 'node:path';
 import { root } from './lib.mjs';
@@ -191,24 +196,69 @@ const env = {
         RateLimits__sheet: '100000',
         // Phase 6: every page open and reconnect takes a hub ticket.
         RateLimits__realtime: '10000',
+        // Phase 6: the hub's relay times for bench/phase6.mjs (GET /api/v1/realtime/metrics;
+        // never mapped in Production).
+        Realtime__Metrics: 'true',
       }
     : {}),
 };
 const bin = (project) => join(run, project, `${project}.dll`);
-start('api', 'dotnet', [bin('Cgw.Api'), '--urls', `http://127.0.0.1:${port}`], {
-  ...env,
-  Database__MigrateOnStart: 'true',
-});
-await waitFor(
-  async () => {
-    try {
-      return (await fetch(`http://127.0.0.1:${port}/health/live`)).ok;
-    } catch {
-      return false;
-    }
-  },
-  'The API',
-  180,
-);
+const healthy = async () => {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/health/live`)).ok;
+  } catch {
+    return false;
+  }
+};
+let api = null;
+let apiStarted = null;
+function startApi() {
+  api = start('api', 'dotnet', [bin('Cgw.Api'), '--urls', `http://127.0.0.1:${port}`], {
+    ...env,
+    Database__MigrateOnStart: 'true',
+  });
+  apiStarted = new Date().toISOString();
+}
+startApi();
+await waitFor(healthy, 'The API', 180);
 start('worker', 'dotnet', [bin('Cgw.Worker')], env);
+
+if (e2e) {
+  // The control port (see the header): the API recycled as an app pool's worker process is, here
+  // at once (the process ended, not drained), which is the harder case for the clients.
+  const controlPort = Number(process.env.CGW_STACK_CONTROL_PORT ?? 5289);
+  let restarting = null;
+  async function restartApi() {
+    const old = api;
+    children.splice(children.indexOf(old), 1);
+    const stoppedAt = Date.now();
+    if (process.platform === 'win32')
+      spawnSync('taskkill', ['/pid', String(old.pid), '/T', '/F'], { windowsHide: true });
+    else old.kill('SIGKILL');
+    // The port is free once the old process is gone.
+    for (let i = 0; i < 200 && (await open(port)); i++) await new Promise((r) => setTimeout(r, 50));
+    const startedAt = Date.now();
+    startApi();
+    await waitFor(healthy, 'The API', 180);
+    return { pid: api.pid, stoppedAt, startedAt, readyAt: Date.now() };
+  }
+  createServer(async (request, response) => {
+    const answer = (status, body) => {
+      response.writeHead(status, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(body));
+    };
+    try {
+      if (request.method === 'GET' && request.url === '/api')
+        return answer(200, { pid: api.pid, startedAt: apiStarted });
+      if (request.method === 'POST' && request.url === '/api/restart') {
+        restarting ??= restartApi().finally(() => (restarting = null));
+        return answer(200, await restarting);
+      }
+      answer(404, { error: 'not found' });
+    } catch (error) {
+      answer(500, { error: String(error) });
+    }
+  }).listen(controlPort, '127.0.0.1');
+  console.log(`Stack control on http://127.0.0.1:${controlPort} (e2e only)`);
+}
 console.log(`Server stack ready: API http://127.0.0.1:${port}, Blob ${blobPort}, mail in ${mail}`);
