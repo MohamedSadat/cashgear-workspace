@@ -548,12 +548,19 @@ export const erpRange = (block: Locator) => block.getByTestId('erp-range');
 // ------------------------------------------------------------------------------- what is stored
 /**
  * Everything this origin keeps on the device, as text: every IndexedDB database and object store
- * (values and keys; bytes decoded as UTF-8, Blobs read), localStorage, sessionStorage and Cache
- * Storage (every cached response's body).
+ * (values and keys; bytes decoded as UTF-8, Blobs read), localStorage and sessionStorage in
+ * `text`; Cache Storage apart, its cached responses' bodies in `build` and their addresses in
+ * `cached`. The service worker caches the build's own files, which hold the app's own words (a
+ * template's sample "Delta Supplies", say): a value found there is the app's, not stored data, so
+ * a test checks `cached` holds only the app's files and never tests a value the build holds.
  */
-export async function deviceDump(page: Page): Promise<{ text: string; summary: string[] }> {
+export async function deviceDump(
+  page: Page,
+): Promise<{ text: string; build: string; cached: string[]; summary: string[] }> {
   return page.evaluate(async () => {
     const parts: string[] = [];
+    const buildParts: string[] = [];
+    const cached: string[] = [];
     const summary: string[] = [];
     const decoder = new TextDecoder('utf-8');
     const pending: Promise<void>[] = [];
@@ -628,14 +635,14 @@ export async function deviceDump(page: Page): Promise<{ text: string; summary: s
         const cache = await caches.open(name);
         const requests = await cache.keys();
         for (const r of requests) {
-          parts.push(r.url);
+          cached.push(r.url);
           const response = await cache.match(r);
-          if (response) parts.push(decoder.decode(await response.arrayBuffer()));
+          if (response) buildParts.push(decoder.decode(await response.arrayBuffer()));
         }
         summary.push(`cache ${name}: ${requests.length}`);
       }
     await Promise.all(pending);
-    return { text: parts.join('\n'), summary };
+    return { text: parts.join('\n'), build: buildParts.join('\n'), cached, summary };
   });
 }
 

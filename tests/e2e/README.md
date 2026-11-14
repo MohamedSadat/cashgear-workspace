@@ -24,13 +24,15 @@ faults). Nobody else's data is touched: the real systems run locally, on LocalDB
    `Sheet__Origin=http://127.0.0.1:4173 node scripts/server-stack.mjs --e2e` (its Redeem allow-list
    already holds 4173 and the mock's 4283, from which the specs save versions as Sheet does).
 3. A web build that frames it: `VITE_CGW_SHEET=http://127.0.0.1:4173 pnpm build`.
-4. `CGW_E2E_REAL_SHEET=1 pnpm test:e2e -- tests/e2e/sheet.spec.ts tests/e2e/integrations-origins.spec.ts`
-   (`CGW_E2E_SHEET_ORIGIN` names another address). The launch link opens Sheet's own `/cloud`;
+4. `CGW_E2E_REAL_SHEET=1 VITE_CGW_SHEET=http://127.0.0.1:4173 pnpm exec playwright test tests/e2e/sheet.spec.ts tests/e2e/integrations-origins.spec.ts`
+   (`CGW_E2E_SHEET_ORIGIN` names another address). `VITE_CGW_SHEET` is needed here too: the
+   preview Playwright starts sends the CSP, whose `frame-src` it names. Name the files to
+   `playwright test` itself: `pnpm test:e2e -- <files>` passes the `--` on and runs every spec. The launch link opens Sheet's own `/cloud`;
    Sheet's editor and its save are Sheet's suite's, so the specs save through sheet-session.1 as
    Sheet does, and check what the block shows; the frame's cells are not read (Sheet draws them
    its own way).
-5. The embed's budget: `node bench/phase5.mjs --real-sheet` (`CGW_BENCH_SHEET` for another
-   address; web only: the desktop build frames only the live Sheet origins and the mock).
+5. The embed's budget: `VITE_CGW_SHEET=http://127.0.0.1:4173 node bench/phase5.mjs --real-sheet`
+   (it starts its own preview; `CGW_BENCH_SHEET` for another address; web only: the desktop build frames only the live Sheet origins and the mock).
 
 ### The real ERP (`CGW_E2E_REAL_ERP`)
 
@@ -43,7 +45,8 @@ faults). Nobody else's data is touched: the real systems run locally, on LocalDB
    `Erp__ApiBase=http://localhost:5299 node scripts/server-stack.mjs --e2e`.
 4. A web build that calls it:
    `VITE_CGW_ERP_API=http://localhost:5299 VITE_CGW_ERP_CLIENT=http://localhost:4285 pnpm build`.
-5. `CGW_E2E_REAL_ERP=1 CGW_E2E_ERP_MARKERS="<value>,<value>,…" pnpm test:e2e -- tests/e2e/erp.spec.ts tests/e2e/integrations-origins.spec.ts`.
+5. `CGW_E2E_REAL_ERP=1 VITE_CGW_ERP_API=http://localhost:5299 VITE_CGW_ERP_CLIENT=http://localhost:4285 CGW_E2E_ERP_MARKERS="<value>,<value>,…" pnpm exec playwright test tests/e2e/erp.spec.ts tests/e2e/integrations-origins.spec.ts`
+   (the two `VITE_` variables again, for the preview's CSP, whose `connect-src` names the ERP).
    - `CGW_E2E_ERP_MARKERS`: distinctive values the seeded Kit tenant holds (vendor and customer
      names) for the "nothing stored" test to look for; required.
    - The users by role, `alice` (every connector), `bob` (fewer customers), `carol` (no

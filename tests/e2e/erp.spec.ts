@@ -52,6 +52,16 @@ test.beforeEach(async () => {
   if (!REAL_ERP) await mockErp.reset();
 });
 
+/**
+ * The customers' field one reader sees and the other does not: the mock's rule is the credit
+ * limit; the real ERP sends the national ID only to users who are not Employees (its customer
+ * list's sensitive data), and alice's seeded user is an Exec, bob's an Employee.
+ */
+const SENSITIVE_FIELD = REAL_ERP ? 'nationalId' : 'creditLimit';
+
+/** The total in "Records 1–50 of 1,250", grouped as the block writes it. */
+const totalOf = (range: string) => Number(range.match(/of ([\d,]+)/)![1]!.replace(/,/g, ''));
+
 /** The browser's lines for the ERP's refusals a test asks for (browsers log every 4xx). */
 const refusal = (status: number, path: string) =>
   new RegExp(`status of ${status} .*/api/connect/${path}$`);
@@ -184,7 +194,7 @@ test('an ERP block shows vendors to a user with the privilege, refuses one witho
       );
       // Only this company's records: Dot's share the ERP's database.
       await expect(table(block)).not.toContainText('Ferrowyn');
-    } else await expect(erpRange(block)).toHaveText(/^Records 1–\d+ of \d+$/);
+    } else await expect(erpRange(block)).toHaveText(/^Records 1–[\d,]+ of [\d,]+$/);
     await waitSaved(page);
 
     // Paging, there and back.
@@ -273,9 +283,9 @@ test('an ERP block shows vendors to a user with the privilege, refuses one witho
     await expect(table(block)).toBeVisible({ timeout: 30000 });
     const customers = REAL_ERP ? [] : await kitRecords('customers');
     if (!REAL_ERP) await expect(erpRange(block)).toHaveText('Records 1–50 of 240');
-    const aliceTotal = Number((await erpRange(block).innerText()).match(/of (\d+)/)![1]);
+    const aliceTotal = totalOf(await erpRange(block).innerText());
     const aliceNames = await column(block, 'customerName');
-    await expect(table(block).locator('th[data-field="creditLimit"]')).toHaveCount(1);
+    await expect(table(block).locator(`th[data-field="${SENSITIVE_FIELD}"]`)).toHaveCount(1);
     await waitSaved(page);
     await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
     const third = await browser.newContext();
@@ -289,11 +299,11 @@ test('an ERP block shows vendors to a user with the privilege, refuses one witho
     await connectErp(bobs, bobBlock, 'bob');
     await expect(bobBlock.getByTestId('erp-title')).toHaveText('Customers', { timeout: 30000 });
     await expect(table(bobBlock)).toBeVisible({ timeout: 30000 });
-    const bobTotal = Number((await erpRange(bobBlock).innerText()).match(/of (\d+)/)![1]);
+    const bobTotal = totalOf(await erpRange(bobBlock).innerText());
     expect(bobTotal).toBeLessThan(aliceTotal);
     const bobNames = await column(bobBlock, 'customerName');
     expect(bobNames).not.toEqual(aliceNames.slice(0, bobNames.length));
-    await expect(table(bobBlock).locator('th[data-field="creditLimit"]')).toHaveCount(0);
+    await expect(table(bobBlock).locator(`th[data-field="${SENSITIVE_FIELD}"]`)).toHaveCount(0);
     if (!REAL_ERP) {
       const his = customers.filter((c) => c.values.salesperson === 'S-BOB');
       expect(bobTotal).toBe(his.length);
@@ -423,13 +433,28 @@ test('nothing stored: after viewing ERP data, none of it is in any store, the do
     await expect(table(block)).toBeVisible({ timeout: 30000 });
     await keep();
     const seen = found(shown.join('\n'), markers);
-    if (!REAL_ERP) expect(seen.length, 'the ERP values the block showed').toBeGreaterThan(5);
+    expect(seen.length, 'the ERP values the block showed').toBeGreaterThan(REAL_ERP ? 0 : 5);
     await waitSaved(page);
     await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
     const id = pageId(page);
 
     // This device: everything its origin keeps (in the desktop's window too).
     const device = await deviceDump(page);
+    // Cache Storage holds the build's own files and nothing else: no answer of the API or the ERP.
+    const origin = new URL(page.url()).origin;
+    for (const url of device.cached) {
+      expect(new URL(url).origin, `cached ${url}`).toBe(origin);
+      expect(url, `cached ${url}`).not.toMatch(/\/api\//);
+    }
+    // A value the build itself holds (a template's sample company, say) proves nothing: it is the
+    // app's own word, so it is not tested. The mock's values are made up, so none is; a real
+    // tenant's chosen values must leave some to test.
+    const own = found(device.build, markers);
+    if (!REAL_ERP) expect(own, "the mock's values in the app's own files").toEqual([]);
+    if (own.length > 0)
+      test.info().annotations.push({ type: 'not tested', description: `the app's own: ${own}` });
+    markers.splice(0, markers.length, ...markers.filter((m) => !own.includes(m)));
+    expect(markers.length, 'ERP values left to look for').toBeGreaterThan(0);
     // What the page wrote is here (its title, and the block's settings in the document's bytes;
     // typed text is kept a keystroke at a time, so not as one string), and nothing of the ERP's.
     // The desktop's window keeps only its preferences: its store is SQLite, below.
@@ -492,8 +517,10 @@ test('nothing stored: after viewing ERP data, none of it is in any store, the do
       await expect(palette.getByRole('option', { name: /Ledger page/ })).toHaveCount(0);
     }
     await page.keyboard.press('Escape');
-    // And the block still shows the ERP's data, from memory and the ERP.
-    expect(found(await table(block).innerText(), markers).length).toBeGreaterThan(0);
+    // And the block still shows the ERP's data, from memory and the ERP: the table it drew last.
+    // (It shows Items on hand now; the values looked for may be any connector's.)
+    expect((await table(block).innerText()).trim()).toBe(shown[shown.length - 1]!.trim());
+    await expect(table(block).locator('tbody tr').first()).toBeVisible();
     expect(errors).toEqual([]);
   } finally {
     await api.dispose();
