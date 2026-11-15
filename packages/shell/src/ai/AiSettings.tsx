@@ -27,6 +27,8 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
   const [key, setKey] = useState('');
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // The switch shows what the person chose while its save is out, not the old value springing back.
+  const [choosing, setChoosing] = useState<boolean | null>(null);
   const state = useSyncExternalStore(
     (listener) => (ai ? ai.store.subscribe(listener) : () => {}),
     () => (ai ? ai.store.state(ai.workspaceId) : null),
@@ -42,11 +44,13 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
     void ai.store.save(ai.workspaceId, change).then(
       () => {
         setBusy(false);
+        setChoosing(null);
         setMessage({ text: t('ai.saved'), error: false });
         after?.();
       },
       (error: unknown) => {
         setBusy(false);
+        setChoosing(null);
         const code = error instanceof AiError ? error.code : 'server.error';
         setMessage({
           text: t(
@@ -84,13 +88,14 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
           <label className="cgw-ai-check">
             <input
               type="checkbox"
-              checked={settings.enabled}
+              checked={choosing ?? settings.enabled}
               disabled={busy}
               onChange={(event) => {
                 if (event.target.checked && !settings.hasKey) {
                   setMessage({ text: t('ai.keyMissing'), error: true });
                   return;
                 }
+                setChoosing(event.target.checked);
                 save({ enabled: event.target.checked });
               }}
             />
