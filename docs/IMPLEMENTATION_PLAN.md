@@ -1,6 +1,7 @@
 # Cash Gear Workspace: implementation plan
 
-> Approved for planning on 2026-11-11. No phase starts until you say so.
+> Approved for planning on 2026-11-11. Phases 8 to 10 added on 2026-11-15, chosen from "Later"
+> after 0.7.0. No phase starts until you say so.
 
 ## Context
 
@@ -68,6 +69,9 @@ benchmarks run in CI on every push to `main`.
 | 5 | Sheet embeds and read-only ERP blocks | `v0.5.0` |
 | 6 | Real-time editing, presence, comments, mentions | `v0.6.0` |
 | 7 | Editable ERP blocks, plugin blocks, optional AI | `v0.7.0` |
+| 8 | Hardening and moving in: reliability, the library's components, bulk cell editing, import, email notifications | `v0.8.0` |
+| 9 | Publishing and views: a public page site, the timeline view, workbooks in the export and their history | `v0.9.0` |
+| 10 | Editable Customers and Items on hand, AI search by embeddings, third-party plugin blocks | `v0.10.0` |
 
 Changes from the brief's suggested phases, and why:
 
@@ -75,6 +79,8 @@ Changes from the brief's suggested phases, and why:
   and is local-first.
 - "Desktop and offline" becomes "Offline" (Phase 3): the desktop app already exists by then.
 - Collaboration (Phase 6) ships alone; ERP editing, plugins and AI move to Phase 7.
+- Phases 8 to 10 were chosen from "Later" and the earlier phases' deferrals on 2026-11-15, after
+  0.7.0, and split into three releases (`DECISIONS.md`).
 
 ## Track U: missing components in `CashGear.React.UI`
 
@@ -85,27 +91,42 @@ Axe). Each is needed by the milestone named.
 | --- | --- | --- |
 | U1 | Command menu: filtered, grouped list anchored to a point, full keyboard | M1.3 |
 | U2 | Selection toolbar: a `CgToolbar` in a `CgFlyout` that follows a rectangle | M1.3 |
-| U3 | Drag handle and drop indicator; a small pointer-and-keyboard drag-and-drop helper | M1.4 |
+| U3 | Drag handle and drop indicator; a small pointer-and-keyboard drag-and-drop helper, with a drag copy and edge scrolling (Phase 4's board) | M1.4 |
 | U4 | `CgTreeView`: drag-and-drop, inline rename, virtualisation, lazy children | M1.6 |
 | U5 | Breadcrumb with overflow | M1.6 |
 | U6 | Emoji picker (data set licence checked) and page-icon set | M1.6 |
 | U7 | Avatar and avatar stack | M2.2 |
 | U8 | Block-type icons added to `CgIcon` | M1.3 |
+| U9 | Tag boxes: creatable options with per-option actions (rename, recolour, regroup, reorder, delete), single and grouped; and caller-drawn chips over caller-supplied results | M4.2 |
+| U10 | A menu surface that holds inputs, switches and panels | M4.2 |
+| U11 | A sortable list (a handle and arrow keys) | M4.2 |
+| U12 | Text and number editors that keep no React draft | M4.2 |
+| U13 | A live-region announcer | M4.4 |
+| U14 | A kanban board | M4.4 |
+| U15 | A month calendar that takes zero-length items and inclusive ends, with no editor of its own | M4.5 |
+| U16 | A file picker that only gives the file | M4.7 |
+| U17 | An editable area with a suggestion list (the comment composer's "@") | M6.4 |
+| U18 | A timeline: bars over a date axis, lanes, drag to move and resize, zoom | M9.2 |
 
 Until a component lands, the milestone uses a local stand-in behind the same props and replaces
-it when the pin moves. Stand-ins are listed in `PROGRESS.md` so none is forgotten.
+it when the pin moves. Stand-ins are listed in `PROGRESS.md` so none is forgotten. U9 to U17 are
+the stand-ins Phases 4 to 7 listed there (added here on 2026-11-15); Phase 8 builds U1 to U17 and
+fixes the library defects `PROGRESS.md` lists, and Phase 9 needs U18.
 
 ## Track S: Cash Gear Sheet
 
 Listed in `INTEGRATIONS.md`: S1 cloud platform, S2 `/cloud` launch route, S3 `/embed` route,
 S4 preview pictures and charts, S5 the shared contract suite. Needed by Phase 5; S1 should start
-during Phase 4.
+during Phase 4. Added on 2026-11-15: S6, Sheet's desktop app opening a Workspace launch ticket by
+its deep link, needed by Phase 9 (M9.3); `INTEGRATIONS.md` gains it when Phase 9 starts.
 
 ## Track E: Cash Gear ERP
 
 Listed in `INTEGRATIONS.md`: E1 app session with an audience, E2 workspace link, E3 connect flow
 in the ERP client, E4 read-only connectors, E5 rate limiting and CORS, E6 editable connectors,
-E7 the contract suite. E1 to E5 are needed by Phase 5; E6 by Phase 7.
+E7 the contract suite. E1 to E5 are needed by Phase 5; E6 by Phase 7. Added on 2026-11-15: E8,
+Customers and Items on hand editable with the audit, and E9, their cases in the contract suite,
+needed by Phase 10 once E1 to E7 are pushed; `INTEGRATIONS.md` gains them when Phase 10 starts.
 
 ---
 
@@ -1090,20 +1111,471 @@ screen, AI panel, settings).
 
 ---
 
+## Phase 8: Hardening and moving in
+
+**Goals**
+
+Close what 0.6.0 and 0.7.0 left open in reliability and server cost, replace the stand-in
+components with the UI library's own, and make it easy to bring work in: bulk cell editing in
+databases, import from Markdown, Notion and Word, and email for mentions and replies.
+
+**Dependencies**
+
+Phase 7. Track U (U1 to U17 and the library's defects) in `CashGear.React.UI`, agreed for this
+phase: M8.2 swaps each component as it lands, and no other milestone waits for it. Mail as
+deployed (decisions, 2026-11-14: production hosting).
+
+**Questions for you (one batch)**
+
+- Track U: who builds it and on which branch of `CashGear.React.UI` (default: a session of its
+  own in that repo, on the branch both pins follow, `claude/cashgear-react-ui-library-xq8tsz`,
+  since the library has no `main`; Sheet moves its own pin when it chooses).
+- If Chrome is shown to lose IndexedDB writes it reported complete with the whole process tree
+  ended: strict durability on document writes, with "Saved" waiting for it (default: yes, if the
+  1 s durability budget still holds).
+- Paste: what a paste past the last row does (default: adds rows, at most 1,000 a paste), and how
+  a paste is taken back (default: the notice after a paste offers Undo, which writes the old
+  values back; databases have no undo yet).
+- Import: where it runs (default: on the device, so it works in a local workspace and the server
+  never opens an uploaded archive), and its limits (default: 2,000 pages and 500 MB an import).
+- Email: the choices per person and the default (default: on, mentions and replies at most every
+  15 minutes and only while still unread; a daily digest or off by choice), and the sender
+  (default: the SMTP account already set, `Smtp__From`).
+
+**Tasks**
+
+*M8.1 Reliability*
+
+- [ ] The web loss after "Saved" (CI run 43746282731, `PROGRESS.md`, Phase 7): reproduced at
+      size with the web kill test during sync; found whether Chrome lost a completed transaction
+      or "Saved" came early; fixed. The kill tests' run counts raised until the loss rate is known.
+- [ ] The server's work per push (about 55 ms of the API's CPU and 45 ms of the worker's on the
+      reference machine, `PROGRESS.md`, Phase 6): profiled; each validation pass loads a document
+      once (its meta, the check and the state hash).
+- [ ] Why CI's work per key doubled from Phase 5 to Phase 6 (the median too, desktop and web):
+      found from the benches' figures and fixed, or the cause recorded.
+- [ ] An operation refused for access (`access.denied`: a guest making a section, a cover file
+      not readable) says what happened (decisions, 2026-11-15, after 0.7.0).
+
+*M8.2 The library's components*
+
+- [ ] Track U's U1 to U17, and the defects `PROGRESS.md` lists, built in `CashGear.React.UI` to
+      its rules (one folder per component, logical CSS, Arabic labels, stories, Axe).
+- [ ] Each stand-in replaced by bumping the pinned commit, its local copy deleted, its row in
+      `PROGRESS.md` ticked; each workaround for a fixed defect removed.
+- [ ] Every spec and budget of Phases 1 to 7 holds after each swap.
+
+*M8.3 Bulk cell editing*
+
+- [ ] Cell selection in the table: a rectangle by Shift and the arrows, Shift+click and pointer
+      drag; whole rows and columns; kept while the table's window scrolls; right to left.
+- [ ] Copy as tab-separated text and an HTML table, the values as shown. Paste tab-separated text
+      (from Sheet, Excel or the table) into a rectangle, each value read by its property's
+      conversion rules; refused cells left as they were and counted. One batch of `row.update`
+      operations a paste; Delete clears the selection.
+- [ ] Board columns and gallery cards dragged into a new order, by pointer and keyboard, as board
+      cards move today; where each order is kept is the phase's choice, logged.
+
+*M8.4 Import*
+
+- [ ] A folder or zip of Markdown files: a page tree after its folders, links between the files
+      as page links, images and attachments as assets; through `@cgw/doc`'s Markdown in.
+- [ ] A Notion export (Markdown and CSV, zipped): pages and their nesting; databases from their
+      CSV, property types inferred as the CSV import does; row pages from the database's folder;
+      Notion's id suffixes taken off names; links between pages kept.
+- [ ] Word `.docx`: headings, paragraphs, lists, tables, images, links and marks into blocks,
+      through a reader under an allowed licence or one of our own over the file's XML.
+- [ ] Each import ends with a report of what was made and what was skipped, and why (tracked
+      changes, comments, text boxes, a type with no counterpart). An import that fails or is
+      stopped leaves nothing half made, and never writes into an existing page.
+
+*M8.5 Email notifications*
+
+- [ ] Settings per person in the account (on, a daily digest, off); each mail turns mail off in
+      one click without signing in (`List-Unsubscribe` and `List-Unsubscribe-Post`, a signed
+      token).
+- [ ] The worker mails `mention`, `commentMention` and `reply` notifications still unread after
+      the delay, grouped per person: access checked again when sending; excerpts by the inbox's
+      rules (plain text, mentions as `@` only); in the person's language (`User.Locale`) and
+      direction; links to the page and block.
+- [ ] Mail kept in a queue in the database, sent with retries under a daily cap below the SMTP
+      account's limit; failures logged without content.
+
+**Files and modules**
+
+`@cgw/store-web` (durability); `server/` Documents (the validation pass), Notifications and Mail;
+`@cgw/database` (selection, clipboard, column and card order); `@cgw/shell` (`exchange/` and an
+import panel, the mail settings); `@cgw/doc` (Markdown in, a `.docx` reader); the pinned
+`@cashgear/ui` everywhere. In another repo: Track U.
+
+**API contracts**
+
+- `GET`, `PUT /account/notification-settings`; `POST /mail/unsubscribe` (the token from the
+  mail; the same answer for any token).
+- No new operation: a paste is `row.update`s, and an import uses the existing operations, asset
+  uploads and `POST /databases/{id}/import`.
+
+**Database changes**
+
+Server: mail settings per account, `Notifications.EmailedAt`, a mail queue. Local stores: none
+(store schema stays 4) unless the durability fix needs one.
+
+**Acceptance criteria**
+
+- The web and desktop kill tests during sync run 1,000 times each and lose nothing reported
+  saved; or the browser's own loss is measured and your decision recorded.
+- The server's CPU per push (the API's and the worker's) is at most half of 0.7.0's on the
+  reference machine.
+- No stand-in that Track U replaced is left; every spec and budget of Phases 1 to 7 passes after
+  the swaps.
+- 1,000 cells copied from Excel and from Sheet paste into the table, each value converted as the
+  conversion table says, reach a second device and can be taken back; a rectangle copied from the
+  table pastes into Excel as shown.
+- A Notion export, a Markdown folder and a `.docx` file each import with their structure, links,
+  databases with typed properties, row pages and images, into a local and a synced workspace,
+  and say what they skipped.
+- A person mentioned while away gets one mail, in their language, that opens the block; none for
+  a page they can no longer read, and none once they have read it in the app; one click in the
+  mail turns mail off; with mail off, nothing is sent.
+
+**Automated tests**
+
+- The kill tests at size; a unit test for the durability fix that fails without it.
+- The validation pass's document loads counted.
+- Paste: the conversion vectors over pasted text; selection by keyboard and pointer; right to
+  left.
+- Import fixtures made here (a Notion export, Markdown folders, `.docx` files), each with its
+  expected pages; hostile archives (paths out of the folder, a zip bomb, huge images).
+- Mail: the e2e stack's pickup folder; access checked when sending; the unsubscribe token;
+  Arabic; the daily cap.
+- Axe and the Arabic check on the new screens.
+
+**Performance benchmarks**
+
+- A paste of 1,000 cells shown ≤ 500 ms, on the server ≤ 5 s.
+- A 1,000-page Notion export imported on the device ≤ 60 s, the uploads apart.
+- The server's CPU per push ≤ half of 0.7.0's; the relay p95 at 20 editors still ≤ 150 ms.
+- Every budget of Phases 1 to 7 unchanged after the Track U swaps.
+
+**Risks**
+
+- Chrome loses writes it reported complete: the fix is in what "Saved" waits for, measured
+  against the 1 s budget, since the browser cannot be fixed from here.
+- Track U lands late: the stand-ins not yet replaced stay, listed, with your decision.
+- Imports meet files no fixture covers: what is not understood is reported, never dropped
+  silently.
+- Mail through a Gmail account has a daily sending limit: the cap, the queue and the digest.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `DATA_MODEL.md`, `ARCHITECTURE.md` and `INTEGRATIONS.md` updated with what was built.
+- Tags `phase-8` and `v0.8.0`; a card for Phase 9.
+
+---
+
+## Phase 9: Publishing and views
+
+**Goals**
+
+Publish a page tree as a public, read-only site; a timeline view for databases; workbooks that
+travel in the workspace's export and show their history.
+
+**Dependencies**
+
+Phase 8 (the library's components). Track U18 for the timeline; Track S6 for Sheet's desktop deep
+link. An origin and a host for the site.
+
+**Questions for you (one batch)**
+
+- The site's address and host (default: an origin of its own, for example
+  `pages.cashgearerp.com`, never the app's or the API's, so a published page can read neither's
+  session).
+- Custom domains for a site (default: not in 0.9.0).
+- Search engines (default: not indexed unless the publisher turns it on for the site).
+- Databases on a published page, and on a share link (default: their rows, read-only, through the
+  block's view, and a database's full page; Phase 4 left a note there).
+- Workbooks on a published page (default: a placeholder, as on a share link: Phase 5's answer
+  keeps a workbook inside its workspace).
+- The timeline in Arabic (default: time runs right to left).
+- Track S6: who builds Sheet's desktop deep link (default: a session of its own in
+  `cashgear-sheet`).
+
+**Tasks**
+
+*M9.1 Publishing*
+
+- [ ] Publish a page and its subtree, by someone with `full` on the page: a slug, unpublish at
+      once, publish again. The pages a site holds follow a share link's rules: restricted, hidden
+      and private pages, and what is under them, never.
+- [ ] The site is HTML rendered on the server from the worker's derived JSON (no Yjs, no script
+      needed to read), on its own origin with a strict CSP: titles, icons, covers, the tree as
+      navigation, both languages and directions, light and dark from the reader's system; images
+      and files by short signed URLs checked against the site.
+- [ ] Other blocks on a published page: databases as answered, chart and kanban blocks drawn from
+      those rows, a placeholder for workbooks and always for ERP views; nothing of comments,
+      presence or history.
+- [ ] Caching, with an unpublish that holds within a minute; `noindex` unless indexing is on; an
+      audit entry for each publish and unpublish.
+
+*M9.2 Timeline view*
+
+- [ ] A sixth view type, `timeline`: bars from a date property's range or from two date
+      properties; zoom by day, week, month and quarter; drag to move and to resize; rows without
+      a date listed beside; lanes by a select or status property; keyboard and screen reader.
+- [ ] `POST /databases/{id}/query` takes a date window, so a calendar or timeline over a large
+      database fetches only the rows it shows; the calendar's 5,000-row note goes for those.
+- [ ] `ViewType` in TypeScript and C#, with vectors. Older builds show a timeline view as a table
+      (their fallback) and must never change its type or settings.
+
+*M9.3 Workbooks*
+
+- [ ] The workspace export holds each workbook the exporter can read: its newest version as
+      `.xlsx`, its name and view settings (export format version 3). Import makes them again in a
+      synced workspace and says it skipped them in a local one.
+- [ ] A workbook's history: its kept versions with time and saver; a version opened read-only;
+      restore as a new version, with `edit` or above.
+- [ ] On the desktop, "Open in Cash Gear Sheet" opens Sheet's desktop app by its deep link with a
+      launch ticket when it is installed, else the web app (Track S6).
+
+**Files and modules**
+
+`server/` Sharing and a Sites module (the renderer from derived JSON to HTML), Databases (the date
+window), Workbooks, Exports; `@cgw/database` (the timeline over U18); `@cgw/workspace` (the view
+type and the query); `@cgw/shell` (the publish dialog, a workbook's history, `exchange/`);
+`crates/cgw-native` (Sheet's link); `deploy/iis` (the site's origin). In other repos: Tracks S6
+and U18.
+
+**API contracts**
+
+- `GET`, `PUT`, `DELETE /pages/{id}/site`; on the site's origin, `GET /{slug}` and
+  `GET /{slug}/{pageId}` (HTML) and the files those pages show.
+- `POST /databases/{id}/query` gains `window: {propertyId, from, to}`.
+- `GET /workbooks/{id}/versions`, `POST /workbooks/{id}/versions/{versionId}/restore`.
+- Export format version 3, with workbooks.
+
+**Database changes**
+
+`PublishedSites` (root page, slug, indexing, who published and when, unpublished); view records of
+type `timeline` and their settings; nothing new for workbooks (`WorkbookVersions` exists).
+
+**Acceptance criteria**
+
+- A published subtree reads in a browser with no account and with script off, in English and in
+  Arabic; a restricted page under it, its comments, its history and its Yjs updates are never
+  reachable; an ERP view and a workbook show placeholders; after unpublishing, every address
+  answers 404 within a minute.
+- Nothing on the site's origin can read the app's or the API's session, proven by a test.
+- A timeline view of a 50,000-row database shows the rows in its window and moves and resizes
+  bars by pointer and keyboard, in both directions; an older build that shows it keeps its type
+  and settings.
+- A workspace exported with workbooks imports into a new synced workspace with them; an older
+  version of a workbook is restored as a new one by an editor and refused for a reader.
+- On the desktop with Sheet's app installed, "Open in Cash Gear Sheet" opens the app on the
+  workbook.
+
+**Automated tests**
+
+- The site's scope matrix (restricted, private, hidden, trashed, unpublished), as share links'
+  are; the renderer's vectors from derived JSON (every node of schema 6, hostile content
+  escaped).
+- The timeline's layout and drag tests, right to left; the date window's vectors in TypeScript
+  and C#; v0.8.0 and an older build meeting a timeline view (`old-build.spec.ts`).
+- The export's round trip with workbooks; the history routes' access matrix; the desktop's deep
+  link from the event on.
+- Axe and the Arabic check on the site and the new screens.
+
+**Performance benchmarks**
+
+- A published page of 2,000 blocks: first byte p95 ≤ 200 ms from the cache, ≤ 1 s rendered
+  fresh.
+- Timeline: the first bars of a 50,000-row database ≤ 500 ms; dragging at 60 frames a second.
+
+**Risks**
+
+- A site shows more than the publisher meant: a share link's scope rules, a list of what will be
+  published before publishing, unpublish at once.
+- People's content on an origin that holds a session: the site has an origin of its own and no
+  cookie.
+- An older build writes a timeline view away: the old-build spec, and the server keeps what an
+  older client does not send (the phase decides how).
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven, the site on its deployed origin.
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `INTEGRATIONS.md` and `OPERATIONS.md` updated.
+- Tags `phase-9` and `v0.9.0`; a card for Phase 10.
+
+---
+
+## Phase 10: Editable Customers and Items, AI search by embeddings, third-party plugins
+
+**Goals**
+
+Customers and Items on hand editable from ERP blocks as Vendors are; AI search that finds pages by
+meaning; plugin blocks by other authors, isolated in sandboxed iframes.
+
+**Dependencies**
+
+Phase 7. Tracks E1 to E7 pushed in `CashGear` (yours), then Tracks E8 and E9. An embeddings
+provider: Anthropic offers no embedding model. Phase 9 is not required.
+
+**Questions for you (one batch)**
+
+- Track E8: which Customers and Items on hand fields become editable, at which privilege, and
+  whether on-hand quantities can change at all (default: what the ERP's own screens let that
+  privilege change; quantities never, since stock moves only by the ERP's transactions). Who
+  builds E8 and E9 (default: a session of its own in `CashGear`, on LocalDB only, as E1 to E7).
+- Embeddings: the provider (default: Voyage AI with the workspace's own key and `voyage-4`, which
+  Anthropic's documentation points to; the alternative is the open-weight `voyage-4-nano`,
+  Apache-2.0, run by the worker, so nothing leaves the server), off for every workspace until
+  turned on, and what is embedded (default: pages' derived text in chunks; never ERP data).
+- Where vectors are kept and searched (default: `PageEmbeddings` rows in SQL Server, searched in
+  the API process per workspace; SQL Server's own vector type if the host's version has one).
+- Third-party plugins: who may add one (default: a workspace's owners and admins); where its code
+  is served from (default: a bundle an admin uploads, served from a sandbox origin of its own,
+  never the author's server); what it may read (default: its block's props, and a database view's
+  rows only when the block names one, and only what the reader may read); whether it may use the
+  network (default: no).
+
+**Tasks**
+
+*M10.1 Editable Customers and Items on hand*
+
+- [ ] `erp-connect.1`'s `Commit` and `CommitStatus` for `customers` and `itemsOnHand`, written in
+      full first in `INTEGRATIONS.md`; the mock ERP's commits for both; the contract suite's cases.
+- [ ] The ERP block's editing, review and conflict screens for both, through Phase 7's path; the
+      AI assist prepares changes for them, still with no path to `Commit`.
+- [ ] Tracks E8 and E9 in the ERP.
+
+*M10.2 Embeddings*
+
+- [ ] `IAiProvider.EmbedAsync` (in the interface since Phase 7, optional) for the chosen provider:
+      its key under Data Protection and never returned, metering in `AiUsage`, audit, the off
+      switch.
+- [ ] `PageEmbeddings`: the worker embeds a page's derived text in chunks after it changes,
+      debounced; removes a page's vectors when it is trashed or deleted or the workspace turns
+      embeddings off; embeds again when the model changes.
+
+*M10.3 Search by meaning*
+
+- [ ] `ask` and the palette's search find pages by meaning and by words together, with the
+      permission filter applied at query time, as ordinary search's; English and Arabic, and
+      across the two.
+- [ ] Vectors never leave the server; a page the person cannot read never counts.
+
+*M10.4 Plugin frames*
+
+- [ ] `plugin-frame.1`: a versioned message contract like `sheet-embed.1` (handshake, props in
+      and out, theme, direction and language, resize, a view's rows when granted), typed, with
+      validators and shared vectors.
+- [ ] The host: a sandboxed iframe on the sandbox origin, mounted near the viewport; a placeholder
+      when the plugin is missing or turned off; read-only for a reader who cannot edit. The
+      document keeps the block's `type`, `version` and `props` as they are (`pluginBlock`, schema
+      6; no schema rise).
+
+*M10.5 Plugin install and trust*
+
+- [ ] A workspace's plugins: add (a bundle and its manifest: name, type, version, what it asks to
+      read), turn on and off, update, remove; by owners and admins; audited.
+- [ ] Serving: the bundle from the sandbox origin with a CSP that allows no network and none of
+      Workspace's origins; the desktop's CSP the same.
+
+**Files and modules**
+
+`@cgw/erp`, `tests/mocks/erp`, `tests/contracts/erp`; `server/` Ai (embeddings), Search and a
+Plugins module; `@cgw/plugins` (the frame host); `@cgw/editor` (the plugin block's frame);
+`@cgw/shell` (plugin settings, AI settings); the sandbox origin's hosting (`deploy/`). In another
+repo: Tracks E8 and E9.
+
+**API contracts**
+
+- `erp-connect.1` `Commit` and `CommitStatus` for `customers` and `itemsOnHand`.
+- `PUT /workspaces/{id}/ai-settings` gains the embeddings provider, model and key;
+  `POST /ai/complete`'s `ask` searches by meaning when they are on.
+- `plugin-frame.1`; `GET`, `POST /workspaces/{id}/plugins`;
+  `PATCH`, `DELETE /workspaces/{id}/plugins/{pluginId}`; the bundles' routes on the sandbox
+  origin.
+
+**Database changes**
+
+`PageEmbeddings` (page, chunk, model, vector, the text's version); the embeddings settings in
+`AiSettings`; `WorkspacePlugins` (manifest, the bundle's blob key, on or off, who and when). No
+document schema rise.
+
+**Acceptance criteria**
+
+- An edit to a customer or an item is written only after review and commit, is in the ERP's audit
+  with its page, and a conflicting ERP change is shown, not overwritten; a user without the
+  privilege cannot commit by any request, proven against the API; none of either connector's data
+  is in any Workspace store.
+- With embeddings on, `ask` finds a page from a question that shares none of its words, in English
+  and in Arabic, and never cites a page the person cannot read; with them off, no text leaves for
+  the embeddings provider; a page restricted or trashed stops counting at once.
+- A third-party plugin draws in its frame with only what it was given. It cannot reach the
+  document, the session, cookies, other blocks or the network, proven by a hostile plugin in the
+  tests; a page holding it opens unchanged in a workspace without it and in an older build.
+
+**Automated tests**
+
+- The contract suite's commit cases for both connectors, against the mock and against UnifiedAPI
+  on LocalDB.
+- Embeddings: the permission matrix at query time; the off switch; chunks made again on change; a
+  mock embeddings provider beside `tests/mocks/ai`.
+- `plugin-frame.1`'s vectors; a hostile plugin (it reads `parent`, cookies and storage, calls
+  `fetch`, navigates, opens pop-ups, posts to other frames); a missing, disabled or newer plugin.
+- Axe and the Arabic check on the new screens.
+
+**Performance benchmarks**
+
+- Review of 500 changed customers ≤ 2 s plus the ERP's time.
+- Retrieval by meaning over 100,000 chunks: p95 ≤ 300 ms, apart from the provider's time to embed
+  the question.
+- A page with 10 plugin frames stays within the keystroke budget.
+
+**Risks**
+
+- Vectors are content: text can be approximated from them, so they are kept and deleted as page
+  text is, filtered by permission at query time, and never sent to a client.
+- A third-party plugin is hostile: an origin of its own, a sandbox without `allow-same-origin`, no
+  network, and a contract that grants nothing by default.
+- Track E's earlier work is not pushed: E8 starts once E1 to E7 are; Workspace builds against its
+  mock meanwhile.
+- Stock edited outside the ERP's transactions: the ERP decides what is editable; Workspace adds no
+  rule of its own.
+
+**Definition of done**
+
+- Acceptance criteria proven against the real ERP and the chosen embeddings provider.
+- `INTEGRATIONS.md`, `DATA_MODEL.md` and `ARCHITECTURE.md` updated.
+- Tags `phase-10` and `v0.10.0`; "Later" reviewed with you.
+
+---
+
 ## Later
 
-Not planned in any phase; listed so they are not lost.
+Not planned in any phase; listed so they are not lost. Reviewed on 2026-11-15: what was chosen
+went to Phases 8 to 10, and the earlier phases' deferrals that were not chosen are listed here.
 
-- Timeline and chart views for databases.
+- A chart view type for databases (the chart plugin block exists from 0.7.0).
 - Embedded presentations, once that app exists.
-- Third-party plugins in sandboxed iframes.
 - Groups in permissions; single sign-on; passkeys.
-- Email notifications; a public page site.
+- Comments offline (online only from 0.6.0).
+- AI's subscription mode and its local-model mode on the desktop.
 - Linux desktop build; a mobile app.
-- A shared `@cashgear/app-kit` for the platform split, theme and shortcuts.
-- SQLite on OPFS in the browser.
+- A shared `@cashgear/app-kit` for the platform split, theme and shortcuts (D1: once a third app
+  needs it).
+- SQLite on OPFS in the browser (D11: it needs COOP/COEP, which blocks embeds).
 - Yjs 14, when its binding is stable.
-- Import from Notion, Markdown folders and Word.
+- A SignalR backplane or Azure SignalR Service, past about 5,000 to 10,000 connections on a node
+  (Q17).
+- ERP reports (Q16); the ERP's Query paging without reading a company's whole table (Track E,
+  before large tenants).
+- Pins that hold every row's document, not only a database's rows; a screen-reader pass on the
+  database grid (Axe only so far); an end-to-end test of access lost without a feed change (the
+  hub's 60 s re-check).
+- Not while the hard limit stands: snapshotting an ERP view into a database, which would store ERP
+  data in a Workspace table.
 
 ## Top risks, by the earliest phase that exposes them
 
@@ -1122,6 +1594,13 @@ Not planned in any phase; listed so they are not lost.
 | Other repos' work is late | 5 | Mocks, staged delivery |
 | Real-time outgrows one node | 6 | Stateless hub |
 | A page becomes a path into ERP transactions | 7 | The ERP enforces; explicit commit |
+| Text reported saved is lost in a browser | 8 | M8.1: the cause found, "Saved" waits for what lasts, kill tests at size |
+| A pasted or imported value lands as the wrong type | 8 | The conversion table, shared vectors, a report of what was skipped |
+| A mail reaches someone who lost access | 8 | Access checked again when sending; the inbox's excerpt rules |
+| A published page shows more than the publisher meant | 9 | A share link's scope rules, an origin of its own, unpublish at once |
+| An older build rewrites a timeline view | 9 | The old-build spec; the server keeps what an older client does not send |
+| Embeddings leak content across permissions | 10 | Filtered at query time; the permission matrix |
+| A third-party plugin reaches the document or the session | 10 | A sandboxed iframe on its own origin, a message contract, no network |
 
 ## Verification
 

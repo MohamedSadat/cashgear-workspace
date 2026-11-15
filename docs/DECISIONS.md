@@ -1065,3 +1065,31 @@ Built in M7.1 to M7.4 (the streams' choices, each in its note):
 | `tree.section`, `section.notEmpty`, `page.notTrashed` | Each says what another device did meanwhile: the page moved under went to another section, so the page stayed (a refused create: the new page or row was not made); pages were put in the section, so it was not deleted and is back; the page was restored from the trash, so nothing was deleted. The two that name a page link to it | The local planner refuses the same rules, so the server refuses these only after a change elsewhere |
 | A notice with no page | Names none | Its title would read "Untitled" (a refused create, a section) |
 | `access.denied` | Keeps its text, which speaks of a recovered page | Asked for unchanged; an operation refused for access (a guest making a section, a cover file not readable) still reads that way, a follow-up |
+
+## 2026-11-15: Phases 8 to 10 (the Later list reviewed)
+
+Phase 7's definition of done asks for "Later" to be reviewed with you. The plan's "Later" list and
+what Phases 3 to 7 left for later were put to you in one batch; two answers were then checked
+with you. The phases are in `IMPLEMENTATION_PLAN.md`.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Editor and database items | All four offered: bulk cell editing (multi-cell selection, copy and paste with Sheet and Excel, board columns and gallery cards dragged), import (Markdown folders, a Notion export, Word `.docx`), the timeline view, and a public page site |
+| Collaboration and account items | Email notifications for mentions and replies. Groups in permissions, comments offline, passkeys and single sign-on stay on "Later" |
+| ERP, AI and plugin items | All three: Customers and Items on hand editable (Tracks E8 and E9), AI search by embeddings, third-party plugins in sandboxed iframes. "None yet" was ticked with them; asked again, the answer was all three |
+| Platform and hardening items | The reliability follow-ups (the web kill test's loss after "Saved" on run 43746282731, the server's work per push, CI's work per key), Track U's components with the stand-ins listed since Phase 4, and the workbook gaps (workbooks in the workspace export, a workbook's version history, Sheet's desktop deep link). The Linux build stays on "Later" |
+| How to split them | Three phases, each its own release, all planned now and built one at a time: Phase 8 (`v0.8.0`) hardening and moving in: reliability, Track U, bulk cell editing, import, email. Phase 9 (`v0.9.0`) publishing and views: the public site, the timeline, the workbook gaps. Phase 10 (`v0.10.0`): Customers and Items on hand editable, embeddings, third-party plugins |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| What was not offered as a choice | Kept on "Later" with its reason: snapshotting an ERP view (it would store ERP data in a Workspace table, which the hard limits forbid), embedded presentations (no app yet), a mobile app, `@cashgear/app-kit` (D1), SQLite on OPFS (D11), Yjs 14 (its binding), a backplane (Q17's measurements), AI's subscription and local-model modes, ERP reports, pins holding rows' documents, a screen-reader pass on the grid, an end-to-end test of access lost without a feed change | Each needs something that does not exist yet, or a measurement says it is not needed |
+| A workbook's version history | In Phase 9 | It was listed beside the smaller deferrals kept on "Later", but the "Workbook gaps" choice you picked named it in its description; the choice wins |
+| The order of the phases | Reliability first in Phase 8, before more features; Track U in Phase 8, so Phase 9's timeline is built over the library (U18) | Text reported saved and then lost is the worst failure the app can have; the hard limits put generic components in `CashGear.React.UI` |
+| Track U's numbering | U9 to U17 are the stand-ins Phases 4 to 7 listed in `PROGRESS.md`; U3 gains the drag copy and edge scrolling; U18 is the timeline | One list in the plan for what the track builds |
+| Track S6, E8 and E9 | Added to the plan's track sections now and to `INTEGRATIONS.md` by the phase that needs them; E8 starts once E1 to E7 are pushed (yours) | Those repos change only as agreed tracks; nothing is built on unpushed work in another repository |
+| Embeddings, as found on 2026-11-15 | Anthropic offers no embedding model; its documentation (platform.claude.com, "Embeddings") points to Voyage AI: `voyage-4` over an HTTP API, and `voyage-4-nano` open-weight under Apache-2.0. Phase 10's question starts from this | The 0.7.0 AI is Anthropic only, so embeddings need a second provider or a local model |
+| Version numbers | `v0.8.0`, `v0.9.0`, `v0.10.0` | One version per phase, as before |

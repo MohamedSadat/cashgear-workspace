@@ -17,6 +17,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 5: Cash Gear ecosystem | Done, 2026-11-14 (0.5.0; proven against the mocks in CI and against the real Sheet and ERP run locally; the deployed check, and pushing Track E, are yours) | `phase-5`, `v0.5.0` |
 | Phase 6: Collaboration | Done, 2026-11-15 (0.6.0; the 300 ms and 150 ms budgets are met on the reference machine, CI's shared runner holds wider ones; one node, Q17) | `phase-6`, `v0.6.0` |
 | Phase 7: Editable ERP blocks, plugins, AI | Done, 2026-11-15 (0.7.0; proven against the mocks in CI and against the real ERP run locally; pushing Track E6 and E7, and the live test against Anthropic, are yours) | `phase-7`, `v0.7.0` |
+| Phases 8 to 10 | Planned, 2026-11-15 ("Later" reviewed with you; `IMPLEMENTATION_PLAN.md`, `DECISIONS.md`) | |
 | Track U: `CashGear.React.UI` components | Not started | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), committed there and not pushed | |
@@ -907,6 +908,10 @@ Notes
   a Workspace table); Customers and Items on hand editable; AI embeddings (`PageEmbeddings`) and
   the subscription and local-model modes; third-party plugins in sandboxed iframes; the live test
   against Anthropic (needs your key: `ANTHROPIC_API_KEY`, CLAUDE.md's command).
+- "Later" reviewed with you on 2026-11-15 (the definition of done's last item): Phases 8 to 10 are
+  in `IMPLEMENTATION_PLAN.md`, the answers in `DECISIONS.md`. Customers and Items on hand,
+  embeddings and third-party plugins are Phase 10's; the subscription and local-model modes stay
+  on "Later".
 
 Exit criteria
 
