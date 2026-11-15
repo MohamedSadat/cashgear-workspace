@@ -537,3 +537,6 @@ Added as they are found, grouped by phase.
 - The app shows one notice at a time, and a later one replaces the text of the element the earlier
   one drew: a probe that records each new `.cgw-notice` element (as `collab.ts`'s `probes` does)
   misses it. Record each text the element shows.
+- The hub sends a frame marked `complete: false`, with no updates, when the worker's compaction
+  (every 200 updates) has taken rows between the relay's two reads. Any client of the hub, a
+  bench's or a test's too, must pull the page then, as the app does, or it misses those updates.

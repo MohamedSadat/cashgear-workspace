@@ -890,6 +890,19 @@ Notes
   but its helper allowed 300 waits of 5 ms, which last about 5.4 s on the reference machine
   (Windows rounds each up) and 1.5 s where the timers are finer, as on that runner. The helper is
   bounded by time now (5 s, that case 8 s).
+- CI run 43754497761 (`c168a1e`) failed Phase 6's gate on the relay p95 alone: 427 ms, inside CI's
+  500 but more than half again the last run's 122.5 (CI's own figure has read 122.5 to 282.5 ms; no
+  change since touched the hub). CI run 43764175809 (`7fa20ad`, on a new runner type, AMD EPYC
+  9V74) failed it on "114 relayed updates never received" and documents that differed: the hub
+  relayed 2,823 of the 2,829 updates, and the other 6 (114 is 6 for each of 19 editors) were in a
+  frame marked `complete: false`, which the relay sends when the worker's compaction (every 200
+  updates) has taken rows between its two reads. The app pulls the page after such a frame
+  (SYNC_DESIGN.md); the bench's Node editors did not, so they never had those 6. They pull now
+  (again when a compaction deleted the snapshot the answer named), and what reached an editor
+  only by a pull is counted apart; anything neither way, or a document that differs, still fails
+  the run. Proven locally with every 25th frame taken as incomplete (a change not committed): 2,927
+  keys, 31 incomplete frames, 2,242 receipts by a pull, 20 pulls made again for a snapshot gone, 0
+  never received, converged, every budget met. Its first run had found the deleted snapshot.
 - By hand in the browser (the e2e stack, the mocks, a throwaway account): Settings with a local
   workspace, then synced; Settings' AI section in dark English; the AI panel in light Arabic,
   right to left, a summary proposed, inserted at the page's top, "Ctrl+Z undoes it". It found the
