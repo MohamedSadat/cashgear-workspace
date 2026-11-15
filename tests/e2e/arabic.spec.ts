@@ -29,10 +29,12 @@ import {
 // outside what the person wrote (page titles, page content, the workspace name) must have no
 // English word. Key names are allowed: shortcuts are shown as the keys are labelled; and so is the
 // CSV format's name (Phase 4: "Import a CSV file…"), which Arabic writes as it is, and from Phase 5
-// the Cash Gear products' names («فتح في Cash Gear Sheet», «بيانات ERP»), which are not translated.
+// the Cash Gear products' names («فتح في Cash Gear Sheet», «بيانات ERP»), which are not translated;
+// from Phase 7 also the AI provider's and its models' names (Anthropic, Claude Opus 5.5), shown in
+// Settings' AI section on every screen walked there.
 
 const KEYS =
-  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP)\b/g;
+  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?)\b/g;
 
 /**
  * What the person wrote or another system holds, beyond the main screens' own (Phase 5): names
@@ -320,8 +322,7 @@ test('the Arabic comments, inbox and presence have no English of their own', asy
 
 // Phase 7's screens in Arabic: a chart block, an ERP block editing a vendor and its review, the AI
 // panel with a proposal, Settings' AI section; against the server stack, the mock ERP and the mock
-// provider (phase7.ts's scene, made in English). Anthropic's and its models' names are product
-// names, kept in Latin as the catalogue keeps them.
+// provider (phase7.ts's scene, made in English).
 test('the Arabic chart, ERP editing, AI panel and AI settings have no English of their own', async ({
   page,
 }) => {
@@ -343,10 +344,6 @@ test('the Arabic chart, ERP editing, AI panel and AI settings have no English of
         'Chrome on Windows',
         'Edge on Windows',
         'Browser',
-        'Anthropic',
-        'Claude Opus 5.5',
-        'Claude Sonnet 5.5',
-        'Claude Haiku 5.5',
       ].sort((a, b) => b.length - a.length),
     };
     const found: string[] = [];

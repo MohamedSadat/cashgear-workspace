@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { editor, newPage, waitSaved } from './helpers';
 import { pageId } from './database';
+import { syncStatus } from './cloud';
 import { pageActions, restrict, team, type Team } from './collab';
 import {
   chooseConnector,
@@ -221,6 +222,8 @@ test('ask cites only pages the person can read, and sends no other page', async 
   await pageWith(page, 'Zephyr plan', ['The Zephyr budget is approved.']);
   const open = pageId(page);
   await pageWith(page, 'Zephyr secret', ['The Zephyr salaries are private.']);
+  // The server holds the page before its access is changed (Edge on CI asked a moment early).
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   await restrict(current, pageId(page), []);
   // The server's search finds both for the owner once the worker has indexed them.
   await expect

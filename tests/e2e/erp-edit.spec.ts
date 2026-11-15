@@ -328,8 +328,10 @@ test('nothing stored: after editing ERP data, none of it, nor what was typed, is
   const errors = watchAppErrors(page);
   const { api, block, workspaceId } = await vendorsPage(page, 'Keeper', 'faris');
   const markers = await erpMarkers();
-  // What the person types becomes ERP data: made-up words found nowhere else.
-  const typed = ['Brinmoorvale Steelworks', 'Qorvathine Depot'];
+  // What the person types becomes ERP data: made-up words found nowhere else, new each run (a
+  // real ERP keeps what the last browser's run committed, and typing it again is no change).
+  const run = Date.now().toString(36);
+  const typed = [`Brinmoorvale Steelworks ${run}`, `Qorvathine Depot ${run}`];
   try {
     await block.getByRole('button', { name: 'Edit data', exact: true }).click();
     await change(block, 'V-1001', 'vendorName', typed[0]!);
