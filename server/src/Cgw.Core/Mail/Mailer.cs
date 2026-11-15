@@ -31,7 +31,12 @@ public sealed class Mailer(IConfiguration configuration, ILogger<Mailer> logger)
         {
             Directory.CreateDirectory(pickup);
             var file = Path.Combine(pickup, $"{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}.eml");
-            await mime.WriteToAsync(file, ct);
+            // Written whole under another name, then renamed: a reader of the folder never opens a
+            // mail being written (on Linux the writer's lock comes after the file exists, and a
+            // reader holding it then made the write fail and the mail was lost).
+            var partial = file + ".partial";
+            await mime.WriteToAsync(partial, ct);
+            File.Move(partial, file);
             logger.LogInformation("Mail to the pickup folder: {Subject}", message.Subject);
             return;
         }
