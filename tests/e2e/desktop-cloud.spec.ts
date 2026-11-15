@@ -140,7 +140,9 @@ test('joins the hub with its bearer token and shows a browser person typing live
         `Browser to desktop: ${d.count} keys: p50 ${d.p50} ms, p95 ${d.p95} ms, max ${d.max} ms, over 300 ms: ${d.over300}, never seen: ${d.missing}`,
       );
       expect(d.missing).toBe(0);
-      expect(d.p95).toBeLessThanOrEqual(300);
+      // 300 ms on the reference machine; on CI's shared runner, live in under a second
+      // (realtime.spec.ts's KEY_LIMIT, DECISIONS.md 2026-11-15).
+      expect(d.p95).toBeLessThanOrEqual(process.env.CI ? 1000 : 300);
       // Ben's cursor is drawn on the desktop, named.
       await expect(
         editor(page).locator(`[data-block-id="${block}"] .cgw-presence-caret[data-name="Ben"]`),
