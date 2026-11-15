@@ -155,6 +155,44 @@ describe('a change through the session', () => {
     await expect(second).rejects.toThrow('The store refused it');
     expect(session.record(row.id)?.title).toBe('Shown at once');
   });
+
+  // A row renamed and its page closed at once lost the title in database.spec.ts (Chrome, Edge),
+  // while the status read "Saved": it followed the document alone.
+  it('is "saving" from the moment it is asked for until the store has it, and "unsaved" while held', async () => {
+    const { store, session, databaseId } = await localDatabase();
+    const row = session.mirror.rowsOf(databaseId)[0];
+    const states: string[] = [];
+    session.onWriteState(() => states.push(session.writeState));
+    let release: (() => void) | undefined;
+    const write = store.applyLocalOps.bind(store);
+    store.applyLocalOps = async (ops) => {
+      await new Promise<void>((done) => (release = done));
+      return write(ops);
+    };
+    expect(session.writeState).toBe('saved');
+    // A title waiting on its pause, then written: "Saved" never shows between.
+    const letGo = session.holdEdit();
+    expect(session.writeState).toBe('unsaved');
+    const renamed = session.updatePage(row.id, { title: 'Renamed' });
+    letGo();
+    letGo();
+    expect(session.writeState).toBe('saving');
+    await until(() => !!release, 'the write to start');
+    expect(session.writeState).toBe('saving');
+    release!();
+    await renamed;
+    expect(session.writeState).toBe('saved');
+    expect(((await store.getPage(row.id)) as RowRecord).title).toBe('Renamed');
+    expect(states).toEqual(['unsaved', 'saving', 'saved']);
+    // A visit is not the person's edit: the status does not wait for it.
+    release = undefined;
+    const visit = session.recordVisit(row.id);
+    expect(session.writeState).toBe('saved');
+    await until(() => !!release, 'the visit to start');
+    release!();
+    await visit;
+    expect(states).toEqual(['unsaved', 'saving', 'saved']);
+  });
 });
 
 describe('the database host on a local workspace', () => {

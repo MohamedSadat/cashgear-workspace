@@ -336,6 +336,8 @@ test('a row opens as a page with its properties, and keeps its body', async ({ p
   // The title is the row's title property.
   await page.getByLabel('Page title').fill('Review the budget again');
   await page.getByLabel('Page title').press('Enter');
+  // "Saved" covers the title's write too (it once followed the body alone, and a restart straight
+  // after lost the title twice on CI): nothing else is waited for.
   await waitSaved(page);
   const again = await restart();
   await again.goto('/');

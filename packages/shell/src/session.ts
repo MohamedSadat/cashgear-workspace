@@ -128,6 +128,13 @@ export class WorkspaceSession {
   private queue: Promise<unknown> = Promise.resolve();
   /** Edits waiting on a delay of their own (a title being typed), written by `flushAll`. */
   private readonly flushers = new Set<() => Promise<void> | void>();
+  /**
+   * What the save status adds to the open document's (`writeState`): changes asked for and not
+   * yet in the store, and edits held on a pause of their own.
+   */
+  private applying = 0;
+  private holding = 0;
+  private readonly writeListeners = new Set<() => void>();
   private workspace: Id | null;
   private readonly listeners = new Set<() => void>();
   private readonly resetListeners = new Set<(pageId: Id) => void>();
@@ -295,8 +302,49 @@ export class WorkspaceSession {
     };
   }
 
-  /** Plans against the mirror, writes through the store, then shows. One at a time. */
+  /**
+   * Plans against the mirror, writes through the store, then shows. One at a time. Until the
+   * store has the change, the save status says "Saving" (a visit is no edit, and is not counted).
+   */
   apply(ops: Operation[]): Promise<void> {
+    if (!ops.some((op) => op.type !== 'visit.record')) return this.applyNow(ops);
+    // Counted at once, before the queue: a page closed straight after the change was asked for
+    // (a title's Enter) is never told it is saved while the write waits behind others.
+    this.countWrites(1, 0);
+    return this.applyNow(ops).finally(() => this.countWrites(-1, 0));
+  }
+
+  /**
+   * Whether this session's own changes are in the store: `unsaved` while an edit is held on a
+   * pause (a title being typed), `saving` while a change is being written, else `saved`.
+   */
+  get writeState(): 'saved' | 'saving' | 'unsaved' {
+    return this.holding ? 'unsaved' : this.applying ? 'saving' : 'saved';
+  }
+
+  onWriteState(listener: () => void): () => void {
+    this.writeListeners.add(listener);
+    return () => void this.writeListeners.delete(listener);
+  }
+
+  /** An edit held back for a moment (the title's pause): "Unsaved" until the release is called. */
+  holdEdit(): () => void {
+    let held = true;
+    this.countWrites(0, 1);
+    return () => {
+      if (held) this.countWrites(0, -1);
+      held = false;
+    };
+  }
+
+  private countWrites(applying: number, holding: number) {
+    const before = this.writeState;
+    this.applying += applying;
+    this.holding += holding;
+    if (this.writeState !== before) for (const listener of this.writeListeners) listener();
+  }
+
+  private applyNow(ops: Operation[]): Promise<void> {
     return this.serial(async () => {
       // The rows a plan reads (the database's, and those its relations point into) are here first.
       await this.prepareRows(ops);

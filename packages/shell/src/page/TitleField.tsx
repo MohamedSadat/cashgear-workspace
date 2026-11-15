@@ -23,6 +23,8 @@ export function TitleField({
   const { t } = useTranslation();
   const [draft, setDraft] = useState(page.title);
   const pending = useRef<number | null>(null);
+  /** While a title waits on its pause, the save status says it is not saved (`holdEdit`). */
+  const held = useRef<(() => void) | null>(null);
   const editing = useRef(false);
   const field = useRef<HTMLTextAreaElement>(null);
 
@@ -38,7 +40,12 @@ export function TitleField({
   const commit = (value: string): Promise<void> | undefined => {
     if (pending.current !== null) clearTimeout(pending.current);
     pending.current = null;
-    if (value !== page.title) return session.updatePage(page.id, { title: value });
+    const write = value !== page.title ? session.updatePage(page.id, { title: value }) : undefined;
+    // Let go only once the write is counted (it is, as `updatePage` is called): the status goes
+    // from "Unsaved" to "Saving", never "Saved" between.
+    held.current?.();
+    held.current = null;
+    return write;
   };
 
   // Leaving the page with a title still waiting to be saved saves it now; so does the session's
@@ -78,6 +85,7 @@ export function TitleField({
         const value = event.target.value.replace(/\n/g, ' ');
         setDraft(value);
         if (pending.current !== null) clearTimeout(pending.current);
+        held.current ??= session.holdEdit();
         pending.current = window.setTimeout(() => void commit(value), 400);
       }}
       onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {

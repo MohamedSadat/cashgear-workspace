@@ -609,6 +609,7 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
               {onScreen && <Breadcrumbs session={session} page={onScreen} />}
               <SaveStatus
                 doc={route.kind === 'page' && onScreen?.kind !== 'database' ? openDoc : null}
+                session={session}
               />
               {onScreen && onScreen.kind !== 'database' && account && (
                 <TopBarPresence collab={collab} session={session} page={onScreen} />
@@ -728,18 +729,29 @@ function StoreTooNew({ platform }: { platform: WorkspacePlatform }) {
 }
 
 /**
- * Whether the open page is saved. Drawn without React: a React commit while the editor has focus
- * reads the editor's selection offsets, which walks the page's DOM (about 14 ms at 5,000 blocks),
- * and the state changes several times a second while typing.
+ * Whether the open page is saved: its document, and the session's own changes (a title, a
+ * property, a move), which are in the store only a moment after they show. Drawn without React: a
+ * React commit while the editor has focus reads the editor's selection offsets, which walks the
+ * page's DOM (about 14 ms at 5,000 blocks), and the state changes several times a second while
+ * typing.
  */
-function SaveStatus({ doc }: { doc: PageDocument | null }) {
+function SaveStatus({ doc, session }: { doc: PageDocument | null; session: WorkspaceSession }) {
   const { t } = useTranslation();
   const label = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = label.current;
     if (!el || !doc) return;
     const show = () => {
-      const state = doc.saveState;
+      const own = doc.saveState;
+      const writes = session.writeState;
+      const state =
+        own === 'error' || own === 'readOnly'
+          ? own
+          : own === 'unsaved' || writes === 'unsaved'
+            ? 'unsaved'
+            : own === 'saving' || writes === 'saving'
+              ? 'saving'
+              : 'saved';
       el.dataset.state = state;
       el.textContent =
         state === 'saved'
@@ -753,8 +765,13 @@ function SaveStatus({ doc }: { doc: PageDocument | null }) {
                 : t('page.readOnly');
     };
     show();
-    return doc.onSaveState(show);
-  }, [doc, t]);
+    const offDoc = doc.onSaveState(show);
+    const offSession = session.onWriteState(show);
+    return () => {
+      offDoc();
+      offSession();
+    };
+  }, [doc, session, t]);
   if (!doc) return null;
   return (
     <span
