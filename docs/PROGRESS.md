@@ -707,7 +707,34 @@ Notes
   `asset.url` once in a full `pnpm check`, then passed 4 of 4 alone and in the whole suite.
   `database.spec.ts` "a row opens as a page..." (a workspace on this device only) lost the row's
   new title across the restart in two CI runs (Edge, then Chrome), as once in Phase 5; passed on
-  retry.
+  retry. It was not flaky: a saved title was lost (below, `ec15494`).
+- **Follow-ups after 0.6.0 (2026-11-15): text reported saved, then lost** (`DECISIONS.md`).
+  - Refused own updates (`84280a5`). When the worker refused a device's own updates, the engine
+    used to set them aside at once, so text it had reported saved never reached the server. Now
+    a refusal goes to repair: the page's whole state, which carries what the refused updates
+    referred to. Only what no repair can carry is set aside as before.
+  - Unit evidence: `realtime.test.ts` "repairs when the worker refuses the device's own updates"
+    reproduces the compaction bug's store. The fake server refuses everything that refers to the
+    key it lacks; one repair follows, the server and the other device hold every word, nothing
+    is set aside and no notice is shown. `offline.test.ts` "updates the worker refuses" covers the
+    same over HTTP: across a stop before the repair, with the repair's answer lost (sent again
+    under its id, kept once), refusals counted as waiting until the repair is taken, and
+    set-aside as before when edit access went meanwhile. Five of these six fail on the old
+    engine.
+  - Kill test: `node scripts/kill-test.mjs --target desktop --sync --runs 100` gave 0 failures.
+    Its 377 saved-text checks all held; 41 kills came while saving, 9 during a request and 2
+    during a compaction (both committed). 28 kills came offline or with the API cut off. All 4
+    server checks were equal, and the final text was 5,551 characters on the device and on the
+    server. The kept store held no refusal and nothing in its corrupt area.
+  - The row's title (`ec15494`). The save status followed the open document alone. A title
+    renamed with Enter shows at once and is in IndexedDB a few milliseconds later, so the spec's
+    `waitSaved` passed while the write was open, and the restart closed the page. IndexedDB
+    aborts a transaction whose page goes, so a person closing the tab then lost it too. The
+    status now covers the session's own changes and a title on its pause.
+  - Row-title evidence: `phase4.test.ts` "is 'saving' from the moment it is asked for...". With
+    the CPU slowed 12× (a probe, not kept), the status read "Saving…" when Enter returned in 7 of
+    8 renames (it used to read "Saved"), and the title was in IndexedDB each time it said
+    "Saved". The spec passed 10 of 10 in Chrome and 10 of 10 in Edge.
 - Left for later: comments offline (online only in 0.6.0, by decision); notifications by email;
   comments, mentions and presence for a share link's readers (by decision, none); an end-to-end
   test of access lost behind the feed's back (the hub's 60 s re-check; the server's tests cover

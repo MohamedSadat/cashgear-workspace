@@ -147,7 +147,12 @@ Autosave is local and needs no network.
 2. The document layer batches updates for at most 500 ms, merges the batch into one update, and
    calls `appendDocUpdates`.
 3. The save indicator shows "Saved" when the write returns. Budget: durable within 1 s of the
-   last keystroke.
+   last keystroke. As built after Phase 6, it also covers the session's own changes to the page,
+   such as its title, its icon or a row's properties. These show at once and are in the store a
+   moment later, so the indicator says "Saving" from the moment a change is asked for until the
+   store has it. It says "Unsaved changes" while a title waits on its 400 ms pause. Before this,
+   the indicator followed the document alone. A row renamed with Enter and closed straight after
+   was told "Saved" and lost its title (`database.spec.ts`, twice on CI).
 4. On close, on `visibilitychange` to hidden, and on the desktop window's close request, any
    pending batch is flushed first.
 5. When a page has more than 200 stored updates, the document layer writes a compacted state with
@@ -231,7 +236,18 @@ GET /api/v1/pages/{pageId}/doc?after=1040
 - `after` is the highest sequence the client has applied. With `after=0`, or when the rows after
   `after` have been compacted away, the answer includes a snapshot and the updates after it.
 - Only valid updates up to the validated head are served; a refused one is never served, and its
-  pusher finds it in `rejected` and keeps it aside (the store's corrupt area).
+  pusher finds it in `rejected`. As built after Phase 6: the pusher does not set its own refused
+  updates aside at once. It sends a repair (below) with its whole state, which carries whatever
+  they referred to and the server lacked, so what was typed reaches the server. A device whose
+  local compaction kept a key in its snapshot that no update carried had everything typed after
+  that key refused, and lost it. The refusal is kept in a preference per workspace
+  (`sync:refused:<workspaceId>`) before the cursor moves past the answer that reported it. The
+  repair is kept there too, under its own update id, before it is sent. A stop at any moment
+  therefore sends it again, and the server keeps the first. Refused updates count as waiting
+  until the repair passes the worker. Only when that whole state is refused too, or cannot be
+  sent, are they kept aside as before (the store's corrupt area, `doc.refused`). That happens
+  when the account can no longer edit, the page is gone, the epoch changed, or the state is over
+  1 MB.
 - A device that pushed an update recognises it in a pull by its `updateId` and only records its
   sequence.
 - A client applies updates in any order and any number of times; Yjs makes that safe.
