@@ -133,7 +133,10 @@ function kill(child) {
   }
   // Its children outlive it for a while (Chrome's utility processes hold the profile's
   // IndexedDB open): ended too, found by the parent id Windows keeps for an orphan, before the
-  // app is started again, as a restart after a crash finds them gone.
+  // app is started again, as a restart after a crash finds them gone. And any other process of
+  // this profile (by its path in the command line, as `sweep` finds them): a WebView2 process
+  // that escaped the tree held the profile, and the next start timed out (CI run 43679261197,
+  // twice in 25 runs; each started on its retry).
   if (process.platform === 'win32')
     spawnSync(
       'powershell.exe',
@@ -141,7 +144,7 @@ function kill(child) {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        `$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId; function Kids($id) { foreach ($p in $all) { if ($p.ParentProcessId -eq $id -and $p.ProcessId -ne $id) { $p.ProcessId; Kids $p.ProcessId } } }; Kids ${child.pid} | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }`,
+        `$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine; function Kids($id) { foreach ($p in $all) { if ($p.ParentProcessId -eq $id -and $p.ProcessId -ne $id) { $p.ProcessId; Kids $p.ProcessId } } }; @(Kids ${child.pid}) + @($all | Where-Object { $_.CommandLine -like '*${tag}*' -and $_.ProcessId -ne $PID } | ForEach-Object { $_.ProcessId }) | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }`,
       ],
       { windowsHide: true, stdio: 'ignore' },
     );
