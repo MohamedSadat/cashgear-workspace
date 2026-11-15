@@ -33,6 +33,39 @@ export async function newPage(page: Page, title = 'Scratch') {
 
 export const editor = (page: Page): Locator => page.locator('.cgw-page .cgw-editor');
 
+/**
+ * Waits until the editor has read the caret the browser shows. ProseMirror takes a click's caret
+ * from the selection change that follows it, which a busy page handles after keys already
+ * queued: Enter or a shortcut pressed at once would act on the old selection.
+ */
+export async function caretSettled(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const el = document.querySelector('.cgw-page .ProseMirror') as unknown as {
+          editor?: {
+            isFocused: boolean;
+            view: {
+              state: { selection: { head: number } };
+              posAtDOM(node: Node, offset: number): number;
+            };
+          };
+        } | null;
+        const selection = getSelection();
+        if (!el?.editor?.isFocused || !selection?.focusNode) return false;
+        const { view } = el.editor;
+        try {
+          return (
+            view.posAtDOM(selection.focusNode, selection.focusOffset) === view.state.selection.head
+          );
+        } catch {
+          return false;
+        }
+      }),
+    )
+    .toBe(true);
+}
+
 /** Each top-level block's id and text, in order. */
 export async function blocks(
   page: Page,

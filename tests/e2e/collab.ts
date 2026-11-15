@@ -297,6 +297,42 @@ export async function caretIn(page: Page, blockId: string, at: 'start' | 'end') 
   const box = (await body.boundingBox())!;
   await body.click({ position: { x: 3, y: Math.min(10, box.height / 2) } });
   await page.keyboard.press(at === 'start' ? 'Home' : 'End');
+  // The editor reads a click's caret a moment after it (a busy CI runner takes tens of
+  // milliseconds): a shortcut pressed before then acts on the old selection, another block's.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ id, at }) => {
+          const view = document.querySelector('.cgw-page .ProseMirror') as unknown as {
+            editor: {
+              isFocused: boolean;
+              state: {
+                selection: {
+                  empty: boolean;
+                  $head: {
+                    depth: number;
+                    parentOffset: number;
+                    parent: { content: { size: number } };
+                    node(depth: number): { attrs: { id?: string } };
+                  };
+                };
+              };
+            };
+          };
+          const { isFocused, state } = view.editor;
+          const { empty, $head } = state.selection;
+          let inBlock = false;
+          for (let d = $head.depth; d > 0 && !inBlock; d--) inBlock = $head.node(d).attrs.id === id;
+          // End reaches the end of the first line, which is the text's end unless it wraps.
+          const size = $head.parent.content.size;
+          const placed =
+            at === 'start' ? $head.parentOffset === 0 : $head.parentOffset > 0 || size === 0;
+          return isFocused && empty && inBlock && placed;
+        },
+        { id: blockId, at },
+      ),
+    )
+    .toBe(true);
 }
 
 /** Watches a block's text in a page: every DOM change's time and the block's text then. */

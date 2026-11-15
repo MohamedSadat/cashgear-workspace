@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { desktop, expect, test } from './fixtures';
-import { createWorkspace, editor, newPage, waitSaved } from './helpers';
+import { caretSettled, createWorkspace, editor, newPage, waitSaved } from './helpers';
 import { newAccount, syncStatus } from './cloud';
 import { signedInWorkspace, signers } from './database';
 import {
@@ -348,6 +348,7 @@ test.describe('accessibility of workbooks and ERP data', () => {
           // The workbook picker, from the slash menu.
           await editor(page).getByText('Checked by Axe.').click();
           await page.keyboard.press('End');
+          await caretSettled(page);
           await page.keyboard.press('Enter');
           await page.keyboard.type(language === 'ar' ? '/مصنف موجود' : '/existing');
           await page.getByRole('option', { name: /^(Existing workbook|مصنف موجود)/ }).click();
