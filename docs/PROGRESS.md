@@ -19,7 +19,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 7: Editable ERP blocks, plugins, AI | In progress (questions answered 2026-11-15) | |
 | Track U: `CashGear.React.UI` components | Not started | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
-| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), committed there and not pushed; E6 and E7 for Phase 7 | |
+| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), committed there and not pushed | |
 
 ## Planning
 
@@ -790,22 +790,93 @@ Stand-ins for Track U
 
 ## Phase 7: Editable ERP blocks, plugins, AI
 
+CI run for the evidence below: CI_RUN_PENDING. Local results are from the reference machine
+(Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, WebView2, SQL Server LocalDB, Azurite),
+the e2e server stack (`scripts/server-stack.mjs --e2e`, its API pointed at the mock provider) and
+the mocks (`tests/mocks`: Sheet, ERP, and Phase 7's AI provider). Answers and defaults are in
+`DECISIONS.md` (2026-11-15: Phase 7); the contracts as built in `INTEGRATIONS.md`; what changed
+for users in `CHANGELOG.md` (0.7.0).
+
 Milestones
 
-- [ ] M7.1 Editable ERP blocks
-- [ ] M7.2 Plugin blocks
-- [ ] M7.3 AI foundation
-- [ ] M7.4 AI features
+- [x] M7.1 Editable ERP blocks. Commits `0128dee` (`Commit` and `CommitStatus` in `erp-connect.1`,
+      written in full first), `173029d` (`@cgw/erp`'s guards, drafts, the editing, review, conflict
+      and AI-prepare screens; the mock ERP's commit; the suite's commit cases), `81950ed` (the
+      `erp-commits` audit route), `fd0df42` (the tab's drafts, the leave warning). Track E6 and E7
+      in the ERP: below
+- [x] M7.2 Plugin blocks. Commits `ca85a4d` (document schema 6 with `pluginBlock`, its migration
+      and fixture, known to the worker), `6128f40` (the plugin block's frame and placeholder),
+      `89ad293` (`@cgw/plugins`: `BlockDefinition`, chart and kanban), `fd0df42` (the host, slash
+      commands)
+- [x] M7.3 AI foundation. Commit `81950ed` (`IAiProvider`, the Anthropic provider over the official
+      C# SDK, settings per workspace, the key under Data Protection, metering, audit, the off
+      switch, the mock provider)
+- [x] M7.4 AI features. Commits `81950ed` (every action's request, `ask` over the person's own
+      search), `6128f40` (the selection and accepted proposals as one undoable edit), `fd0df42`
+      (the AI panel, Settings' AI section, the ERP assist kept off `Commit`)
+
+Notes
+
+- The work ran as four streams in one checkout to the contracts written first (ERP editing,
+  plugin blocks, AI on the server, AI in the client), then a proof stream; Tracks E6 and E7 ran in
+  a session of their own in `CashGear` (decisions, 2026-11-15).
+- Track E6 and E7: ERP commits `a97528cd`, `51da67ee`, `85dbb246`, `006f8c4d`, `89729d72` in
+  `CashGear`, **committed locally, not pushed** (its `main` holds your own unpushed commits). One
+  commit path for Sheet and Workspace (`SheetCommitService` with a Workspace caller): the same
+  checks, locks, idempotency and audit, Sheet's SQL and answers byte for byte unchanged; the audit
+  rows and the system log name the workspace, page and block. New tenant script
+  `Add_WorkspaceCommitAudit.sql`, applied to LocalDB only. The ERP's tests: SQLite 138 passed
+  (24 skipped), LocalDB 161 passed; the failures left are your uncommitted `appsettings.json` and
+  `VendorModel.cs` edits, as before. Sheet's own suite against it: 44 passed, 16 skipped, 0 failed,
+  as at E5. Workspace's `erp-connect.1` suite against UnifiedAPI on LocalDB: 49 passed, 21
+  mock-only skipped, 0 failed, with its files run one after another (their link is shared on a
+  real server: `pnpm contract:erp` now runs them so).
+- The proof found and fixed one old product bug and four of Phase 7's: a duplicated, pasted or
+  id-less block could not be undone (latent since Phase 1; the block-id plugin's appended fix took
+  the person's change out of history, `81586e0`); the AI switch sprang back while its save was out;
+  the chart's selects and title were named with their values ("Chart Bar"); two targets under 24
+  px (the chart's title, `CgChart`'s "Chart data" toggle) and the ERP block's pressed buttons at
+  3.95:1 (Axe).
+- Left for later: snapshotting an ERP view into a database (not built: it would store ERP data in
+  a Workspace table); Customers and Items on hand editable; AI embeddings (`PageEmbeddings`) and
+  the subscription and local-model modes; third-party plugins in sandboxed iframes; the live test
+  against Anthropic (needs your key: `ANTHROPIC_API_KEY`, CLAUDE.md's command).
 
 Exit criteria
 
 | Criterion | Result | Evidence |
 | --- | --- | --- |
-| ERP edits written only after review and commit, audited, conflicts shown | | |
-| No commit without the edit privilege, by any request | | |
-| A plugin block survives a build without the plugin | | |
-| AI off sends nothing; AI on sends only readable content; output enters on accept | | |
-| No AI path reaches `Commit` | | |
+| ERP edits written only after review and commit, audited, conflicts shown | Pass | `erp-edit.spec.ts` "an ERP edit is written only after review and commit, names its page in the ERP’s audit, and a change made in the ERP is shown, not overwritten" (Chrome): a changed address is held in the tab (the ERP unchanged), "Review changes" is a dry run that writes nothing and stores no audit, "Commit" writes it; the mock's audit row names the field, its value before and after, the workspace, page and block; Workspace's `erp-commits` report carries the link, connector, commit id, outcome and counts, never a value. A name changed in the ERP meanwhile is shown beside the person's and kept until they choose; a change in the ERP between a clean review and Commit gets the commit's 409, the conflict screen, the ERP's value kept, and a `conflict` report. Against the real ERP: `WorkspaceCommitTests` and `WorkspaceCommitLocalDbTests` in `CashGear` (the audit rows and system log naming workspace, page and block; 6 concurrent commits of one record: 1 written, 5 409; racing retries one write) and the suite's commit cases against UnifiedAPI on LocalDB (Track E7, above). `ErpCommitTests` (the route's access and audit). Unit: `packages/erp/src/drafts.test.ts`, `commit.test.ts`, `view/editing.test.ts` |
+| No commit without the edit privilege, by any request | Pass | `erp-edit.spec.ts` "a person without the edit privilege gets no editing, and a commit by any request is refused": alice (view) gets no "Edit data", and a session of hers from the app's own origin is refused 403 `privilege.denied` for a dry run and a commit, no session 401. The suite's `commit.test.ts` "no commit without Edit by any request" (mock and UnifiedAPI), and the ERP's `WorkspaceCommitTests` (checks 1 to 3, a view-only user with a malformed body, Edit taken away mid-session) |
+| A plugin block survives a build without the plugin | Pass | `plugins.spec.ts` "a plugin type this build does not know is kept as it was, with a placeholder naming it" (a `vendor.timeline` block from a later build, edited around and reloaded: its attributes unchanged); `old-build.spec.ts` "the v0.6.0 build shows a page with plugin blocks read-only, sends nothing but visits, and the server keeps its bytes" (Chrome). Unit: `packages/editor/src/plugins.test.ts` (an unknown `pluginBlock`'s attributes byte for byte after edits around it), `packages/doc/src/version6.test.ts`, `packages/plugins/src/props.test.ts` (unknown props kept on write); the worker: `DocTests` "Schema 6 is known…" and `cgw-ydoc`'s `version_6_plugin_block_writes_nothing…`. Also "a chart and a kanban board over a database: drawn from its rows, set, and a card moved" and "plugin blocks read in Arabic and in the dark theme" |
+| AI off sends nothing; AI on sends only readable content; output enters on accept | Pass | `ai.spec.ts` (Chrome) "with AI off, no AI control is shown and no request leaves for any provider" (also asked directly: 403 `ai.disabled`, the mock provider received nothing); "on, each action sends only what it needs, and its answer enters only on Accept" (the key once, never read back; a rewrite sends the selection alone; a summary the page's text; a database the prompt alone; each answer outside the page until Accept, then one edit Undo takes back); "ask cites only pages the person can read, and sends no other page" (a restricted page never reaches the provider nor the sources). `desktop-cloud.spec.ts` "asks AI for a summary with its bearer token and puts it in only on Accept" (the desktop app). Server: `AiTests` (off sends nothing for every action, server-wide and per workspace; `ask` never sends a restricted, private, trashed or other workspace's page; the key in no answer, log line or audit row; settings by role), `AiRequestBuilderTests` (each action's request holds only its named inputs) |
+| No AI path reaches `Commit` | Pass | Client: `packages/shell/src/ai/boundary.test.ts` (from every module of `packages/shell/src/ai`, following value imports across the packages, no module of `@cgw/erp` but its type-only `./ai`, and none of `packages/shell/src/erp`, is reached; a control from the ERP host does reach the client) and the lint rule that refuses `@cgw/erp` there. Server: `AiTests` "the Ai module has no path to the ERP" (no Workbooks or ERP type in it, by reflection and source). End to end: `ai.spec.ts` "the ERP prepare fills pending changes, and nothing reaches Commit" (proposals marked "Prepared by AI", the mock ERP saw no commit, not even a dry run's) |
+
+Also: `a11y.spec.ts` "Axe finds nothing on the chart, ERP editing and review, the AI panel and its
+settings (light and dark, English and Arabic)"; `arabic.spec.ts` "the Arabic chart, ERP editing,
+AI panel and AI settings have no English of their own"; `erp-edit.spec.ts` "leaving a page with
+ERP changes not committed asks first" and "nothing stored: after editing ERP data, none of it, nor
+what was typed, is in any store, the document or search". Unit: 2,608 tests in `pnpm test`, 252
+server tests; all 17 standing checks pass.
+
+Benchmarks (`bench/phase7.mjs`, gated in CI against the budgets and the last run on `main`)
+
+| Budget | Limit | CI | Local, run 1 | Local, run 2 |
+| --- | --- | --- | --- | --- |
+| Review of 500 changed records, less the ERP's dry run, p95 | 2 s | CI_REVIEW | 233.8 ms | 209.4 ms |
+| The ERP's own time in it, p95 | tracked | CI_REVIEW_ERP | 71.9 ms | 115 ms |
+| First AI token, less the provider's own time, p95 | 2 s | CI_TOKEN | 68.9 ms | 78.9 ms |
+
+The first run with Phase 7's figures has no earlier run on `main`, so the regression half of the
+gate starts with the next one. The provider is the mock (its own time to the first text 0 to 2
+ms); a real provider's time is the provider's, as the budget says.
+
+Stand-ins and defects for Track U
+
+| Item | Where |
+| --- | --- |
+| `CgChart`'s "Chart data" toggle (a `summary`) is 20 px high, under WCAG 2.2's 24 px target | `packages/plugins/src/plugins.css` raises it inside a plugin block |
+| `CgButton appearance="soft" intent="primary"` reads 3.95:1 in the light theme (#1769ff on #e3edff) | the ERP block's pressed buttons use `outline` instead |
 
 ## Track U: `CashGear.React.UI`
 
@@ -833,5 +904,5 @@ Exit criteria
 - [x] E3 Connect flow in the ERP client (ERPClient_React `008fe3b`, local)
 - [x] E4 Read-only connectors: Vendors, Customers, Items on hand (`10a7393b`, `d6a1a684`)
 - [x] E5 Rate limiting and CORS on the connect routes (`10a7393b`); Workspace's `erp-connect.1` suite against UnifiedAPI on LocalDB: 39 passed, 0 failed
-- [ ] E6 Editable connectors and audit
-- [ ] E7 Contract suite against UnifiedAPI
+- [x] E6 Editable connectors and audit (CashGear `a97528cd`, `51da67ee`, `85dbb246`, local; the tenant script `Add_WorkspaceCommitAudit.sql`)
+- [x] E7 Contract suite against UnifiedAPI (`006f8c4d`, `89729d72`, local; Workspace's suite on LocalDB: 49 passed, 21 mock-only skipped, 0 failed)

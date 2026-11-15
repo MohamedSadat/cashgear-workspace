@@ -70,7 +70,7 @@ Fixed by spike S1 (DECISIONS.md, 2026-11-11: Phase 0 results).
 | `table` | `body` | `tableRow*` | |
 | `tableRow` | | `tableCell*` | |
 | `tableCell` | | `inline*` | all |
-| `divider`, `image`, `file`, `bookmark`, `childPage`, `tableOfContents` (v2), `databaseView` (v3), `sheetEmbed`, `erpView` | `body` | none (atom) | |
+| `divider`, `image`, `file`, `bookmark`, `childPage`, `tableOfContents` (v2), `databaseView` (v3), `sheetEmbed`, `erpView` (v4), `pluginBlock` (v6) | `body` | none (atom) | |
 | `text`, `hardBreak`, `pageMention`, `userMention`, `dateMention` (v3) | `inline` | | |
 
 Schema rules that hold forever (D3):
@@ -111,6 +111,7 @@ Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
 | Embedded spreadsheet | `sheetEmbed` | `workbookId`, `sheet`, `range`, `chartId`, `height` (all null by default) | No | Phase 5 (schema version 4): an atom body drawn by the host lazily near the viewport (the stored picture, then the live embed); deleting the block never deletes the workbook; Markdown and plain text write nothing for it |
 | Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize` (all null by default; `filter`, `fields` and `sort` are JSON text) | No | Phase 5 (schema version 4): an atom body holding settings only, never ERP data; drawn from each reader's own ERP session; Markdown and plain text write nothing for it |
 | Database view | `databaseView` | `databaseId`, `viewId` (null: the database's first view) | No | Phase 4 (schema version 3): an inline database or a linked view, drawn by the host lazily near the viewport; deleting the block never deletes the database; Markdown and plain text write nothing for it |
+| Plugin block | `pluginBlock` | `type` (the definition: `cashgear.chart`, `cashgear.kanban`), `version` (the definition's version that last wrote `props`, a whole number), `props` (JSON text of ids and settings, never data); all null by default | No | Phase 7 (schema version 6): an atom body drawn by the host's definition of `type` lazily near the viewport (`@cgw/plugins`); a type the build has no definition of draws a placeholder naming it and the node is never changed; a later version than the build's definition is drawn read-only; search, the server's Markdown and plain text write nothing for it, a client that knows the definition writes its line in copy and export (INTEGRATIONS.md, Plugin blocks) |
 
 Notes:
 
@@ -198,6 +199,15 @@ As built in Phase 6: version 5 adds `userMention`; step 4 → 5 only raises `met
 the same path. Fixture: `packages/doc/fixtures/doc-v4.json`; a build that knows only version 4
 opens a version-5 page read-only with the mention as a placeholder, kept. Comments add nothing to
 the document: a thread is anchored relationally (Comments, below), so no comment mark exists.
+
+As built in Phase 7: version 6 adds `pluginBlock`; step 5 → 6 only raises `meta.schemaVersion`, by
+the same path. Fixture: `packages/doc/fixtures/doc-v5.json` (version 4's bodies and a person
+mentioned in a line and in a list item); a build that knows only version 5 opens a version-6 page
+read-only with each plugin block as a placeholder, kept (`migrations.test.ts`, and v0.6.0 in
+`old-build.spec.ts`). A plugin type added later needs no step: the node is the same, and a build
+without the definition draws a placeholder. A copy of a page that copies a database rewrites a
+plugin block's `databaseId` and `viewId` in its props, by the convention the first-party
+definitions keep, and leaves every other prop as it was.
 
 ## Relational records
 
@@ -464,13 +474,28 @@ log: an ERP view's records live in its React state for as long as the page is op
 session in memory (`@cgw/erp`, whose lint keeps it off every store). The proof inspects every
 store after viewing (`PROGRESS.md`, Phase 5).
 
+### AI (Phase 7)
+
+As built (`server/src/Cgw.Core/Ai`, migration `Phase7Ai`); both tables are tenant-owned, and the
+worker deletes them with their workspace.
+
+| Table | Key fields | Notes |
+| --- | --- | --- |
+| `AiSettings` | `WorkspaceId` (the key), `Enabled`, `Provider` (`anthropic`), `Model`, `KeyCipher`, `KeySetAt`, `KeySetBy`, `UpdatedAt`, `UpdatedBy` | One row a workspace, made by its first change. `KeyCipher` is the workspace's own key as Data Protection's output (purpose `Cgw.Ai.Key.v1`, bound to the workspace), opened only for a provider call and never returned; no key, no row, or `Enabled` false is AI off |
+| `AiUsage` | `Id`, `WorkspaceId`, `UserId`, `Action`, `Model`, `PageId`, `InputTokens`, `OutputTokens`, `Outcome`, `DurationMs`, `CreatedAt` | One row a completion, however it ended (`ok`, `length`, `refused`, `cancelled`, or the AI code it failed with); never what was sent or answered. Owners and admins see the month's totals in the settings |
+
+No `PageEmbeddings` in 0.7.0 (decisions, 2026-11-15): `ask` searches with the server's own search
+under the person's permission filter and sends the derived text of what it finds, and nothing new
+is stored. A completion's content is in no table and no log; its `ai.complete` audit row holds the
+request id, action, model, tokens and outcome only.
+
 ### Sync and audit
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `WorkspaceChanges` | (`WorkspaceId`, `Seq`), `EntityType`, `EntityId`, `Kind`, `Version`, `ActorUserId`, `CreatedAt` | The change feed. `Kind` is `upsert`, `delete`, `grant` or `revoke` |
 | `AppliedOps` | `OpId`, `WorkspaceId`, `UserId`, `Result` (JSON), `CreatedAt` | Idempotency. Written in the same transaction as the operation |
-| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes, workbook changes (made, renamed, trashed, restored, access changed, saved and copied by Sheet). Account events have no workspace |
+| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes, workbook changes (made, renamed, trashed, restored, access changed, saved and copied by Sheet); Phase 7: `ai.settings` (on, off, model, key set or removed, never the key), `ai.complete` (each completion, without content), `erp.commit` (each real ERP commit attempt from a page, without values). Account events have no workspace |
 | `WorkspaceExports` | `Id`, `WorkspaceId`, `RequestedBy`, `Status`, `BlobKey`, `SizeBytes`, `Error` | A workspace's export zip, written by the worker |
 | `JobStates` | `Name`, `LastRunAt`, `LastOkAt`, `LastError`, `Runs` | Each worker job's last run: the worker's lag and the API's health check |
 

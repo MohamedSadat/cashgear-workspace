@@ -698,6 +698,31 @@ Workspace's route for it (Phase 7), on the Workspace session:
 - A 409 shows the ERP's current value beside the user's, per field, and the user chooses.
 - AI can prepare changes in the block. It cannot press Commit.
 
+As built in Phase 7 (`packages/erp`: `drafts.ts`, `view/editing.tsx`, `view/aiPrepare.ts`;
+`packages/shell/src/erp/leave.tsx`; decisions, 2026-11-15):
+
+- "Edit data" shows when the connector's `access` is `edit`, its schema has editable fields and
+  `maxCommitRecords` is above 0, whoever may or may not edit the page: the ERP decides. It opens
+  the editable fields' cells, each with an editor for its type that refuses what the field's
+  rules refuse; the ERP checks again.
+- The pending changes are one draft per block, held by the tab's ERP services (`pageId#blockId`),
+  in memory only: they outlive the block's frame unmounting far from the viewport and a
+  reconnect, and are gone when the page is left (after the warning), another person signs in or
+  the app closes. While they wait, the block's connector cannot be changed.
+- "Review changes" is the dry run of exactly what Commit sends. Commit reuses the review's
+  `commitId` when nothing changed since. After a lost answer `CommitStatus` comes first, then the
+  same request, at most three times, then "Try again". A 401 waits for the person to connect
+  again, then asks `CommitStatus` by itself.
+- A 409's screen shows, for each field the ERP changed, the person's value beside the ERP's; the
+  person picks one, the rest keep their value on the record's new version, and they review again.
+- Each real attempt's end is reported to `erp-commits` (`committed`, `conflict`, `refused`,
+  `failed`, `unknown`), best effort; dry runs are not.
+- Leaving with changes asks first: the router holds an in-app move with the page still on screen,
+  the browser asks on `beforeunload`, and the desktop asks before its window closes.
+- "Prepare changes with AI" sends the records on screen (at most 500) and the editable fields
+  with their active codes; each proposal is checked as a typed value, marked "Prepared by AI",
+  and goes to the review screen like any change.
+
 ### Track E: work in the ERP repo
 
 | # | Work | Why |
@@ -727,7 +752,7 @@ interface BlockDefinition<Props> {
   version: number;
   props: PropSchema<Props>;             // validated on read; unknown props are kept, not dropped
   slash: { label: { en: string; ar: string }; icon: string; keywords: string[] };
-  toPlainText(props: Props): string;    // for search and export
+  toPlainText(props: Props): string;    // for copy and export (search writes nothing for it)
   render: BlockRenderer<Props>;
 }
 ```
@@ -759,8 +784,37 @@ Rules for 0.7.0 (written 2026-11-15, Phase 7, M7.2; `packages/plugins`):
   propertyId}, title: string | null}`, drawn with `CgChart` from the view's rows (its filters
   and sort) as the reader may see them.
 - Kanban (`cashgear.kanban`, version 1): `{databaseId, viewId, groupBy: propertyId, cardProperties:
-  propertyId[]}` over a select or status property; moving a card writes that row's property as
-  the board view does, with the database's own access.
+  propertyId[], hidden: groupKey[]}` over a select or status property; moving a card writes that
+  row's property as the board view does, with the database's own access.
+
+As built in Phase 7 (`packages/plugins`, `@cgw/plugins`; the shell's `packages/shell/src/plugins`;
+the editor's `nodeviews/plugin.ts`):
+
+- `BlockDefinition<Props>` is `{type, version, props: {read(raw)}, slash: {label: {en, ar}, icon,
+  keywords}, toPlainText(props, {language, pageTitle}), render}`, where `render` is a React
+  component given `{props, editable, newer, setProps, data, blockId, language}` and loaded with the
+  first block of its type on screen. `data` is `{databases: DatabaseHost | null, pickDatabase?}`:
+  the open workspace's database host, null on a page shared by link (where a chart or a board says
+  where it is shown, as a database block does). The registry (`FIRST_PARTY`) holds chart, then
+  kanban; a type is a dotted lower-case name, a version a whole number from 1.
+- `EditorHost.plugins` is `{has(type), mount(element, options)}`; the editor mounts the frame by
+  the lazy frame's rules (near the viewport, mounted again only for a new type, block id or
+  editability) and writes `setProps(text, version)` only for a JSON object and a whole version.
+  The slash menu lists each definition by its label in the interface language; insertion writes
+  the type and the definition's version with no props, and the block's own set-up asks for the
+  database ("Choose a database", the linked-view picker).
+- A chart counts from the query itself (a grouped query's counts, the ungrouped total), so a
+  count is exact at any size; a sum or an average reads the rows, group by group, up to 5,000,
+  and says "Based on the first 5,000 rows" past that. Groups are the query's, in its order, with
+  the board's group labels. Bar, line and pie are `CgChart`; a number is drawn as text. A sum or
+  average of a property that is gone counts instead.
+- A kanban is `@cgw/database`'s own board, given a view that is never stored: the base view's
+  filter and sorts, the block's column property (default the first status, else the first
+  select), its hidden columns and its card properties. The board's own changes to that view (hide
+  a column, change the column property) go to the block's props; nothing writes `view.upsert`.
+- Copy and export write a definition's line (`Chart: Tasks`, `لوحة: Tasks`) through `@cgw/doc`'s
+  `TextContext.pluginText`; the local search index, the server's derived text, search and Markdown
+  write nothing.
 - Third-party plugins, if ever allowed, render only inside a sandboxed iframe with a message
   contract like `sheet-embed.1`, and get no access to the document, the session or other blocks.
 - Charts, kanban, calendar, timeline and embedded presentations are planned as first-party
@@ -862,7 +916,7 @@ type AiEvent =                       // one JSON object a line
 | `summarise` | `{text}`: the page's text as the client holds it | That text | Markdown |
 | `actionItems` | `{text}` | That text | JSON `{items: {text: string}[]}` |
 | `generatePage` | `{prompt}` | The prompt | Markdown, its first heading the title |
-| `generateDatabase` | `{prompt}` | The prompt | JSON `{name, properties: {name, type, options?}[], rows: {values}[]}`, at most 20 properties and 100 rows |
+| `generateDatabase` | `{prompt}` | The prompt | JSON `{name, properties: {name, type, options}[], rows: {values}[]}`: `type` one of `text`, `number`, `select`, `multiSelect`, `date`, `checkbox`, `url`, `email`, `phone`, the first property each row's name; `options` always present (empty but for selects); each row's `values` an array in the properties' order (text, a number, `YYYY-MM-DD`, `true`/`false`, an option, a list of options, or `null`); at most 20 properties and 100 rows asked for |
 | `ask` | `{question}` | The question and, numbered, the derived text of the server's top 8 search hits the person can read (at most 8,000 characters each) | Markdown citing `[n]`, then `sources` |
 | `erpChanges` | `{instruction, connector: {id, schemaVersion}, fields: FieldSchema[] (editable ones), records: {id, key, values}[]}`: the block's records in memory, from the person's own session | Those, as given | JSON `{changes: {id, field, to}[]}` |
 
@@ -896,5 +950,35 @@ Rules:
   an ordinary edit by the person (replace the selection, insert after it or at the page's top, a
   new page, a new database with its rows, pending changes in an ERP block); Discard drops it.
 - **No path to Commit.** AI code in the client (`packages/shell/src/ai`) imports nothing of
-  `@cgw/erp` but `@cgw/erp/ai`, whose one function adds proposed changes to a block's pending
-  list; a lint rule and a test hold it. The person reviews and commits on the usual screen.
+  `@cgw/erp` but `@cgw/erp/ai`, which holds types only: the block hands the AI its fields and
+  records and gets proposals back, and the block's own code checks them and adds them to its
+  pending list. A lint rule and a test that follows every import hold it. The person reviews and
+  commits on the usual screen.
+
+As built on the server (2026-11-15, Phase 7, stream D; `server/src/Cgw.Core/Ai`,
+`Cgw.Api/Modules/AiEndpoints.cs`; tests `AiTests`, `AiRequestBuilderTests`):
+
+- The provider interface is `IAsyncEnumerable<AiChunk> CompleteAsync(AiCall call, CancellationToken
+  ct)`: `AiCall` is the built `AiRequest` (action, system text, user text, effort, token limit,
+  JSON schema or none), the workspace's model and its key, and prints without the key. The first
+  chunk is `AiStarted` once the provider accepted the call; then `AiText`, then `AiFinished`
+  (`end`, `length`, `refused`, with the tokens). No `EmbedAsync` in 0.7.0.
+- The order of checks: a member (404 otherwise), not a guest (403 `access.denied`), AI on (403
+  `ai.disabled`), the action and language (400), a named page the person can read (404), the
+  input (400 or 413), for `ask` the search, the key (502 `ai.keyInvalid` when it no longer opens).
+- The stream starts only once the provider has accepted the call: a refused key is 502
+  `ai.keyInvalid`, a provider that is busy 503 `ai.limit` (after the SDK's own two retries), one
+  that failed or could not be reached 502 `ai.provider`. After the stream starts, the same codes
+  and `ai.refused` come as an `error` line, after any text already sent.
+- `sources` comes right after `start`, before any text, so citations can be drawn as they arrive.
+  An `ask` that finds no page the person can read sends nothing to the provider: `start`, an empty
+  `sources` and `done` with no tokens.
+- `ask` searches the question's words together and then each word of three letters or more alone
+  (at most six words), ranks the pages by the words they match, and sends the top eight.
+- Anthropic's API version `2026-10-21`, as the SDK sends it, carries the key as `Authorization:
+  Bearer`, not `x-api-key`; the SDK never looks for a key or profile of the host
+  (`ShouldAutoResolveCredentials` is off). Claude Haiku 5.5 has no server-side fallback, so its
+  calls go without `fallbacks` and the beta.
+- `tests/mocks/ai` stands in for the provider in the server's tests, the e2e stack and the benches
+  (`Ai__AnthropicBaseUrl`, ignored in Production): the same streamed events as the API, the key
+  recorded only as a hash, scripted answers and faults.

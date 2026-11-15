@@ -305,7 +305,7 @@ One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
 
 Modules, each with its own folder, services and tests: Identity, Workspaces, Pages, Documents,
 Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), Workbooks and ErpLinks (Phase 5,
-`Cgw.Core/Workbooks`), Realtime, Comments and Notifications (Phase 6: `Cgw.Api/Realtime`, `Cgw.Core/Comments`, `Cgw.Core/Notifications`), and later Ai. The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
+`Cgw.Core/Workbooks`), Realtime, Comments and Notifications (Phase 6: `Cgw.Api/Realtime`, `Cgw.Core/Comments`, `Cgw.Core/Notifications`), and Ai (Phase 7: `Cgw.Core/Ai`, the routes in `Cgw.Api/Modules/AiEndpoints.cs`; the only code that calls a model provider, through Anthropic's C# SDK with the workspace's own key, and with no route to the ERP). The Databases module (`Cgw.Core/Databases`) holds the C# port of the database rules
 (coercion, conversion, queries, formulas, rollups, CSV) held to the TypeScript by shared vectors,
 the operations on databases, views and rows, and the query engine: a database's rows cached in
 memory per database and rows version, evaluated by the ported `queryRows`, keyset paged.
