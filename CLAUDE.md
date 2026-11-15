@@ -518,6 +518,9 @@ Added as they are found, grouped by phase.
 - ESLint's `no-restricted-imports` `group` patterns follow gitignore: `'!@cgw/erp/ai'` cannot
   re-include a path whose parent a pattern excluded; use `regex`
   (`^@cgw/erp(?!/ai$)(/.*)?$`).
+- `useSyncExternalStore`'s snapshot must be the same object until it changes: a store that answers
+  `?? { status: 'idle' }` for what it never loaded gives a new one each read, and React draws again
+  until it gives up (Settings drew nothing for a local workspace). Keep one frozen constant.
 - A component behind `React.lazy` loads after more than a few ticks under Vitest: import the
   module first, then wait for the Suspense fallback to go. A registry of `BlockDefinition<P>` of
   different `P` does not type-check (variance of `render`): `untyped()`.

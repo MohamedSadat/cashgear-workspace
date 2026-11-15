@@ -838,6 +838,25 @@ Notes
   as at E5. Workspace's `erp-connect.1` suite against UnifiedAPI on LocalDB: 49 passed, 21
   mock-only skipped, 0 failed, with its files run one after another (their link is shared on a
   real server: `pnpm contract:erp` now runs them so).
+- Against the real ERP (UnifiedAPI on LocalDB from `ContractHost.ps1`, the real ERP client, run
+  by the Track E6 session at `e3f958c`): the suite 49 passed, 21 mock-only skipped, 0 failed; the
+  e2e cases that run with `CGW_E2E_REAL_ERP` (`erp-edit.spec.ts`'s no-Edit, leave and
+  nothing-stored cases, `erp.spec.ts`, `integrations-origins.spec.ts`) passed in Chrome and Edge,
+  7 cases each; every `SheetChangeAudit` row the suite's and the e2e commits wrote names its
+  workspace, page and block, with a system-log row naming the page. Its first e2e run failed the
+  nothing-stored case twice, both the spec's: a marker the build holds (as in Phase 5), and Edge
+  typing the value Chrome's run had just committed (a real ERP keeps it): the typed values are new
+  each run now.
+- CI run 43716838601 (`e3f958c`) failed in the e2e step, 23 cases in Chrome and Edge: Settings
+  drew nothing for a workspace whose AI settings were never read (a local one). The AI store gave
+  a new idle state on every read, which `useSyncExternalStore` takes as a change, so React drew
+  again until it gave up; the Phase 7 specs open Settings only after the settings were read, so
+  they passed. Fixed by one idle state, with a unit test. The same run found the Arabic spec
+  meeting "Anthropic" in Settings (a product name, now allowed everywhere) and Edge restricting a
+  page in `ai.spec.ts` before the server held it (the spec waits for "Synced" now). The Mac's run
+  43716838706 was green. Locally after the fix, CI's 23 failed cases passed in Chrome and Edge,
+  but for Chrome's offline case, which once waited out its 30 s for the service worker right
+  after a fresh build, then passed 3 of 3.
 - The proof found and fixed one old product bug and four of Phase 7's: a duplicated, pasted or
   id-less block could not be undone (latent since Phase 1; the block-id plugin's appended fix took
   the person's change out of history, `81586e0`); the AI switch sprang back while its save was out;
