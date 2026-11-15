@@ -1093,3 +1093,15 @@ with you. The phases are in `IMPLEMENTATION_PLAN.md`.
 | Track S6, E8 and E9 | Added to the plan's track sections now and to `INTEGRATIONS.md` by the phase that needs them; E8 starts once E1 to E7 are pushed (yours) | Those repos change only as agreed tracks; nothing is built on unpushed work in another repository |
 | Embeddings, as found on 2026-11-15 | Anthropic offers no embedding model; its documentation (platform.claude.com, "Embeddings") points to Voyage AI: `voyage-4` over an HTTP API, and `voyage-4-nano` open-weight under Apache-2.0. Phase 10's question starts from this | The 0.7.0 AI is Anthropic only, so embeddings need a second provider or a local model |
 | Version numbers | `v0.8.0`, `v0.9.0`, `v0.10.0` | One version per phase, as before |
+
+## 2026-11-16: Phase 8
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Track U: who builds it, and on which branch | A session of its own in `CashGear.React.UI`, on the branch both pins follow, `claude/cashgear-react-ui-library-xq8tsz` (the library has no `main`). Workspace moves its pin as each component lands; Sheet moves its own pin when it chooses |
+| Strict durability | If Chrome is shown to lose IndexedDB writes it reported complete with the whole process tree ended: document writes use strict durability and "Saved" waits for it, as long as the 1 s durability budget still holds |
+| Paste past the last row, and taking a paste back | A paste past the last row adds rows, at most 1,000 a paste. The notice after a paste offers Undo, which writes the old values back (databases have no undo yet) |
+| Where import runs, and its limits | On the device, so it works in a local workspace and the server never opens an uploaded archive. At most 2,000 pages and 500 MB an import |
+| Email: the choices, the default, the sender | On by default: mentions and replies still unread, at most every 15 minutes; a daily digest or off by choice. Sent from the SMTP account already set (`Smtp__From`) |
