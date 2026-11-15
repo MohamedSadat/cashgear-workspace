@@ -3,11 +3,12 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 5 are done (0.5.0: the local-first editor; accounts, sync, sharing, server
+Status: Phases 0 to 6 are done (0.6.0: the local-first editor; accounts, sync, sharing, server
 search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
-views; then Sheet workbooks embedded in pages and read-only ERP blocks); the next step is Phase 6
-(collaboration: real-time editing, presence, comments, mentions). Evidence is in
-`docs/PROGRESS.md`; spike results and the decisions they changed are in `docs/DECISIONS.md`.
+views; Sheet workbooks embedded in pages and read-only ERP blocks; then real-time editing,
+presence, comments, mentions and the inbox); the next step is Phase 7 (editable ERP blocks,
+plugin blocks, AI). Evidence is in `docs/PROGRESS.md`; spike results and the decisions they
+changed are in `docs/DECISIONS.md`.
 
 ## Workflow
 
@@ -67,7 +68,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `scripts/eslint` | Workspace's own lint rules: `cgw/no-untranslated-text` |
 | `apps/desktop` (`@cgw/desktop`, crate `cgw-desktop`) | Tauri 2 shell showing the same page; CSP in `src-tauri/tauri.conf.json`, the Mac's bundle in `tauri.macos.conf.json`; the test-only bridge (`src/bridge.rs`, feature `e2e-bridge`, refused in release builds) |
 | `scripts/` | Standing-check runner, licence gate, third-party notices, desktop smoke test, WebView2 setup; the Mac's build, acceptance run and checks (`macos-*.mjs`); the state-hash vectors' generator |
-| `tests/e2e` | Playwright specs (Chrome and Edge) |
+| `tests/e2e` | Playwright specs (Chrome and Edge); Phase 6's helpers in `collab.ts` (a team by invitation, keys timed on one clock, the hub's frames and switch, comments) |
 | `tests/license-gate` | GPL fixtures the licence self-test must reject |
 | `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB (database `cgw-workspace`, store schema 4, upgraded additively); plans operations inside its own transaction; text search in a MiniSearch worker loaded from it |
 | `packages/store-desktop` (`@cgw/store-desktop`) | The desktop's `LocalStore`: binary frames to `crates/cgw-store` over Tauri's `invoke('store')`, or over `cgw-store-cli` in tests; plans against its in-memory mirror |
@@ -117,7 +118,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `pnpm bench:phase1 [-- --desktop]` | Phase 1's budgets, gated against the budgets and `bench/previous/phase1.json` |
 | `node scripts/updater-key.mjs` | Made the updater's key once: private half straight into the repo's secrets, public half into `tauri.conf.json`. Refuses to replace it |
 | `pnpm dev:web` / `pnpm dev:desktop` | Vite dev server on port 5273; Tauri dev window on it |
-| `pnpm dev:server` | The server stack (`scripts/server-stack.mjs`): Azurite, the API on `http://127.0.0.1:5280` and the worker, database `cgw_dev` on LocalDB, mail in `.cgw-dev/mail`. `--e2e` (Playwright starts it, or reuses one already running) uses a fresh `cgw_e2e`, data and mail in `.cgw-dev/e2e` |
+| `pnpm dev:server` | The server stack (`scripts/server-stack.mjs`): Azurite, the API on `http://127.0.0.1:5280` and the worker, database `cgw_dev` on LocalDB, mail in `.cgw-dev/mail`. `--e2e` (Playwright starts it, or reuses one already running) uses a fresh `cgw_e2e`, data and mail in `.cgw-dev/e2e`, maps the hub's metrics route, and opens a control port on 127.0.0.1:5289 (`scripts/stack-control.mjs`: `POST /api/restart` ends the API and starts it again) |
 | `node scripts/server-publish.mjs` | The deploy package: `target/deploy/cgw-server-<version>.zip` |
 | `node scripts/deploy-rehearsal.mjs` | The package installed on a scratch database, smoke-tested, then backed up, restored elsewhere and compared (`bench/results/deploy-rehearsal.json`) |
 | `pnpm bench:s3` | S3: Yjs writes a corpus, `cgw-ydoc` processes it from .NET, Yjs checks it (`S3_DOCS`, `S3_BIG_BYTES`) |
@@ -133,6 +134,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `node scripts/sheet-launcher.mjs` | Real launch tickets for Sheet's `sheet-session.1` suite (127.0.0.1:4285), through real sign-ins against a running stack |
 | `pnpm bench:phase3 [-- --desktop]` | Phase 3's budgets (reconnect with 1,000 waiting updates, pinning 500 pages while typing, the store for 1,000 pages, the desktop's cold start offline), gated against the budgets and `bench/previous/phase3.json` |
 | `pnpm bench:phase4 [-- --desktop] [--server \| --no-server]` | Phase 4's budgets: first rows of a 50,000-row database (seeded through the import route), scrolling it, a board drag, a cell edit shown, to the next frame and durable (web, and the desktop with `--desktop`); `--server` runs only the server's query budget (`Phase4Bench`), `--no-server` everything else; gated against the budgets and `bench/previous/phase4.json` |
+| `pnpm bench:phase6 [-- --desktop] [--no-load \| --load-only]` | Phase 6's budgets against the e2e stack (started if not running): 20 editors on one page as Node clients over the real hub (the server's relay p95), the keystroke budget in Chrome (and the desktop app with `--desktop`) while 19 type, then 2,000 connections on the one API process (memory, CPU idle and with presence) and their reconnect storm after a recycle through the control port; gated against the budgets and `bench/previous/phase6.json` |
 | `node scripts/state-hash-vectors.mjs [--check]` | The state-hash vectors (`packages/doc/vectors/state-hash-vectors.json`), made by plain Yjs; `--check` fails if they are stale |
 | `node crates/cgw-store/tests/fixtures/make.mjs` | The SQLite migration fixtures, written by `cgw-store` built from the v0.1.0 and v0.2.0 tags (offline, under `target/store-fixtures`) |
 | `SIM_SEEDS=60 SIM_STEPS=200 pnpm exec vitest run packages/doc/src/sync-sim` | The convergence simulator at size (CI runs 4 seeds of 40 rounds); `SIM_SEED` replays one |
@@ -457,3 +459,30 @@ Added as they are found, grouped by phase.
   `expect.poll` fails at once when its callback throws: poll a route that answers 404 until ready
   with `api.raw`. A Python heredoc in the Bash tool loses one level of backslashes: write such
   scripts with the file tool.
+- Playwright's `setOffline(true)` leaves an open WebSocket working, and CDP's `setBlockedURLs`
+  leaves it open and fires no `offline` event: the app drops the hub on `offline`, and the
+  desktop's network helpers and the kill test fire it themselves. `page.on('websocket')` and
+  `routeWebSocket` see only sockets opened after they are attached: attach before the page
+  connects.
+- ProseMirror reads a selection made by keys a few milliseconds after the key: a shortcut pressed
+  at once (Ctrl+Alt+M) can act before the last Shift+Arrow (wait for the editor's own selection).
+  A click in the middle of a block can land on a comment's marker, which opens the thread and
+  keeps the focus where it was: click a line's start.
+- A spec that signs in and then calls `createWorkspace` (which loads the app again) can make the
+  workspace before that start's account check answers: it stays "On this device only".
+  `locator.locator(otherLocator)` runs the other's whole chain inside the first: pass a selector.
+  With a page open, a tree row under the pointer shows its own "Page actions": take the top bar's.
+- `@microsoft/signalr` and `yjs` are not hoisted: a script at the root loads them with
+  `createRequire` from `packages/shell/package.json` or `packages/doc/package.json`. The API's
+  working set after other work is no baseline: measure before and after on one process, and gate
+  the peak of several samples.
+- An open page pushes about once a key: limits sized for HTTP's batches (the per-page 1,200 a
+  minute) stop live typing. `bench/phase6.mjs` at 20 editors is what finds that.
+- A local compaction's snapshot is the document in memory: made while a batch waited to be written,
+  it held content no update carried, never pushed after a kill, and the server refused everything
+  typed after it (the device then set its own refused updates aside: text reported saved, lost).
+  `maintain` compacts only when nothing waits. It took the desktop sync kill test 77 to 285 runs
+  to show: `--stop-on-failure --keep` keeps the store, and the server's `PageDocUpdates.Problem`
+  says why a row was refused.
+- `node:sqlite` (Node 24) reads a kept profile's `workspace.db` without any other tool: the
+  `corrupt` table holds what the device set aside, with its reason.

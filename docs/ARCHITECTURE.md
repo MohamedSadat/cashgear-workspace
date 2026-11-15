@@ -8,10 +8,11 @@ This document says what the parts are and how data moves between them. Why each 
 is in `DECISIONS.md`. The stored shapes are in `DATA_MODEL.md`, sync in `SYNC_DESIGN.md`, and the
 Sheet and ERP contracts in `INTEGRATIONS.md`.
 
-Status: Phases 0 to 4 are built: the local-first editor and page tree (Phase 1); the server,
+Status: Phases 0 to 6 are built: the local-first editor and page tree (Phase 1); the server,
 accounts, sync while online, sharing, server search and history (Phase 2); offline, conflicts,
 migrations and the Mac app (Phase 3); workspace databases and their views (Phase 4); Sheet
-workbooks embedded in pages and read-only ERP blocks (Phase 5). What exists
+workbooks embedded in pages and read-only ERP blocks (Phase 5); real-time editing over the hub,
+presence, comments, mentions and the inbox, on one node (Phase 6). What exists
 is listed in `CLAUDE.md`; later phases' parts are proposals. Spike results are in `DECISIONS.md`
 (2026-11-11: Phase 0 results); each phase's answers and defaults under its own date. Deployment is
 in `OPERATIONS.md`.

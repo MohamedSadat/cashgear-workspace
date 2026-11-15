@@ -4,6 +4,37 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.6.0] - 2026-11-15
+
+Work on a page together: see each other's typing and cursors as it happens, comment on what you
+read, and mention people.
+
+- **Live editing.** Everyone on a page sees the others' typing as they type, in the browser and
+  in the desktop app, and all end with the same text. If the live connection is blocked or lost,
+  editing goes on and syncs as before; only the sync status shows it.
+- **Who is here.** The people on a page are shown in its top bar, and beside the pages they have
+  open in the sidebar, only on pages you can see. Their cursors and selections show in the page
+  with their name and colour.
+- **The sidebar keeps up.** Pages that others add, rename, move or share appear within a second
+  while you are connected.
+- **Comments.** Select text and press Ctrl+Alt+M (⌘⌥M on a Mac), or choose "Comment", to start a
+  thread; Ctrl+Alt+Shift+M (⌘⌥⇧M) opens the comments panel. Reply, edit or delete your own, and resolve and
+  reopen threads. A comment stays with its block when the block moves and when the text around it
+  changes, and a comment whose block was removed says so. Comments need a connection in 0.6.0.
+- **Mentions and the inbox.** "@" offers people as well as pages and dates. Someone mentioned in a
+  page or a comment, or replied to, finds it in their inbox, which opens the page at that block.
+  Nobody is told about a page they cannot read.
+- **Access.** Someone whose access to a page is taken away, or who is removed from the workspace,
+  stops receiving its changes at once.
+- **Fixed.** If the app closed suddenly (a crash, a power cut) just after typing, a few
+  characters could stay on the device without ever reaching the server; text typed after them was
+  then refused by the server and gone on the next start. Every change is now on its way to the
+  server before the device tidies its saved history.
+- **Versions.** Pages edited in 0.6.0 move to document version 5, which 0.5.0 opens read-only.
+- **For whoever runs the server.** The API's IIS site needs the WebSocket Protocol feature, which
+  `install.ps1` turns on; the update adds the comment, notification and hub ticket tables
+  (`docs/OPERATIONS.md`).
+
 ## [0.5.0] - 2026-11-14
 
 Cash Gear Sheet workbooks in your pages, and read-only Cash Gear ERP data, each person seeing what
