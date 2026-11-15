@@ -873,6 +873,17 @@ Notes
   as in Phase 6's 43679261197). Nothing was lost: its other 24 runs passed and the server's text
   equalled the device's at every check. The failed job's second attempt passed every step: the
   four kill tests (25 runs each, 0 failures), every phase's budgets, Phase 7's among them.
+- CI run 43746282731 (`30dd8a6`, the tagged commit: docs only, the same code as `2678f87`) failed
+  the web kill test during sync (Chrome, IndexedDB, signed in) in 1 of its 25 runs, after every
+  earlier step passed (the e2e suites in Chrome, Edge and the desktop app, the local kill tests);
+  the steps after it did not run. Run 7, typing with the network blocked from its start, was
+  killed with its whole process tree 71 ms after the page reported 549 characters saved; reopened,
+  the page held 525. The last 24 characters were in no store row: the device's log ended at the
+  update the server also held, nothing set aside or refused. The page reports "Saved" only once
+  IndexedDB's transaction completes (`appendDocUpdates` waits for `oncomplete`). Phase 3 measured
+  Chrome losing completed transactions when only its browser process is ended (5 of 70; 1 of 40
+  with strict durability), and none with the tree ended (0 of 40; 1,000 sync runs, 0 lost): this is
+  the first such loss with the tree ended. Not fixed in 0.7.0; a follow-up.
 - By hand in the browser (the e2e stack, the mocks, a throwaway account): Settings with a local
   workspace, then synced; Settings' AI section in dark English; the AI panel in light Arabic,
   right to left, a summary proposed, inserted at the page's top, "Ctrl+Z undoes it". It found the
