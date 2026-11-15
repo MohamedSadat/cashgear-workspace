@@ -374,7 +374,7 @@ function vendorRow(company, account, values) {
   };
 }
 
-function vendors(pick, kitVendors = 150) {
+function vendors(pick, kitVendors = 150, locks = true) {
   const kit = [
     vendorRow('Kit', 'V-1001', {
       vendorName: 'Qorvath Lantern Trading',
@@ -410,7 +410,7 @@ function vendors(pick, kitVendors = 150) {
       payMethod: 'NET60',
       debitLimit: '999999999.99',
       // Phase 7: locked in the ERP (an open document holds it), so no commit may change it.
-      locked: true,
+      locked: locks,
     }),
     vendorRow('Kit', 'V-1006', { vendorName: 'Thessaly Quay Logistics', currency: null }),
     vendorRow('Kit', 'V-1007', { vendorName: 'Zarkonite Old Group', vendorGroup: 'OLD' }),
@@ -620,7 +620,7 @@ function interleave(kit, dot, firstId) {
  * Every record by connector, in id order, with its version: one 8-byte counter per database, as
  * SQL Server's `rowversion` is.
  */
-export function seedRecords({ kitVendors = 150 } = {}) {
+export function seedRecords({ kitVendors = 150, locks = true } = {}) {
   const pick = random(20261114);
   let counter = 0x1000n;
   const version = () => {
@@ -630,7 +630,7 @@ export function seedRecords({ kitVendors = 150 } = {}) {
   };
   const out = {};
   for (const [id, rows] of [
-    ['vendors', vendors(pick, kitVendors)],
+    ['vendors', vendors(pick, kitVendors, locks)],
     ['customers', customers(pick)],
     ['itemsOnHand', items(pick)],
   ]) {

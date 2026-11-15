@@ -23,6 +23,7 @@ import {
   workspaceIdOf,
 } from './ecosystem';
 import { commentScene, select } from './collab';
+import { phase7Scene, phase7Screens } from './phase7';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -395,6 +396,41 @@ test.describe('accessibility of workbooks and ERP data', () => {
       });
     }
   }
+});
+
+// Phase 7: Axe on a chart block, an ERP block editing a vendor and its review, the AI panel with a
+// proposal and Settings' AI section, in both themes and both languages, against the server stack,
+// the mock ERP and the mock provider (phase7.ts's scene, made in English, then loaded again in
+// each language and theme).
+test.describe('accessibility of Phase 7', () => {
+  const cloud = signers();
+  test.afterEach(() => cloud.close());
+  test('Axe finds nothing on the chart, ERP editing and review, the AI panel and its settings (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop || REAL_ERP, 'A browser against the mocks');
+    test.setTimeout(480000);
+    const scene = await phase7Scene(page, 'Axe seven', cloud.signer);
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await phase7Screens(page, language, async (screen) => {
+            problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+          });
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.api.dispose();
+    }
+  });
 });
 
 // Phase 6: Axe on the comments panel (open threads, a reply, a draft, a resolved thread shown),

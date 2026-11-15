@@ -41,8 +41,11 @@ const REAL_KEYS: Record<ErpUser, string> = {
   bob: 'ws-test-kit-limited',
   carol: 'ws-test-kit-none',
   dan: 'ws-test-kit-admin',
+  // Phase 7: Vendors' Edit, and Edit with AdvEdit (Track E6's seed; CGW_E2E_ERP_KEYS overrides).
+  gina: 'ws-test-kit-editor',
+  faris: 'ws-test-kit-advedit',
 };
-export type ErpUser = 'alice' | 'bob' | 'carol' | 'dan';
+export type ErpUser = 'alice' | 'bob' | 'carol' | 'dan' | 'gina' | 'faris';
 const erpKeys: Record<ErpUser, string> = {
   ...REAL_KEYS,
   ...(process.env.CGW_E2E_ERP_KEYS ? JSON.parse(process.env.CGW_E2E_ERP_KEYS) : {}),
@@ -56,6 +59,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 export const NO_PICTURE_YET =
   /status of 404 .* https?:\/\/[^ /]+\/api\/v1\/workbooks\/[0-9a-f-]{36}\/previews\/[0-9a-f]{64}$/;
+
+/**
+ * A commit's 409 (erp-connect.1: records changed in the ERP since they were read) is the contract's
+ * answer, which the block shows as a conflict; browsers log every 4xx.
+ */
+export const COMMIT_CONFLICT =
+  /status of 409 .* https?:\/\/[^ /]+\/api\/connect\/Connectors\/[^/ ]+\/Commit$/;
 
 /**
  * Page errors and console errors, each with the address it came from, less the lines `allowed`
@@ -124,6 +134,25 @@ export const mockErp = {
         ticket: string;
       }
     ).ticket,
+  /** Phase 7: another ERP user changes a record behind the page's back. */
+  editRecord: (connector: string, company: string, key: string, values: Record<string, unknown>) =>
+    control(ERP_API, 'edit-record', { connector, company, key, values, by: 'Bob Mansour' }),
+  /** Phase 7: the mock's audit, one row per changed field, and how many commits it stores. */
+  audit: async () =>
+    (await control(ERP_API, 'audit')) as {
+      audit: {
+        connector: string;
+        key: string;
+        field: string;
+        before: unknown;
+        after: unknown;
+        commitId: string;
+        workspaceId: string;
+        pageId: string;
+        blockId: string | null;
+      }[];
+      commits: number;
+    },
 };
 
 /** Every distinctive value the mock ERP holds: its made-up words, in both companies. */

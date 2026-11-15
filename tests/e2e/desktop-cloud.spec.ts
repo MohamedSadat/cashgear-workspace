@@ -159,3 +159,65 @@ test('joins the hub with its bearer token and shows a browser person typing live
     await signer.close();
   }
 });
+
+// Phase 7 on the desktop: AI through the desktop's bearer token (the mock provider behind the
+// e2e stack's API), a summary proposed beside the page, entering it only on Accept, one edit
+// Undo takes back.
+test('asks AI for a summary with its bearer token and puts it in only on Accept', async ({
+  page,
+  authUrlFile,
+}) => {
+  test.setTimeout(180000);
+  const signer = await chromium.launch({ channel: 'chrome' });
+  const completions: { authorization?: string; cookie?: string }[] = [];
+  page.on('request', (request) => {
+    if (/\/api\/v1\/ai\/complete$/.test(request.url())) completions.push(request.headers());
+  });
+  try {
+    const ada = await newAccount('Ada');
+    await createWorkspace(page, 'Desktop AI');
+    await signInDesktop(page, signer, authUrlFile!, ada);
+    await page.getByRole('button', { name: 'Upload to my account' }).click();
+    await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+    const api = await apiSession(ada);
+    try {
+      const workspaceId = await workspaceIdOf(api, 'Desktop AI');
+      await api.put(`/api/v1/workspaces/${workspaceId}/ai-settings`, {
+        apiKey: 'sk-mock-phase7-desktop-key-0001',
+      });
+      await api.put(`/api/v1/workspaces/${workspaceId}/ai-settings`, { enabled: true });
+      await page.reload();
+      await newPage(page, 'Desktop notes');
+      await page.keyboard.type('The desktop keeps its sign-in in the keychain.');
+      await waitSaved(page);
+      await page
+        .getByRole('region', { name: 'Page' })
+        .getByRole('button', { name: 'Page actions' })
+        .click();
+      await page.getByRole('menuitem', { name: 'AI…' }).click();
+      const panel = page.getByTestId('ai-panel');
+      await panel.getByRole('radio', { name: 'Summarise this page' }).check();
+      await panel.getByRole('button', { name: 'Ask', exact: true }).click();
+      await expect(panel.getByRole('button', { name: 'Insert at the top' })).toBeVisible({
+        timeout: 30000,
+      });
+      await expect(editor(page)).not.toContainText('Summary:');
+      await panel.getByRole('button', { name: 'Insert at the top' }).click();
+      await expect(editor(page)).toContainText('Summary:');
+      expect(completions.length).toBeGreaterThan(0);
+      for (const headers of completions) {
+        expect(headers.authorization).toMatch(/^Bearer /);
+        expect(headers.cookie).toBeUndefined();
+      }
+      await editor(page).click();
+      await page.keyboard.press('Control+KeyZ');
+      await expect(editor(page)).not.toContainText('Summary:');
+      await waitSaved(page);
+    } finally {
+      await api.dispose();
+    }
+  } finally {
+    await signOutDesktop(page);
+    await signer.close();
+  }
+});

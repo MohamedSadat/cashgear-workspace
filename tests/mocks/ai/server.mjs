@@ -74,7 +74,9 @@ export function defaultAnswer(body) {
     }
     case 'summarise': {
       const text = tagged(user, 'text').trim();
-      return { text: `Summary: ${text.split(/(?<=[.!?؟])\s/)[0].slice(0, 200)}` };
+      // The first line's first sentence: a summary that repeats a page's lines would make them
+      // look like the page's own text to the next action asked about it.
+      return { text: `Summary: ${text.split(/\n|(?<=[.!?؟])\s/)[0].slice(0, 200)}` };
     }
     case 'actionItems': {
       const lines = tagged(user, 'text')

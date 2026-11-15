@@ -3,8 +3,16 @@
 `pnpm test:e2e` runs every spec in Chrome and Edge; `pnpm test:e2e:desktop` (after
 `pnpm desktop:build`) runs them on the built desktop app. Playwright starts what they need, or
 reuses it locally when it already answers: `pnpm preview` (4273), the server stack
-(`scripts/server-stack.mjs --e2e`, 5280), and from Phase 5 the mock Sheet (`tests/mocks/sheet`, 4283) and the mock ERP (`tests/mocks/erp`, API 4282, client 4284). Run Workspace's suite and
+(`scripts/server-stack.mjs --e2e`, 5280), and from Phase 5 the mock Sheet (`tests/mocks/sheet`, 4283) and the mock ERP (`tests/mocks/erp`, API 4282, client 4284); from Phase 7 the mock AI
+provider (`tests/mocks/ai`, 4286), which the e2e stack's API calls. Run Workspace's suite and
 Sheet's one at a time: Sheet's suite also takes port 4273.
+
+Phase 7's specs: `erp-edit.spec.ts` (editable ERP blocks: review, commit, conflicts, no commit
+without Edit, the leave warning, nothing stored), `ai.spec.ts` (AI off sends nothing; on, each
+action sends only what it needs and enters only on Accept; ask cites only readable pages; the ERP
+prepare never commits), `plugins.spec.ts` (chart and kanban, a type this build does not know);
+`old-build.spec.ts`'s v0.6.0 case; the Phase 7 cases of `a11y.spec.ts` and `arabic.spec.ts`
+(`phase7.ts`'s scene).
 
 ## Phase 5 against the real Sheet and the real ERP
 
@@ -51,8 +59,10 @@ faults). Nobody else's data is touched: the real systems run locally, on LocalDB
      names) for the "nothing stored" test to look for; required.
    - The users by role, `alice` (every connector), `bob` (fewer customers), `carol` (no
      privilege) and `dan` (ERP admin), default to the seeded keys `ws-test-kit-viewer`,
-     `ws-test-kit-limited`, `ws-test-kit-none` and `ws-test-kit-admin`; `CGW_E2E_ERP_KEYS` (JSON,
-     `{"alice": "…"}`) overrides them.
+     `ws-test-kit-limited`, `ws-test-kit-none` and `ws-test-kit-admin`; from Phase 7 `gina`
+     (Vendors' Edit) and `faris` (Edit and AdvEdit) to Track E6's `ws-test-kit-editor` and
+     `ws-test-kit-advedit`; `CGW_E2E_ERP_KEYS` (JSON, `{"alice": "…"}`) overrides them.
+     `erp-edit.spec.ts` runs with them too (its mock-only parts skip).
    - Links are made as the link screen makes them (a link ticket from
      `WorkspaceLink/CreateTicket` with the admin's key, redeemed from Workspace's origin, recorded
      through Workspace's API); the link page's own walk-through is the mock's (the real client's

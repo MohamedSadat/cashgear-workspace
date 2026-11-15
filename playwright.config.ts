@@ -29,6 +29,13 @@ export const mocks = [
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
+  // Phase 7: the mock AI provider (Anthropic's streamed Messages API) the e2e stack's API calls.
+  {
+    command: 'node tests/mocks/ai/server.mjs',
+    url: 'http://127.0.0.1:4286/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 ];
 
 // Chrome and Edge are the first-class browsers, as in Sheet. E2E_BASE_URL points the specs at a

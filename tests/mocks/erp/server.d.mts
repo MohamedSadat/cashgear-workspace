@@ -96,7 +96,7 @@ export declare class MockErp {
   workspaceOrigins: Set<string>;
   clientOrigins: Set<string>;
   readonly workspaceUrl: string;
-  reset(options?: { kitVendors?: number }): void;
+  reset(options?: { kitVendors?: number; locks?: boolean }): void;
   now(): number;
   state(): MockState;
 }

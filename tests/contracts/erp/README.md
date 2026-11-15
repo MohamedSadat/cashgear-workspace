@@ -26,7 +26,10 @@ Never against the live database: LocalDB, or a test tenant. The suite makes link
 workspace `ERP_TEST_WORKSPACE_ID` and for fresh workspace ids of its own) and revokes every one it
 made when it ends. The commit cases change Vendors' addresses and mobiles of the first records in
 account order, and put each value back with another commit before the case ends (a case that
-fails half-way may leave one changed).
+fails half-way may leave one changed). Run its files one after another (`pnpm contract:erp`, or
+`--no-file-parallelism`): both link `ERP_TEST_WORKSPACE_ID` to the same company, the ERP answers
+both with the one live link, and a file that ends first revokes it under the other (Track E7
+found it; on the mock each file has its own server).
 
 | Variable                 | Meaning                                                                                                                                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

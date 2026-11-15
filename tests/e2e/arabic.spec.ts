@@ -4,6 +4,7 @@ import { editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount } from './cloud';
 import { signedInWorkspace, signers } from './database';
 import { commentScene, select } from './collab';
+import { phase7Scene, phase7Screens } from './phase7';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -314,5 +315,48 @@ test('the Arabic comments, inbox and presence have no English of their own', asy
     expect(t.owner.errors).toEqual([]);
   } finally {
     await scene.t.close();
+  }
+});
+
+// Phase 7's screens in Arabic: a chart block, an ERP block editing a vendor and its review, the AI
+// panel with a proposal, Settings' AI section; against the server stack, the mock ERP and the mock
+// provider (phase7.ts's scene, made in English). Anthropic's and its models' names are product
+// names, kept in Latin as the catalogue keeps them.
+test('the Arabic chart, ERP editing, AI panel and AI settings have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop || REAL_ERP, 'A browser against the mocks');
+  test.setTimeout(300000);
+  const cloud = signers();
+  const errors = watchAppErrors(page);
+  const scene = await phase7Scene(page, 'Samira', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const theirs = {
+      within: ['.cgw-erp-table tbody', '.cgw-erp-review-table tbody', '.cgw-ai-text'],
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+        'Anthropic',
+        'Claude Opus 5.5',
+        'Claude Sonnet 5.5',
+        'Claude Haiku 5.5',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await phase7Screens(page, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.api.dispose();
+    await cloud.close();
   }
 });

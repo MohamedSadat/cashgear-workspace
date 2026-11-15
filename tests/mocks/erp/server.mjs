@@ -1073,12 +1073,14 @@ export class MockErp {
     };
     switch (route) {
       case 'reset':
-        // `kitVendors`: more of Kit's vendors than the seed's 150 (Phase 7's review bench: 500).
-        this.reset(
-          Number.isInteger(body.kitVendors) && body.kitVendors >= 7 && body.kitVendors <= 5000
+        // For Phase 7's review bench: `kitVendors`, more of Kit's vendors than the seed's 150;
+        // `locks: false`, no record locked (every change of 500 valid).
+        this.reset({
+          ...(Number.isInteger(body.kitVendors) && body.kitVendors >= 7 && body.kitVendors <= 5000
             ? { kitVendors: body.kitVendors }
-            : {},
-        );
+            : {}),
+          ...(body.locks === false ? { locks: false } : {}),
+        });
         return ok();
       case 'clock':
         if (Number.isFinite(body.advanceMs)) this.offsetMs += body.advanceMs;

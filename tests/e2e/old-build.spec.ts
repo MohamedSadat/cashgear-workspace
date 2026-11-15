@@ -1,7 +1,8 @@
 // The old builds against what this build writes: an older desktop app meeting newer documents
 // and data must show them read-only, push nothing, and leave the server's bytes as they were. The
 // old builds are the web builds of the releases (scripts/old-build.mjs, in target/old-build/<tag>,
-// served on 127.0.0.1:4279 for v0.2.0, :4278 for v0.3.0, :4277 for v0.4.0 and :4276 for v0.5.0),
+// served on 127.0.0.1:4279 for v0.2.0, :4278 for v0.3.0, :4277 for v0.4.0, :4276 for v0.5.0 and
+// :4275 for v0.6.0),
 // each running the same document code as that release's desktop app (the app embeds that very
 // build). Both builds talk to the e2e server stack as the same person.
 //
@@ -28,6 +29,11 @@
 // `userMention`, schema 5) opens read-only there, the mention drawn in its line as needing a newer
 // version, nothing sent but the visit, the server's bytes kept; and the feed's new kinds of change
 // (a page's `comments`, a person's `notification`) pass it by: it stays synced.
+//
+// Phase 7 (v0.6.0, schema version 5, no plugin blocks): a page holding a chart and a kanban board
+// (`pluginBlock`, schema 6) opens read-only there, both blocks drawn as needing a newer version,
+// nothing sent but the visit, the server's bytes kept, and the blocks' props (with one this build
+// does not know) exactly as this build wrote them when this build opens the page again.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -648,5 +654,125 @@ test('the v0.5.0 build shows a version-5 page read-only, sends nothing but visit
   expect(nowErrors).toEqual([]);
   await oldContext.close();
   await colleague.dispose();
+  await api.dispose();
+});
+
+test('the v0.6.0 build shows a page with plugin blocks read-only, sends nothing but visits, and the server keeps its bytes', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.6.0');
+  const account = await newAccount('Five releases');
+  const api = await apiSession(account);
+
+  // This build: a page with a database, a chart of it and a board of it (schema 6).
+  const current = await browser.newContext();
+  const now = await current.newPage();
+  const nowErrors = watchAppErrors(now);
+  await now.goto('/');
+  await signIn(now, account);
+  await signedIn(now, account);
+  await now.getByLabel('Workspace name').fill('Five releases');
+  await now.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(now)).toBeVisible();
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  const workspaceId = (
+    (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+  ).find((w) => w.name === 'Five releases')!.id;
+  await newPage(now, 'Plans with a chart');
+  await now.keyboard.type('Written by version six');
+  await now.keyboard.press('Enter');
+  for (const name of ['Chart', 'Kanban board']) {
+    await now.keyboard.type(`/${name}`);
+    await expect(now.getByRole('option', { name, exact: true })).toBeVisible();
+    await now.keyboard.press('Enter');
+  }
+  await expect(editor(now).locator('[data-body="pluginBlock"]')).toHaveCount(2);
+  await expect(editor(now).locator('[data-body="pluginBlock"]').first()).toContainText(
+    'No database chosen.',
+  );
+  await waitSaved(now);
+  const plansId = pageIdOf(now);
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  await expect
+    .poll(async () => (await pageRecord(api, workspaceId, plansId))?.docSchemaVersion, {
+      timeout: 60000,
+    })
+    .toBe(CURRENT);
+  expect(CURRENT).toBeGreaterThanOrEqual(6);
+  // The worker's derived document holds both plugin blocks.
+  let derived = '';
+  await expect
+    .poll(
+      async () => {
+        const { status, body } = await api.raw(`/api/v1/pages/${plansId}/doc/json`);
+        if (status !== 200) return false;
+        derived = (JSON.parse(body) as { json: string }).json;
+        return derived.includes('cashgear.chart') && derived.includes('cashgear.kanban');
+      },
+      { timeout: 60000 },
+    )
+    .toBe(true);
+  const before = await serverState(api, plansId);
+  await current.close();
+
+  // v0.6.0, signed in as the same person on its own copy.
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const pushes: string[] = [];
+  old.on('request', (request) => {
+    const url = request.url();
+    if (request.method() !== 'POST') return;
+    if (/\/doc\/(updates|repair)$/.test(url)) pushes.push(url);
+    if (/\/ops$/.test(url))
+      for (const op of (request.postDataJSON()?.ops ?? []) as { type: string }[])
+        if (op.type !== 'visit.record') pushes.push(`${op.type} ${url}`);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  const sidebar = old.getByRole('tree', { name: 'Pages' });
+  await sidebar.getByRole('treeitem', { name: /Plans with a chart/ }).click({ timeout: 30000 });
+  await expect(editor(old)).toContainText('Written by version six', { timeout: 20000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  // Both blocks are placeholders where they were.
+  await expect(
+    editor(old).getByText('This block needs a newer version of Cash Gear Workspace.'),
+  ).toHaveCount(2);
+  await expect(editor(old).locator('[data-body="pluginBlock"]')).toHaveCount(0);
+  await expect(old.locator('.cgw-page [contenteditable="true"]')).toHaveCount(0);
+  const shown = (await editor(old).textContent())!;
+  await editor(old).click();
+  await old.keyboard.type('typed in the old build');
+  await old.keyboard.press('Enter');
+  await expect(editor(old)).toHaveText(shown);
+  await old.reload();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await expect(old.getByText(NEWER)).toBeVisible({ timeout: 20000 });
+  await old.waitForTimeout(5000);
+
+  expect(pushes, 'what the old build sent').toEqual([]);
+  expect(await serverState(api, plansId)).toEqual(before);
+  expect(oldErrors).toEqual([]);
+  expect(nowErrors).toEqual([]);
+  await oldContext.close();
+
+  // This build again: the blocks are as it wrote them.
+  const again = await browser.newContext();
+  const back = await again.newPage();
+  await back.goto('/');
+  await signIn(back, account);
+  await signedIn(back, account);
+  await back
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /Plans with a chart/ })
+    .click();
+  await expect(editor(back).locator('[data-body="pluginBlock"]')).toHaveCount(2);
+  const { body } = await api.raw(`/api/v1/pages/${plansId}/doc/json`);
+  expect((JSON.parse(body) as { json: string }).json).toBe(derived);
+  await again.close();
   await api.dispose();
 });
