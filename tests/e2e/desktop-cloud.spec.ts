@@ -209,7 +209,8 @@ test('asks AI for a summary with its bearer token and puts it in only on Accept'
         expect(headers.authorization).toMatch(/^Bearer /);
         expect(headers.cookie).toBeUndefined();
       }
-      await editor(page).click();
+      // Focus, not a click: in CI's smaller window the AI panel lies over the editor.
+      await editor(page).focus();
       await page.keyboard.press('Control+KeyZ');
       await expect(editor(page)).not.toContainText('Summary:');
       await waitSaved(page);
