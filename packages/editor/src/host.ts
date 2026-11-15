@@ -69,6 +69,15 @@ export const EDITOR_STRING_DEFAULTS = {
   mentionPeople: 'People',
   comment: 'Comment',
   commentOpen: 'Open the comment',
+  /** Phase 7: the bubble toolbar's "Ask AI" (`EditorHost.ai`). */
+  askAi: 'Ask AI',
+  /**
+   * Phase 7 (schema version 6): a plugin block's accessible name; what it says for a type this
+   * build has no definition of (`{{type}}` is the block's type); and when its frame fails.
+   */
+  pluginBlock: 'Plugin block',
+  pluginUnknown: 'This block needs a newer version of Cash Gear Workspace ({{type}}).',
+  pluginUnavailable: "This block can't be shown here.",
 } as const;
 
 /** One of the Phase 6 strings: the host's, else the English default. */
@@ -230,8 +239,52 @@ export interface ErpMountOptions extends ErpBlockAttrs {
   setAttrs(attrs: Partial<ErpBlockAttrs>): void;
 }
 
+/**
+ * A plugin block's attributes (schema version 6, `pluginBlock`; INTEGRATIONS.md, Plugin blocks):
+ * which definition, the version of it that last wrote `props`, and `props` as JSON text.
+ */
+export interface PluginBlockAttrs {
+  type: string | null;
+  version: number | null;
+  props: string | null;
+}
+
+/** What a plugin block gives the host to draw into its frame (Phase 7, stream C fills this in). */
+export interface PluginMountOptions extends PluginBlockAttrs {
+  blockId: string | null;
+  /** Whether the page is editable here. */
+  editable: boolean;
+  /** Writes the block's props (JSON text) as an ordinary edit; nothing when not editable. */
+  setProps(props: string, version: number): void;
+}
+
+/**
+ * What the AI part of the shell gives the editor (Phase 7, `packages/shell/src/ai`; stream E
+ * fills this in). Without it, no AI control is drawn. The editor never calls the network for it:
+ * it only tells the host what the person selected and asked for.
+ */
+export interface EditorAiHook {
+  /** Whether AI may be offered on this page now (on for the workspace, online, editable). */
+  available(): boolean;
+  subscribe(listener: () => void): () => void;
+  /** "Ask AI" on a selection (bubble toolbar): the range and its plain text. */
+  askAboutSelection(selection: { from: number; to: number; text: string }): void;
+}
+
 export interface EditorHost {
   strings?: EditorStrings;
+  /**
+   * Plugin blocks (schema version 6), drawn by the shell (`@cgw/plugins`) into a plugin block's
+   * frame. Without it, or for a `type` it does not know, the block draws a placeholder and the
+   * node is never changed (Phase 7, stream C).
+   */
+  plugins?: {
+    /** Whether this build has a definition for `type`. */
+    has(type: string): boolean;
+    mount?(element: HTMLElement, options: PluginMountOptions): MountedFrame<PluginMountOptions>;
+  };
+  /** AI (Phase 7, stream E): see `EditorAiHook`. */
+  ai?: EditorAiHook;
   /** The interface language (BCP 47) dates are drawn in; else the document's `lang`. */
   locale?: string;
   /** Toggle open state, kept per device (DATA_MODEL.md), never in the document. */

@@ -25,6 +25,7 @@ import { SlashCommands, type SlashKeys } from './slash';
 import { bookmarkView, childPageView, codeBlockView, fileView, imageView } from './nodeviews/atoms';
 import { databaseViewView } from './nodeviews/database';
 import { erpViewView } from './nodeviews/erp';
+import { pluginBlockView } from './nodeviews/plugin';
 import { sheetEmbedView } from './nodeviews/sheet';
 import { textBodyView } from './nodeviews/textBody';
 import { Tables } from './tables';
@@ -102,6 +103,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
     databaseView: (h) => databaseViewView(h, onHostChange),
     sheetEmbed: (h) => sheetEmbedView(h, onHostChange),
     erpView: (h) => erpViewView(h, onHostChange),
+    pluginBlock: (h) => pluginBlockView(h, onHostChange),
     pageMention: pageMentionView,
     dateMention: (h) => dateMentionView(h, () => ui, onHostChange),
     userMention: (h) => userMentionView(h, onHostChange),

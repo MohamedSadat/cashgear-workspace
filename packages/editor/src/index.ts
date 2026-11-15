@@ -9,12 +9,15 @@ export type {
   CommentThreadAnchor,
   DatabaseMountOptions,
   DatabaseRef,
+  EditorAiHook,
   EditorHost,
   EditorStrings,
   ErpBlockAttrs,
   ErpMountOptions,
   MountedFrame,
   PersonRef,
+  PluginBlockAttrs,
+  PluginMountOptions,
   PresenceCursor,
   SheetBlockAttrs,
   SheetMountOptions,
@@ -39,5 +42,14 @@ export {
 export type { LinkPreview, SlashItem } from './host';
 export { formatDateMention, insertDateMention } from './dates';
 export { mentionItems } from './mention';
+export { insertPluginBlock, unknownPluginText } from './nodeviews/plugin';
+export {
+  insertAiContent,
+  selectionForAi,
+  textOfRange,
+  type AiInsertResult,
+  type AiPlace,
+  type AiSelectionRange,
+} from './ai';
 export * from './sheet/contract';
 export * from './sheet/embed';

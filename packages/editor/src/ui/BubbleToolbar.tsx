@@ -1,5 +1,6 @@
 // The bubble toolbar on a text selection: marks, link, colour, "turn into" and, when the host lets
-// this person comment (Phase 6), "Comment". A stand-in for Track U2's selection toolbar (a
+// this person comment (Phase 6), "Comment"; when the host offers AI (Phase 7), "Ask AI", which
+// only tells the host the selection. A stand-in for Track U2's selection toolbar (a
 // CgToolbar in a CgFlyout that follows a rectangle). Mousedown is prevented everywhere, so the
 // editor keeps its selection while the toolbar is used. On a page this person may comment on but
 // not edit (or in a code block, where marks do not apply), it holds "Comment" alone.
@@ -16,6 +17,7 @@ import {
   type ReactNode,
 } from 'react';
 import { BLOCK_ACTIONS } from '../actions';
+import { textOfRange } from '../ai';
 import { currentBlock, firstBody } from '../blocks';
 import { commentOnSelection } from '../comments';
 import type { BlockEditor } from '../editor';
@@ -124,6 +126,19 @@ function Button({
   );
 }
 
+const noAi = () => () => {};
+const notAvailable = () => false;
+
+/** Whether "Ask AI" is offered (Phase 7, `EditorHost.ai`), followed without a render per key. */
+function useAiAvailable(host: EditorHost): boolean {
+  const ai = host.ai;
+  const subscribe = useCallback(
+    (listener: () => void) => (ai ? ai.subscribe(listener) : noAi()),
+    [ai],
+  );
+  return useSyncExternalStore(subscribe, ai ? () => ai.available() : notAvailable);
+}
+
 export function BubbleToolbar({
   editor: blockEditor,
   host,
@@ -133,6 +148,7 @@ export function BubbleToolbar({
 }) {
   const editor = blockEditor.editor;
   const snap = useSelectionSnapshot(editor, !!host.comments?.create);
+  const aiAvailable = useAiAvailable(host);
   const [panel, setPanel] = useState<Panel>(null);
   const [href, setHref] = useState('');
   const [invalid, setInvalid] = useState(false);
@@ -289,6 +305,23 @@ export function BubbleToolbar({
           <>
             <span className="cgw-bubble-sep" />
             {comment}
+          </>
+        )}
+        {aiAvailable && host.ai && (
+          <>
+            <span className="cgw-bubble-sep" />
+            <Button
+              label={editorString(host, 'askAi')}
+              onPress={() => {
+                const { from, to } = editor.state.selection;
+                const text = textOfRange(editor, from, to, host);
+                if (!text.trim()) return;
+                setPanel(null);
+                host.ai?.askAboutSelection({ from, to, text });
+              }}
+            >
+              <span aria-hidden="true">✦</span>
+            </Button>
           </>
         )}
       </div>
