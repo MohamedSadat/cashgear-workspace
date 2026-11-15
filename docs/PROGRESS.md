@@ -857,6 +857,12 @@ Notes
   43716838706 was green. Locally after the fix, CI's 23 failed cases passed in Chrome and Edge,
   but for Chrome's offline case, which once waited out its 30 s for the service worker right
   after a fresh build, then passed 3 of 3.
+- CI run 43723468807 (`e5aa034`) failed two older cases in both browsers and on retry, both races
+  of the specs on a busy runner, neither Phase 7's: the Arabic walk pressed Ctrl+/ before the
+  editor read the click's caret (Phase 6's `1414cd0` fixed the same in other specs; the Axe walk
+  was flaky the same way), and `database.ts`'s `addProperty` pressed Enter on a type before the
+  menu had put its own focus on the first item, so the retry made "Edited" a Text property. Both
+  wait now; locally 6 of 6 in Chrome and Edge. The Mac's run 43723468750 was green.
 - By hand in the browser (the e2e stack, the mocks, a throwaway account): Settings with a local
   workspace, then synced; Settings' AI section in dark English; the AI panel in light Arabic,
   right to left, a summary proposed, inserted at the page's top, "Ctrl+Z undoes it". It found the
