@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus, mailTo, link } from './cloud';
+import { apiSession } from '../../scripts/cloud-account.mjs';
 
 test.skip(desktop, 'The desktop signs in through the system browser: desktop-cloud.spec.ts');
 
@@ -66,6 +67,68 @@ test('signs up, keeps a workspace in the account, and a second device sees an ed
   expect(errors).toEqual([]);
   expect(secondErrors).toEqual([]);
   await other.close();
+});
+
+test('a first run while signed in makes its Getting started pages once, and says nothing of it', async ({
+  page,
+}) => {
+  // The workspace goes to the account as soon as it is made, while its first-run pages are still
+  // being made: the English page's create was sent twice, the server refused the second and the
+  // visit after it, and the app said "This is no longer available to you."
+  const errors = watchErrors(page);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __notices: string[] };
+    w.__notices = [];
+    new MutationObserver(() => {
+      for (const el of document.querySelectorAll('.cgw-notice')) {
+        const text = el.textContent?.trim();
+        if (text && w.__notices.at(-1) !== text) w.__notices.push(text);
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  // Each create by its operation id: a batch sent again after a lost answer is the same create.
+  const creates = new Map<string, string>();
+  const refused: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+    const { ops } = request.postDataJSON() as {
+      ops: { opId: string; type: string; entityId: string }[];
+    };
+    for (const op of ops) if (op.type === 'page.create') creates.set(op.opId, op.entityId);
+  });
+  page.on('response', async (response) => {
+    if (response.request().method() !== 'POST' || !/\/ops$/.test(response.url())) return;
+    const answer = (await response.json().catch(() => null)) as {
+      results: { status: string; error?: { code: string } }[];
+    } | null;
+    for (const r of answer?.results ?? [])
+      if (r.status === 'rejected') refused.push(r.error?.code ?? '');
+  });
+  const account = await newAccount('Lin');
+  await page.goto('/');
+  await signIn(page, account);
+  await signedIn(page, account);
+  await workspaceHere(page, 'First run');
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+
+  const api = await apiSession(account);
+  const [workspace] = (await api.get('/api/v1/workspaces')) as { id: string }[];
+  const tree = (await api.get(`/api/v1/workspaces/${workspace.id}/tree`)) as {
+    pages: { id: string; title: string }[];
+  };
+  // One page in each language (DECISIONS.md, Phase 1), each made once.
+  expect(tree.pages.map((p) => p.title).sort()).toEqual(['Getting started', 'البداية']);
+  expect([...creates.values()].sort()).toEqual(tree.pages.map((p) => p.id).sort());
+  expect(refused).toEqual([]);
+  await expect(page.getByRole('treeitem', { name: /Getting started/ })).toHaveCount(1);
+  await page.goto('/#/settings');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  const notices = await page.evaluate(
+    () => (window as unknown as { __notices: string[] }).__notices,
+  );
+  expect(notices.filter((n) => n.includes('no longer available'))).toEqual([]);
+  expect(errors).toEqual([]);
+  await api.dispose();
 });
 
 test('a workspace made before signing in uploads intact: tree, documents and ids', async ({
