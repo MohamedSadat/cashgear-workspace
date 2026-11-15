@@ -27,6 +27,8 @@ public static class Schema
         [4] = ["block", "bookmark", "childPage", "codeBlock", "databaseView", "dateMention", "divider", "erpView", "file", "hardBreak", "image", "pageMention", "sheetEmbed", "table", "tableCell", "tableOfContents", "tableRow", "textBody"],
         // Version 4's and a user mention (an inline atom: userId) (Phase 6).
         [5] = ["block", "bookmark", "childPage", "codeBlock", "databaseView", "dateMention", "divider", "erpView", "file", "hardBreak", "image", "pageMention", "sheetEmbed", "table", "tableCell", "tableOfContents", "tableRow", "textBody", "userMention"],
+        // Version 5's and a plugin block (an atom body: type, version, props) (Phase 7).
+        [6] = ["block", "bookmark", "childPage", "codeBlock", "databaseView", "dateMention", "divider", "erpView", "file", "hardBreak", "image", "pageMention", "pluginBlock", "sheetEmbed", "table", "tableCell", "tableOfContents", "tableRow", "textBody", "userMention"],
     };
 
     /// <summary>The highest version this worker knows: a document may rise to it, never past it.</summary>

@@ -3,7 +3,7 @@
 // ordinary local edit and loads in this build with nothing lost; a page of a version a build does
 // not know is read-only there and writes nothing (S2's check). Version 2 (Phase 3) added
 // `tableOfContents`; version 3 (Phase 4) `databaseView` and `dateMention`; version 4 (Phase 5)
-// `sheetEmbed` and `erpView`; version 5 (Phase 6) `userMention`.
+// `sheetEmbed` and `erpView`; version 5 (Phase 6) `userMention`; version 6 (Phase 7) `pluginBlock`.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MemoryStore, uuidv7 } from '@cgw/workspace';
@@ -31,6 +31,7 @@ const fixtures: Record<number, Fixture> = {
   2: readJSON<Fixture>('fixtures', 'doc-v2.json'),
   3: readJSON<Fixture>('fixtures', 'doc-v3.json'),
   4: readJSON<Fixture>('fixtures', 'doc-v4.json'),
+  5: readJSON<Fixture>('fixtures', 'doc-v5.json'),
 };
 /** The element names each version knows (the server worker's list). */
 const elements = readJSON<Record<string, string[]>>('vectors', 'schema-elements.json');
@@ -69,7 +70,7 @@ function kindsIn(json: DocJSON): Set<string> {
 
 describe('the version list', () => {
   it('has one step per version, each from n to n + 1', () => {
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
     for (let version = 1; version < SCHEMA_VERSION; version++) {
       expect(typeof migrations[version], String(version)).toBe('function');
       expect(fixtures[version], `fixture for version ${version}`).toBeDefined();
@@ -88,7 +89,7 @@ describe('the version list', () => {
   });
 });
 
-describe.each([1, 2, 3, 4])('the version-%i fixture', (version) => {
+describe.each([1, 2, 3, 4, 5])('the version-%i fixture', (version) => {
   const fixture = fixtures[version];
 
   it('is a document of that version holding every one of its block kinds and marks', () => {
@@ -110,7 +111,7 @@ describe.each([1, 2, 3, 4])('the version-%i fixture', (version) => {
   });
 });
 
-describe.each([1, 2, 3, 4])('migration from version %i', (version) => {
+describe.each([1, 2, 3, 4, 5])('migration from version %i', (version) => {
   const fixture = fixtures[version];
   afterEach(() => vi.useRealTimers());
 
@@ -253,6 +254,15 @@ const VIEW = '01936f6e-0000-7000-8000-0000000000d2';
 const WORKBOOK = '01936f6e-0000-7000-8000-0000000000e1';
 const LINK = '01936f6e-0000-7000-8000-0000000000e2';
 const PERSON = '01936f6e-0000-7000-8000-0000000000b1';
+const CHART_PROPS = JSON.stringify({
+  databaseId: DATABASE,
+  viewId: VIEW,
+  chart: 'bar',
+  groupBy: 'status',
+  measure: { kind: 'count' },
+  title: null,
+  later: { kept: true },
+});
 const strings = { block: 'Needs a newer version.', inline: '[newer]' };
 
 /** A block holding one body, built in Yjs. */
@@ -383,6 +393,35 @@ const newer: Newer[] = [
       expect(plainText({ type: 'doc', content: [ask, start] })).toBe(
         `Ask ${strings.inline} about it\n${strings.inline} to review`,
       );
+    },
+  },
+  {
+    version: 6,
+    blocks: () => [
+      blockOf(
+        'PluginChart1',
+        element('pluginBlock', { type: 'cashgear.chart', version: 1, props: CHART_PROPS }),
+      ),
+      blockOf(
+        'PluginLater2',
+        element('pluginBlock', { type: 'vendor.timeline', version: 3, props: '{"x":1}' }),
+      ),
+    ],
+    unknown: ['pluginBlock'],
+    found: (json) => {
+      const bodies = json.content!.map((block) => block.content![0]);
+      expect(bodies).toContainEqual({
+        type: 'pluginBlock',
+        attrs: { type: 'cashgear.chart', version: 1, props: CHART_PROPS },
+      });
+      expect(bodies).toContainEqual({
+        type: 'pluginBlock',
+        attrs: { type: 'vendor.timeline', version: 3, props: '{"x":1}' },
+      });
+    },
+    drawn: ([chart, later]) => {
+      placeholderIn(chart, 'PluginChart1');
+      placeholderIn(later, 'PluginLater2');
     },
   },
 ];

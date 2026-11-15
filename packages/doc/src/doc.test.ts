@@ -67,6 +67,7 @@ describe('schema', () => {
       'databaseView',
       'sheetEmbed',
       'erpView',
+      'pluginBlock',
       'text',
       'hardBreak',
       'pageMention',
@@ -85,7 +86,7 @@ describe('schema', () => {
       'highlight',
     ])
       expect(marks.has(name), name).toBe(true);
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
   });
 
   it('allows only safe link schemes', () => {

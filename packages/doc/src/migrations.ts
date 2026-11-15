@@ -34,6 +34,12 @@ export const migrations: Record<number, Migration> = {
   4: (doc) => {
     doc.getMap(META).set('schemaVersion', 5);
   },
+  // 5 -> 6: version 6 adds the `pluginBlock` body (INTEGRATIONS.md, Plugin blocks). No content
+  // changes, as above: a version-5 build opens the page read-only rather than meet it. A plugin
+  // type added later needs no step: a build without its definition draws a placeholder.
+  5: (doc) => {
+    doc.getMap(META).set('schemaVersion', 6);
+  },
 };
 
 export interface MigrationResult {

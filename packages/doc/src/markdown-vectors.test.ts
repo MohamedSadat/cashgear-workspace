@@ -47,7 +47,7 @@ function contextOf(data: Context | undefined): TextContext {
 const { docOf, heading, paragraph, bullet, numbered, todo, toggle, quote, callout, divider, code } =
   build;
 const { text, table, textBlock, block, bookmark, childPage, databaseView, dateMention } = build;
-const { sheetEmbed, erpView, userMention } = build;
+const { sheetEmbed, erpView, userMention, pluginBlock } = build;
 
 const PLANS = '01936f6e-0000-7000-8000-000000000001';
 const EMPTY = '01936f6e-0000-7000-8000-000000000002';
@@ -544,6 +544,25 @@ function cases(): Omit<Vector, 'markdown'>[] {
         paragraph('Ask ', userMention(SARA), ' about it.'),
         bullet(['Item ', userMention(OMAR)]),
         block({ type: 'codeBlock', content: [text('in code '), userMention(SARA)] }),
+      ),
+    },
+    {
+      // Schema version 6: a plugin block writes nothing for the server (its props are settings,
+      // not the page's text; only a client that knows the definition writes its line), whatever
+      // its attributes hold, and its child blocks are still written.
+      name: 'plugin blocks write nothing',
+      doc: docOf(
+        paragraph('Before'),
+        pluginBlock('cashgear.chart', { databaseId: TASKS, viewId: BOARD, chart: 'bar' }, 1),
+        pluginBlock('cashgear.kanban', '{"title":"*Kanban* [board] | <b>"}', 1),
+        pluginBlock('vendor.unknown', 'not json', 7),
+        block({ type: 'pluginBlock' }),
+        block({ type: 'pluginBlock', attrs: { type: 7, version: 'two', props: { a: 1 } } }),
+        bullet(['Item'], [pluginBlock('cashgear.chart')]),
+        block({ type: 'pluginBlock', attrs: { type: 'cashgear.chart' } }, [
+          paragraph('Child of a plugin block'),
+        ]),
+        paragraph('After'),
       ),
     },
     { name: 'an empty document', doc: { type: 'doc', content: [] } },

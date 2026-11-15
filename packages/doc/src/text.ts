@@ -17,6 +17,21 @@ export interface TextContext {
    * without one. The server's derived text and search write `@` alone (names change).
    */
   userName?: (userId: string) => string | undefined;
+  /**
+   * A plugin block's line (schema version 6), from its definition's `toPlainText`, when the
+   * writer has one for its type: copy and export on the client. Without it, or for a type it
+   * does not know, a plugin block writes nothing, as the server's derived text and search do.
+   */
+  pluginText?: (type: string, props: string | null, version: number | null) => string | undefined;
+}
+
+/** A plugin block's line, from the writer's definitions, else nothing. */
+function pluginLine(body: DocJSON, context: TextContext): string {
+  const type = body.attrs?.type;
+  if (typeof type !== 'string' || !type || !context.pluginText) return '';
+  const props = typeof body.attrs?.props === 'string' ? body.attrs.props : null;
+  const version = typeof body.attrs?.version === 'number' ? body.attrs.version : null;
+  return context.pluginText(type, props, version) ?? '';
 }
 
 /** A person's mention as text: `@` and the name the writer is given, else `@` alone. */
@@ -62,6 +77,8 @@ function bodyText(body: DocJSON, context: TextContext): string {
       return String(body.attrs?.url ?? '');
     case 'childPage':
       return context.pageTitle?.(String(body.attrs?.pageId ?? '')) ?? '';
+    case 'pluginBlock':
+      return pluginLine(body, context);
     // A table of contents and a database view hold no text of this page (a database's rows are
     // pages of their own, searched and exported as such). Nor do a workbook's embed and an ERP
     // view: a workbook is a record of its own, and nothing from the ERP is ever written.
@@ -260,6 +277,11 @@ function bodyMarkdown(body: DocJSON, context: TextContext, indent: string, numbe
     }
     case 'table':
       return tableMarkdown(body, context, indent);
+    case 'pluginBlock': {
+      // Its definition's line, as text (escaped), when the writer has one; else nothing.
+      const line = pluginLine(body, context);
+      return line ? `${indent}${escapeLineStart(escapeInline(line))}` : '';
+    }
     // A table of contents, a database view, a workbook's embed and an ERP view write nothing.
     default:
       return '';

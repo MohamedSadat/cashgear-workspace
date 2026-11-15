@@ -88,5 +88,27 @@
     "tableRow",
     "textBody",
     "userMention"
+  ],
+  "6": [
+    "block",
+    "bookmark",
+    "childPage",
+    "codeBlock",
+    "databaseView",
+    "dateMention",
+    "divider",
+    "erpView",
+    "file",
+    "hardBreak",
+    "image",
+    "pageMention",
+    "pluginBlock",
+    "sheetEmbed",
+    "table",
+    "tableCell",
+    "tableOfContents",
+    "tableRow",
+    "textBody",
+    "userMention"
   ]
 }

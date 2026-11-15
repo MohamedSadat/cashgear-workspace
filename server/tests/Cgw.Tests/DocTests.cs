@@ -482,12 +482,78 @@ public sealed class DocTests(ServerFixture server)
         Assert.Equal(UpdateStatus.Rejected, mentionOnly.Status);
         Assert.Contains("userMention", mentionOnly.Problem);
         Assert.Equal(1, mentionPage.DocSchemaVersion);
-        // Version 6, which this worker does not know, even from an app that says it does.
+        // Version 6 (Phase 7) is known now: a document may claim it from an app that knows it.
         var (six, sixPage) = await Decide("claimsV6", 6);
-        Assert.Equal(UpdateStatus.Rejected, six.Status);
-        Assert.Contains("newer than this worker knows", six.Problem);
-        Assert.Equal(1, sixPage.DocSchemaVersion);
-        Assert.Equal(5, Schema.Latest);
+        Assert.Equal(UpdateStatus.Valid, six.Status);
+        Assert.Equal(6, sixPage.DocSchemaVersion);
+    }
+
+    private static readonly Lazy<Dictionary<string, Fixture>> Schema6 = new(() =>
+        JsonSerializer.Deserialize<List<Fixture>>(
+                File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", "schema6.json")),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!
+            .ToDictionary(f => f.Name));
+
+    [Fact]
+    public async Task Schema_6_is_known_its_plugin_blocks_write_no_text_and_a_newer_version_is_not_known()
+    {
+        var ws = await Ws.Create(server);
+        await Kit.Register(ws.Client, ws.Id);
+
+        async Task<(PageDocUpdate Row, Cgw.Core.Data.Page Page)> Decide(string fixture, int clientSchemaVersion)
+        {
+            var page = (await ws.NewPage(fixture)).GetProperty("id").GetGuid();
+            await Kit.PushOk(ws.Client, page, Kit.Update("page"));
+            var id = Guid.CreateVersion7();
+            var pushed = await ws.Client.PostAsJsonAsync($"/api/v1/pages/{page}/doc/updates", new
+            {
+                epoch = 0,
+                clientSchemaVersion,
+                updates = new[] { new { updateId = id, data = Schema6.Value[fixture].Bytes } },
+            });
+            Assert.True(pushed.IsSuccessStatusCode, await pushed.Content.ReadAsStringAsync());
+            await Validate();
+            await using var db = server.NewDb(ws.Id);
+            return (await db.PageDocUpdates.AsNoTracking().SingleAsync(u => u.UpdateId == id), await db.Pages.AsNoTracking().SingleAsync(p => p.Id == page));
+        }
+
+        const string Marker = "Plugprop 6631";
+        // Version 6 from an app that knows it: a plugin block, the page raised.
+        var (migrated, page6) = await Decide("migrate6", 6);
+        Assert.Equal(UpdateStatus.Valid, migrated.Status);
+        Assert.Equal(6, page6.DocSchemaVersion);
+        await Kit.Derive(server, ws.Id, page6.Id);
+        var json = (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/pages/{page6.Id}/doc/json")).GetProperty("json").GetString()!;
+        Assert.Contains("cashgear.chart", json);
+        Assert.Contains("Plugprop", json);
+        // The derived text and search write nothing of its props (settings, not the page's text).
+        await using (var db = server.NewDb(ws.Id))
+        {
+            var derived = await db.PageDocDerived.SingleAsync(d => d.PageId == page6.Id);
+            foreach (var text in new[] { derived.PlainText, derived.SearchText })
+            {
+                Assert.Contains("hello", text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("6631", text);
+                Assert.DoesNotContain(Marker, text, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("cashgear.chart", text, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        // The same from an app that knows only version 5.
+        var (fromOld, oldPage) = await Decide("migrate6", 5);
+        Assert.Equal(UpdateStatus.Rejected, fromOld.Status);
+        Assert.Contains("newer than the app that pushed it", fromOld.Problem);
+        Assert.Equal(1, oldPage.DocSchemaVersion);
+        // A plugin block in a document still at version 1 is refused.
+        var (pluginOnly, pluginPage) = await Decide("pluginOnly", 6);
+        Assert.Equal(UpdateStatus.Rejected, pluginOnly.Status);
+        Assert.Contains("pluginBlock", pluginOnly.Problem);
+        Assert.Equal(1, pluginPage.DocSchemaVersion);
+        // Version 7, which this worker does not know, even from an app that says it does.
+        var (seven, sevenPage) = await Decide("claimsV7", 7);
+        Assert.Equal(UpdateStatus.Rejected, seven.Status);
+        Assert.Contains("newer than this worker knows", seven.Problem);
+        Assert.Equal(1, sevenPage.DocSchemaVersion);
+        Assert.Equal(6, Schema.Latest);
     }
 
     [Fact]

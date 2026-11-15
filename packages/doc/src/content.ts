@@ -103,6 +103,23 @@ export const erpView = (
       pageSize: settings.pageSize ?? null,
     },
   });
+/**
+ * Schema version 6: a plugin block; `props` as JSON text (an object is written for it), `version`
+ * the definition's that wrote them.
+ */
+export const pluginBlock = (
+  type: string | null,
+  props: Record<string, unknown> | string | null = null,
+  version: number | null = null,
+) =>
+  block({
+    type: 'pluginBlock',
+    attrs: {
+      type,
+      version,
+      props: props === null || typeof props === 'string' ? props : JSON.stringify(props),
+    },
+  });
 /** Schema version 3: a date in a line (`YYYY-MM-DD` or a UTC instant), with an optional end. */
 export const dateMention = (date: string, end: string | null = null): DocJSON => ({
   type: 'dateMention',
@@ -168,6 +185,11 @@ export function remapRefs(
       next.viewId = pages.get(attrs.viewId);
     if (typeof attrs.assetId === 'string' && assets.has(attrs.assetId))
       next.assetId = assets.get(attrs.assetId);
+    // A plugin block (schema version 6) names a database by `databaseId` and `viewId` in its
+    // props, by the convention the first-party definitions keep: those follow the copy too, and
+    // every other prop is kept as it was.
+    if (node.type === 'pluginBlock' && typeof attrs.props === 'string')
+      next.props = remapPluginProps(attrs.props, pages);
     copy.attrs = next;
   }
   if (node.marks)
@@ -181,6 +203,27 @@ export function remapRefs(
     });
   if (node.content) copy.content = node.content.map((child) => remapRefs(child, pages, assets));
   return copy;
+}
+
+/** A plugin block's props with its database and view remapped; the text as it was otherwise. */
+function remapPluginProps(props: string, pages: ReadonlyMap<string, string>): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(props);
+  } catch {
+    return props;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return props;
+  const record = parsed as Record<string, unknown>;
+  let changed = false;
+  for (const key of ['databaseId', 'viewId']) {
+    const value = record[key];
+    if (typeof value === 'string' && pages.has(value)) {
+      record[key] = pages.get(value);
+      changed = true;
+    }
+  }
+  return changed ? JSON.stringify(record) : props;
 }
 
 /** Every page and asset a document points at: what an export or a copy must bring along. */

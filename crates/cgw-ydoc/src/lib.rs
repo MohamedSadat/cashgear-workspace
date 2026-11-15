@@ -334,7 +334,11 @@ fn collect_text<T: ReadTxn>(txn: &T, node: &XmlOut, depth: usize, out: &mut Stri
             }
             // Schema version 4's workbook embed and ERP view write nothing, whatever they hold:
             // a workbook is a record of its own, and nothing from the ERP is ever search text.
-            if matches!(element.tag().as_ref(), "sheetEmbed" | "erpView") {
+            // Nor does version 6's plugin block: its props are settings, never the page's text.
+            if matches!(
+                element.tag().as_ref(),
+                "sheetEmbed" | "erpView" | "pluginBlock"
+            ) {
                 return Ok(());
             }
             // Schema version 5's user mention writes `@` alone, whatever it holds: names change,

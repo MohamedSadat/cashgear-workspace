@@ -4939,6 +4939,202 @@
     "markdown": "Ask @ about it.\n\n- Item @\n\n```\nin code @\n```\n"
   },
   {
+    "name": "plugin blocks write nothing",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Before"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "pluginBlock",
+              "attrs": {
+                "type": "cashgear.chart",
+                "version": 1,
+                "props": "{\"databaseId\":\"01936f6e-0000-7000-8000-0000000000d1\",\"viewId\":\"01936f6e-0000-7000-8000-0000000000d2\",\"chart\":\"bar\"}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "pluginBlock",
+              "attrs": {
+                "type": "cashgear.kanban",
+                "version": 1,
+                "props": "{\"title\":\"*Kanban* [board] | <b>\"}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "pluginBlock",
+              "attrs": {
+                "type": "vendor.unknown",
+                "version": 7,
+                "props": "not json"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "pluginBlock"
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "pluginBlock",
+              "attrs": {
+                "type": 7,
+                "version": "two",
+                "props": {
+                  "a": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "bulletItem"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Item"
+                }
+              ]
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "pluginBlock",
+                  "attrs": {
+                    "type": "cashgear.chart",
+                    "version": null,
+                    "props": null
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "pluginBlock",
+              "attrs": {
+                "type": "cashgear.chart"
+              }
+            },
+            {
+              "type": "block",
+              "attrs": {
+                "id": null
+              },
+              "content": [
+                {
+                  "type": "textBody",
+                  "attrs": {
+                    "kind": "paragraph"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Child of a plugin block"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Before\n\n- Item\n\n  Child of a plugin block\n\nAfter\n"
+  },
+  {
     "name": "an empty document",
     "doc": {
       "type": "doc",

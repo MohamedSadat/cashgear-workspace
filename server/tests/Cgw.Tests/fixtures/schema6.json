@@ -1,0 +1,20 @@
+[
+  {
+    "name": "migrate6",
+    "client": 1001,
+    "data": "AQfpBwyo6QcAAX0Gh+kHAgMFYmxvY2sHAOkHDQMLcGx1Z2luQmxvY2soAOkHDgR0eXBlAXcOY2FzaGdlYXIuY2hhcnQoAOkHDgd2ZXJzaW9uAX0BKADpBw4FcHJvcHMBd2l7ImRhdGFiYXNlSWQiOiIwMTk1ZjRhMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwZDYiLCJ2aWV3SWQiOm51bGwsImNoYXJ0IjoiYmFyIiwidGl0bGUiOiJQbHVncHJvcCA2NjMxIn0oAOkHDQJpZAF3DFBiMVBiMlBiM1BiNAHpBwEAAQ==",
+    "why": "the migration to version 6: meta.schemaVersion set to 6 and a plugin block, in one transaction"
+  },
+  {
+    "name": "pluginOnly",
+    "client": 1001,
+    "data": "AQbpBwyH6QcCAwVibG9jawcA6QcMAwtwbHVnaW5CbG9jaygA6QcNBHR5cGUBdw5jYXNoZ2Vhci5jaGFydCgA6QcNB3ZlcnNpb24BfQEoAOkHDQVwcm9wcwF3aXsiZGF0YWJhc2VJZCI6IjAxOTVmNGEwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkNiIsInZpZXdJZCI6bnVsbCwiY2hhcnQiOiJiYXIiLCJ0aXRsZSI6IlBsdWdwcm9wIDY2MzEifSgA6QcMAmlkAXcMUGIxUGIyUGIzUGI0AA==",
+    "why": "a plugin block in a document still at version 1: an element versions 1 to 5 lack"
+  },
+  {
+    "name": "claimsV7",
+    "client": 1001,
+    "data": "AQHpBwyo6QcAAX0HAekHAQAB",
+    "why": "a document claiming version 7, newer than the worker knows"
+  }
+]

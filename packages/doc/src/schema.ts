@@ -1,7 +1,7 @@
 // The block schema (DATA_MODEL.md, "Page content"), fixed by spike S1:
 //   doc: block*      block: (body | block)*      one textBody node whose `kind` sets the text kind
 // Rules that hold forever: `*` only; every attribute optional with a default; no node or attribute
-// is ever removed or renamed. Schema version 5 (version 4 plus `userMention`).
+// is ever removed or renamed. Schema version 6 (version 5 plus `pluginBlock`).
 import { Extension, Mark, Node, getSchema, mergeAttributes, type AnyExtension } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { dateMentionText, isDateValue } from './dates';
@@ -9,9 +9,10 @@ import { dateMentionText, isDateValue } from './dates';
 /**
  * Raised for every change an older client could not draw (DATA_MODEL.md). 1: Phase 1's blocks.
  * 2: `tableOfContents`. 3: `databaseView` and `dateMention`. 4: `sheetEmbed` and `erpView`.
- * 5: `userMention`. Each rise has a migration (migrations.ts) and a fixture (fixtures/).
+ * 5: `userMention`. 6: `pluginBlock`. Each rise has a migration (migrations.ts) and a fixture
+ * (fixtures/).
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const TEXT_KINDS = [
   'paragraph',
@@ -215,6 +216,12 @@ const positiveNumber = (raw: string): number | null => {
   return raw.trim() !== '' && Number.isFinite(value) && value > 0 ? value : null;
 };
 
+/** A version: a positive whole number, else null (the default). */
+const positiveInteger = (raw: string): number | null => {
+  const value = positiveNumber(raw);
+  return value !== null && Number.isInteger(value) ? value : null;
+};
+
 function atomBody(
   name: string,
   attrs: Record<string, AtomAttr>,
@@ -309,6 +316,18 @@ const ErpView = atomBody('erpView', {
   fields: { default: null },
   sort: { default: null },
   pageSize: { default: null, parse: positiveNumber },
+});
+/**
+ * Version 6: a block whose body a plugin defines (INTEGRATIONS.md, Plugin blocks): `type` names
+ * the definition (`cashgear.chart`), `version` is the definition's version that last wrote
+ * `props`, and `props` is JSON text of ids and settings, never data. A build that does not know
+ * `type` draws a placeholder and never changes the node; one whose definition is older than
+ * `version` draws it read-only. Later plugin types need no schema change.
+ */
+const PluginBlock = atomBody('pluginBlock', {
+  type: { default: null },
+  version: { default: null, parse: positiveInteger },
+  props: { default: null },
 });
 
 // Tables (DATA_MODEL.md): cells hold inline content. Header row and column are table attributes,
@@ -650,6 +669,7 @@ export function schemaExtensions(): AnyExtension[] {
     DatabaseView,
     SheetEmbed,
     ErpView,
+    PluginBlock,
     HardBreak,
     PageMention,
     DateMention,
@@ -676,6 +696,7 @@ export const ATOM_BODIES = [
   'databaseView',
   'sheetEmbed',
   'erpView',
+  'pluginBlock',
 ] as const;
 
 let cached: Schema | null = null;

@@ -144,11 +144,14 @@ public static partial class Markdown
             // Schema version 2: the page's own headings, drawn by the app; nothing of its own to
             // write (the document layer's writer agrees). Version 3's database view writes nothing
             // either: a database's rows are pages of their own. Nor do version 4's workbook embed
-            // (a workbook is a record of its own) and ERP view (nothing from the ERP is written).
+            // (a workbook is a record of its own) and ERP view (nothing from the ERP is written),
+            // nor version 6's plugin block (its props are settings; only a client that knows the
+            // definition writes its line).
             case "tableOfContents":
             case "databaseView":
             case "sheetEmbed":
             case "erpView":
+            case "pluginBlock":
                 return "";
             default:
                 return "";

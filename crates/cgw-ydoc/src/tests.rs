@@ -351,3 +351,65 @@ fn version_5_user_mention_writes_an_at_sign_and_only_version_5_knows_it() {
         "{refused:?}"
     );
 }
+
+/// Schema version 6 (the doc layer's `text.ts`): a plugin block writes nothing in search's plain
+/// text, even with something inside it (its props are settings, never the page's text); its
+/// attributes reach the derived JSON as stored; version 6's list takes it and version 5's
+/// refuses it.
+#[test]
+fn version_6_plugin_block_writes_nothing_and_only_version_6_knows_it() {
+    let doc = Doc::with_client_id(6);
+    let content = doc.get_or_insert_xml_fragment(CONTENT);
+    let update = {
+        let mut txn = doc.transact_mut();
+        let first = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        first.insert_attribute(&mut txn, "id", "aaaaaaaaaaaa");
+        let before = first.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        before.push_back(&mut txn, XmlTextPrelim::new("Before"));
+        let chart = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        chart.insert_attribute(&mut txn, "id", "bbbbbbbbbbbb");
+        let plugin = chart.push_back(&mut txn, XmlElementPrelim::empty("pluginBlock"));
+        plugin.insert_attribute(&mut txn, "type", "cashgear.chart");
+        plugin.insert_attribute(&mut txn, "version", 1.0);
+        plugin.insert_attribute(
+            &mut txn,
+            "props",
+            r#"{"databaseId":"0195f4a0-0000-7000-8000-0000000000d1","title":"Distinctive 7731"}"#,
+        );
+        // Hostile: an atom holding text. It is still not the page's text.
+        plugin.push_back(&mut txn, XmlTextPrelim::new("Leaked chart"));
+        let last = content.push_back(&mut txn, XmlElementPrelim::empty("block"));
+        last.insert_attribute(&mut txn, "id", "cccccccccccc");
+        let after = last.push_back(&mut txn, XmlElementPrelim::empty("textBody"));
+        after.push_back(&mut txn, XmlTextPrelim::new("After"));
+        txn.encode_update_v1()
+    };
+    assert_eq!(to_plain_text(&update, CONTENT).unwrap(), "Before\nAfter\n");
+
+    let json: Value =
+        serde_json::from_str(&to_prosemirror_json(&update, CONTENT).unwrap()).unwrap();
+    let plugin = &json["content"][1]["content"][0];
+    assert_eq!(plugin["type"], "pluginBlock");
+    assert_eq!(plugin["attrs"]["type"], "cashgear.chart");
+    assert_eq!(plugin["attrs"]["version"].as_f64(), Some(1.0));
+    assert!(plugin["attrs"]["props"]
+        .as_str()
+        .unwrap()
+        .contains("Distinctive 7731"));
+
+    let policy = |version: &str| Policy {
+        elements: schema_elements(version),
+        block_ids: true,
+        ..Policy::default()
+    };
+    assert_eq!(
+        validate(&[], &update, &policy("6")).unwrap(),
+        Vec::<String>::new()
+    );
+    let refused = validate(&[], &update, &policy("5")).unwrap();
+    assert_eq!(
+        refused,
+        vec!["unknown element <pluginBlock>".to_string()],
+        "{refused:?}"
+    );
+}
