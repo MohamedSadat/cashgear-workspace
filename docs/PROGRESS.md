@@ -884,6 +884,11 @@ Notes
   Chrome losing completed transactions when only its browser process is ended (5 of 70; 1 of 40
   with strict durability), and none with the tree ended (0 of 40; 1,000 sync runs, 0 lost): this is
   the first such loss with the tree ended. Not fixed in 0.7.0; a follow-up.
+- CI run 43751996745 (`c0a2dde`, docs only) failed one unit test from Phase 5,
+  `ErpView.test.ts` "says so when the ERP refuses…": it waits out the 3 s an ERP's 429 asks for,
+  but its helper allowed 300 waits of 5 ms, which last about 5.4 s on the reference machine
+  (Windows rounds each up) and 1.5 s where the timers are finer, as on that runner. The helper is
+  bounded by time now (5 s, that case 8 s).
 - By hand in the browser (the e2e stack, the mocks, a throwaway account): Settings with a local
   workspace, then synced; Settings' AI section in dark English; the AI panel in light Arabic,
   right to left, a summary proposed, inserted at the page's top, "Ctrl+Z undoes it". It found the
