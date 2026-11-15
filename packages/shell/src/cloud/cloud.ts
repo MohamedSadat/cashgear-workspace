@@ -151,12 +151,13 @@ export class Cloud {
       clientIdFor: (workspaceId) => this.engine.clientIdFor(workspaceId),
       pullPage: (pageId) => (this.account_ ? this.engine.pullPage(pageId) : Promise.resolve()),
       changed: () => this.engine.changed(),
-      // A workspace made while signed in goes to the account at once.
+      // A workspace made while signed in goes to the account at once. One made before the first
+      // check has answered (or before this connection was made) waits for it: until then nobody
+      // is known to be signed in, and it stayed on this device.
       created: (workspaceId) => {
-        if (this.account_)
-          void this.upload(workspaceId).catch((error: unknown) =>
-            console.warn('Upload failed:', error),
-          );
+        void this.firstCheck
+          .then(() => (this.account_ ? this.upload(workspaceId) : undefined))
+          .catch((error: unknown) => console.warn('Upload failed:', error));
       },
       fetchMissing: (pageId) => this.fetchMissing(pageId),
       docEvent: (event) => this.onDocEvent(event),

@@ -147,6 +147,8 @@ export class WorkspaceSession {
   private readonly rowTrash = new Map<Id, { count: number; fresh: boolean; counting: boolean }>();
   private readonly rowTrashListeners = new Set<() => void>();
   private cloud: CloudHooks | null = null;
+  /** Workspaces made here before the cloud connected: told to it when it does (`created`). */
+  private madeBefore: Id[] = [];
   /** The page on screen: the document opened last, until another opens or it closes (Phase 6). */
   private shown: Id | null = null;
   /** Bytes of an asset this device does not hold, from the server (cloud/cloud.ts). */
@@ -193,6 +195,10 @@ export class WorkspaceSession {
   connect(hooks: CloudHooks) {
     this.cloud = hooks;
     if (this.shown) hooks.live?.(this.shown, true);
+    // The first-run screen shows once the store is open, before the connection is made.
+    const made = this.madeBefore;
+    this.madeBefore = [];
+    for (const id of made) hooks.created?.(id);
   }
 
   /** A page's open document, if the session has it open (or is opening it). */
@@ -592,7 +598,8 @@ export class WorkspaceSession {
       newOp('section.create', workspace.id, personal.id, personal),
     ]);
     this.switchTo(workspace.id);
-    this.cloud?.created?.(workspace.id);
+    if (this.cloud) this.cloud.created?.(workspace.id);
+    else this.madeBefore.push(workspace.id);
     return { workspace, shared, personal };
   }
 

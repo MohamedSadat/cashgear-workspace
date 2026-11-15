@@ -208,27 +208,33 @@ describe('recovered pages', () => {
   });
 });
 
+const platform = {
+  kind: 'web',
+  apiBase: 'http://127.0.0.1:9',
+  auth: { kind: 'cookie' },
+  setWindowTheme: async () => {},
+  openExternal: async () => {},
+  openStore: async () => new MemoryStore(),
+  saveFile: async () => {},
+} as CloudPlatform;
+const ada = { id: uuidv7(), email: 'ada@example.test', displayName: 'Ada', deviceId: null };
+
+async function until(check: () => boolean) {
+  for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
+  expect(check()).toBe(true);
+}
+
+const answer = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
 describe('signed in while offline', () => {
   const realFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = realFetch;
   });
-
-  const platform = {
-    kind: 'web',
-    apiBase: 'http://127.0.0.1:9',
-    auth: { kind: 'cookie' },
-    setWindowTheme: async () => {},
-    openExternal: async () => {},
-    openStore: async () => new MemoryStore(),
-    saveFile: async () => {},
-  } as CloudPlatform;
-  const ada = { id: uuidv7(), email: 'ada@example.test', displayName: 'Ada', deviceId: null };
-
-  async function until(check: () => boolean) {
-    for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
-    expect(check()).toBe(true);
-  }
 
   it('uses the account last signed in here when the server cannot be reached', async () => {
     globalThis.fetch = vi.fn(async () => {
@@ -263,6 +269,90 @@ describe('signed in while offline', () => {
       expect(await cloud.refreshAccount()).toBeNull();
       expect(cloud.account).toBeNull();
       await until(() => cloud.status.state === 'signedOut');
+    } finally {
+      cloud.dispose();
+    }
+  });
+});
+
+describe('a workspace made at start', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  /** The server, its first "who is signed in" held until `release`; each upload recorded. */
+  function server(account: typeof ada | null) {
+    let release!: () => void;
+    const held = new Promise<void>((done) => (release = done));
+    const uploads: Id[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(String(input), init);
+      const route = `${request.method} ${new URL(request.url).pathname}`;
+      if (route === 'GET /api/v1/account/session') {
+        await held;
+        return answer({ account });
+      }
+      if (route === 'GET /api/v1/account/antiforgery') return answer({ token: 'csrf' });
+      if (route === 'POST /api/v1/workspaces') {
+        const body = (await request.json()) as { id: Id; name: string };
+        uploads.push(body.id);
+        return answer({ ...body, icon: null, createdAt: now(), version: 1, role: 'owner' });
+      }
+      return answer({ code: 'server.unavailable', title: 'Down for the test' }, 503);
+    }) as typeof fetch;
+    return { release, uploads };
+  }
+
+  const sections = { shared: 'S', private: 'P' };
+
+  it('goes to the account when made before the first account check has answered', async () => {
+    const { release, uploads } = server(ada);
+    const session = await WorkspaceSession.start(new MemoryStore());
+    const cloud = new Cloud(platform, session, docCodec);
+    try {
+      const checked = cloud.refreshAccount();
+      const { workspace } = await session.createWorkspace('Early', sections);
+      expect(cloud.account).toBeUndefined();
+      release();
+      expect((await checked)?.id).toBe(ada.id);
+      await until(() => uploads.length > 0);
+      expect(uploads).toEqual([workspace.id]);
+    } finally {
+      cloud.dispose();
+    }
+  });
+
+  it('goes to the account when made before the app connected to the server', async () => {
+    const { release, uploads } = server(ada);
+    const session = await WorkspaceSession.start(new MemoryStore());
+    // The first-run screen shows once the store is open; the connection waits for the editor's code.
+    const { workspace } = await session.createWorkspace('Earlier', sections);
+    const cloud = new Cloud(platform, session, docCodec);
+    try {
+      release();
+      await cloud.refreshAccount();
+      await until(() => uploads.length > 0);
+      expect(uploads).toEqual([workspace.id]);
+    } finally {
+      cloud.dispose();
+    }
+  });
+
+  it('stays on this device when the check says nobody is signed in', async () => {
+    const { release, uploads } = server(null);
+    const session = await WorkspaceSession.start(new MemoryStore());
+    const early = await session.createWorkspace('Before', sections);
+    const cloud = new Cloud(platform, session, docCodec);
+    try {
+      const checked = cloud.refreshAccount();
+      const late = await session.createWorkspace('During', sections);
+      release();
+      expect(await checked).toBeNull();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(uploads).toEqual([]);
+      for (const { workspace } of [early, late])
+        expect(session.mirror.workspaces.get(workspace.id)?.localOnly).toBe(true);
     } finally {
       cloud.dispose();
     }
