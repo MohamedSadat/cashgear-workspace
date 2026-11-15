@@ -430,7 +430,10 @@ outbox is replaced by the workspace's records as creates, parents first, then tr
 upload resumes from the outbox. Nothing written while the upload is prepared is lost: only the
 operations it read before it read the workspace give way to its creates (later ones follow them),
 and only the updates it merged give way to the merged one (later ones stay after it; a local
-compaction in between makes it stop and start again).
+compaction in between makes it stop and start again). The outbox is read again after the records,
+and both again until it has not changed (at most five reads): an operation written between the
+two reads would be in the creates and kept after them too. A workspace made while signed in is
+uploaded at once, while its first-run pages are being made, which met that every time.
 
 **Databases** (Phase 4): database, view and row records are metadata on this channel; their rules
 are in `DATA_MODEL.md` (Databases).

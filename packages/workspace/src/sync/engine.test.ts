@@ -113,6 +113,52 @@ describe('sync engine', () => {
     expect(decode(fakeCodec.merge(doc.updates.map((u) => u.data))).text).toBe('typed');
   });
 
+  it('sends a page made while an upload starts once, and what was done to it after', async () => {
+    // A first run while signed in: the workspace goes to the account as soon as it is made, while
+    // its Getting started pages are still being made. One lands between the upload's read of the
+    // outbox and its read of the records, and is renamed (a visit, a title) just after.
+    const server = new FakeServer();
+    const store = new MemoryStore();
+    const { ws, section } = await localWorkspace(store);
+    const made = pageRecord(ws.id, section.id, 'Getting started', null, 'a5');
+    const outbox = store.nextOutboxBatch.bind(store);
+    const read = store.readMirror.bind(store);
+    let step = 0;
+    store.nextOutboxBatch = async (limit: number, workspaceId?: Id) => {
+      const ops = await outbox(limit, workspaceId);
+      if (step === 0 && limit > 1000) {
+        step = 1;
+        await store.applyLocalOps([newOp('page.create', ws.id, made.id, made)]);
+      }
+      return ops;
+    };
+    store.readMirror = async (workspaceId: Id | null) => {
+      const snapshot = await read(workspaceId);
+      if (step === 1) {
+        step = 2;
+        await store.applyLocalOps([newOp('page.update', ws.id, made.id, { title: 'Renamed' })]);
+      }
+      return snapshot;
+    };
+    const creates: Id[] = [];
+    const one = device(server, ALICE, {
+      store,
+      api: (base) => ({
+        pushOps: (workspaceId, deviceId, ops) => {
+          for (const op of ops) if (op.type === 'page.create') creates.push(op.entityId);
+          return base.pushOps(workspaceId, deviceId, ops);
+        },
+      }),
+    });
+    await one.engine.upload(ws.id);
+    await one.engine.syncOnce();
+    expect(creates.filter((id) => id === made.id)).toHaveLength(1);
+    expect(one.notices()).toEqual([]);
+    expect(await store.nextOutboxBatch(100, ws.id)).toEqual([]);
+    expect(server.spaces.get(ws.id)!.mirror.pages.get(made.id)?.title).toBe('Renamed');
+    expect((await store.getPage(made.id))?.title).toBe('Renamed');
+  });
+
   it('takes a create the server already holds as made, and sends what followed it again', async () => {
     // A create sent twice (as a first run's upload did before): the server refuses the second
     // with the page it holds, and what follows it in the push as depending on a refused create.

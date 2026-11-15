@@ -2564,21 +2564,12 @@ export class SyncEngine {
     const workspace = current.workspaces[0];
     if (!workspace) throw new Error('No such workspace');
     if (!workspace.localOnly) return;
-    // What the records below stand for. Anything written while the upload runs (a page made at
-    // the same time, a key typed into an open page) is not replaced, and is sent after them.
-    const replaced = (await this.store.nextOutboxBatch(OUTBOX_ALL, workspaceId)).map(
-      (op) => op.opId,
-    );
-    const snapshot = await this.store.readMirror(workspaceId);
+    const { replaced, snapshot, rows } = await this.uploadState(workspaceId);
     await this.api.createWorkspace({
       id: workspace.id,
       name: workspace.name,
       icon: workspace.icon,
     });
-    // Its databases go with it: their records, views and every row (Phase 4).
-    const rows: RowRecord[] = [];
-    for (const database of snapshot.databases ?? [])
-      rows.push(...(await this.store.readRows(database.id)));
     const ids = new Set<number>();
     for (const page of [...snapshot.pages, ...rows]) {
       const doc = await this.store.loadDoc(page.id);
@@ -2619,6 +2610,32 @@ export class SyncEngine {
     this.kick(0);
   }
 
+  /**
+   * The records an upload sends, with its databases' rows (Phase 4), and the operations they stand
+   * for, which the upload's creates replace. Anything written later (a page made at the same time,
+   * a key typed into an open page) is not replaced, and is sent after them. The two are read apart,
+   * so an operation written between them would be both in the records and kept: a first run's page,
+   * made while its workspace went to the account, was created twice, and what followed it refused.
+   * They are read again until the outbox is the same after the records as before them.
+   */
+  private async uploadState(workspaceId: Id) {
+    const outbox = async () =>
+      (await this.store.nextOutboxBatch(OUTBOX_ALL, workspaceId)).map((op) => op.opId);
+    let replaced = await outbox();
+    for (let tries = 1; ; tries++) {
+      const snapshot = await this.store.readMirror(workspaceId);
+      const rows: RowRecord[] = [];
+      for (const database of snapshot.databases ?? [])
+        rows.push(...(await this.store.readRows(database.id)));
+      const after = await outbox();
+      const same = after.length === replaced.length && after.every((id, i) => id === replaced[i]);
+      // Still changing after a few reads (a title typed into at that moment): what was written
+      // meanwhile is sent twice, and a create the server holds already is taken as made.
+      if (same || tries >= UPLOAD_READS) return { replaced, snapshot, rows };
+      replaced = after;
+    }
+  }
+
   private async registerAll(workspaceId: Id, ids: number[]): Promise<Set<number>> {
     const refused = new Set<number>();
     for (let i = 0; i < ids.length; i += 1000)
@@ -2629,6 +2646,9 @@ export class SyncEngine {
 
 /** Enough to read a workspace's whole outbox. */
 const OUTBOX_ALL = 1_000_000;
+
+/** How many times an upload reads its records before it takes them as they are. */
+const UPLOAD_READS = 5;
 
 const isLaterType = (type: EntityType): type is LaterType =>
   type === 'page' || type === 'row' || type === 'database';
