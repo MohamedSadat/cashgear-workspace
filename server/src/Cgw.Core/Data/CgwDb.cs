@@ -62,6 +62,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<CommentThread> CommentThreads => Set<CommentThread>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+    public DbSet<AiUsage> AiUsage => Set<AiUsage>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -412,6 +414,24 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.DedupeKey).HasMaxLength(200).IsUnicode(false);
         });
 
+        // Phase 7: AI settings and metering.
+        b.Entity<AiSettings>(e =>
+        {
+            e.HasKey(x => x.WorkspaceId);
+            e.Property(x => x.Provider).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Model).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.KeyCipher).HasMaxLength(4000).IsUnicode(false);
+        });
+        b.Entity<AiUsage>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // A month's use of a workspace.
+            e.HasIndex(x => new { x.WorkspaceId, x.CreatedAt });
+            e.Property(x => x.Action).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Model).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.Outcome).HasMaxLength(20).IsUnicode(false);
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -447,6 +467,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<CommentThread>(b);
         Filter<Comment>(b);
         Filter<Notification>(b);
+        Filter<AiSettings>(b);
+        Filter<AiUsage>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

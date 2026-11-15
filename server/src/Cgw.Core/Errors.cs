@@ -45,6 +45,21 @@ public static class Codes
     /// <summary>A comment's body or a thread's anchor that fails the rules (400).</summary>
     public const string CommentInvalid = "comment.invalid";
 
+    // Phase 7: AI (INTEGRATIONS.md, AI, As agreed for 0.7.0).
+
+    /// <summary>AI is off for the workspace, has no key, or is off on this server (403): nothing was sent.</summary>
+    public const string AiDisabled = "ai.disabled";
+    /// <summary>AI turned on with no key set (400).</summary>
+    public const string AiKeyMissing = "ai.keyMissing";
+    /// <summary>The provider refused the workspace's key, or it could not be read (502, or an event).</summary>
+    public const string AiKeyInvalid = "ai.keyInvalid";
+    /// <summary>The provider failed or could not be reached (502, or an event).</summary>
+    public const string AiProvider = "ai.provider";
+    /// <summary>The provider is busy or the key's own limit is reached (503, or an event).</summary>
+    public const string AiLimit = "ai.limit";
+    /// <summary>The model declined the request (an event only).</summary>
+    public const string AiRefused = "ai.refused";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -53,6 +68,7 @@ public static class Codes
         AssetTypeNotAllowed, RequestInvalid, Conflict, ServerError, DbTooLarge,
         TicketInvalid, SessionExpired, OriginDenied, WorkbookGone, VersionRequired,
         CommentInvalid,
+        AiDisabled, AiKeyMissing, AiKeyInvalid, AiProvider, AiLimit, AiRefused,
     ];
 }
 

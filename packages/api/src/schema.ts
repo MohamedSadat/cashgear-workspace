@@ -193,6 +193,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/ai/complete': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['completeAi'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/assets/{assetId}': {
     parameters: {
       query?: never;
@@ -491,6 +507,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['pushDocUpdates'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/pages/{pageId}/erp-commits': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['recordErpCommit'];
     delete?: never;
     options?: never;
     head?: never;
@@ -913,6 +945,22 @@ export interface paths {
     patch: operations['updateWorkspace'];
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/ai-settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getAiSettings'];
+    put: operations['updateAiSettings'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/assets': {
     parameters: {
       query?: never;
@@ -1157,6 +1205,66 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    AiCompleteRequest: {
+      action?: null | string;
+      input?: components['schemas']['JsonElement'];
+      language?: null | string;
+      /** Format: uuid */
+      pageId?: null | string;
+      /** Format: uuid */
+      workspaceId: string;
+    };
+    AiEventDto: {
+      code?: null | string;
+      model?: null | string;
+      pages?: null | components['schemas']['AiSourceDto'][];
+      requestId?: null | string;
+      stopReason?: null | string;
+      text?: null | string;
+      type: string;
+      usage?: null | components['schemas']['AiTokensDto'];
+    };
+    AiPersonDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    AiSettingsDto: {
+      enabled: boolean;
+      hasKey?: null | boolean;
+      /** Format: date-time */
+      keySetAt?: null | string;
+      keySetBy?: null | components['schemas']['AiPersonDto'];
+      model: string;
+      models: string[];
+      provider: string;
+      usage?: null | components['schemas']['AiUsageDto'];
+    };
+    AiSettingsUpdate: {
+      apiKey?: components['schemas']['JsonElement'];
+      enabled?: null | boolean;
+      model?: null | string;
+    };
+    AiSourceDto: {
+      /** Format: uuid */
+      pageId: string;
+      title: string;
+    };
+    AiTokensDto: {
+      /** Format: int64 */
+      inputTokens: number | string;
+      /** Format: int64 */
+      outputTokens: number | string;
+    };
+    AiUsageDto: {
+      /** Format: int64 */
+      inputTokens: number | string;
+      month: string;
+      /** Format: int64 */
+      outputTokens: number | string;
+      /** Format: int32 */
+      requests: number | string;
+    };
     AssetDto: {
       contentType: string;
       /** Format: date-time */
@@ -1300,6 +1408,18 @@ export interface components {
       view?: null | components['schemas']['ViewDto'];
       visit?: null | components['schemas']['VisitDto'];
       workspace?: null | components['schemas']['WorkspaceDto'];
+    };
+    ErpCommitReport: {
+      blockId?: null | string;
+      commitId?: null | string;
+      connectorId?: null | string;
+      /** Format: int32 */
+      fields?: null | number | string;
+      /** Format: uuid */
+      linkId?: null | string;
+      outcome?: null | string;
+      /** Format: int32 */
+      records?: null | number | string;
     };
     ErpLinkDto: {
       company: string;
@@ -1586,6 +1706,14 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+    };
+    ProblemDetails: {
+      detail?: null | string;
+      instance?: null | string;
+      /** Format: int32 */
+      status?: null | number | string;
+      title?: null | string;
+      type?: null | string;
     };
     PullResponse: {
       /** Format: int64 */
@@ -2338,6 +2466,84 @@ export interface operations {
       };
     };
   };
+  completeAi: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AiCompleteRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/x-ndjson': components['schemas']['AiEventDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Payload Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Bad Gateway */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
   getAsset: {
     parameters: {
       query?: never;
@@ -2844,6 +3050,30 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PushResponse'];
         };
+      };
+    };
+  };
+  recordErpCommit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ErpCommitReport'];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -3677,6 +3907,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OpResultDto'];
+        };
+      };
+    };
+  };
+  getAiSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AiSettingsDto'];
+        };
+      };
+    };
+  };
+  updateAiSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AiSettingsUpdate'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AiSettingsDto'];
         };
       };
     };

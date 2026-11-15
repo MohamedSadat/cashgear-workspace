@@ -715,3 +715,39 @@ public sealed class JobState
     public string? LastError { get; set; }
     public long Runs { get; set; }
 }
+
+/// <summary>
+/// A workspace's AI settings (Phase 7, INTEGRATIONS.md, AI): bring your own key, off until an owner
+/// or admin turns it on. The key is kept only as Data Protection's output (purpose
+/// <c>Cgw.Ai.Key.v1</c>, bound to the workspace), never returned to any client.
+/// </summary>
+public sealed class AiSettings : ITenantOwned
+{
+    public Guid WorkspaceId { get; set; }
+    public bool Enabled { get; set; }
+    public string Provider { get; set; } = "anthropic";
+    public string Model { get; set; } = "claude-opus-5-5";
+    /// <summary>The key, protected; null with none.</summary>
+    public string? KeyCipher { get; set; }
+    public DateTimeOffset? KeySetAt { get; set; }
+    public Guid? KeySetBy { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public Guid? UpdatedBy { get; set; }
+}
+
+/// <summary>One AI completion, for metering (Phase 7): who, what, which model, the tokens, how it ended. Never its content.</summary>
+public sealed class AiUsage : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid UserId { get; set; }
+    public string Action { get; set; } = "";
+    public string Model { get; set; } = "";
+    public Guid? PageId { get; set; }
+    public long InputTokens { get; set; }
+    public long OutputTokens { get; set; }
+    /// <summary><c>ok</c>, <c>length</c>, <c>refused</c>, <c>cancelled</c>, or the error code it ended with.</summary>
+    public string Outcome { get; set; } = "";
+    public int DurationMs { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}

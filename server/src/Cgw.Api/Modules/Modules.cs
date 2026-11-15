@@ -1,4 +1,5 @@
 using Cgw.Core;
+using Cgw.Core.Ai;
 using Cgw.Api.Realtime;
 using Cgw.Core.Assets;
 using Cgw.Core.Comments;
@@ -46,6 +47,14 @@ public static class Modules
         services.AddScoped<PageGate>();
         services.AddScoped<CommentService>();
         services.AddScoped<NotificationService>();
+        services.AddScoped<ErpCommitService>();
+        // Phase 7: AI. One client connection pool for the provider, renewed every few minutes.
+        services.AddSingleton(sp => AiOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton<AiKeys>();
+        services.AddScoped<AiService>();
+        services.AddSingleton<IAiProvider>(sp => new AnthropicProvider(
+            sp.GetRequiredService<AiOptions>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
         return services;
     }
 
@@ -61,6 +70,8 @@ public static class Modules
         api.MapSheetSessions();
         api.MapComments();
         api.MapRealtimeTickets();
+        api.MapErpCommits();
+        api.MapAi();
         return api;
     }
 }

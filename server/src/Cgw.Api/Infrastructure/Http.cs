@@ -166,6 +166,8 @@ public static class RateLimits
     public const string Sheet = "sheet";
     /// <summary>Hub tickets, per person: one each connect and reconnect (Phase 6).</summary>
     public const string Realtime = "realtime";
+    /// <summary>AI completions, per person (Phase 7): each one spends the workspace's own key.</summary>
+    public const string Ai = "ai";
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -207,6 +209,7 @@ public static class RateLimits
             options.AddPolicy(Ticket, c => Window("ticket:" + Ip(c), Limit(Ticket, 30)));
             options.AddPolicy(Sheet, c => Window("sheet:" + Ip(c), Limit(Sheet, 600)));
             options.AddPolicy(Realtime, c => Window("realtime:" + Who(c), Limit(Realtime, 60)));
+            options.AddPolicy(Ai, c => Window("ai:" + Who(c), Limit(Ai, 30)));
         });
     }
 }

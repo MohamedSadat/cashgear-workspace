@@ -111,6 +111,8 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.Comments.ExecuteDeleteAsync(ct);
         await db.CommentThreads.ExecuteDeleteAsync(ct);
         await db.Notifications.ExecuteDeleteAsync(ct);
+        await db.AiSettings.ExecuteDeleteAsync(ct);
+        await db.AiUsage.ExecuteDeleteAsync(ct);
         await db.PageDocUpdates.ExecuteDeleteAsync(ct);
         await db.PageDocSnapshots.ExecuteDeleteAsync(ct);
         await db.PageDocDerived.ExecuteDeleteAsync(ct);

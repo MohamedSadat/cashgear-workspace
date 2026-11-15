@@ -12,6 +12,8 @@
     <PackageReference Include="MailKit" />
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
+    <!-- Phase 7: the Ai module's only provider (INTEGRATIONS.md, AI). -->
+    <PackageReference Include="Anthropic" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Cgw.Tests" />

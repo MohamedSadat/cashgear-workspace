@@ -42,7 +42,12 @@ public sealed class ServerFixture : IAsyncLifetime
     public const string AzuriteKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
     public string MailDir { get; } = Path.Combine(Path.GetTempPath(), "cgw-mail-" + Guid.NewGuid().ToString("N"));
 
+    /// <summary>The mock of Anthropic's API (<c>tests/mocks/ai</c>): no test reaches the real provider.</summary>
+    public int AiPort { get; } = FreePort();
+    public string AiMockUrl => $"http://127.0.0.1:{AiPort}";
+
     private Process? azurite;
+    private Process? aiMock;
     public WebApplicationFactory<Program> Api { get; private set; } = null!;
     public IServiceProvider Worker { get; private set; } = null!;
 
@@ -69,6 +74,8 @@ public sealed class ServerFixture : IAsyncLifetime
         ["RateLimits:ticket"] = "100000",
         ["RateLimits:sheet"] = "100000",
         ["RateLimits:realtime"] = "100000",
+        ["RateLimits:ai"] = "100000",
+        ["Ai:AnthropicBaseUrl"] = AiMockUrl,
     };
 
     public async ValueTask InitializeAsync()
@@ -85,6 +92,16 @@ public sealed class ServerFixture : IAsyncLifetime
             RedirectStandardError = true,
         }) ?? throw new InvalidOperationException("Azurite did not start.");
         await WaitForPort(BlobPort);
+        aiMock = Process.Start(new ProcessStartInfo("node",
+        [
+            Path.Combine(Root, "tests", "mocks", "ai", "server.mjs"), "--port", AiPort.ToString(), "--host", "127.0.0.1",
+        ])
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        }) ?? throw new InvalidOperationException("The mock AI provider did not start.");
+        await WaitForPort(AiPort);
 
         await using (var server = new SqlConnection(ServerConnection))
         {
@@ -130,13 +147,14 @@ public sealed class ServerFixture : IAsyncLifetime
         {
             // A database left behind is dropped by the next run's clean-up of old ones.
         }
-        try
-        {
-            azurite?.Kill(entireProcessTree: true);
-        }
-        catch (InvalidOperationException)
-        {
-        }
+        foreach (var process in new[] { azurite, aiMock })
+            try
+            {
+                process?.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
         if (Directory.Exists(MailDir)) Directory.Delete(MailDir, recursive: true);
     }
 
@@ -332,7 +350,7 @@ public sealed class ServerFixture : IAsyncLifetime
                 await Task.Delay(100);
             }
         }
-        throw new InvalidOperationException("Azurite did not open its port.");
+        throw new InvalidOperationException($"Nothing opened port {port}.");
     }
 }
 

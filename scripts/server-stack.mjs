@@ -39,11 +39,12 @@ const origins = [
   'http://tauri.localhost',
   'tauri://localhost',
   // The old web builds that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs): v0.2.0,
-  // v0.3.0, v0.4.0 and v0.5.0.
+  // v0.3.0, v0.4.0, v0.5.0 and v0.6.0.
   'http://127.0.0.1:4279',
   'http://127.0.0.1:4278',
   'http://127.0.0.1:4277',
   'http://127.0.0.1:4276',
+  'http://127.0.0.1:4275',
 ];
 
 const children = [];
@@ -181,6 +182,10 @@ const env = {
   Ydoc__Library: ydoc,
   Logging__LogLevel__Default: 'Warning',
   Logging__LogLevel__Microsoft: 'Warning',
+  // Phase 7: AI goes to the mock provider (tests/mocks/ai, started by Playwright or by hand), never
+  // to Anthropic, unless CGW_AI_BASE_URL names another (`https://api.anthropic.com` to try a real key).
+  Ai__AnthropicBaseUrl:
+    process.env.CGW_AI_BASE_URL ?? `http://127.0.0.1:${process.env.CGW_MOCK_AI_PORT ?? 4286}`,
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   ...(e2e
     ? {
@@ -196,6 +201,8 @@ const env = {
         RateLimits__sheet: '100000',
         // Phase 6: every page open and reconnect takes a hub ticket.
         RateLimits__realtime: '10000',
+        // Phase 7: the AI specs and bench/phase7.mjs complete many times a minute.
+        RateLimits__ai: '10000',
         // Phase 6: the hub's relay times for bench/phase6.mjs (GET /api/v1/realtime/metrics;
         // never mapped in Production).
         Realtime__Metrics: 'true',
