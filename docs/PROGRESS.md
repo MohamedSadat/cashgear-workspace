@@ -16,7 +16,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 4: Workspace databases | Done, 2026-11-14 (0.4.0; a share link shows a note where a database is) | `phase-4`, `v0.4.0` |
 | Phase 5: Cash Gear ecosystem | Done, 2026-11-14 (0.5.0; proven against the mocks in CI and against the real Sheet and ERP run locally; the deployed check, and pushing Track E, are yours) | `phase-5`, `v0.5.0` |
 | Phase 6: Collaboration | Done, 2026-11-15 (0.6.0; the 300 ms and 150 ms budgets are met on the reference machine, CI's shared runner holds wider ones; one node, Q17) | `phase-6`, `v0.6.0` |
-| Phase 7: Editable ERP blocks, plugins, AI | Not started | |
+| Phase 7: Editable ERP blocks, plugins, AI | In progress (questions answered 2026-11-15) | |
 | Track U: `CashGear.React.UI` components | Not started | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), committed there and not pushed; E6 and E7 for Phase 7 | |
