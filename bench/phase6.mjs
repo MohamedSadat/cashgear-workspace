@@ -81,7 +81,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * caps, far above what one node needs, so a leak or a busy loop fails the run.
  */
 const BUDGETS = {
-  relay20P95: { max: 150, unit: 'ms', slack: 30 },
+  // The plan's 150 ms is the server's on the reference machine (75.6 and 80.8 ms). CI's hosted
+  // runner gives its four cores to the 20 editors' clients, Chrome, the desktop app, SQL Server,
+  // the API and the worker at once (282.5 ms there): there the figure is held to 500 ms, and to
+  // the last run on main (DECISIONS.md, 2026-11-15).
+  relay20P95: { max: process.env.CI ? 500 : 150, unit: 'ms', slack: 30 },
   key20WorkP95: { max: 8, unit: 'ms', slack: 2 },
   key20FrameP95: { max: 33, unit: 'ms', slack: 5 },
   key20DesktopWorkP95: { max: 8, unit: 'ms', slack: 2 },
