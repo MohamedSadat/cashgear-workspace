@@ -77,6 +77,8 @@ test.describe('accessibility', () => {
 
         await editor(page).locator('[data-block] .cgw-body').first().click();
         await expect(editor(page)).toBeFocused();
+        // The editor reads the click's caret a moment later on a busy runner (Phase 6, 1414cd0).
+        await caretSettled(page);
         await page.keyboard.press('Control+Slash');
         await expect(page.getByRole('menu')).toBeVisible();
         problems.push(...(await axe(page, 'block menu')));

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { desktop, expect, test } from './fixtures';
-import { editor, newPage, waitSaved, watchErrors } from './helpers';
+import { caretSettled, editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount } from './cloud';
 import { signedInWorkspace, signers } from './database';
 import { commentScene, select } from './collab';
@@ -131,6 +131,8 @@ test('the Arabic interface is right to left, with no English of its own', async 
 
   await editor(page).locator('[data-block] .cgw-body').first().click();
   await expect(editor(page)).toBeFocused();
+  // The editor reads the click's caret a moment later on a busy runner (Phase 6, 1414cd0).
+  await caretSettled(page);
   await page.keyboard.press('Control+Slash');
   await expect(page.getByRole('menu')).toBeVisible();
   found.push(...(await english(page, 'block menu')));

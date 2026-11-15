@@ -124,6 +124,9 @@ export async function addProperty(page: Page, type: string, name: string, scope?
   const where = scope ?? fullPage(page);
   await where.locator('.cgw-th-add button').click();
   const menu = page.getByRole('menu', { name: 'Add a property of type…' });
+  // The menu puts the focus on its first item a frame after it opens: wait for that, or on a busy
+  // runner it lands after the item below was focused and Enter makes a Text property (CI).
+  await expect(menu.getByRole('menuitem').first()).toBeFocused();
   // By the keys: a menu cut off by the window's edge is checked on its own (typeMenuInView).
   await menu.getByRole('menuitem', { name: type, exact: true }).press('Enter');
   const input = page.getByRole('textbox', { name: 'Property name' });
