@@ -473,8 +473,8 @@ Added as they are found, grouped by phase.
   A click in the middle of a block can land on a comment's marker, which opens the thread and
   keeps the focus where it was: click a line's start.
 - A spec that signs in and then calls `createWorkspace` (which loads the app again) can make the
-  workspace before that start's account check answers: it stays "On this device only".
-  `locator.locator(otherLocator)` runs the other's whole chain inside the first: pass a selector.
+  workspace before that start's account check answers: until 2026-11-15 it stayed "On this device
+  only"; it now waits for the check. `locator.locator(otherLocator)` runs the other's whole chain inside the first: pass a selector.
   With a page open, a tree row under the pointer shows its own "Page actions": take the top bar's.
 - `@microsoft/signalr` and `yjs` are not hoisted: a script at the root loads them with
   `createRequire` from `packages/shell/package.json` or `packages/doc/package.json`. The API's

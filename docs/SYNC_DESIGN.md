@@ -433,7 +433,10 @@ and only the updates it merged give way to the merged one (later ones stay after
 compaction in between makes it stop and start again). The outbox is read again after the records,
 and both again until it has not changed (at most five reads): an operation written between the
 two reads would be in the creates and kept after them too. A workspace made while signed in is
-uploaded at once, while its first-run pages are being made, which met that every time.
+uploaded at once, while its first-run pages are being made, which met that every time. One made
+before the app knows who is signed in (before the first account check has answered, or before the
+connection to the server is made at start) waits for that check, and is uploaded if it names an
+account; until 2026-11-15 it stayed on this device.
 
 **Databases** (Phase 4): database, view and row records are metadata on this channel; their rules
 are in `DATA_MODEL.md` (Databases).
