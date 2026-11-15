@@ -535,9 +535,19 @@ export async function renderView(
   };
 }
 
-/** Lets promises and timers run until `check` holds (or fails the test). */
-export async function until(check: () => boolean, what = 'the condition'): Promise<void> {
-  for (let i = 0; i < 300 && !check(); i++)
+/**
+ * Lets promises and timers run until `check` holds, or `ms` of real time pass (then fails the
+ * test). Bounded by time, not by a count of 5 ms waits: Windows rounds each wait up to about 15 ms,
+ * so 300 of them lasted some 4.5 s there but 1.5 s where the timers are finer, shorter than the
+ * 3 s an ERP's "try again in" makes a test wait (CI run 43751996745).
+ */
+export async function until(
+  check: () => boolean,
+  what = 'the condition',
+  ms = 5000,
+): Promise<void> {
+  const end = Date.now() + ms;
+  while (!check() && Date.now() < end)
     await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
   if (!check()) throw new Error(`Timed out waiting for ${what}`);
 }

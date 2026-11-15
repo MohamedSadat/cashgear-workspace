@@ -361,13 +361,14 @@ describe('the ERP view block', { timeout: 30_000 }, () => {
     await until(() => text(view!.container).includes('Try again in 3 s'), 'busy');
     expect(button(view.container, E.retry).disabled).toBe(true);
     expect(view.container.querySelector('table')).toBeNull();
-    await until(() => text(view!.container).includes(E.rateLimitedNow), 'the wait over');
+    // The ERP asked for 3 s: real time, so more than the usual bound.
+    await until(() => text(view!.container).includes(E.rateLimitedNow), 'the wait over', 8000);
     erp.failures.query = new ErpError('network');
     await click(button(view.container, E.retry));
     await until(() => text(view!.container).includes(E.notAnswering), 'not answering');
     await click(button(view.container, E.retry));
     await until(() => !!view!.container.querySelector('table'), 'the table');
-  });
+  }, 15_000);
 
   it('asks to connect again when the session ends, and says when the ERP revoked the link', async () => {
     const erp = new FakeErp();
