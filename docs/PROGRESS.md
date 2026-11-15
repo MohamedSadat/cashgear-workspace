@@ -857,6 +857,14 @@ Notes
   43716838706 was green. Locally after the fix, CI's 23 failed cases passed in Chrome and Edge,
   but for Chrome's offline case, which once waited out its 30 s for the service worker right
   after a fresh build, then passed 3 of 3.
+- By hand in the browser (the e2e stack, the mocks, a throwaway account): Settings with a local
+  workspace, then synced; Settings' AI section in dark English; the AI panel in light Arabic,
+  right to left, a summary proposed, inserted at the page's top, "Ctrl+Z undoes it". It found the
+  unchosen radio buttons drawn as dark dots: since Phase 1 the page's `color-scheme` followed the
+  system, not the theme the person chose, so a light app on a dark system drew native controls
+  dark; they follow the chosen theme now. On the desktop: `desktop-cloud.spec.ts`'s AI case, above.
+  The ERP block's connect pop-up opens in the same tab in the built-in browser, so its editing is
+  the specs' (Chrome and Edge, and against the real ERP).
 - The proof found and fixed one old product bug and four of Phase 7's: a duplicated, pasted or
   id-less block could not be undone (latent since Phase 1; the block-id plugin's appended fix took
   the person's change out of history, `81586e0`); the AI switch sprang back while its save was out;
