@@ -564,7 +564,33 @@ let api = null;
 let signer = null;
 let pageId = null;
 
-/** The device says Synced with nothing unsaved, and the server's text equals the device's. */
+/**
+ * What the server holds of the page beside its derived JSON, for a failure's record: the validated
+ * head, the valid updates after the derived text, and this person's refused ones.
+ */
+async function serverHolds(after) {
+  try {
+    const pull = await api.get(`/api/v1/pages/${pageId}/doc?after=${after}`);
+    return {
+      epoch: pull.epoch,
+      headSeq: pull.headSeq,
+      cursor: pull.cursor,
+      more: pull.more,
+      snapshot: pull.snapshot?.upToSeq ?? null,
+      validAfter: pull.updates?.length ?? null,
+      rejected: pull.rejected?.length ?? null,
+    };
+  } catch (error) {
+    return { error: String(error).slice(0, 200) };
+  }
+}
+
+/**
+ * The device says Synced with nothing unsaved (within two minutes), then the server's text equals
+ * the device's (within two minutes more: the worker derives a page's text two seconds after its
+ * last change at the soonest). Each wait has its own limit, so a slow first one leaves the second
+ * its whole time.
+ */
 async function serverCheck(app, run) {
   const begun = Date.now();
   let now = await read(app.page);
@@ -576,13 +602,25 @@ async function serverCheck(app, run) {
     await sleep(200);
     now = await read(app.page);
   }
+  const syncedAfterMs = Date.now() - begun;
   const device = await blockTexts(app.page);
+  const compared = Date.now();
   let server;
   for (;;) {
     server = await serverDoc(api, pageId).catch((error) => ({ error: String(error) }));
     if (JSON.stringify(server.blocks) === JSON.stringify(device)) break;
-    if (Date.now() - begun > 120000) {
-      results.failures.push({ run, check: 'server', device, server });
+    if (Date.now() - compared > 120000) {
+      const holds = await serverHolds(Number.isFinite(server.upToSeq) ? server.upToSeq : 0);
+      const later = await read(app.page);
+      results.failures.push({
+        run,
+        check: 'server',
+        syncedAfterMs,
+        statusAtEnd: later.sync,
+        device,
+        server,
+        holds,
+      });
       return;
     }
     await sleep(400);
