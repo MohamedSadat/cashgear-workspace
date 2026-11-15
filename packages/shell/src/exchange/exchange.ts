@@ -11,6 +11,7 @@
 // and takes versions 1 and 2, as this device or the server writes them (the server's export
 // writes the same format, every row's body included).
 import { remapRefs, toMarkdown, type DocJSON } from '@cgw/doc';
+import { FIRST_PARTY, pluginText } from '@cgw/plugins';
 import {
   STORED_TYPES,
   TITLE_PROPERTY,
@@ -156,6 +157,8 @@ export interface ExportOptions {
    * `people`'s; a mention with neither writes `@` alone.
    */
   userName?: (userId: Id) => string | undefined;
+  /** Phase 7: the language a plugin block's line is written in (its definition's `toPlainText`). */
+  language?: 'en' | 'ar';
 }
 
 /** The export's files (the manifest among them) and the zip's name. */
@@ -251,6 +254,12 @@ export async function buildExport(
       },
       untitled: options.untitled,
       userName: (id) => options.userName?.(id) ?? options.people?.[id],
+      // A chart or a board writes its definition's line (search writes nothing for it).
+      pluginText: (type, props, version) =>
+        pluginText(FIRST_PARTY, type, props, version, {
+          language: options.language ?? 'en',
+          pageTitle: titleOf,
+        }),
     });
     const heading = `# ${page.icon ? `${page.icon} ` : ''}${page.title || options.untitled}\n\n`;
     files[`${base}.md`] = utf8.encode(heading + markdown);

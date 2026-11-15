@@ -72,6 +72,11 @@ export interface WorkspacePlatform {
   saveFile(suggestedName: string, bytes: Uint8Array, type: string): Promise<void>;
   /** The desktop window is closing: `flush` runs first. */
   onCloseRequested?(flush: () => Promise<void>): () => void;
+  /**
+   * Phase 7: asked before the desktop window closes, before `flush`; false keeps it open (ERP
+   * changes not committed). One asker at a time; returns what removes it.
+   */
+  onCloseAsk?(ask: () => Promise<boolean>): () => void;
   /** Desktop updates from the release feed. */
   updates?: PlatformUpdates;
   /**

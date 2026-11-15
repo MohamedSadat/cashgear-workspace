@@ -48,6 +48,12 @@ describe('catalogues', () => {
       'sheets.rangeHint',
       'sheets.rangeInvalid',
       'sheets.newNote',
+      // Phase 7: the AI provider, Anthropic, and its models' names.
+      'ai.settingsNote',
+      'ai.key',
+      'ai.modelOpus',
+      'ai.modelSonnet',
+      'ai.modelHaiku',
     ]);
     for (const [key, text] of arabic) {
       if (allowed.has(key) || key.startsWith('keywords.')) continue;

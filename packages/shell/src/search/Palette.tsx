@@ -7,7 +7,9 @@ import { useShell } from '../context';
 import { Dialog } from '../Dialog';
 import type { ShellDatabaseHost } from '../database/host';
 import { pageGlyph } from '../database/make';
-import { navigate } from '../route';
+import { useAi } from '../ai/context';
+import { openAi } from '../ai/open';
+import { navigate, parseRoute } from '../route';
 import { isRowRecord, type RemoteSearchHit, type WorkspaceSession } from '../session';
 import { formatShortcut } from '../shortcuts';
 
@@ -44,6 +46,10 @@ export function Palette({
   const list = useRef<HTMLDivElement>(null);
   const workspaceId = session.workspaceId;
   const ready = !workspaceId || result.query === normaliseText(query);
+  // Phase 7: "Ask AI" about what was typed, answered in the AI panel of the page on screen.
+  const ai = useAi(session, workspaceId);
+  const route = parseRoute(location.hash);
+  const aiPage = ai?.availability === 'ready' && route.kind === 'page' ? route.pageId : null;
   // Enter pressed before the results for what was typed are in: it acts when they arrive.
   const enterWhenReady = useRef(false);
 
@@ -131,8 +137,20 @@ export function Palette({
         shortcut: command.shortcut ? formatShortcut(command.shortcut) : undefined,
         run: close(() => void services.commands.run(command.id, context)),
       }));
-    return [...pages, ...commands];
-  }, [hits, query, session, services, t, onClose, workspaceId, databases]);
+    const asks: Item[] =
+      aiPage && query.trim()
+        ? [
+            {
+              id: 'ai:ask',
+              kind: 'command',
+              label: t('ai.askAbout', { query: query.trim() }),
+              icon: '✦',
+              run: close(() => openAi({ pageId: aiPage, action: 'ask', question: query.trim() })),
+            },
+          ]
+        : [];
+    return [...pages, ...asks, ...commands];
+  }, [hits, query, session, services, t, onClose, workspaceId, databases, aiPage]);
 
   useEffect(() => setActive(0), [query]);
   useEffect(() => {

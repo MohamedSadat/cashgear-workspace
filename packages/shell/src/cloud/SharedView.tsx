@@ -4,6 +4,7 @@
 // deleted since the last compaction); nothing is stored on this device.
 import { knownTypes, readableJSON, type DocJSON } from '@cgw/doc';
 import { BlockEditorView, type EditorHost, type EditorStrings } from '@cgw/editor';
+import { FIRST_PARTY } from '@cgw/plugins';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { navigate } from '../route';
@@ -104,6 +105,19 @@ export function SharedView({
     },
     // A workbook is never shared outside its workspace: no picture, only that (Phase 5).
     workbooks: noAccessWorkbooks(t('sheets.noAccess')),
+    // A chart or a board draws a database's rows: shown where the database is (Phase 7). A type
+    // this build does not know is still the editor's own placeholder.
+    plugins: {
+      has: (type) => FIRST_PARTY.has(type),
+      mount: (element) => {
+        const note = document.createElement('p');
+        note.className = 'cgw-db-shared-note';
+        note.setAttribute('role', 'note');
+        note.textContent = t('databases.sharedPlaceholder');
+        element.appendChild(note);
+        return { update: () => {}, destroy: () => note.remove() };
+      },
+    },
     pages: {
       title: (id) => tree?.pages.find((p) => p.id === id)?.title,
       icon: (id) => tree?.pages.find((p) => p.id === id)?.icon,

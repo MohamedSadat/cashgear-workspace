@@ -26,6 +26,8 @@ export async function exportAndSave(
     untitled,
     people: people && Object.fromEntries(people.map((p) => [p.id, p.name])),
     ...(userName ? { userName } : {}),
+    // A chart's or a board's line in the Markdown, in the interface language (Phase 7).
+    language: document.documentElement.lang.startsWith('ar') ? 'ar' : 'en',
   });
   await save(name, bytes, 'application/zip');
 }

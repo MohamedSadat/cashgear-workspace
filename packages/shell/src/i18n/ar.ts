@@ -1,5 +1,7 @@
 import { ar as databaseAr } from '@cgw/database/i18n';
 import { ar as erpAr } from '@cgw/erp/i18n';
+import { ar as pluginsAr } from '@cgw/plugins/i18n';
+import { aiAr } from '../ai/i18n';
 import type { Catalogue } from './catalogue';
 
 // The Arabic catalogue. Same keys as `en.ts`; the type checks it. The database views' section
@@ -7,6 +9,8 @@ import type { Catalogue } from './catalogue';
 export const ar: Catalogue = {
   ...databaseAr,
   ...erpAr,
+  ...pluginsAr,
+  ...aiAr,
   app: {
     title: 'مساحة عمل كاش جير',
     loading: 'جارٍ التحميل…',
@@ -134,6 +138,10 @@ export const ar: Catalogue = {
     mentionPeople: 'الأشخاص',
     comment: 'تعليق',
     commentOpen: 'فتح التعليق',
+    askAi: 'اسأل الذكاء الاصطناعي',
+    pluginBlock: 'كتلة إضافة',
+    pluginUnknown: 'تحتاج هذه الكتلة إلى إصدار أحدث من مساحة عمل كاش جير ({{type}}).',
+    pluginUnavailable: 'لا يمكن عرض هذه الكتلة هنا.',
     untitled: 'بدون عنوان',
     missingPage: 'الصفحة غير موجودة',
     dragHandle: 'اسحب للنقل، وانقر لقائمة الكتلة',

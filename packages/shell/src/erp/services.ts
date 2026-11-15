@@ -6,6 +6,7 @@
 // data can be used here at all. ERP answers never pass through here: the views ask the sessions.
 import type { Account, Id } from '@cgw/workspace';
 import {
+  ErpDrafts,
   ErpSessions,
   RecordLinkError,
   createErpClient,
@@ -16,6 +17,7 @@ import {
   type ConnectFlow,
   type ErpAvailability,
   type ErpClient,
+  type ErpCommitAudit,
   type ErpConnection,
   type ErpLinkInfo,
   type ErpLinksState,
@@ -38,6 +40,8 @@ export interface ErpCloud {
     body: { erpLinkId: string; erpBaseUrl: string; company: string; companyName: string },
   ): Promise<'created' | 'exists'>;
   deleteLink(workspaceId: Id, linkId: Id): Promise<void>;
+  /** Phase 7: a real commit attempt, for Workspace's audit (`recordErpCommit`); never a value. */
+  recordCommit?(entry: ErpCommitAudit): Promise<void>;
 }
 
 const adapters = new WeakMap<Cloud, ErpCloud>();
@@ -99,6 +103,14 @@ function makeCloudErp(cloud: Cloud): ErpCloud {
       });
       if (!answer.response.ok) throw new Error(`erp-links: ${answer.response.status}`);
     },
+    async recordCommit(entry) {
+      const { pageId, ...body } = entry;
+      const answer = await cloud.api.POST('/api/v1/pages/{pageId}/erp-commits', {
+        params: { path: { pageId } },
+        body,
+      });
+      if (!answer.response.ok) throw new Error(`erp-commits: ${answer.response.status}`);
+    },
   };
 }
 
@@ -129,6 +141,11 @@ const POPUP_FEATURES = 'popup,width=520,height=720';
 
 export class ShellErp implements ErpConnection {
   readonly connectKind: 'popup' | 'browser';
+  /**
+   * Phase 7: the tab's pending changes to ERP data, one draft per block, in memory only. Gone
+   * when another person signs in, when the page holding them is left, and when the app closes.
+   */
+  readonly drafts = new ErpDrafts();
   private cloud: ErpCloud | null = null;
   private client_: ErpClient | null = null;
   private sessions_: ErpSessions | null = null;
@@ -238,6 +255,14 @@ export class ShellErp implements ErpConnection {
     return this.sessions_;
   }
 
+  /**
+   * Records a real commit attempt at Workspace's API (`erp-commits`), never a value. Best
+   * effort: the ERP's own audit is the authority, and a failure here changes nothing.
+   */
+  audit = (entry: ErpCommitAudit): void => {
+    void this.cloud?.recordCommit?.(entry).catch(() => undefined);
+  };
+
   private flow(): ConnectFlow {
     const erp = this.platform.erp!;
     if (this.platform.kind === 'desktop')
@@ -297,6 +322,7 @@ export class ShellErp implements ErpConnection {
   }
 
   dispose(): void {
+    this.drafts.clear();
     this.sessions_?.dispose();
     this.sessions_ = null;
     this.detach?.();
@@ -377,6 +403,7 @@ export class ShellErp implements ErpConnection {
       if (this.accountId !== undefined) {
         this.entries.clear();
         this.sessions_?.endAll({ keepalive: true });
+        this.drafts.clear();
       }
       this.accountId = id;
     }

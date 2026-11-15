@@ -7,10 +7,15 @@
 // `@cgw/erp/i18n` the same way.
 import { en as databaseEn } from '@cgw/database/i18n';
 import { en as erpEn } from '@cgw/erp/i18n';
+import { en as pluginsEn } from '@cgw/plugins/i18n';
+// Phase 7: AI's section, `ai`, kept beside its code.
+import { aiEn } from '../ai/i18n';
 
 export const en = {
   ...databaseEn,
   ...erpEn,
+  ...pluginsEn,
+  ...aiEn,
   app: {
     title: 'Cash Gear Workspace',
     loading: 'Loading…',
@@ -140,6 +145,11 @@ export const en = {
     mentionPeople: 'People',
     comment: 'Comment',
     commentOpen: 'Open the comment',
+    // Phase 7: the bubble toolbar's AI.
+    askAi: 'Ask AI',
+    pluginBlock: 'Plugin block',
+    pluginUnknown: 'This block needs a newer version of Cash Gear Workspace ({{type}}).',
+    pluginUnavailable: 'This block can’t be shown here.',
     untitled: 'Untitled',
     missingPage: 'Page not found',
     dragHandle: 'Drag to move, click for the block menu',

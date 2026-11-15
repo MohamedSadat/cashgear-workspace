@@ -1,0 +1,229 @@
+/* The AI panel beside the page (Phase 7), laid out as the comments panel is. */
+.cgw-ai {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  flex: 0 0 360px;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-block-size: calc(100vh - 45px);
+  border-inline-start: 1px solid var(--cg-border);
+  background: var(--cg-surface);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 1100px) {
+  .cgw-ai {
+    position: fixed;
+    inset-block: 45px 0;
+    inset-inline-end: 0;
+    z-index: 40;
+    inline-size: min(380px, 100vw);
+    max-block-size: none;
+    box-shadow: var(--cg-shadow, 0 6px 24px rgba(0, 0, 0, 0.2));
+  }
+}
+
+.cgw-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-block: 8px;
+  padding-inline: 14px 8px;
+  border-block-end: 1px solid var(--cg-border);
+}
+
+.cgw-ai-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.cgw-ai-header h2:focus-visible {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+.cgw-ai-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: 10px 14px 16px;
+}
+
+.cgw-ai-intro,
+.cgw-ai-message {
+  margin: 0;
+}
+
+.cgw-ai-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cgw-ai-actions legend {
+  margin-block-end: 4px;
+  padding: 0;
+  font-weight: 600;
+}
+
+.cgw-ai-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 4px;
+  padding-inline: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cgw-ai-action:hover {
+  background: color-mix(in srgb, var(--cg-text) 6%, transparent);
+}
+
+.cgw-ai-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cgw-ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-ai-inputs textarea,
+.cgw-ai-inputs input,
+.cgw-ai-inputs select {
+  box-sizing: border-box;
+  inline-size: 100%;
+}
+
+.cgw-ai-inputs textarea {
+  resize: vertical;
+}
+
+.cgw-ai-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cg-text-secondary);
+}
+
+.cgw-ai-quote {
+  margin: 0;
+  padding-block: 4px;
+  padding-inline: 10px 4px;
+  border-inline-start: 3px solid var(--cg-border-strong, var(--cg-border));
+  color: var(--cg-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cgw-ai-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cgw-ai-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: 8px;
+  background: var(--cg-page-bg, var(--cg-surface));
+}
+
+.cgw-ai-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.cgw-ai-page-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.cgw-ai-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-ai-items li {
+  padding-block: 2px;
+}
+
+.cgw-ai-sources ol {
+  margin: 4px 0 0;
+  padding-inline-start: 20px;
+}
+
+.cgw-ai-table-wrap {
+  overflow-x: auto;
+}
+
+.cgw-ai-table {
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.cgw-ai-table th,
+.cgw-ai-table td {
+  padding-block: 3px;
+  padding-inline: 6px;
+  border: 1px solid var(--cg-border);
+  text-align: start;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.cgw-ai-problem {
+  margin: 0;
+  color: var(--cg-danger-text, #b42318);
+}
+
+/* Settings' "AI" section. */
+.cgw-ai-settings .cgw-ai-field {
+  margin-block: 10px;
+  max-inline-size: 520px;
+}
+
+.cgw-ai-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-ai-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cgw-ai-key .cgw-input {
+  flex: 1 1 240px;
+  min-inline-size: 0;
+}
+
+.cgw-ai-settings p {
+  margin-block: 4px;
+}
+
+.cgw-ai-notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cg-accent) 12%, transparent);
+}

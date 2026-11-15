@@ -6,6 +6,7 @@
 // place. Any other change of its settings goes to `update`.
 import type { ErpMountOptions, MountedFrame } from '@cgw/editor';
 import type { ErpViewHost } from '@cgw/erp';
+import type { ErpAiAssist } from '@cgw/erp/ai';
 import type { i18n as I18n } from 'i18next';
 import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -27,6 +28,10 @@ const mounted = new Map<string, Mounted>();
 export interface ErpMountDeps {
   services: ShellErp;
   i18n: I18n;
+  /** Phase 7: the page the block is on; null leaves it read-only. */
+  pageId?: string | null;
+  /** The AI that prepares changes, when AI is on here. */
+  ai?: ErpAiAssist;
 }
 
 export function mountErp(
@@ -81,7 +86,7 @@ function ErpBlock({
   deps: ErpMountDeps;
   container: HTMLElement;
 }) {
-  const { i18n, services } = deps;
+  const { i18n, services, pageId = null, ai } = deps;
   // The block's own direction and language: the CashGear controls read the nearest `dir`.
   useEffect(() => {
     const apply = () => {
@@ -92,7 +97,8 @@ function ErpBlock({
     i18n.on('languageChanged', apply);
     return () => i18n.off('languageChanged', apply);
   }, [i18n, container]);
-  const { linkId, connectorId, filter, fields, sort, pageSize, editable, setAttrs } = options;
+  const { linkId, connectorId, filter, fields, sort, pageSize, editable, setAttrs, blockId } =
+    options;
   const host = useMemo<ErpViewHost>(
     () => ({
       attrs: { linkId, connectorId, filter, fields, sort, pageSize },
@@ -102,8 +108,25 @@ function ErpBlock({
       },
       connection: services,
       sessions: services.sessions(),
+      // Phase 7: changing ERP data needs the block's place; the ERP decides who may.
+      ...(pageId ? { place: { pageId, blockId }, drafts: services.drafts } : {}),
+      audit: services.audit,
+      ...(ai ? { ai } : {}),
     }),
-    [linkId, connectorId, filter, fields, sort, pageSize, editable, setAttrs, services],
+    [
+      linkId,
+      connectorId,
+      filter,
+      fields,
+      sort,
+      pageSize,
+      editable,
+      setAttrs,
+      services,
+      pageId,
+      blockId,
+      ai,
+    ],
   );
   return (
     <I18nextProvider i18n={i18n}>

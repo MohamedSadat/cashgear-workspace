@@ -9,6 +9,7 @@ import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 import { OfflineSettings } from '../cloud/OfflineSettings';
 import { ErpSettingsSection } from '../erp/SettingsSection';
+import { AiSettingsSection } from '../ai/AiSettings';
 
 export function Settings({
   onLanguage,
@@ -53,6 +54,7 @@ export function Settings({
       {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
       {session.workspaceId && <DataPanel session={session} />}
       {cloud && session.workspaceId && <ErpSettingsSection session={session} />}
+      {cloud && session.workspaceId && <AiSettingsSection session={session} />}
       {cloud && session.workspaceId && (
         <>
           <h2>{t('sheets.screenTitle')}</h2>

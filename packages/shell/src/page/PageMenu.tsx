@@ -1,10 +1,12 @@
-// The page's menu in the top bar: favourite, share, comments, history, export, template,
+// The page's menu in the top bar: favourite, share, comments, AI (Phase 7), history, export, template,
 // available offline, trash. A database's page has no document (no history, no comments), and is
 // not a template; a row is part of its database: no favourite, sharing, template, export or pin of
 // its own (a row's body takes comments as a page's does).
 import type { Id, PageRecord } from '@cgw/workspace';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAi } from '../ai/context';
+import { openAi } from '../ai/open';
 import { offlineMenuItems, useCloud } from '../cloud/CloudUi';
 import { leavePage } from '../route';
 import { canEditPage, type WorkspaceSession } from '../session';
@@ -45,6 +47,9 @@ export function PageMenu({
   const row = page.kind === 'row';
   const database = page.kind === 'database';
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  // AI (Phase 7), where the workspace has it on; a database's page has no document to work on.
+  const ai = useAi(session, page.workspaceId);
+  const aiReady = ai?.availability === 'ready' && !database;
   const favourite =
     !!session.workspaceId && session.mirror.isFavourite(session.workspaceId, page.id);
   return (
@@ -99,6 +104,9 @@ export function PageMenu({
                       pageEvents.dispatchEvent(new CustomEvent('comments', { detail: page.id })),
                   },
                 ]
+              : []),
+            ...(aiReady
+              ? [{ label: t('ai.open'), onSelect: () => openAi({ pageId: page.id }) }]
               : []),
             ...(database
               ? []

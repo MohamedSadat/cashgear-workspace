@@ -44,6 +44,9 @@ const authCommand = async <T>(command: string, args: Record<string, unknown>): P
   }
 };
 
+/** Asked before the window closes (`onCloseAsk`); false keeps it open. */
+let closeAsk: (() => Promise<boolean>) | null = null;
+
 export const desktopPlatform: WorkspacePlatform = {
   kind: 'desktop',
   apiBase,
@@ -100,12 +103,24 @@ export const desktopPlatform: WorkspacePlatform = {
       off?.();
     };
   },
-  // Pending saves are written before the window goes; then it closes.
+  // Phase 7: the asker (ERP changes not committed) may keep the window open; else pending saves
+  // are written before the window goes, then it closes.
+  onCloseAsk: (ask) => {
+    closeAsk = ask;
+    return () => {
+      if (closeAsk === ask) closeAsk = null;
+    };
+  },
   onCloseRequested: (flush) => {
     let off: (() => void) | null = null;
     let cancelled = false;
     void getCurrentWindow()
-      .onCloseRequested(async () => {
+      .onCloseRequested(async (event) => {
+        const ask = closeAsk;
+        if (ask && !(await ask().catch(() => true))) {
+          event.preventDefault();
+          return;
+        }
         await flush();
       })
       .then((unlisten) => {

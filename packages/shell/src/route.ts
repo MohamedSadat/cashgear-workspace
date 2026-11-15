@@ -92,12 +92,77 @@ export function leavePage(pageId: string) {
   if (route.kind === 'page' && route.pageId === pageId) navigate({ kind: 'home' });
 }
 
+/**
+ * Phase 7: something that leaving a page would lose (ERP changes not committed, erp/leave.tsx)
+ * asks first. `blocks` says whether a move must be asked about; `ask` resolves true to leave.
+ * While it asks, the app goes on showing the route it was on; staying puts the address back.
+ */
+export interface LeaveGuard {
+  blocks(from: Route, to: Route): boolean;
+  ask(from: Route, to: Route): Promise<boolean>;
+}
+
+let guard: LeaveGuard | null = null;
+/** The hash the app shows while a move is asked about; null when none is. */
+let held: string | null = null;
+/** The hash the app showed last. */
+let last: string | null = null;
+const listeners = new Set<() => void>();
+
+/** Sets the one guard; returns what removes it. */
+export function setLeaveGuard(next: LeaveGuard | null): () => void {
+  guard = next;
+  return () => {
+    if (guard === next) guard = null;
+  };
+}
+
+function onHashChange() {
+  const next = location.hash;
+  const from = last ?? next;
+  if (held !== null) return;
+  const current = guard;
+  if (current && next !== from) {
+    const [a, b] = [parseRoute(from), parseRoute(next)];
+    if (current.blocks(a, b)) {
+      held = from;
+      void current.ask(a, b).then(
+        (leave) => {
+          if (!leave) history.replaceState(null, '', from || '#/');
+          held = null;
+          last = location.hash;
+          emit();
+        },
+        () => {
+          held = null;
+          last = location.hash;
+          emit();
+        },
+      );
+      return;
+    }
+  }
+  last = next;
+  emit();
+}
+
+function emit() {
+  for (const listener of [...listeners]) listener();
+}
+
 const subscribe = (listener: () => void) => {
-  window.addEventListener('hashchange', listener);
-  return () => window.removeEventListener('hashchange', listener);
+  if (listeners.size === 0) {
+    last = location.hash;
+    window.addEventListener('hashchange', onHashChange);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) window.removeEventListener('hashchange', onHashChange);
+  };
 };
 
 /** The current hash; parse it with parseRoute (the string keeps effects stable). */
 export function useHash(): string {
-  return useSyncExternalStore(subscribe, () => location.hash);
+  return useSyncExternalStore(subscribe, () => held ?? location.hash);
 }

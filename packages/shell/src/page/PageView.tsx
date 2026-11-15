@@ -6,6 +6,7 @@ import {
   type DatabaseMountOptions,
   type EditorHost,
   type EditorStrings,
+  selectionForAi,
 } from '@cgw/editor';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +24,10 @@ import { emptyRowsOps, newDatabaseOps } from '../database/make';
 import { mountDatabase } from '../database/mount';
 import { useWorkbooksHost } from '../sheet/host';
 import { useErpHost } from '../erp/host';
+import { usePluginsHost } from '../plugins/host';
+import { useAi } from '../ai/context';
+import { aiAr, aiEn } from '../ai/i18n';
+import { aiEvents, openAi, type AiOpenDetail, type AiPanelRequest } from '../ai/open';
 import { formatShortcut } from '../shortcuts';
 import {
   NewerDocumentError,
@@ -44,6 +49,8 @@ import { usePageDoc } from './usePageDoc';
 const RowProperties = lazy(() =>
   import('@cgw/database').then((m) => ({ default: m.RowProperties })),
 );
+// The AI panel (Phase 7): its own chunk, loaded when it first opens.
+const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiPanel })));
 
 export interface PageViewProps {
   session: WorkspaceSession;
@@ -165,8 +172,11 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
   const databases = useDatabaseHost();
   // Workbooks (Phase 5): the block's frame and the dialogs that choose or make one.
   const workbooks = useWorkbooksHost(session, page.id);
-  // ERP views (Phase 5): the block's frame, from the reader's own ERP session.
-  const erp = useErpHost(session);
+  // ERP views (Phase 5): the block's frame, from the reader's own ERP session; from Phase 7 the
+  // page it is on, so changes to ERP data name it.
+  const erp = useErpHost(session, page.id);
+  // Plugin blocks (Phase 7): chart and kanban over the workspace's databases.
+  const plugins = usePluginsHost();
   // People (Phase 6): mentions drawn with names, and the "@" menu's people, for the members of a
   // workspace in the account only.
   const collab = useCollab();
@@ -224,6 +234,7 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
         : undefined,
       workbooks,
       erp,
+      plugins,
       ...(people ? { people } : {}),
       slash: {
         list: (query: string) => slashItems(services, t, query),
@@ -251,6 +262,7 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
       databases,
       workbooks,
       erp,
+      plugins,
       people,
     ],
   );
@@ -413,13 +425,64 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         : undefined,
     [comments, level, showThread],
   );
+  // AI (Phase 7): the panel beside the page, opened by the bubble toolbar's "Ask AI", the page
+  // menu or the palette, where the workspace has AI on (the server decides every request again).
+  // It shares the page's side with the comments: one at a time.
+  const ai = useAi(session, page.workspaceId);
+  const aiReady = ai?.availability === 'ready';
+  const [aiRequest, setAiRequest] = useState<AiPanelRequest | null>(null);
+  const openAiPanel = useCallback((request: Omit<AiPanelRequest, 'n'>) => {
+    setPanel(false);
+    setAiRequest((was) => ({ ...request, n: (was?.n ?? 0) + 1 }));
+  }, []);
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<AiOpenDetail>).detail;
+      if (detail.pageId !== page.id) return;
+      const current = editorRef.current;
+      const selection = current ? selectionForAi(current.editor, plainHost) : null;
+      openAiPanel({
+        action: detail.action ?? (selection ? 'rewrite' : 'summarise'),
+        selection,
+        question: detail.question,
+      });
+    };
+    aiEvents.addEventListener('open', onOpen);
+    return () => aiEvents.removeEventListener('open', onOpen);
+  }, [page.id, openAiPanel, plainHost]);
+  useEffect(() => {
+    if (panel) setAiRequest(null);
+  }, [panel]);
+  useEffect(() => {
+    if (!aiReady) return;
+    return services.commands.register({
+      id: 'page.ai',
+      group: 'page',
+      label: () => t('ai.command'),
+      keywords: () => [aiEn.ai.command, aiAr.ai.command, aiEn.ai.title, aiAr.ai.title],
+      run: () => openAi({ pageId: page.id }),
+    });
+  }, [aiReady, services, t, page.id]);
+  const aiHost = useMemo(
+    () =>
+      aiReady
+        ? {
+            available: () => true,
+            subscribe: () => () => {},
+            askAboutSelection: (selection: { from: number; to: number; text: string }) =>
+              openAiPanel({ action: 'rewrite', selection }),
+          }
+        : undefined,
+    [aiReady, openAiPanel],
+  );
   const host = useMemo<EditorHost>(
     () => ({
       ...plainHost,
       ...(presenceHost ? { presence: presenceHost } : {}),
       ...(commentsHost ? { comments: commentsHost } : {}),
+      ...(aiHost ? { ai: aiHost } : {}),
     }),
-    [plainHost, presenceHost, commentsHost],
+    [plainHost, presenceHost, commentsHost, aiHost],
   );
   // A pulled change can make the page newer than this build while it is open: it turns read-only.
   const [newer, setNewer] = useState(doc.readOnly);
@@ -576,6 +639,22 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
           focusRequest={focusRequest}
           onClose={closePanel}
         />
+      )}
+      {aiRequest && ai && (
+        <Suspense fallback={null}>
+          <AiPanel
+            ai={ai}
+            session={session}
+            page={page}
+            editor={editor}
+            doc={doc}
+            editable={!readOnly}
+            databases={databases}
+            personName={together && collab ? collab.people(page.workspaceId).name : undefined}
+            request={aiRequest}
+            onClose={() => setAiRequest(null)}
+          />
+        </Suspense>
       )}
     </div>
   );
