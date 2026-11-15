@@ -13,6 +13,16 @@ body {
   color-scheme: light dark;
 }
 
+/* Native controls (radio buttons, check boxes, scroll bars) follow the theme the person chose, not
+   the system's: a light app on a dark system drew unchosen radio buttons as dark filled dots. */
+:root[data-cg-theme='light'] body {
+  color-scheme: light;
+}
+
+:root[data-cg-theme='dark'] body {
+  color-scheme: dark;
+}
+
 .cgw-visually-hidden {
   position: absolute;
   inline-size: 1px;
