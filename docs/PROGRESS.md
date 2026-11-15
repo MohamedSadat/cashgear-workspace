@@ -16,7 +16,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 4: Workspace databases | Done, 2026-11-14 (0.4.0; a share link shows a note where a database is) | `phase-4`, `v0.4.0` |
 | Phase 5: Cash Gear ecosystem | Done, 2026-11-14 (0.5.0; proven against the mocks in CI and against the real Sheet and ERP run locally; the deployed check, and pushing Track E, are yours) | `phase-5`, `v0.5.0` |
 | Phase 6: Collaboration | Done, 2026-11-15 (0.6.0; the 300 ms and 150 ms budgets are met on the reference machine, CI's shared runner holds wider ones; one node, Q17) | `phase-6`, `v0.6.0` |
-| Phase 7: Editable ERP blocks, plugins, AI | In progress (questions answered 2026-11-15) | |
+| Phase 7: Editable ERP blocks, plugins, AI | Done, 2026-11-15 (0.7.0; proven against the mocks in CI and against the real ERP run locally; pushing Track E6 and E7, and the live test against Anthropic, are yours) | `phase-7`, `v0.7.0` |
 | Track U: `CashGear.React.UI` components | Not started | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), committed there and not pushed | |
@@ -797,7 +797,8 @@ Stand-ins for Track U
 
 ## Phase 7: Editable ERP blocks, plugins, AI
 
-CI run for the evidence below: CI_RUN_PENDING. Local results are from the reference machine
+Done 2026-11-15. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43732586349 (commit `2678f87`, all jobs green on its
+second attempt, below); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43732586348 (the same commit). Local results are from the reference machine
 (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, WebView2, SQL Server LocalDB, Azurite),
 the e2e server stack (`scripts/server-stack.mjs --e2e`, its API pointed at the mock provider) and
 the mocks (`tests/mocks`: Sheet, ERP, and Phase 7's AI provider). Answers and defaults are in
@@ -863,6 +864,15 @@ Notes
   was flaky the same way), and `database.ts`'s `addProperty` pressed Enter on a type before the
   menu had put its own focus on the first item, so the retry made "Edited" a Text property. Both
   wait now; locally 6 of 6 in Chrome and Edge. The Mac's run 43723468750 was green.
+- CI run 43727343957 (`7040b15`) failed only the desktop app's AI case: its click on the editor
+  to undo landed on the AI panel, which covers the page's end in the desktop's window. The case
+  focuses the editor instead (`2678f87`).
+- CI run 43732586349 (`2678f87`), first attempt: every e2e spec passed (Chrome, Edge, the desktop
+  app); the desktop kill test during sync failed because its first run's app did not start
+  within 45 s, just after the test's server stack started (WebView2's cold start on the runner,
+  as in Phase 6's 43679261197). Nothing was lost: its other 24 runs passed and the server's text
+  equalled the device's at every check. The failed job's second attempt passed every step: the
+  four kill tests (25 runs each, 0 failures), every phase's budgets, Phase 7's among them.
 - By hand in the browser (the e2e stack, the mocks, a throwaway account): Settings with a local
   workspace, then synced; Settings' AI section in dark English; the AI panel in light Arabic,
   right to left, a summary proposed, inserted at the page's top, "Ctrl+Z undoes it". It found the
@@ -903,9 +913,9 @@ Benchmarks (`bench/phase7.mjs`, gated in CI against the budgets and the last run
 
 | Budget | Limit | CI | Local, run 1 | Local, run 2 |
 | --- | --- | --- | --- | --- |
-| Review of 500 changed records, less the ERP's dry run, p95 | 2 s | CI_REVIEW | 233.8 ms | 209.4 ms |
-| The ERP's own time in it, p95 | tracked | CI_REVIEW_ERP | 71.9 ms | 115 ms |
-| First AI token, less the provider's own time, p95 | 2 s | CI_TOKEN | 68.9 ms | 78.9 ms |
+| Review of 500 changed records, less the ERP's dry run, p95 | 2 s | 199.4 ms | 233.8 ms | 209.4 ms |
+| The ERP's own time in it, p95 | tracked | 25.8 ms | 71.9 ms | 115 ms |
+| First AI token, less the provider's own time, p95 | 2 s | 45 ms | 68.9 ms | 78.9 ms |
 
 The first run with Phase 7's figures has no earlier run on `main`, so the regression half of the
 gate starts with the next one. The provider is the mock (its own time to the first text 0 to 2
