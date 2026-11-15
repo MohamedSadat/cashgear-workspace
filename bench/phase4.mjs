@@ -78,11 +78,14 @@ const BUDGETS = {
   // "Editing a cell: local ≤ 16 ms": Enter to the cell showing the value. The frame after it is
   // read as Phase 1's keystroke was (Q19: the wait for the next 60 Hz frame alone reaches
   // 16.7 ms): two frames.
+  // The frame after an edit moves by a whole frame between CI's runs (the desktop's: 16.6, 9.9,
+  // 16.4, 10.1 and 17.4 ms, the last two on the same processor; the web's: 16.1, 11.6, 20, 13.8,
+  // 12.8 ms), so its regression must be more than a frame.
   cellEditLocalP95: { max: 16, unit: 'ms', slack: 4 },
-  cellEditFrameP95: { max: 33, unit: 'ms', slack: 5 },
+  cellEditFrameP95: { max: 33, unit: 'ms', slack: 17 },
   cellEditDurableP95: { max: 1000, unit: 'ms', slack: 100 },
   cellEditDesktopLocalP95: { max: 16, unit: 'ms', slack: 4 },
-  cellEditDesktopFrameP95: { max: 33, unit: 'ms', slack: 5 },
+  cellEditDesktopFrameP95: { max: 33, unit: 'ms', slack: 17 },
   cellEditDesktopDurableP95: { max: 1000, unit: 'ms', slack: 100 },
   serverQueryP95: { max: 300, unit: 'ms', slack: 50 },
   // Tracked, not budgeted.

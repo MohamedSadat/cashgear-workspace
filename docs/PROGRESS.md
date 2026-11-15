@@ -735,6 +735,13 @@ Notes
     the CPU slowed 12× (a probe, not kept), the status read "Saving…" when Enter returned in 7 of
     8 renames (it used to read "Saved"), and the title was in IndexedDB each time it said
     "Saved". The spec passed 10 of 10 in Chrome and 10 of 10 in Edge.
+  - CI run 43707259854 (`caf9f37`) passed every step up to Phase 4's budgets, the e2e suites
+    and every kill test among them. Phase 5's and Phase 6's budgets were skipped after it, and
+    the re-run was cancelled by the 0.7.0 push. In Phase 4's budgets the desktop's cell edit next
+    frame read 17.4 ms against 33, flagged as regressed from the last run's 10.1 ms on the same
+    processor. The cell edits run on a full-page database, where the save status is not drawn,
+    so nothing these commits changed runs in that frame. The figure had read 16.6, 9.9, 16.4 and
+    10.1 ms in the four runs before. Its regression margin is now a frame (`DECISIONS.md`).
 - Left for later: comments offline (online only in 0.6.0, by decision); notifications by email;
   comments, mentions and presence for a share link's readers (by decision, none); an end-to-end
   test of access lost behind the feed's back (the hub's 60 s re-check; the server's tests cover
