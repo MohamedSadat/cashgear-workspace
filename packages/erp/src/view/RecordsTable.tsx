@@ -1,11 +1,29 @@
 // A page of a query's records as a table, each value drawn by its field's type, with the range
 // shown and paging by cursor. A native table: screen readers read its headers with each cell.
+// Phase 7: with `edit`, the block's pending changes are drawn in place of what was read, marked,
+// and an editable field's cells open an editor (`EditableCell`).
 import { CgButton } from '@cashgear/ui';
 import { useId } from 'react';
-import type { ConnectorSchema, FieldSchema, Language, QueryResponse, SortKey } from '../contract';
+import type {
+  ConnectorSchema,
+  FieldSchema,
+  Language,
+  QueryResponse,
+  SortKey,
+  WireValue,
+} from '../contract';
+import type { ErpDraft } from '../drafts';
 import { useErpT } from '../i18n';
+import { EditableCell } from './editing';
 import { cellText, formatInteger } from './format';
 import { labelOf } from './settings';
+
+/** What the table needs to show and take changes. */
+export interface TableEditing {
+  readonly draft: ErpDraft;
+  /** Cells open an editor: the person chose "Edit data", and the draft is not locked. */
+  readonly active: boolean;
+}
 
 export function RecordsTable({
   name,
@@ -18,6 +36,7 @@ export function RecordsTable({
   canBack,
   onBack,
   onNext,
+  edit,
 }: {
   name: string;
   schema: ConnectorSchema;
@@ -30,6 +49,7 @@ export function RecordsTable({
   canBack: boolean;
   onBack: () => void;
   onNext: () => void;
+  edit?: TableEditing;
 }) {
   const { t, locale } = useErpT();
   const rangeId = useId();
@@ -75,19 +95,40 @@ export function RecordsTable({
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => (
-              <tr key={record.id}>
-                {columns.map((field) => (
-                  <Cell
-                    key={field.name}
-                    field={field}
-                    value={record.values[field.name]}
-                    schema={schema}
-                    locale={locale}
-                  />
-                ))}
-              </tr>
-            ))}
+            {records.map((record) => {
+              const pending = edit?.draft.record(record.id);
+              return (
+                <tr
+                  key={record.id}
+                  data-key={record.key}
+                  data-changed={pending ? 'true' : undefined}
+                >
+                  {columns.map((field) =>
+                    edit && ((edit.active && field.editable) || pending?.changes[field.name]) ? (
+                      <EditableCell
+                        key={field.name}
+                        field={field}
+                        record={record}
+                        schema={schema}
+                        draft={edit.draft}
+                        locale={locale}
+                        language={language}
+                        disabled={!edit.active || !field.editable}
+                        numeric={numeric(field)}
+                      />
+                    ) : (
+                      <Cell
+                        key={field.name}
+                        field={field}
+                        value={record.values[field.name]}
+                        schema={schema}
+                        locale={locale}
+                      />
+                    ),
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -106,7 +147,7 @@ export function RecordsTable({
   );
 }
 
-const numeric = (field: FieldSchema) => field.type === 'decimal' || field.type === 'integer';
+export const numeric = (field: FieldSchema) => field.type === 'decimal' || field.type === 'integer';
 
 function Cell({
   field,
@@ -115,7 +156,26 @@ function Cell({
   locale,
 }: {
   field: FieldSchema;
-  value: Parameters<typeof cellText>[1];
+  value: WireValue | undefined;
+  schema: ConnectorSchema;
+  locale: string;
+}) {
+  return (
+    <td className={numeric(field) ? 'cgw-erp-num' : undefined} data-field={field.name}>
+      <CellBody field={field} value={value} schema={schema} locale={locale} />
+    </td>
+  );
+}
+
+/** A value as its field's type draws it, without the cell around it. */
+export function CellBody({
+  field,
+  value,
+  schema,
+  locale,
+}: {
+  field: FieldSchema;
+  value: WireValue | undefined;
   schema: ConnectorSchema;
   locale: string;
 }) {
@@ -123,27 +183,19 @@ function Cell({
   const shown = cellText(field, value, schema, locale);
   switch (shown.kind) {
     case 'empty':
-      return <td />;
+      return null;
     case 'boolean':
-      return <td>{t(shown.value ? 'yes' : 'no')}</td>;
+      return <>{t(shown.value ? 'yes' : 'no')}</>;
     case 'dateTime':
       return (
-        <td>
+        <>
           <span>{shown.when}</span>{' '}
           <bdi dir="ltr" className="cgw-erp-offset">
             {shown.offset}
           </bdi>
-        </td>
+        </>
       );
     case 'text':
-      return shown.numeric ? (
-        <td className="cgw-erp-num">
-          <bdi>{shown.text}</bdi>
-        </td>
-      ) : (
-        <td>
-          <span dir="auto">{shown.text}</span>
-        </td>
-      );
+      return shown.numeric ? <bdi>{shown.text}</bdi> : <span dir="auto">{shown.text}</span>;
   }
 }

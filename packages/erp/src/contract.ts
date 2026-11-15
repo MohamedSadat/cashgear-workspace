@@ -139,6 +139,25 @@ export function isVersion(text: string): boolean {
   return text.length > 0 && BASE64.test(text);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_V4_LOWER = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const BLOCK_ID = /^[0-9A-Za-z]{12}$/;
+
+/** Any UUID, in either case, as the ERP takes a `commitId` and a page id. */
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value);
+}
+
+/** What Workspace makes a `commitId`: a UUID v4 in lower case. */
+export function isCommitId(value: unknown): value is string {
+  return typeof value === 'string' && UUID_V4_LOWER.test(value);
+}
+
+/** A Workspace block id: 12 characters of base 62. */
+export function isBlockId(value: unknown): value is string {
+  return typeof value === 'string' && BLOCK_ID.test(value);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Links (INTEGRATIONS.md, "Linking a workspace to a company")
 
@@ -224,7 +243,10 @@ export interface ConnectorSummary {
   readonly label: Localized;
   /** `vendors.1`. */
   readonly schemaVersion: string;
-  /** Already resolved for this user; `view` for every connector until Phase 7. */
+  /**
+   * Already resolved for this user: `edit` when they hold the connector's Edit privilege (Phase 7:
+   * Vendors only), else `view`.
+   */
   readonly access: Access;
 }
 
@@ -346,18 +368,97 @@ export interface QueryResponse {
   readonly total: number;
 }
 
-/** Phase 7: a commit of changed fields, as `vendors.1`'s. */
+// ---------------------------------------------------------------------------------------------
+// Commit (Phase 7, INTEGRATIONS.md, "`Commit` and `CommitStatus`")
+
+/** Where in Workspace a change was made, for the ERP's audit. */
+export interface CommitSource {
+  /** The session's workspace. */
+  readonly workspaceId: string;
+  /** A UUID. */
+  readonly pageId: string;
+  /** 12 characters of base 62, or null. */
+  readonly blockId: string | null;
+}
+
+/** One changed field: the value it was read with, and the new one. */
+export interface CommitChange {
+  readonly from: WireValue;
+  readonly to: WireValue;
+}
+
+export interface CommitRecord {
+  readonly id: string;
+  readonly key: string;
+  /** As the record was read. */
+  readonly version: string;
+  /** Changed fields only. */
+  readonly changes: Readonly<Record<string, CommitChange>>;
+}
+
 export interface CommitRequest {
+  /** A UUID v4 in lower case: one per commit attempt, the same on every retry. */
   readonly commitId: string;
   readonly schemaVersion: string;
+  /** True: every check runs, versions included, and nothing is written. */
   readonly dryRun: boolean;
-  readonly records: readonly {
-    readonly id: string;
-    readonly key: string;
-    readonly version: string;
-    readonly changes: Readonly<Record<string, { readonly from: unknown; readonly to: unknown }>>;
-  }[];
+  readonly source: CommitSource;
+  readonly records: readonly CommitRecord[];
 }
+
+export interface CommitResponse {
+  readonly commitId: string;
+  readonly dryRun: boolean;
+  /** Null for a dry run. */
+  readonly committedAt: string | null;
+  /**
+   * Each changed record as saved (a dry run: as it would be, versions unchanged), every field
+   * the user may see.
+   */
+  readonly records: readonly ErpRecord[];
+}
+
+/** A record another write changed since it was read (409). */
+export interface CommitConflict {
+  readonly id: string;
+  readonly key: string;
+  /** Its version now. */
+  readonly version: string;
+  /** Its values now, every field the user may see. */
+  readonly values: Readonly<Record<string, WireValue>>;
+  /** The commit's fields whose value now differs from their `from`; may be empty. */
+  readonly fields: readonly string[];
+  readonly modifiedBy: string | null;
+  readonly modifiedAt: string | null;
+}
+
+export interface ConflictBody {
+  readonly message: string;
+  readonly correlationId: string;
+  readonly conflicts: readonly CommitConflict[];
+}
+
+export type CommitStatusResponse =
+  { readonly status: 'unknown' } | ({ readonly status: 'committed' } & CommitResponse);
+
+/** The field and record codes a commit's 400 lists, one error per field or record. */
+export const COMMIT_ERROR_CODES = [
+  'required',
+  'maxLength',
+  'type',
+  'range',
+  'scale',
+  'lookup.notFound',
+  'field.readOnly',
+  'privilege.denied',
+  'record.notFound',
+  'record.locked',
+  'version.missing',
+] as const;
+export type CommitErrorCode = (typeof COMMIT_ERROR_CODES)[number];
+
+/** Most records in one commit, as the contract fixes for Vendors (the schema says which). */
+export const MAX_COMMIT_RECORDS = 500;
 
 // ---------------------------------------------------------------------------------------------
 // Errors
@@ -944,6 +1045,173 @@ export function parseQueryResponse(
     throw new ErpContractError(`${path}.total`, 'at least the records sent', total);
   }
   return { records, nextCursor, total };
+}
+
+// Commit
+
+/** What a commit's answer is checked against, when the caller knows it. */
+export interface CommitContext {
+  /** The request it answers: the same id and kind, and exactly its records. */
+  readonly request?: CommitRequest;
+  /** The connector's schema: every record's values are checked against it, every field. */
+  readonly schema?: ConnectorSchema;
+}
+
+function checkAgainstSchema(
+  schema: ConnectorSchema | undefined,
+  record: Pick<ErpRecord, 'key' | 'values'>,
+  path: string,
+): void {
+  if (!schema) return;
+  const found = problemsOf(schema, record, undefined)[0];
+  if (found) {
+    throw new ErpContractError(
+      `${path}.values.${found.field}`,
+      `what the schema allows (${found.problem})`,
+      record.values[found.field],
+    );
+  }
+}
+
+const sameId = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+export function parseCommitResponse(
+  value: unknown,
+  context: CommitContext = {},
+  path = '$',
+): CommitResponse {
+  const o = object(value, path);
+  const { request, schema } = context;
+  const commitId = nonEmpty(o.commitId, `${path}.commitId`);
+  if (request && !sameId(commitId, request.commitId)) {
+    throw new ErpContractError(`${path}.commitId`, "the request's commitId", commitId);
+  }
+  const dryRun = boolean(o.dryRun, `${path}.dryRun`);
+  if (request && dryRun !== request.dryRun) {
+    throw new ErpContractError(`${path}.dryRun`, `${request.dryRun}, as asked`, dryRun);
+  }
+  const committedAt =
+    o.committedAt === null || o.committedAt === undefined
+      ? null
+      : dateTime(o.committedAt, `${path}.committedAt`);
+  if (dryRun && committedAt !== null) {
+    throw new ErpContractError(`${path}.committedAt`, 'null for a dry run', committedAt);
+  }
+  if (!dryRun && committedAt === null) {
+    throw new ErpContractError(`${path}.committedAt`, 'the time it was committed', null);
+  }
+  const records = array(o.records, `${path}.records`).map((v, i) =>
+    erpRecord(v, `${path}.records[${i}]`),
+  );
+  if (new Set(records.map((r) => r.id)).size !== records.length) {
+    throw new ErpContractError(`${path}.records`, 'unique ids', o.records);
+  }
+  if (request) {
+    const asked = new Map(request.records.map((r) => [r.id, r]));
+    if (records.length !== asked.size || records.some((r) => !asked.has(r.id))) {
+      throw new ErpContractError(`${path}.records`, "exactly the request's records", o.records);
+    }
+    records.forEach((record, i) => {
+      const sent = asked.get(record.id)!;
+      if (record.key !== sent.key) {
+        throw new ErpContractError(`${path}.records[${i}].key`, "the record's key", record.key);
+      }
+      if (dryRun && record.version !== sent.version) {
+        throw new ErpContractError(
+          `${path}.records[${i}].version`,
+          'the version it was read with (a dry run writes nothing)',
+          record.version,
+        );
+      }
+    });
+  }
+  records.forEach((record, i) => checkAgainstSchema(schema, record, `${path}.records[${i}]`));
+  return { commitId, dryRun, committedAt, records };
+}
+
+function commitConflict(value: unknown, path: string, context: CommitContext): CommitConflict {
+  const o = object(value, path);
+  const id = nonEmpty(o.id, `${path}.id`);
+  const key = nonEmpty(o.key, `${path}.key`);
+  const version = string(o.version, `${path}.version`);
+  if (!isVersion(version)) throw new ErpContractError(`${path}.version`, 'base64', version);
+  const values = object(o.values, `${path}.values`);
+  for (const [k, v] of Object.entries(values)) wireValue(v, `${path}.values.${k}`);
+  const fields = array(o.fields, `${path}.fields`).map((v, i) => name(v, `${path}.fields[${i}]`));
+  if (new Set(fields).size !== fields.length) {
+    throw new ErpContractError(`${path}.fields`, 'unique names', o.fields);
+  }
+  if (context.request) {
+    const asked = context.request.records.find((r) => r.id === id);
+    if (!asked) throw new ErpContractError(`${path}.id`, "one of the request's records", id);
+    const unchanged = fields.find((f) => !Object.prototype.hasOwnProperty.call(asked.changes, f));
+    if (unchanged !== undefined) {
+      throw new ErpContractError(`${path}.fields`, 'only fields the commit changes', unchanged);
+    }
+  }
+  const typedValues = values as Readonly<Record<string, WireValue>>;
+  checkAgainstSchema(context.schema, { key, values: typedValues }, path);
+  return {
+    id,
+    key,
+    version,
+    values: typedValues,
+    fields,
+    modifiedBy:
+      o.modifiedBy === null || o.modifiedBy === undefined
+        ? null
+        : string(o.modifiedBy, `${path}.modifiedBy`),
+    modifiedAt:
+      o.modifiedAt === null || o.modifiedAt === undefined
+        ? null
+        : dateTime(o.modifiedAt, `${path}.modifiedAt`),
+  };
+}
+
+/** A 409's body: every record that changed since it was read. */
+export function parseConflictBody(
+  value: unknown,
+  context: CommitContext = {},
+  path = '$',
+): ConflictBody {
+  const o = object(value, path);
+  const conflicts = array(o.conflicts, `${path}.conflicts`).map((v, i) =>
+    commitConflict(v, `${path}.conflicts[${i}]`, context),
+  );
+  if (conflicts.length === 0) {
+    throw new ErpContractError(`${path}.conflicts`, 'at least one conflict', o.conflicts);
+  }
+  if (new Set(conflicts.map((c) => c.id)).size !== conflicts.length) {
+    throw new ErpContractError(`${path}.conflicts`, 'unique ids', o.conflicts);
+  }
+  return {
+    message: string(o.message, `${path}.message`),
+    correlationId: nonEmpty(o.correlationId, `${path}.correlationId`),
+    conflicts,
+  };
+}
+
+/**
+ * `CommitStatus`'s answer: `unknown`, or `committed` with the stored body of a real commit. With
+ * `request`, the stored body must answer that request's real commit.
+ */
+export function parseCommitStatus(
+  value: unknown,
+  context: CommitContext & { readonly commitId?: string } = {},
+  path = '$',
+): CommitStatusResponse {
+  const o = object(value, path);
+  const status = oneOf(['unknown', 'committed'] as const, o.status, `${path}.status`);
+  if (status === 'unknown') return { status };
+  const request = context.request ? { ...context.request, dryRun: false } : undefined;
+  const response = parseCommitResponse(value, { schema: context.schema, request }, path);
+  if (response.dryRun) {
+    throw new ErpContractError(`${path}.dryRun`, 'false: a dry run is never stored', true);
+  }
+  if (context.commitId && !sameId(response.commitId, context.commitId)) {
+    throw new ErpContractError(`${path}.commitId`, 'the commitId asked about', response.commitId);
+  }
+  return { status, ...response };
 }
 
 // Errors

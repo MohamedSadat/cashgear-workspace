@@ -4,10 +4,18 @@
 // session is renewed at most every 5 minutes while the person works in the tab (a key, a click,
 // a scroll), ended with a `keepalive` request on `pagehide`, and forgotten when the app closes.
 
-import type { ErpClient, ErpQueryOptions, ErpRequestOptions } from './client';
+import type {
+  CommitOutcome,
+  ErpClient,
+  ErpCommitStatusOptions,
+  ErpQueryOptions,
+  ErpRequestOptions,
+} from './client';
 import {
   ErpError,
   LIMITS,
+  type CommitRequest,
+  type CommitStatusResponse,
   type ConnectSession,
   type ConnectorSchema,
   type ConnectorSummary,
@@ -291,6 +299,28 @@ export class ErpSessions {
     options?: ErpQueryOptions,
   ): Promise<QueryResponse> {
     return this.#use(linkId, (token) => this.#client.query(token, connectorId, request, options));
+  }
+
+  /** `Commit` (Phase 7) in the link's session; a 401 or 403 `link.revoked` ends it here too. */
+  commit(
+    linkId: string,
+    connectorId: string,
+    request: CommitRequest,
+    options?: ErpQueryOptions,
+  ): Promise<CommitOutcome> {
+    return this.#use(linkId, (token) => this.#client.commit(token, connectorId, request, options));
+  }
+
+  /** `CommitStatus` (Phase 7) in the link's session. */
+  commitStatus(
+    linkId: string,
+    connectorId: string,
+    commitId: string,
+    options?: ErpCommitStatusOptions,
+  ): Promise<CommitStatusResponse> {
+    return this.#use(linkId, (token) =>
+      this.#client.commitStatus(token, connectorId, commitId, options),
+    );
   }
 
   /** The states only: what serialising this object shows. */

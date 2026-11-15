@@ -49,6 +49,8 @@ export const DEFAULT_PORTS = { api: 4282, client: 4284 };
 
 const MAX_BODY = 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A Workspace block id: 12 characters of base 62. */
+const BLOCK = /^[0-9A-Za-z]{12}$/;
 
 // ---------------------------------------------------------------------------------------------
 // Messages in the session's language: the ERP's fallback text, as Workspace words errors by code.
@@ -64,6 +66,20 @@ const TEXT = {
     'request.invalid': 'The request is not valid.',
     'rate.limited': 'Too many requests. Try again in a moment.',
     'batch.tooLarge': 'Too many records at once.',
+    'schema.changed': 'The fields of this list have changed. Read it again.',
+    'commit.reused': 'This commit id was used for other changes.',
+    commit: 'Some changes cannot be saved.',
+    conflict: 'Records were changed since they were read.',
+    required: 'A value is required.',
+    maxLength: 'The text is too long.',
+    type: 'The value is not of this field’s type.',
+    range: 'The value is out of range.',
+    scale: 'The value has too many decimals.',
+    'lookup.notFound': 'The code is not an active choice.',
+    'field.readOnly': 'This field cannot be changed.',
+    'record.notFound': 'The record does not exist.',
+    'record.locked': 'The record is locked.',
+    'version.missing': 'The record’s version is missing.',
   },
   ar: {
     'ticket.invalid': 'انتهت صلاحية هذا الرابط أو استخدم من قبل. اتصل من جديد.',
@@ -75,6 +91,20 @@ const TEXT = {
     'request.invalid': 'الطلب غير صالح.',
     'rate.limited': 'طلبات كثيرة. حاول مرة أخرى بعد قليل.',
     'batch.tooLarge': 'سجلات كثيرة في مرة واحدة.',
+    'schema.changed': 'تغيّرت حقول هذه القائمة. اقرأها من جديد.',
+    'commit.reused': 'استُخدم معرّف الاعتماد هذا لتغييرات أخرى.',
+    commit: 'لا يمكن حفظ بعض التغييرات.',
+    conflict: 'تغيّرت سجلات بعد قراءتها.',
+    required: 'القيمة مطلوبة.',
+    maxLength: 'النص أطول من المسموح.',
+    type: 'القيمة ليست من نوع هذا الحقل.',
+    range: 'القيمة خارج النطاق.',
+    scale: 'أرقام عشرية كثيرة.',
+    'lookup.notFound': 'الرمز ليس اختيارًا نشطًا.',
+    'field.readOnly': 'لا يمكن تغيير هذا الحقل.',
+    'record.notFound': 'السجل غير موجود.',
+    'record.locked': 'السجل مقفل.',
+    'version.missing': 'إصدار السجل غير موجود.',
   },
 };
 
@@ -189,12 +219,26 @@ export class MockErp {
     this.workspaceOrigins = new Set(workspaceOrigins);
     this.clientOrigins = new Set(clientOrigins);
     this.workspaceUrl = workspaceUrl.replace(/\/+$/, '');
-    this.records = seedRecords();
     this.reset();
   }
 
-  /** Back to the start: tickets, sessions, links, clock, faults, limits and switches. */
-  reset() {
+  /**
+   * Back to the start: records, tickets, sessions, links, clock, faults, limits, switches, and
+   * Phase 7's stored commits and audit.
+   */
+  reset(options = {}) {
+    this.records = seedRecords(options);
+    // Versions after the seed's: one 8-byte counter, as SQL Server's `rowversion` is.
+    this.version = Object.values(this.records)
+      .flat()
+      .reduce((max, row) => {
+        const n = Buffer.from(row.version, 'base64').readBigUInt64BE();
+        return n > max ? n : max;
+      }, 0n);
+    /** `${company}|${commitId}` → { hash, body }. */
+    this.commits = new Map();
+    /** One row per changed field, as the ERP's audit holds them. */
+    this.audit = [];
     this.offsetMs = 0;
     this.tickets = new Map();
     this.sessions = new Map();
@@ -211,6 +255,12 @@ export class MockErp {
 
   now() {
     return Date.now() + this.offsetMs;
+  }
+
+  nextVersion() {
+    const bytes = Buffer.alloc(8);
+    bytes.writeBigUInt64BE(++this.version);
+    return bytes.toString('base64');
   }
 
   userByKey(key) {
@@ -306,7 +356,9 @@ export class MockErp {
     if (lower.startsWith('__mock/')) return send(res, this.control(ctx));
 
     const fault = this.takeFault(path);
-    if (fault) {
+    // `drop: 'after'`: the route runs and its answer is lost, as a commit that went through.
+    const dropAfter = fault?.drop === 'after';
+    if (fault && !dropAfter) {
       if (fault.drop) return void req.socket.destroy();
       const headers =
         fault.retryAfter === undefined ? {} : { 'Retry-After': String(fault.retryAfter) };
@@ -330,6 +382,7 @@ export class MockErp {
       if (!(error instanceof Refusal)) throw error;
       reply = this.fail(ctx, error.status, error.code, error.why);
     }
+    if (dropAfter) return void req.socket.destroy();
     send(res, reply);
   }
 
@@ -407,8 +460,7 @@ export class MockErp {
       const connector = this.connectorFor(session, id);
       if (at[2] === 'schema') return this.schema(session, connector);
       if (at[2] === 'query') return this.query(ctx, session, connector);
-      // Phase 7: no one has Edit on any connector yet.
-      refuse(403, 'privilege.denied');
+      return this.commit(ctx, session, connector);
     }
     const status = /^api\/connect\/connectors\/([^/]+)\/commitstatus\/([^/]+)$/.exec(lower);
     if (status) {
@@ -417,7 +469,12 @@ export class MockErp {
       this.connectorFor(session, ctx.path.split('/')[3]);
       const commitId = ctx.path.split('/')[5];
       if (!UUID.test(commitId)) refuse(400, 'request.invalid', 'commitId must be a UUID.');
-      return new Reply(200, { status: 'unknown' });
+      // A refused commit and a dry run store nothing, and another company's id is not this one's.
+      const stored = this.commits.get(`${session.company}|${commitId.toLowerCase()}`);
+      return new Reply(
+        200,
+        stored ? { status: 'committed', ...stored.body } : { status: 'unknown' },
+      );
     }
     return new Reply(404, { message: 'Not found.', correlationId: ctx.correlationId, errors: [] });
   }
@@ -621,10 +678,30 @@ export class MockErp {
     return new Reply(200, {
       connectors: CONNECTOR_IDS.filter((id) => user.connectors.includes(id)).map((id) => {
         const c = CONNECTORS[id];
-        // Until Phase 7, every connector is read-only for everyone (agreed with Track E).
-        return { id, kind: c.kind, label: c.label, schemaVersion: c.schemaVersion, access: 'view' };
+        const access = this.grant(user, c) ? 'edit' : 'view';
+        return { id, kind: c.kind, label: c.label, schemaVersion: c.schemaVersion, access };
       }),
     });
+  }
+
+  /**
+   * The user's privilege to change `connector`'s records: `edit`, `advEdit` (Edit and AdvEdit),
+   * or null. Only a connector with fields anyone may edit can be granted (Phase 7: Vendors).
+   */
+  grant(user, connector) {
+    if (connector.maxCommitRecords === 0 || !connector.fields.some((f) => f.edit)) return null;
+    return user.edit?.[connector.id] ?? null;
+  }
+
+  /** Whether `user` may change `field`, and why not (INTEGRATIONS.md, an editable schema). */
+  fieldEdit(user, connector, field) {
+    const grant = this.grant(user, connector);
+    if (!field.edit) return { editable: false, editReason: 'notEditable' };
+    if (!grant) return { editable: false, editReason: 'needsEdit' };
+    if (field.edit === 'advEdit' && grant !== 'advEdit') {
+      return { editable: false, editReason: 'needsAdvEdit' };
+    }
+    return { editable: true };
   }
 
   /** The connector named in the route (else 404), which the user may view (else 403). */
@@ -642,8 +719,7 @@ export class MockErp {
         name: f.name,
         label: f.label,
         type: f.type,
-        editable: false,
-        editReason: 'notEditable',
+        ...this.fieldEdit(user, connector, f),
       };
       for (const key of ['required', 'maxLength', 'min', 'max', 'scale', 'lookup']) {
         if (f[key] !== undefined) out[key] = f[key];
@@ -746,6 +822,239 @@ export class MockErp {
   }
 
   // -------------------------------------------------------------------------------------------
+  // Commit (Phase 7, INTEGRATIONS.md, "`Commit` and `CommitStatus`"): every check in the
+  // contract's order, the first that fails answering, and nothing written unless all pass.
+
+  commit(ctx, session, connector) {
+    const user = session.userInfo;
+    const grant = this.grant(user, connector);
+    // 3. The connector's Edit privilege, dry runs included.
+    if (!grant) refuse(403, 'privilege.denied');
+    // 4. The request's shape.
+    const body = ctx.body;
+    const no = (why) => refuse(400, 'request.invalid', why);
+    if (!isObject(body)) no('A JSON body is required.');
+    if (typeof body.commitId !== 'string' || !UUID.test(body.commitId)) {
+      no('commitId must be a UUID.');
+    }
+    if (typeof body.schemaVersion !== 'string' || body.schemaVersion === '') {
+      no('schemaVersion is required.');
+    }
+    if (typeof body.dryRun !== 'boolean') no('dryRun must be true or false.');
+    const source = body.source;
+    if (
+      !isObject(source) ||
+      source.workspaceId !== session.workspaceId ||
+      typeof source.pageId !== 'string' ||
+      !UUID.test(source.pageId) ||
+      !(
+        source.blockId === null ||
+        (typeof source.blockId === 'string' && BLOCK.test(source.blockId))
+      )
+    ) {
+      no('source must name this session’s workspace, a page and a block.');
+    }
+    if (!Array.isArray(body.records) || body.records.length === 0) no('records must list one.');
+    const seen = new Set();
+    for (const record of body.records) {
+      if (
+        !isObject(record) ||
+        typeof record.id !== 'string' ||
+        record.id === '' ||
+        typeof record.key !== 'string' ||
+        typeof record.version !== 'string' ||
+        !isObject(record.changes) ||
+        Object.keys(record.changes).length === 0
+      ) {
+        no('Each record has an id, a key, a version and changes.');
+      }
+      if (seen.has(record.id)) no('A record is listed twice.');
+      seen.add(record.id);
+      for (const change of Object.values(record.changes)) {
+        if (!isObject(change) || !('to' in change) || !isWire(change.to)) {
+          no('Each change has a `to`.');
+        }
+        if ('from' in change && !isWire(change.from)) no('`from` is a value.');
+      }
+    }
+    // 5. Size.
+    if (body.records.length > connector.maxCommitRecords) refuse(413, 'batch.tooLarge');
+    // 6. A commit already stored under this id.
+    const key = `${session.company}|${body.commitId.toLowerCase()}`;
+    const hash = sha256(
+      canonical({
+        schemaVersion: body.schemaVersion,
+        source,
+        records: [...body.records]
+          .map((r) => ({
+            id: r.id,
+            key: r.key,
+            version: r.version,
+            changes: Object.fromEntries(
+              Object.entries(r.changes).map(([f, c]) => [f, { from: c.from ?? null, to: c.to }]),
+            ),
+          }))
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+      }),
+    );
+    if (!body.dryRun && this.commits.has(key)) {
+      const stored = this.commits.get(key);
+      if (stored.hash === hash) return new Reply(200, stored.body);
+      refuse(400, 'commit.reused');
+    }
+    // 7. The schema.
+    if (body.schemaVersion !== connector.schemaVersion) refuse(400, 'schema.changed');
+    // 8. Every record and field, every error listed.
+    const visible = new Map(this.fieldsFor(user, connector).map((f) => [f.name, f]));
+    const rows = this.rowsFor(user, connector);
+    const lists = lookups(user.company);
+    const errors = [];
+    const found = [];
+    for (const record of body.records) {
+      const at = { id: record.id, key: record.key };
+      const row = rows.find((r) => r.id === record.id);
+      if (!row) {
+        errors.push({ ...at, code: 'record.notFound' });
+        continue;
+      }
+      if (record.version === '') {
+        errors.push({ ...at, code: 'version.missing' });
+        continue;
+      }
+      if (row.locked) {
+        errors.push({ ...at, code: 'record.locked' });
+        continue;
+      }
+      found.push({ record, row });
+      for (const [name, change] of Object.entries(record.changes)) {
+        const field = visible.get(name);
+        const problem = field
+          ? this.changeProblem(user, connector, field, change.to, lists)
+          : 'field.readOnly';
+        if (problem) errors.push({ ...at, field: name, code: problem });
+      }
+    }
+    if (errors.length) {
+      const table = TEXT[ctx.language] ?? TEXT.en;
+      return new Reply(400, {
+        message: table.commit,
+        correlationId: ctx.correlationId,
+        errors: errors.map((e) => ({ ...e, message: table[e.code] ?? e.code })),
+      });
+    }
+    // 9. Versions, every conflict listed.
+    const names = [...visible.keys()];
+    const valuesOf = (row) => Object.fromEntries(names.map((n) => [n, row[n] ?? null]));
+    const empty = (v) => (v === '' || v === undefined ? null : v);
+    const conflicts = found
+      .filter(({ record, row }) => record.version !== row.version)
+      .map(({ record, row }) => ({
+        id: row.id,
+        key: String(row[connector.keyField]),
+        version: row.version,
+        values: valuesOf(row),
+        fields: Object.entries(record.changes)
+          .filter(([name, change]) => empty(row[name]) !== empty(change.from))
+          .map(([name]) => name),
+        modifiedBy: row.modifiedBy ?? null,
+        modifiedAt: row.modifiedDate ?? null,
+      }));
+    if (conflicts.length) {
+      const table = TEXT[ctx.language] ?? TEXT.en;
+      return new Reply(409, {
+        message: table.conflict,
+        correlationId: ctx.correlationId,
+        conflicts,
+      });
+    }
+    // 10. Written in one step, with the modified stamps, the audit and the stored commit.
+    const now = this.now();
+    const at = iso(now);
+    const written = found.map(({ record, row }) => {
+      const next = { ...row };
+      for (const [name, change] of Object.entries(record.changes)) {
+        const field = visible.get(name);
+        next[name] =
+          (field.type === 'text' || field.type === 'lookup') && change.to === '' ? null : change.to;
+      }
+      if (!body.dryRun) {
+        next.version = this.nextVersion();
+        next.modifiedBy = user.displayName;
+        next.modifiedDate = at;
+      }
+      return { record, row, next };
+    });
+    const response = {
+      commitId: body.commitId,
+      dryRun: body.dryRun,
+      committedAt: body.dryRun ? null : at,
+      records: written.map(({ next }) => ({
+        id: next.id,
+        key: String(next[connector.keyField]),
+        version: next.version,
+        values: valuesOf(next),
+      })),
+    };
+    if (body.dryRun) return new Reply(200, response);
+    const table = this.records[connector.id];
+    for (const { record, row, next } of written) {
+      table[table.indexOf(row)] = next;
+      for (const name of Object.keys(record.changes)) {
+        this.audit.push({
+          company: session.company,
+          connector: connector.id,
+          recordId: row.id,
+          key: String(row[connector.keyField]),
+          field: name,
+          before: row[name] ?? null,
+          after: next[name] ?? null,
+          user: user.id,
+          at,
+          commitId: body.commitId.toLowerCase(),
+          audience: 'workspace',
+          workspaceId: source.workspaceId,
+          pageId: source.pageId,
+          blockId: source.blockId,
+        });
+      }
+    }
+    this.commits.set(key, { hash, body: response });
+    return new Reply(200, response);
+  }
+
+  /** What is wrong with a change to `field` for `user`, as the ERP checks it, or null. */
+  changeProblem(user, connector, field, value, lists) {
+    const edit = this.fieldEdit(user, connector, field);
+    if (!edit.editable)
+      return edit.editReason === 'needsAdvEdit' ? 'privilege.denied' : 'field.readOnly';
+    const empty = value === null || value === '';
+    if (empty) return field.required ? 'required' : null;
+    if (valueProblem(field, value)) return 'type';
+    if (field.type === 'decimal') {
+      const digits = DECIMAL.exec(value)?.[3]?.length ?? 0;
+      if (digits > (field.scale ?? 0)) return 'scale';
+      if (field.min !== undefined && compareDecimal(value, field.min) < 0) return 'range';
+      if (field.max !== undefined && compareDecimal(value, field.max) > 0) return 'range';
+    }
+    if (field.type === 'integer') {
+      if (field.min !== undefined && value < field.min) return 'range';
+      if (field.max !== undefined && value > field.max) return 'range';
+    }
+    if (
+      field.maxLength !== undefined &&
+      typeof value === 'string' &&
+      value.length > field.maxLength
+    ) {
+      return 'maxLength';
+    }
+    if (field.type === 'lookup') {
+      const item = (lists[field.lookup] ?? []).find((i) => i.code === value);
+      if (!item || item.active === false) return 'lookup.notFound';
+    }
+    return null;
+  }
+
+  // -------------------------------------------------------------------------------------------
   // /__mock/*: test controls
 
   control(ctx) {
@@ -764,7 +1073,12 @@ export class MockErp {
     };
     switch (route) {
       case 'reset':
-        this.reset();
+        // `kitVendors`: more of Kit's vendors than the seed's 150 (Phase 7's review bench: 500).
+        this.reset(
+          Number.isInteger(body.kitVendors) && body.kitVendors >= 7 && body.kitVendors <= 5000
+            ? { kitVendors: body.kitVendors }
+            : {},
+        );
         return ok();
       case 'clock':
         if (Number.isFinite(body.advanceMs)) this.offsetMs += body.advanceMs;
@@ -828,6 +1142,34 @@ export class MockErp {
       }
       case 'state':
         return ok(this.state());
+      case 'edit-record': {
+        // Another ERP user changes a record behind the page's back: a new version, new stamps.
+        const connector = Object.hasOwn(CONNECTORS, body.connector)
+          ? CONNECTORS[body.connector]
+          : undefined;
+        if (!connector || !Object.hasOwn(COMPANIES, body.company) || !isObject(body.values)) {
+          return bad('connector, company, key and values are required.');
+        }
+        const table = this.records[connector.id];
+        const index = table.findIndex(
+          (row) => row.company === body.company && String(row[connector.keyField]) === body.key,
+        );
+        if (index < 0) return bad('No such record.');
+        const names = new Set(connector.fields.map((f) => f.name));
+        for (const name of Object.keys(body.values)) {
+          if (!names.has(name)) return bad(`No field ${name}.`);
+        }
+        table[index] = {
+          ...table[index],
+          ...body.values,
+          version: this.nextVersion(),
+          modifiedBy: typeof body.by === 'string' ? body.by : 'Another ERP user',
+          modifiedDate: iso(this.now()),
+        };
+        return ok({ id: table[index].id, version: table[index].version });
+      }
+      case 'audit':
+        return ok({ audit: this.audit, commits: this.commits.size });
       default:
         return new Reply(404, {
           message: 'Not found.',

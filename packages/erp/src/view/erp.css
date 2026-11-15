@@ -301,6 +301,167 @@
   margin-inline-end: auto;
 }
 
+/* Changing ERP data (Phase 7). A changed value is marked by its cell's tint and a bar at its
+   inline start, never by colour alone: a screen reader hears "Changed" after it. */
+
+.cgw-erp-editbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+  padding: var(--cg-space-2, 8px);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+  background: var(--cg-surface-subtle, var(--cg-surface));
+}
+
+.cgw-erp-editbar > :first-child {
+  margin-inline-end: auto;
+}
+
+.cgw-erp-done {
+  flex-basis: 100%;
+  color: var(--cg-success-text, var(--cg-text));
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-table td.cgw-erp-changed {
+  background: var(--cg-accent-subtle, var(--cg-hover, transparent));
+  box-shadow: inset 3px 0 0 var(--cg-accent);
+}
+
+.cgw-erp-table td.cgw-erp-changed:dir(rtl) {
+  box-shadow: inset -3px 0 0 var(--cg-accent);
+}
+
+.cgw-erp-table td[data-changed='ai'] {
+  box-shadow: inset 3px 0 0 var(--cg-warning, var(--cg-accent));
+}
+
+.cgw-erp-table td[data-changed='ai']:dir(rtl) {
+  box-shadow: inset -3px 0 0 var(--cg-warning, var(--cg-accent));
+}
+
+.cgw-erp-cell {
+  display: block;
+  inline-size: 100%;
+  min-block-size: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cg-radius-sm, 4px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: text;
+}
+
+.cgw-erp-cell:hover:not(:disabled) {
+  outline: 1px dashed var(--cg-border-strong, var(--cg-border));
+  outline-offset: 1px;
+}
+
+.cgw-erp-cell:focus-visible {
+  outline: var(--cg-focus-ring-width, 2px) solid var(--cg-focus-ring-color, var(--cg-accent));
+  outline-offset: 1px;
+}
+
+.cgw-erp-cell:disabled {
+  cursor: default;
+}
+
+.cgw-erp-cell-edit {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cgw-erp-cell-input {
+  min-inline-size: 8rem;
+}
+
+.cgw-erp-cell-edit .cgw-erp-invalid {
+  white-space: normal;
+}
+
+.cgw-erp-textarea {
+  inline-size: 100%;
+  max-inline-size: 40rem;
+  min-block-size: 4rem;
+  resize: vertical;
+}
+
+.cgw-erp-ai label {
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cg-space-2, 8px);
+  min-inline-size: 0;
+}
+
+.cgw-erp-review[aria-busy='true'] .cgw-erp-review-title {
+  color: var(--cg-text-secondary);
+}
+
+.cgw-erp-review-title {
+  margin: 0;
+  font-size: var(--cg-font-size-md, 14px);
+  font-weight: var(--cg-font-weight-medium, 600);
+}
+
+.cgw-erp-review p {
+  margin: 0;
+}
+
+.cgw-erp-review-table th[scope='row'] {
+  position: static;
+  background: transparent;
+  color: var(--cg-text);
+  font-weight: var(--cg-font-weight-regular, 400);
+}
+
+.cgw-erp-tag {
+  color: var(--cg-text-secondary);
+  font-size: var(--cg-font-size-xs, 12px);
+}
+
+.cgw-erp-conflict {
+  margin: 0;
+  padding: var(--cg-space-2, 8px);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+  min-inline-size: 0;
+}
+
+.cgw-erp-conflict legend {
+  padding-inline: var(--cg-space-1, 4px);
+}
+
+.cgw-erp-conflict .cgw-erp-table th[scope='row'] {
+  position: static;
+}
+
+.cgw-erp-choice {
+  display: inline-flex;
+  gap: var(--cg-space-3, 12px);
+}
+
+.cgw-erp-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cg-space-1, 4px);
+  cursor: pointer;
+}
+
+.cgw-erp-choice input:focus-visible {
+  outline: var(--cg-focus-ring-width, 2px) solid var(--cg-focus-ring-color, var(--cg-accent));
+  outline-offset: 1px;
+}
+
 /* The link screen and the settings section */
 
 .cgw-erp-screen {

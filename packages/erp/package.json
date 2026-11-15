@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./view": "./src/view/index.ts",
+    "./ai": "./src/ai.ts",
     "./i18n": "./src/i18n/catalogues.ts"
   },
   "scripts": {

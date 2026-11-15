@@ -6,10 +6,13 @@ import { act, createElement, useMemo, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { I18nextProvider } from 'react-i18next';
 import { vi } from 'vitest';
-import type { ErpClient } from '../client';
+import type { ErpAiAssist } from '../ai';
+import type { CommitOutcome, ErpClient } from '../client';
 import {
   ErpError,
   LIMITS,
+  type CommitRequest,
+  type CommitResponse,
   type ConnectSession,
   type ConnectorSchema,
   type ConnectorSummary,
@@ -18,6 +21,7 @@ import {
   type QueryRequest,
   type QueryResponse,
 } from '../contract';
+import { ErpDrafts, type ErpCommitAudit } from '../drafts';
 import { createErpI18n } from '../i18n';
 import { ErpSessions, type ConnectFlow } from '../session';
 import type {
@@ -171,6 +175,94 @@ export const RECORDS: ErpRecord[] = [
   },
 ];
 
+/** Phase 7: an editable connector, as Vendors is for a person with Edit (not AdvEdit). */
+export const VENDORS: ConnectorSummary = {
+  id: 'vendors',
+  kind: 'entity',
+  label: { en: 'Vendors', ar: 'الموردون' },
+  schemaVersion: 'vendors.1',
+  access: 'edit',
+};
+
+export const VENDOR_SCHEMA: ConnectorSchema = {
+  id: 'vendors',
+  schemaVersion: 'vendors.1',
+  keyField: 'vendorAccount',
+  idField: 'recId',
+  maxPageSize: 1000,
+  maxRecords: 10_000,
+  maxCommitRecords: 500,
+  fields: [
+    field('vendorAccount', 'Account', 'الحساب', 'text', { sortable: true }),
+    field('vendorName', 'Name', 'الاسم', 'text', {
+      editable: true,
+      editReason: undefined,
+      required: true,
+      maxLength: 150,
+    }),
+    field('vendorGroup', 'Group', 'المجموعة', 'lookup', {
+      editable: true,
+      editReason: undefined,
+      required: true,
+      lookup: 'vendorGroups',
+    }),
+    field('currency', 'Currency', 'العملة', 'lookup', {
+      editReason: 'needsAdvEdit',
+      lookup: 'currencies',
+    }),
+    field('blocked', 'Blocked', 'موقوف', 'boolean', { editReason: 'needsAdvEdit' }),
+    field('debitLimit', 'Credit limit', 'حد الائتمان', 'decimal', { scale: 2 }),
+  ].map((f) => {
+    // An editable field has no reason.
+    if (f.editable) {
+      const rest = { ...f };
+      delete (rest as { editReason?: string }).editReason;
+      return rest;
+    }
+    return f;
+  }),
+  lookups: {
+    vendorGroups: [
+      { code: 'LOCAL', label: 'Local' },
+      { code: 'IMPORT', label: 'Import' },
+      { code: 'OLD', label: 'Old suppliers', active: false },
+    ],
+    currencies: [
+      { code: 'EGP', label: 'Egyptian pound' },
+      { code: 'USD', label: 'US dollar' },
+    ],
+  },
+};
+
+export const VENDOR_RECORDS: ErpRecord[] = [
+  {
+    id: '4411',
+    key: 'V-1001',
+    version: 'AAAAAAAAEAE=',
+    values: {
+      vendorAccount: 'V-1001',
+      vendorName: 'Qorvath Lantern Trading',
+      vendorGroup: 'LOCAL',
+      currency: 'EGP',
+      blocked: false,
+      debitLimit: '15000.00',
+    },
+  },
+  {
+    id: '4412',
+    key: 'V-1002',
+    version: 'AAAAAAAAEAI=',
+    values: {
+      vendorAccount: 'V-1002',
+      vendorName: 'Velmorra Supplies',
+      vendorGroup: 'OLD',
+      currency: 'USD',
+      blocked: true,
+      debitLimit: '2500.50',
+    },
+  },
+];
+
 /** An ERP in memory behind the client's interface, paging by offset as the mock does. */
 export class FakeErp {
   language: Language = 'en';
@@ -178,10 +270,82 @@ export class FakeErp {
   schemaValue: ConnectorSchema = SCHEMA;
   records: ErpRecord[] = RECORDS;
   /** The next call of a kind fails with this. */
-  readonly failures: Partial<Record<'connectors' | 'schema' | 'query' | 'redeem', ErpError>> = {};
+  readonly failures: Partial<
+    Record<'connectors' | 'schema' | 'query' | 'redeem' | 'commit' | 'commitStatus', ErpError>
+  > = {};
   readonly queries: QueryRequest[] = [];
   readonly ended: string[] = [];
+  /** Phase 7: every commit request, dry runs too, in order. */
+  readonly commits: CommitRequest[] = [];
+  readonly statusAsked: string[] = [];
+  /** Answers a commit instead of the in-memory ERP, when set. */
+  commitWith: ((request: CommitRequest) => CommitOutcome | Promise<CommitOutcome>) | null = null;
+  /** Real commits written, by id. */
+  readonly stored = new Map<string, CommitResponse>();
   private n = 0;
+  private versions = 0x2000;
+
+  /** An editable Vendors connector, its schema and records. */
+  editable(): this {
+    this.connectorsList = [VENDORS];
+    this.schemaValue = VENDOR_SCHEMA;
+    this.records = VENDOR_RECORDS.map((r) => ({ ...r, values: { ...r.values } }));
+    return this;
+  }
+
+  /** Changes a record behind the block's back, as another ERP user would. */
+  changeBehind(id: string, values: Record<string, ErpRecord['values'][string]>): void {
+    this.records = this.records.map((r) =>
+      r.id === id ? { ...r, version: this.nextVersion(), values: { ...r.values, ...values } } : r,
+    );
+  }
+
+  private nextVersion(): string {
+    const bytes = new Uint8Array(8);
+    new DataView(bytes.buffer).setUint32(4, ++this.versions);
+    return btoa(String.fromCharCode(...bytes));
+  }
+
+  /** The in-memory ERP's commit: versions checked, then written unless a dry run. */
+  private applyCommit(request: CommitRequest): CommitOutcome {
+    const stored = this.stored.get(request.commitId);
+    if (stored && !request.dryRun) return { kind: 'done', response: stored, correlationId: 'c' };
+    const conflicts = request.records.flatMap((change) => {
+      const record = this.records.find((r) => r.id === change.id)!;
+      if (record.version === change.version) return [];
+      return [
+        {
+          id: record.id,
+          key: record.key,
+          version: record.version,
+          values: record.values,
+          fields: Object.entries(change.changes)
+            .filter(([f, c]) => (record.values[f] ?? null) !== c.from)
+            .map(([f]) => f),
+          modifiedBy: 'Bob Mansour',
+          modifiedAt: '2026-11-15T10:00:00+02:00',
+        },
+      ];
+    });
+    if (conflicts.length) return { kind: 'conflict', conflicts, correlationId: 'c' };
+    const records = request.records.map((change) => {
+      const record = this.records.find((r) => r.id === change.id)!;
+      const values = { ...record.values };
+      for (const [f, c] of Object.entries(change.changes)) values[f] = c.to;
+      return { ...record, values, version: request.dryRun ? record.version : this.nextVersion() };
+    });
+    const response: CommitResponse = {
+      commitId: request.commitId,
+      dryRun: request.dryRun,
+      committedAt: request.dryRun ? null : new Date().toISOString(),
+      records,
+    };
+    if (!request.dryRun) {
+      this.records = this.records.map((r) => records.find((w) => w.id === r.id) ?? r);
+      this.stored.set(request.commitId, response);
+    }
+    return { kind: 'done', response, correlationId: 'c' };
+  }
 
   readonly client: ErpClient = {
     apiBase: 'http://127.0.0.1:4282',
@@ -231,6 +395,17 @@ export class FakeErp {
         total: this.records.length,
       };
     },
+    commit: async (_token, _id, request) => {
+      this.commits.push(request);
+      this.fail('commit');
+      return this.commitWith ? this.commitWith(request) : this.applyCommit(request);
+    },
+    commitStatus: async (_token, _id, commitId) => {
+      this.statusAsked.push(commitId);
+      this.fail('commitStatus');
+      const stored = this.stored.get(commitId);
+      return stored ? { status: 'committed', ...stored } : { status: 'unknown' };
+    },
   };
 
   private fail(kind: keyof FakeErp['failures']) {
@@ -276,8 +451,14 @@ export interface Rendered {
   writes: Partial<ErpBlockAttrs>[];
   /** The block's attributes now. */
   attrs(): ErpBlockAttrs;
+  /** Phase 7: the tab's drafts, and what the block reported to Workspace's audit. */
+  drafts: ErpDrafts;
+  audits: ErpCommitAudit[];
   unmount(): void;
 }
+
+export const PAGE_ID = '01930000-0000-7000-8000-0000000000bb';
+export const BLOCK_ID = 'Blk000000001';
 
 /** Renders `ErpView` in a block whose attributes take what the view writes, as the editor does. */
 export async function renderView(
@@ -288,6 +469,10 @@ export async function renderView(
     erp?: FakeErp;
     connection?: FakeConnection;
     flow?: ConnectFlow;
+    /** Where the block is; null leaves it read-only whatever the ERP allows. */
+    place?: { pageId: string; blockId: string | null } | null;
+    drafts?: ErpDrafts;
+    ai?: ErpAiAssist;
   } = {},
 ): Promise<Rendered> {
   const { ErpView } = await import('./ErpView');
@@ -298,6 +483,10 @@ export async function renderView(
   const writes: Partial<ErpBlockAttrs>[] = [];
   let current: ErpBlockAttrs = { ...EMPTY_ATTRS, ...options.attrs };
   const editable = options.editable ?? true;
+  const drafts = options.drafts ?? new ErpDrafts({ wait: async () => undefined });
+  const audits: ErpCommitAudit[] = [];
+  const place =
+    options.place === undefined ? { pageId: PAGE_ID, blockId: BLOCK_ID } : options.place;
 
   function Block() {
     const [attrs, setAttrsState] = useState(current);
@@ -312,6 +501,9 @@ export async function renderView(
         },
         connection,
         sessions,
+        ...(place ? { place, drafts } : {}),
+        audit: (entry) => void audits.push(entry),
+        ...(options.ai ? { ai: options.ai } : {}),
       }),
       [attrs],
     );
@@ -333,6 +525,8 @@ export async function renderView(
     flow,
     writes,
     attrs: () => current,
+    drafts,
+    audits,
     unmount: () => {
       act(() => root.unmount());
       container.remove();

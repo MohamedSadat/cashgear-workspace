@@ -9,6 +9,7 @@ import {
   SESSION_HEADER,
   connectorRoute,
   isServerErrorCode,
+  parseConflictBody,
   parseConnectCreateTicket,
   parseConnectSession,
   parseErrorBody,
@@ -31,11 +32,15 @@ export const ORIGIN = env.ERP_TEST_ORIGIN ?? 'http://127.0.0.1:5273';
 /** The cases that drive a server to its rate limits: always on the mock, else when asked. */
 export const rateLimits = onMock || env.ERP_TEST_RATE_LIMITS === '1';
 
-export type Role = 'full' | 'limited' | 'none' | 'admin' | 'other';
+/**
+ * `full` views every connector, `limited` fewer, `none` none; `admin` links; `other` is another
+ * company's. Phase 7: `edit` holds Vendors' Edit privilege, `advEdit` its Edit and AdvEdit.
+ */
+export type Role = 'full' | 'limited' | 'none' | 'admin' | 'other' | 'edit' | 'advEdit';
 
 /**
  * The ERP users the suite acts as, by their API keys: on the mock its seeded users (alice, bob,
- * carol, dan, erin), else the ERP_TEST_KEY_* variables.
+ * carol, dan, erin, gina, faris), else the ERP_TEST_KEY_* variables.
  */
 export const KEYS: Record<Role, string | undefined> = onMock
   ? {
@@ -44,6 +49,8 @@ export const KEYS: Record<Role, string | undefined> = onMock
       none: 'mock-carol',
       admin: 'mock-dan',
       other: 'mock-erin',
+      edit: 'mock-gina',
+      advEdit: 'mock-faris',
     }
   : {
       full: env.ERP_TEST_KEY_FULL,
@@ -51,6 +58,8 @@ export const KEYS: Record<Role, string | undefined> = onMock
       none: env.ERP_TEST_KEY_NONE,
       admin: env.ERP_TEST_KEY_ADMIN,
       other: env.ERP_TEST_KEY_OTHER,
+      edit: env.ERP_TEST_KEY_EDIT,
+      advEdit: env.ERP_TEST_KEY_ADVEDIT,
     };
 
 export const lacks = (...roles: Role[]) => roles.some((role) => !KEYS[role]);
@@ -181,7 +190,13 @@ export async function send(
         'no-store',
       );
     }
-    if (response.status >= 400 && json !== null) {
+    if (response.status === 409 && json !== null) {
+      // A commit's conflict (Phase 7): its own body, with every conflicting record.
+      const body = parseConflictBody(json);
+      expect(body.correlationId, `${route}: the body repeats the correlation id`).toBe(
+        correlationId,
+      );
+    } else if (response.status >= 400 && json !== null) {
       const body = parseErrorBody(json);
       expect(body.correlationId, `${route}: the body repeats the correlation id`).toBe(
         correlationId,
@@ -342,6 +357,49 @@ export function sharedSession(role: Role = 'full'): Promise<ConnectSession> {
   const session = openSession(role);
   sessions.set(role, { epoch, session });
   return session;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Editing (Phase 7, INTEGRATIONS.md, "An editable connector's schema")
+
+/** The privilege each Vendors field needs to be changed; null: never. */
+export const VENDOR_EDIT: Readonly<Record<string, 'edit' | 'advEdit' | null>> = {
+  vendorAccount: null,
+  vendorName: 'edit',
+  vendorGroup: 'edit',
+  mobile: 'edit',
+  currency: 'advEdit',
+  payMethod: 'edit',
+  address: 'edit',
+  taxFile: 'edit',
+  blocked: 'advEdit',
+  bankAccount: null,
+  debitLimit: null,
+  modifiedBy: null,
+  modifiedDate: null,
+};
+
+export type Grant = 'none' | 'edit' | 'advEdit';
+
+/** What a schema's access says the user holds: AdvEdit shows as an editable `currency`. */
+export function grantOf(access: 'view' | 'edit', schema: ConnectorSchema): Grant {
+  if (access === 'view') return 'none';
+  return schema.fields.find((f) => f.name === 'currency')?.editable ? 'advEdit' : 'edit';
+}
+
+/** A field's `editable` and `editReason` as the contract's table gives them for `grant`. */
+export function expectedEditing(
+  connectorId: string,
+  field: string,
+  grant: Grant,
+): { editable: boolean; editReason?: string } {
+  const level = connectorId === 'vendors' ? (VENDOR_EDIT[field] ?? null) : null;
+  if (level === null) return { editable: false, editReason: 'notEditable' };
+  if (grant === 'none') return { editable: false, editReason: 'needsEdit' };
+  if (level === 'advEdit' && grant === 'edit') {
+    return { editable: false, editReason: 'needsAdvEdit' };
+  }
+  return { editable: true };
 }
 
 // ---------------------------------------------------------------------------------------------

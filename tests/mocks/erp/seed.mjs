@@ -61,6 +61,25 @@ export const USERS = {
     connectors: ['vendors', 'customers', 'itemsOnHand'],
     admin: true,
   },
+  // Phase 7: `edit` gives a connector's Edit privilege (`edit`) or Edit and AdvEdit (`advEdit`).
+  gina: {
+    id: 'u105',
+    key: 'mock-gina',
+    company: 'Kit',
+    displayName: 'Gina Wahba',
+    connectors: ['vendors', 'customers'],
+    edit: { vendors: 'edit' },
+    admin: false,
+  },
+  faris: {
+    id: 'u106',
+    key: 'mock-faris',
+    company: 'Kit',
+    displayName: 'فارس منير',
+    connectors: ['vendors', 'customers', 'itemsOnHand'],
+    edit: { vendors: 'advEdit' },
+    admin: false,
+  },
 };
 
 /** Made-up words, one in every record's name: Kit's, then Dot's own. */
@@ -105,7 +124,8 @@ export const CONNECTORS = {
     maxPageSize: 1000,
     maxRecords: 10000,
     maxCommitRecords: 500,
-    // vendors.1's fields, in the ERP's list order, with its labels.
+    // vendors.1's fields, in the ERP's list order, with its labels. `edit` is the privilege a
+    // field needs to be changed (Phase 7, INTEGRATIONS.md): none, Edit or AdvEdit.
     fields: [
       field('vendorAccount', 'Account', 'الحساب', 'text', {
         maxLength: 50,
@@ -118,6 +138,7 @@ export const CONNECTORS = {
         required: true,
         sortable: true,
         search: true,
+        edit: 'edit',
       }),
       field('vendorGroup', 'Group', 'المجموعة', 'lookup', {
         lookup: 'vendorGroups',
@@ -125,22 +146,29 @@ export const CONNECTORS = {
         filterable: true,
         sortable: true,
         search: true,
+        edit: 'edit',
       }),
-      field('mobile', 'Mobile', 'الجوال', 'text', { maxLength: 50, search: true }),
+      field('mobile', 'Mobile', 'الجوال', 'text', { maxLength: 50, search: true, edit: 'edit' }),
       field('currency', 'Currency', 'العملة', 'lookup', {
         lookup: 'currencies',
         required: true,
         filterable: true,
         sortable: true,
+        edit: 'advEdit',
       }),
       field('payMethod', 'Payment method', 'طريقة الدفع', 'lookup', {
         lookup: 'paymentModes',
         required: true,
         filterable: true,
+        edit: 'edit',
       }),
-      field('address', 'Address', 'العنوان', 'text', { maxLength: 150 }),
-      field('taxFile', 'Tax file', 'الملف الضريبي', 'text', { maxLength: 50 }),
-      field('blocked', 'Blocked', 'موقوف', 'boolean', { required: true, filterable: true }),
+      field('address', 'Address', 'العنوان', 'text', { maxLength: 150, edit: 'edit' }),
+      field('taxFile', 'Tax file', 'الملف الضريبي', 'text', { maxLength: 50, edit: 'edit' }),
+      field('blocked', 'Blocked', 'موقوف', 'boolean', {
+        required: true,
+        filterable: true,
+        edit: 'advEdit',
+      }),
       field('bankAccount', 'Bank account', 'الحساب البنكي', 'text', { maxLength: 50 }),
       field('debitLimit', 'Credit limit', 'حد الائتمان', 'decimal', {
         scale: 2,
@@ -346,7 +374,7 @@ function vendorRow(company, account, values) {
   };
 }
 
-function vendors(pick) {
+function vendors(pick, kitVendors = 150) {
   const kit = [
     vendorRow('Kit', 'V-1001', {
       vendorName: 'Qorvath Lantern Trading',
@@ -381,11 +409,13 @@ function vendors(pick) {
       vendorGroup: 'SERVICES',
       payMethod: 'NET60',
       debitLimit: '999999999.99',
+      // Phase 7: locked in the ERP (an open document holds it), so no commit may change it.
+      locked: true,
     }),
     vendorRow('Kit', 'V-1006', { vendorName: 'Thessaly Quay Logistics', currency: null }),
     vendorRow('Kit', 'V-1007', { vendorName: 'Zarkonite Old Group', vendorGroup: 'OLD' }),
   ];
-  for (let n = kit.length + 1; kit.length < 150; n++) {
+  for (let n = kit.length + 1; kit.length < kitVendors; n++) {
     const arabic = pick() < 0.3;
     const cents = Math.floor(pick() * 5_000_000);
     kit.push(
@@ -590,7 +620,7 @@ function interleave(kit, dot, firstId) {
  * Every record by connector, in id order, with its version: one 8-byte counter per database, as
  * SQL Server's `rowversion` is.
  */
-export function seedRecords() {
+export function seedRecords({ kitVendors = 150 } = {}) {
   const pick = random(20261114);
   let counter = 0x1000n;
   const version = () => {
@@ -600,7 +630,7 @@ export function seedRecords() {
   };
   const out = {};
   for (const [id, rows] of [
-    ['vendors', vendors(pick)],
+    ['vendors', vendors(pick, kitVendors)],
     ['customers', customers(pick)],
     ['itemsOnHand', items(pick)],
   ]) {

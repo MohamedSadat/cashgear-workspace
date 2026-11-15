@@ -1,16 +1,38 @@
-// @cgw/erp: Cash Gear ERP for Workspace (Phase 5, Level 1): erp-connect.1's types and a guard for
-// every answer, the client, one in-memory session per link, and the connect flows. Nothing here
-// keeps an ERP answer or a token anywhere but in memory: no store, no storage, no log (lint).
+// @cgw/erp: Cash Gear ERP for Workspace (Phase 5, Level 1; Phase 7, Level 2): erp-connect.1's
+// types and a guard for every answer, the client, one in-memory session per link, the connect
+// flows, and the drafts that hold changes until a person reviews and commits them. Nothing here
+// keeps an ERP answer, a change or a token anywhere but in memory: no store, no storage, no log
+// (lint). AI code takes only `@cgw/erp/ai`'s types.
 export * from './contract';
 export {
   codeForStatus,
   createErpClient,
   retryAfterMs,
+  type CommitOutcome,
   type ErpClient,
   type ErpClientOptions,
+  type ErpCommitStatusOptions,
   type ErpQueryOptions,
   type ErpRequestOptions,
 } from './client';
+// Phase 7: pending changes per block, in memory, reviewed and committed through the sessions.
+export {
+  COMMIT_RETRIES,
+  ErpDraft,
+  ErpDrafts,
+  localProblem,
+  parseInput,
+  sameValue,
+  type CommitAuditOutcome,
+  type DraftChange,
+  type DraftCommitApi,
+  type DraftOptions,
+  type DraftPhase,
+  type DraftPlace,
+  type DraftRecord,
+  type ErpCommitAudit,
+  type ParsedInput,
+} from './drafts';
 export {
   ACTIVITY_EVENTS,
   ErpSessions,

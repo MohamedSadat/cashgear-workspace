@@ -12,8 +12,12 @@ import {
   ROUTES,
   SESSION_HEADER,
   connectorRoute,
+  commitStatusRoute,
   isServerErrorCode,
   isToken,
+  parseCommitResponse,
+  parseCommitStatus,
+  parseConflictBody,
   parseConnectSession,
   parseConnectors,
   parseErrorBody,
@@ -21,6 +25,11 @@ import {
   parseQueryResponse,
   parseRenew,
   parseSchema,
+  type ApiError,
+  type CommitConflict,
+  type CommitRequest,
+  type CommitResponse,
+  type CommitStatusResponse,
   type ConnectSession,
   type ConnectorSchema,
   type ConnectorSummary,
@@ -40,6 +49,36 @@ export interface ErpQueryOptions extends ErpRequestOptions {
   /** The connector's schema, so every record is checked against it. */
   readonly schema?: ConnectorSchema;
 }
+
+export interface ErpCommitStatusOptions extends ErpQueryOptions {
+  /** The real commit sent under that id, so a stored body is checked against it. */
+  readonly request?: CommitRequest;
+}
+
+/**
+ * How a commit ended, when the ERP answered it: done (a dry run that passed, or a commit
+ * written), refused per record and field (400, every error), or a conflict (409, every
+ * conflicting record). Nothing was written unless it is `done` and not a dry run. Any other
+ * answer throws an `ErpError`; one without an answer (`network`) leaves the outcome unknown,
+ * for `commitStatus` to settle.
+ */
+export type CommitOutcome =
+  | {
+      readonly kind: 'done';
+      readonly response: CommitResponse;
+      readonly correlationId: string | null;
+    }
+  | {
+      readonly kind: 'invalid';
+      /** Each with `id` and `key`, and `field` for a field's. */
+      readonly errors: readonly ApiError[];
+      readonly correlationId: string | null;
+    }
+  | {
+      readonly kind: 'conflict';
+      readonly conflicts: readonly CommitConflict[];
+      readonly correlationId: string | null;
+    };
 
 export interface ErpClient {
   /** The ERP API's base, without a trailing slash. */
@@ -65,6 +104,20 @@ export interface ErpClient {
     request: QueryRequest,
     options?: ErpQueryOptions,
   ): Promise<QueryResponse>;
+  /** `Commit` (Phase 7): a dry run or a real commit; see `CommitOutcome`. */
+  commit(
+    token: string,
+    id: string,
+    request: CommitRequest,
+    options?: ErpQueryOptions,
+  ): Promise<CommitOutcome>;
+  /** `CommitStatus` (Phase 7): whether a commit with that id was written. */
+  commitStatus(
+    token: string,
+    id: string,
+    commitId: string,
+    options?: ErpCommitStatusOptions,
+  ): Promise<CommitStatusResponse>;
 }
 
 export interface ErpClientOptions {
@@ -85,6 +138,8 @@ interface Call {
   readonly body?: unknown;
   readonly keepalive?: boolean;
   readonly signal?: AbortSignal;
+  /** Error statuses whose body the caller reads itself (a commit's 400 and 409). */
+  readonly accept?: readonly number[];
 }
 
 interface Answer {
@@ -200,7 +255,9 @@ export function createErpClient(
           unreadable = true;
         }
       }
-      if (!response.ok) throw failure(response, json, correlationId, call.kind);
+      if (!response.ok && !call.accept?.includes(response.status)) {
+        throw failure(response, json, correlationId, call.kind);
+      }
       if (unreadable) {
         throw new ErpError('response.invalid', {
           status: response.status,
@@ -343,6 +400,73 @@ export function createErpClient(
             fields: request.fields,
             pageSize: request.pageSize,
           }),
+      );
+    },
+
+    async commit(token, id, request, options = {}) {
+      const answer = await send({
+        method: 'POST',
+        route: connectorRoute(id, 'Commit'),
+        kind: 'connector',
+        token,
+        body: request,
+        signal: options.signal,
+        accept: [400, 409],
+      });
+      const context = { request, schema: options.schema };
+      const invalid = (detail?: string) =>
+        new ErpError('response.invalid', {
+          status: answer.status,
+          correlationId: answer.correlationId,
+          detail,
+        });
+      const read = <T>(parse: () => T): T => {
+        try {
+          return parse();
+        } catch (error) {
+          if (!(error instanceof ErpContractError)) throw error;
+          throw invalid(`${error.path}: ${error.expected}`);
+        }
+      };
+      if (answer.status === 409) {
+        const body = read(() => parseConflictBody(answer.json, context));
+        return {
+          kind: 'conflict',
+          conflicts: body.conflicts,
+          correlationId: answer.correlationId ?? body.correlationId,
+        };
+      }
+      if (answer.status === 400) {
+        const body = read(() => parseErrorBody(answer.json));
+        const correlationId = answer.correlationId ?? body.correlationId;
+        // Errors that name records are the person's to fix; a batch's is a refusal of its own.
+        if (!body.errors.some((e) => e.id !== undefined)) {
+          const first = body.errors[0]?.code;
+          throw new ErpError(isServerErrorCode(first) ? first : 'request.invalid', {
+            status: 400,
+            correlationId,
+          });
+        }
+        const ids = new Set(request.records.map((r) => r.id));
+        const stray = body.errors.findIndex((e) => e.id !== undefined && !ids.has(e.id));
+        if (stray >= 0) throw invalid(`$.errors[${stray}].id: one of the request's records`);
+        return { kind: 'invalid', errors: body.errors, correlationId };
+      }
+      const response = read(() => parseCommitResponse(answer.json, context));
+      return { kind: 'done', response, correlationId: answer.correlationId };
+    },
+
+    commitStatus(token, id, commitId, options = {}) {
+      return json(
+        {
+          method: 'GET',
+          route: commitStatusRoute(id, commitId),
+          kind: 'connector',
+          token,
+          signal: options.signal,
+        },
+        (value) =>
+          parseCommitStatus(value, { schema: options.schema, request: options.request, commitId }),
       );
     },
   };

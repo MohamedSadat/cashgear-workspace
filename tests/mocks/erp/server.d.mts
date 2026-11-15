@@ -9,9 +9,32 @@ export interface MockUser {
   readonly admin: boolean;
   readonly rules?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   readonly hidden?: Readonly<Record<string, readonly string[]>>;
+  /** Phase 7: a connector's Edit privilege, or Edit and AdvEdit. */
+  readonly edit?: Readonly<Record<string, 'edit' | 'advEdit'>>;
 }
 
-export declare const USERS: Readonly<Record<'alice' | 'bob' | 'carol' | 'dan' | 'erin', MockUser>>;
+export declare const USERS: Readonly<
+  Record<'alice' | 'bob' | 'carol' | 'dan' | 'erin' | 'gina' | 'faris', MockUser>
+>;
+
+/** One row of the mock's audit, per changed field (Phase 7). */
+export interface MockAuditRow {
+  readonly company: string;
+  readonly connector: string;
+  readonly recordId: string;
+  readonly key: string;
+  readonly field: string;
+  readonly before: unknown;
+  readonly after: unknown;
+  /** The ERP user's id. */
+  readonly user: string;
+  readonly at: string;
+  readonly commitId: string;
+  readonly audience: 'workspace';
+  readonly workspaceId: string;
+  readonly pageId: string;
+  readonly blockId: string | null;
+}
 export declare const COMPANIES: Readonly<
   Record<'Kit' | 'Dot', { readonly name: string; readonly database: string }>
 >;
@@ -73,7 +96,7 @@ export declare class MockErp {
   workspaceOrigins: Set<string>;
   clientOrigins: Set<string>;
   readonly workspaceUrl: string;
-  reset(): void;
+  reset(options?: { kitVendors?: number }): void;
   now(): number;
   state(): MockState;
 }

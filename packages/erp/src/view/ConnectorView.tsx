@@ -1,8 +1,10 @@
 // One connector's data in a block: its schema (only the fields this person may see), the view's
 // settings for an editor, and the query's records with paging by cursor, the time they were
-// loaded, and "Refresh".
+// loaded, and "Refresh". Phase 7: when the ERP gives this person `edit` on the connector, "Edit
+// data" opens its editable fields' cells; changes wait in the block's draft (memory only) for
+// "Review changes" and "Commit".
 import { CgButton } from '@cashgear/ui';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import type {
   ConnectorSchema,
   ConnectorSummary,
@@ -10,7 +12,9 @@ import type {
   Language,
   QueryResponse,
 } from '../contract';
+import { ErpDrafts, type DraftCommitApi, type ErpDraft } from '../drafts';
 import { useErpT } from '../i18n';
+import { AiPreparePanel, ConflictPanel, EditBar, ReviewPanel, reviewing } from './editing';
 import { useConnectors } from './ErpView';
 import type { ErpLinkInfo, ErpViewHost } from './host';
 import { errorText, Message, useWait } from './Message';
@@ -121,14 +125,18 @@ function ChangeData({
   current,
   language,
   onChange,
+  locked = false,
 }: {
   connectors: readonly ConnectorSummary[];
   current: string;
   language: Language;
   onChange: (connectorId: string) => void;
+  /** Changes wait to be committed: the data cannot change under them. */
+  locked?: boolean;
 }) {
   const { t } = useErpT();
   const id = useId();
+  const hint = useId();
   return (
     <span className="cgw-erp-field">
       <label htmlFor={id}>{t('dataLabel')}</label>
@@ -136,6 +144,8 @@ function ChangeData({
         id={id}
         className="cgw-erp-select"
         value={current}
+        disabled={locked}
+        aria-describedby={locked ? hint : undefined}
         onChange={(event) => onChange(event.target.value)}
       >
         {!connectors.some((c) => c.id === current) && <option value={current}>{current}</option>}
@@ -145,9 +155,64 @@ function ChangeData({
           </option>
         ))}
       </select>
+      {locked && (
+        <span id={hint} className="cgw-erp-muted">
+          {t('editLocked')}
+        </span>
+      )}
     </span>
   );
 }
+
+/** The block's draft when this person may change this connector's data here; else null. */
+function useDraft(
+  host: ErpViewHost,
+  link: ErpLinkInfo,
+  connectorId: string,
+  schema: ConnectorSchema,
+  summary: ConnectorSummary | undefined,
+): { draft: ErpDraft | null; stale: ErpDraft | null } {
+  const { drafts, place, audit } = host;
+  const blockId = place?.blockId ?? null;
+  const pageId = place?.pageId ?? null;
+  const editable =
+    summary?.access === 'edit' &&
+    schema.maxCommitRecords > 0 &&
+    schema.fields.some((f) => f.editable);
+  return useMemo(() => {
+    if (!drafts || !pageId || !blockId) return { draft: null, stale: null };
+    const key = ErpDrafts.key(pageId, blockId);
+    const held = drafts.peek(key);
+    const other =
+      held && (held.place.connectorId !== connectorId || held.place.linkId !== link.id)
+        ? held
+        : null;
+    if (other?.pending()) return { draft: null, stale: other };
+    if (!editable) return { draft: held && !other && held.pending() ? held : null, stale: null };
+    const draft = drafts.get(
+      key,
+      {
+        linkId: link.id,
+        connectorId,
+        source: { workspaceId: link.workspaceId, pageId, blockId },
+      },
+      audit ? (entry) => audit(entry) : undefined,
+    );
+    return { draft, stale: null };
+    // The audit is read when the draft is made: the host is made again every render.
+  }, [drafts, pageId, blockId, link.id, link.workspaceId, connectorId, editable]);
+}
+
+/** Re-renders with every change of the draft. */
+function useDraftRev(draft: ErpDraft | null): number {
+  return useSyncExternalStore(
+    draft ? draft.subscribe : noopSubscribe,
+    draft ? draft.rev : zero,
+    draft ? draft.rev : zero,
+  );
+}
+const noopSubscribe = () => () => undefined;
+const zero = () => 0;
 
 function Loaded({
   host,
@@ -177,6 +242,34 @@ function Loaded({
   const panelId = useId();
   const pageSizeId = useId();
   const info = sessions.session(link.id);
+
+  // Phase 7: changing the data, when the ERP lets this person.
+  const summary = connectors.find((c) => c.id === connectorId);
+  const { draft, stale } = useDraft(host, link, connectorId, schema, summary);
+  useDraftRev(draft);
+  useDraftRev(stale);
+  const phase = draft?.phase() ?? null;
+  const [editMode, setEditMode] = useState(() => !!draft?.hasChanges());
+  const [aiOpen, setAiOpen] = useState(false);
+  const api = useMemo<DraftCommitApi>(
+    () => ({
+      commit: (request, options) => sessions.commit(link.id, connectorId, request, options),
+      commitStatus: (commitId, options) =>
+        sessions.commitStatus(link.id, connectorId, commitId, options),
+    }),
+    [sessions, link.id, connectorId],
+  );
+  // A commit written: the page is read again, so what shows is the ERP's.
+  const committedId = phase?.kind === 'committed' ? phase.response.commitId : null;
+  useEffect(() => {
+    if (committedId) setRefresh((n) => n + 1);
+  }, [committedId]);
+  // A commit whose session ended before it answered: asked about once connected again.
+  const waiting = phase?.kind === 'unknown' && phase.reconnect;
+  useEffect(() => {
+    if (waiting && draft) void draft.resume(api, schema);
+  }, [waiting, draft, api, schema]);
+  const pending = !!draft?.pending();
 
   // The query, by its key; a cursor belongs to the query that gave it.
   const requestKey = plan.kind === 'query' ? JSON.stringify(plan.request) : '';
@@ -271,8 +364,26 @@ function Loaded({
           >
             {t('refresh')}
           </CgButton>
+          {draft && (
+            <CgButton
+              appearance={editMode ? 'soft' : 'outline'}
+              intent={editMode ? 'primary' : undefined}
+              size="small"
+              aria-pressed={editMode}
+              onClick={() => setEditMode((on) => !on)}
+            >
+              {t('editData')}
+            </CgButton>
+          )}
         </span>
       </div>
+      {stale && (
+        <Message text={t('staleDraft')} testId="erp-stale-draft">
+          <CgButton appearance="outline" onClick={() => void stale.discard()}>
+            {t('discardThem')}
+          </CgButton>
+        </Message>
+      )}
       {editable && (
         <div className="cgw-erp-toolbar" role="group" aria-label={t('settings')}>
           {connectors.length > 0 && (
@@ -280,6 +391,7 @@ function Loaded({
               connectors={connectors}
               current={connectorId}
               language={language}
+              locked={pending}
               onChange={(id) => id !== connectorId && host.setAttrs(resetFor(id))}
             />
           )}
@@ -325,7 +437,36 @@ function Loaded({
           </CgButton>
         </div>
       )}
-      {plan.kind === 'noField' ? (
+      {draft && (editMode || pending || phase?.kind === 'committed') && (
+        <EditBar
+          draft={draft}
+          schema={schema}
+          api={api}
+          aiOpen={aiOpen}
+          {...(host.ai ? { onAi: () => setAiOpen((open) => !open) } : {})}
+        />
+      )}
+      {draft && host.ai && aiOpen && (
+        <AiPreparePanel
+          ai={host.ai}
+          draft={draft}
+          schema={schema}
+          records={response?.records ?? []}
+          language={language}
+          onClose={() => setAiOpen(false)}
+          onPrepared={() => setEditMode(true)}
+        />
+      )}
+      {draft && phase && reviewing(phase) ? (
+        <ReviewPanel draft={draft} schema={schema} api={api} language={language} />
+      ) : draft && phase?.kind === 'conflict' ? (
+        <ConflictPanel
+          key={phase.request.commitId}
+          draft={draft}
+          schema={schema}
+          language={language}
+        />
+      ) : plan.kind === 'noField' ? (
         <Message text={t('noFieldVisible')} testId="erp-no-field" />
       ) : plan.kind === 'filterDenied' ? (
         <Message text={t('filterDenied')} testId="erp-filter-denied" />
@@ -373,6 +514,7 @@ function Loaded({
                 response.nextCursor &&
                 setPaging({ key: requestKey, cursors: [...cursors, response.nextCursor] })
               }
+              {...(draft ? { edit: { draft, active: editMode && !draft.locked() } } : {})}
             />
           )}
         </>

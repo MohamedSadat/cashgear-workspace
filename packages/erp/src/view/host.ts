@@ -1,6 +1,8 @@
 // What the shell gives the ERP views. The views never call Workspace's API, never touch a store
 // and keep what the ERP answers in React state only: everything they need comes through these.
+import type { ErpAiAssist } from '../ai';
 import type { Language, LinkRedeemResponse } from '../contract';
+import type { ErpCommitAudit, ErpDrafts } from '../drafts';
 import type { ErpSessions } from '../session';
 
 /**
@@ -79,6 +81,8 @@ export type ErpSessionsApi = Pick<
   | 'connectors'
   | 'schema'
   | 'query'
+  | 'commit'
+  | 'commitStatus'
 >;
 
 /** What an ERP view block is given (`ErpView`). */
@@ -93,6 +97,18 @@ export interface ErpViewHost {
   readonly connection: ErpConnection;
   /** The tab's ERP sessions, one per link, in memory only. */
   readonly sessions: ErpSessionsApi;
+  /**
+   * Phase 7 (Level 2): where the block is, so its changes name the page in the ERP's audit.
+   * Without it, or without `drafts` or a block id, the block is read-only whatever the ERP
+   * allows. Editing ERP data needs no edit right on the page: the ERP decides who may change it.
+   */
+  readonly place?: { readonly pageId: string; readonly blockId: string | null };
+  /** The tab's pending changes, by block, in memory only. */
+  readonly drafts?: ErpDrafts;
+  /** Records a real commit attempt at Workspace's API (`erp-commits`), never a value. */
+  audit?(entry: ErpCommitAudit): void;
+  /** AI that prepares changes for the pending list (`@cgw/erp/ai`); absent when AI is off. */
+  readonly ai?: ErpAiAssist;
 }
 
 /** A workspace the person may link: one they own or administer, kept on their account. */

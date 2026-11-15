@@ -53,6 +53,8 @@ import {
   resetMock,
   schemaOf,
   send,
+  expectedEditing,
+  grantOf,
   sharedLink,
   sharedSession,
   startServer,
@@ -414,8 +416,9 @@ describe('connectors', () => {
       };
       const full = await list('full');
       expect(full.map((c) => c.id)).toEqual(expect.arrayContaining(CONNECTORS));
-      // Read-only until Phase 7 (agreed with Track E).
-      for (const c of full) expect(c.access).toBe('view');
+      // Phase 7: only Vendors may be editable, for a user with its Edit privilege.
+      for (const c of full) if (c.id !== 'vendors') expect(c.access).toBe('view');
+      if (onMock) for (const c of full) expect(c.access).toBe('view');
       const limited = (await list('limited')).map((c) => c.id);
       expect(full.map((c) => c.id)).toEqual(expect.arrayContaining(limited));
       if (has('itemsOnHand')) expect(limited).not.toContain('itemsOnHand');
@@ -432,14 +435,23 @@ describe('connectors', () => {
   );
 
   describe.each(CONNECTORS.map((id) => [id]))('%s', (id) => {
-    it.skipIf(lacks('admin', 'full'))('has a schema the contract allows, read-only', async () => {
-      const schema = await schemaOf((await sharedSession('full')).token, id);
-      expect(schema.id).toBe(id);
-      for (const f of schema.fields) {
-        expect(f, f.name).toMatchObject({ editable: false, editReason: 'notEditable' });
-      }
-      expect(schema.fields.some((f) => f.name === schema.keyField)).toBe(true);
-    });
+    it.skipIf(lacks('admin', 'full'))(
+      'has a schema the contract allows, its editing resolved for the user',
+      async () => {
+        const { token } = await sharedSession('full');
+        const schema = await schemaOf(token, id);
+        expect(schema.id).toBe(id);
+        const summary = parseConnectors(
+          (await send('GET', ROUTES.connectors, { session: token })).json,
+        ).connectors.find((c) => c.id === id)!;
+        const grant = grantOf(summary.access, schema);
+        for (const f of schema.fields) {
+          expect(f, f.name).toMatchObject(expectedEditing(id, f.name, grant));
+        }
+        expect(schema.fields.some((f) => f.name === schema.keyField)).toBe(true);
+        expect(schema.maxCommitRecords).toBe(id === 'vendors' ? 500 : 0);
+      },
+    );
 
     it.skipIf(lacks('admin', 'full'))('answers a first page in the schema’s values', async () => {
       const { token } = await sharedSession('full');
@@ -730,7 +742,8 @@ describe('queries', () => {
     }
   });
 
-  mockOnly('refuse Commit until Phase 7, and know no commit', async () => {
+  mockOnly('refuse Commit to a user without Edit, and know no commit', async () => {
+    // Before the body is read: this one would be 400 for anyone who may edit.
     refused(
       await send('POST', connectorRoute(id, 'Commit'), {
         session: token,
