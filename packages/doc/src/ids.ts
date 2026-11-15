@@ -243,7 +243,14 @@ export function blockIdPlugin({ isRemote, stats: counters, schedule, fragment }:
       if (!fixes.length) return null;
       const tr = state.tr;
       for (const { pos, id } of fixes) tr.setNodeAttribute(pos, 'id', id);
-      return tr.setMeta(blockIdKey, true).setMeta('addToHistory', false);
+      tr.setMeta(blockIdKey, true);
+      // The ids belong to the change that made the blocks, and go into history with it. The
+      // binding writes a batch to Yjs as in history or not by its last transaction, so an id
+      // fix kept out of history took the person's whole change (a duplicate, a paste) with it,
+      // and Undo could not take it back. Out of history only when that change was too.
+      if (changed.every((t) => t.getMeta('addToHistory') === false))
+        tr.setMeta('addToHistory', false);
+      return tr;
     },
     view: () => {
       let handled = 0;

@@ -121,6 +121,27 @@ describe('block ids in the editor', () => {
     ]);
   });
 
+  it('a duplicate, or any block a change made without an id, is undone in one step with its id', () => {
+    const { doc, editor, list, caret, press } = setup();
+    const text = () => doc.getXmlFragment(CONTENT).toString();
+    caret(0, 0);
+    press('Mod-d');
+    expect(list()).toHaveLength(3);
+    expect(undoCommand(editor.state)).toBe(true);
+    expect(list().map((b) => b.node.firstChild!.textContent)).toEqual(['alpha beta', 'gamma']);
+    // A block inserted with no id: the id plugin gives it one in the same step of history.
+    const before = text();
+    const { schema } = editor.state;
+    const block = schema.nodes.block.create({ id: null }, [
+      schema.nodes.textBody.create({ kind: 'paragraph' }, schema.text('new')),
+    ]);
+    editor.view.dispatch(editor.state.tr.insert(editor.state.doc.content.size, block));
+    expect(list()).toHaveLength(3);
+    expect(list()[2].id).toMatch(BLOCK_ID);
+    expect(undoCommand(editor.state)).toBe(true);
+    expect(text()).toBe(before);
+  });
+
   it('turn into keeps the id, the text and the children; code keeps the text', () => {
     const { editor, list } = setup(
       docOf(bullet(['one', ' ', build.text('two', 'bold')], [paragraph('child')])),
