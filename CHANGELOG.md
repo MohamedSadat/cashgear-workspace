@@ -4,6 +4,41 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.7.0] - 2026-11-15
+
+Change Cash Gear ERP vendors from a page after reviewing every change, add charts and boards over
+your databases, and, when a workspace turns it on, ask AI for drafts you accept or discard.
+
+- **Editing ERP data.** In an ERP block on Vendors, someone whose Cash Gear ERP account may edit
+  vendors chooses "Edit data" and changes the name, group, mobile, payment method, address or tax
+  file (and, with the advanced privilege, the currency and whether it is blocked). Changed cells
+  are marked; nothing is written until "Review changes" shows every field's old and new value with
+  any problem the ERP finds, and "Commit" sends them. If someone changed a vendor in the ERP
+  meanwhile, both values are shown side by side and nothing is overwritten until you choose.
+  Leaving the page with changes not committed asks first. Cash Gear ERP's own audit names the page
+  each change came from, and Workspace's audit records each attempt without its values. The ERP
+  decides who may change what, as always.
+- **Charts and boards.** "/Chart" draws a bar, line or pie chart, or a single number, from a
+  database view: rows counted, summed or averaged by a property. "/Kanban board" shows a view as a
+  board grouped by a select or status property; moving a card changes that row. Both show only
+  what you may see in the database.
+- **AI, when a workspace turns it on.** Off until an owner or admin turns it on in Settings and
+  enters the workspace's own Anthropic API key, which is kept encrypted on the server and never
+  shown again; they also choose the model (Claude Opus 5.5 by default) and see this month's use.
+  Then the AI panel beside a page rewrites a selection, summarises the page, lists its action
+  items, drafts a new page or a new database, and answers questions from the pages you can read,
+  with links to them. Every answer is a proposal: it enters the page only when you accept it, as
+  one change Undo takes back. In an ERP block, "Prepare changes with AI" fills in changes for you
+  to review; AI can never commit them. Only what each action needs is sent, and only from pages
+  you can read.
+- **Fixed.** A duplicated block (Ctrl+D), a pasted one, or any block made without an id could not
+  be undone.
+- **Versions.** Pages with a chart or a board move to document version 6, which 0.6.0 opens
+  read-only.
+- **For whoever runs the server.** The update adds the AI settings and usage tables; the API needs
+  outbound HTTPS to `api.anthropic.com` once a workspace turns AI on (`docs/OPERATIONS.md`).
+  Editing ERP data needs the ERP's Workspace commit (Track E6) deployed with its database script.
+
 ## [0.6.0] - 2026-11-15
 
 Work on a page together: see each other's typing and cursors as it happens, comment on what you
