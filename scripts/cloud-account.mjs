@@ -126,13 +126,18 @@ export async function apiSession(account) {
   };
 }
 
-/** Signs a browser page in on the API's page, which sends it back to the app with the cookie. */
+/**
+ * Signs a browser page in on the API's page, which sends it back to the app with the cookie; then
+ * waits for the app's own account check to answer (its account button), since a workspace made
+ * before it has answered stays on this device only.
+ */
 export async function signInPage(page, account, back = `${APP}/`) {
   await page.goto(`${API}/account/signin?returnUrl=${encodeURIComponent(back)}`);
   await page.getByLabel('Email').fill(account.email);
   await page.getByLabel('Password').fill(account.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL((url) => url.origin !== new URL(API).origin, { timeout: 30000 });
+  await page.locator('.cgw-account-button').first().waitFor({ state: 'attached', timeout: 30000 });
 }
 
 /**
