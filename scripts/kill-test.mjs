@@ -4,6 +4,7 @@
 // checks the one before.
 //   node scripts/kill-test.mjs --target web|desktop [--runs 1000] [--out file] [--kill immediate|tree]
 //   node scripts/kill-test.mjs --target web|desktop --sync [--runs 1000] [--check-every 25]
+//   ... [--stop-on-failure] [--keep]   stop at the first failure; keep the profile and its store
 // web: Chrome on the built app (`pnpm preview` on 4273, started if not running). desktop:
 // target/release/cgw-desktop.exe with its own data folder. A kill is TerminateProcess on the
 // process that holds the store (Chrome's browser process, cgw-desktop.exe), at once, as a crash or
@@ -65,6 +66,9 @@ const compactAfter = Number(arg('compact-after', 8));
 // Every run types, saving each word, until a compaction starts, and is killed during it.
 const untilCompaction = process.argv.includes('--until-compaction');
 const killHow = arg('kill', target === 'web' ? 'tree' : 'immediate');
+// Looking into a failure: stop at the first, and keep the profile (its store) for reading.
+const stopOnFailure = process.argv.includes('--stop-on-failure');
+const keep = process.argv.includes('--keep');
 const out = arg(
   'out',
   join(
@@ -1102,6 +1106,8 @@ try {
       appendFileSync(failuresFile, JSON.stringify(failure) + '\n');
     }
     reported = results.failures.length;
+    // Looking into a failure: the profile as the failing run left it (with --keep).
+    if (stopOnFailure && results.failures.length) break;
     if ((run + 1) % 25 === 0) {
       sweep();
       console.log(
@@ -1177,6 +1183,7 @@ try {
   mkdirSync(join(root, 'bench/results'), { recursive: true });
   writeFileSync(out, JSON.stringify(results, null, 2) + '\n');
   console.log(JSON.stringify({ ...results, failures: results.failures.slice(0, 3) }, null, 2));
-  rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  if (keep) console.log(`The profile is kept: ${profile}`);
+  else rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
 }
 if (results.failures.length) process.exitCode = 1;
