@@ -13,7 +13,7 @@ import {
   type RowRequest,
 } from '@cgw/database';
 import type { DatabaseRecord, GroupRule, PropertyDef } from '@cgw/workspace';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { usePluginT, type PluginT } from '../i18n';
 import type { PluginViewProps } from '../types';
 import {
@@ -275,6 +275,7 @@ function ChartSettings({
   change(next: Partial<ChartProps>): void;
 }) {
   const { t } = usePluginT();
+  const titleId = useId();
   const NONE = '';
   const numbers = measurable(database);
   const measureKind = props.measure.kind;
@@ -343,9 +344,12 @@ function ChartSettings({
           }
         />
       ) : null}
-      <label className="cgw-plugin-field">
-        <span className="cgw-plugin-field-label">{t('chart.title')}</span>
+      <div className="cgw-plugin-field">
+        <label className="cgw-plugin-field-label" htmlFor={titleId}>
+          {t('chart.title')}
+        </label>
         <input
+          id={titleId}
           className="cgw-plugin-input"
           dir="auto"
           defaultValue={props.title ?? ''}
@@ -359,7 +363,7 @@ function ChartSettings({
             if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
           }}
         />
-      </label>
+      </div>
       <SourceRows
         state={state}
         viewId={props.viewId}

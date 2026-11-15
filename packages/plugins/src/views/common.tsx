@@ -3,7 +3,7 @@
 import { CgButton } from '@cashgear/ui';
 import type { DatabaseHost } from '@cgw/database';
 import type { DatabaseRecord, ViewRecord } from '@cgw/workspace';
-import { useCallback, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useId, useSyncExternalStore, type ReactNode } from 'react';
 import { usePluginT } from '../i18n';
 import type { PluginData } from '../types';
 
@@ -131,7 +131,10 @@ export function BlockHead({
   );
 }
 
-/** A labelled native select, as the settings rows use. */
+/**
+ * A labelled native select, as the settings rows use. The label names the select by `for`, not by
+ * wrapping it: a wrapping label's name takes in the chosen option ("Chart Bar").
+ */
 export function SelectRow<T extends string>({
   label,
   value,
@@ -145,10 +148,14 @@ export function SelectRow<T extends string>({
   onChange(value: T): void;
   disabled?: boolean;
 }) {
+  const id = useId();
   return (
-    <label className="cgw-plugin-field">
-      <span className="cgw-plugin-field-label">{label}</span>
+    <div className="cgw-plugin-field">
+      <label className="cgw-plugin-field-label" htmlFor={id}>
+        {label}
+      </label>
       <select
+        id={id}
         className="cgw-plugin-select"
         value={value}
         disabled={disabled}
@@ -160,7 +167,7 @@ export function SelectRow<T extends string>({
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 
