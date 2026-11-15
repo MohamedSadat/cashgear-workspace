@@ -192,12 +192,58 @@ describe('real-time sync through the hub', () => {
     expect(await text(t.two.store, t.a.id)).toContain(' after');
   });
 
-  it("keeps aside the device's own update the worker refused, and never shows it to the other", async () => {
-    const t = await team();
-    t.server.refuse((u) => decode(u.data).text === ' bad');
+  it("repairs when the worker refuses the device's own updates, so what was typed reaches the server and the other", async () => {
+    const clock = new VirtualClock();
+    const t = await team(clock);
+    for (const engine of t.engines) engine.start();
+    // As Phase 6's compaction bug left a device: its snapshot holds a key no update carries (typed
+    // while a write ran, then the app stopped), so the server never had it.
+    const doc = await t.one.store.loadDoc(t.a.id);
+    const lost = fakeUpdate(501, ' lost');
+    const top = Math.max(doc.snapshotCovers, ...doc.updates.map((u) => u.localSeq));
+    const parts = [...(doc.snapshot ? [doc.snapshot] : []), ...doc.updates.map((u) => u.data)];
+    await t.one.store.compactDoc(t.a.id, fakeCodec.merge([...parts, lost]), top);
+    // The worker refuses an update that refers to content it lacks: here, everything typed after
+    // that key, until the server holds it.
+    const key = decode(lost).items![0]!;
+    const holds = (pageId: Id) =>
+      t.server.docParts(pageId).some((p) => decode(p).items?.includes(key));
+    t.server.refuse((u) => !holds(u.pageId) && !decode(u.data).items?.includes(key));
+    const refused = [await type(t.one, t.a.id, ' after'), await type(t.one, t.a.id, ' more')];
+    await advance(clock, t.hub, t.engines, 2000);
+    const rows = t.server.docs.get(t.a.id)!.rows;
+    expect(refused.map((id) => rows.find((r) => r.updateId === id)?.refused)).toEqual([true, true]);
+    // One repair carried the whole state: the server holds everything the device does.
+    expect(t.aliceCalls.get('repairDoc')).toBe(1);
+    const held = await t.one.store.loadDoc(t.a.id);
+    expect(await fakeCodec.stateHash(t.server.docParts(t.a.id))).toBe(
+      await fakeCodec.stateHash([held.snapshot!, ...held.updates.map((u) => u.data)]),
+    );
+    for (const words of [' lost', ' after', ' more'])
+      expect(await text(t.two.store, t.a.id)).toContain(words);
+    // Nothing kept aside, nothing to tell: the text was saved, and now the server has it too.
+    expect(t.one.store.corruptUpdates()).toEqual([]);
+    expect(t.one.notices()).toEqual([]);
+    expect(t.one.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+    // What is typed next refers to what the server now holds, and is taken.
+    const next = await type(t.one, t.a.id, ' next');
+    await advance(clock, t.hub, t.engines, 2000);
+    expect(rows.find((r) => r.updateId === next)?.refused).toBeUndefined();
+    expect(await text(t.two.store, t.a.id)).toContain(' next');
+    expect(t.aliceCalls.get('repairDoc')).toBe(1);
+    for (const engine of t.engines) engine.stop();
+  });
+
+  it("keeps aside the device's own update the worker refuses even in its whole state, and never shows it to the other", async () => {
+    const clock = new VirtualClock();
+    const t = await team(clock);
+    for (const engine of t.engines) engine.start();
+    // Content the server will not take wherever it is: the repair carrying it is refused too.
+    t.server.refuse((u) => decode(u.data).text.includes(' bad'));
     const bad = await type(t.one, t.a.id, ' bad');
     await type(t.one, t.a.id, ' good');
-    await t.flush();
+    await advance(clock, t.hub, t.engines, 2000);
+    expect(t.aliceCalls.get('repairDoc')).toBe(1);
     expect(t.one.notices()).toEqual(['doc.refused']);
     expect(t.one.store.corruptUpdates()).toEqual([
       expect.objectContaining({ pageId: t.a.id, reason: 'doc.refused' }),
@@ -207,6 +253,8 @@ describe('real-time sync through the hub', () => {
     expect(await text(t.two.store, t.a.id)).toContain(' good');
     expect(await text(t.two.store, t.a.id)).not.toContain(' bad');
     expect(t.two.notices()).toEqual([]);
+    expect(t.one.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+    for (const engine of t.engines) engine.stop();
   });
 
   it('handles a push the hub refuses as the same refusal over HTTP (edit access gone)', async () => {

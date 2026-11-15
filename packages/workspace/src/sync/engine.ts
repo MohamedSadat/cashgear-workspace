@@ -9,7 +9,9 @@
 //      past this device's cursor), and resync any subtree access changed on;
 //   4. pull documents this device holds whose server head moved, then a bounded number of pinned
 //      pages it does not hold yet;
-//   5. compare a few pages' state hashes with the server's, and repair those that differ.
+//   5. repair pages whose own updates the worker refused (their whole state, which carries what
+//      the refused ones referred to), then compare a few pages' state hashes with the server's,
+//      and repair those that differ.
 // Phase 4 (databases): after the feed, the rows of databases this device holds in full and has
 // not fetched yet come by their own route (at most 4 requests of 1,000 rows a pass, the next pass
 // soon while some remain); the feed keeps held rows fresh after that; pins hold the databases in
@@ -228,6 +230,24 @@ type Later =
 
 const poolKey = (workspaceId: Id) => `sync:yjsPool:${workspaceId}`;
 const registeredKey = (workspaceId: Id) => `sync:yjsRegistered:${workspaceId}`;
+const refusedKey = (workspaceId: Id) => `sync:refused:${workspaceId}`;
+
+/**
+ * This device's own updates of a page that the worker refused, until a repair carries them to the
+ * server (`noteRefusals`, `repairRefused`). Kept as a preference per workspace, written before the
+ * cursor moves past the answer that told of them, so a stop at any moment loses nothing.
+ */
+interface Refusal {
+  /** Refused updates (ids) whose content no repair has brought to the server yet. */
+  updates: Id[];
+  /**
+   * The repair sent for them: its update's id, the refused updates it carries, and the sequence
+   * the server gave it (null until the answer came: it is sent again under the same id).
+   */
+  repair: { updateId: Id; covers: Id[]; seq: number | null } | null;
+}
+type Refusals = Record<Id, Refusal>;
+
 /** The signed-in account (no credential), for a start with no network. */
 export const ACCOUNT_PREF = 'sync:account';
 
@@ -306,6 +326,8 @@ export class SyncEngine {
   private readonly opened = new Set<Id>();
   /** Pages whose failed repair was reported this session. */
   private readonly repairReported = new Set<Id>();
+  /** Refused updates waiting for a repair, per workspace, once read from the store. */
+  private readonly refusals = new Map<Id, Refusals>();
   /** Quarantine entries already told of; null until the first pass has read them. */
   private seen: Set<Id> | null = null;
   /** Something may have been set aside (or pending entries remain): look after the pass. */
@@ -583,7 +605,12 @@ export class SyncEngine {
       // A page held back (this build is too old for it) waits for an update, not for a pass.
       .filter((d) => !this.heldBack.has(d.pageId))
       .reduce((n, d) => n + d.updates.length, 0);
-    const waiting = ops + docs;
+    // Refused updates are not on the server until their repair is: they wait too.
+    let refused = 0;
+    for (const workspaceId of this.mine)
+      for (const refusal of Object.values(await this.refusalsOf(workspaceId)))
+        refused += refusal.updates.length;
+    const waiting = ops + docs + refused;
     if (order < this.reportShown) return;
     this.reportShown = order;
     this.status_ = {
@@ -716,6 +743,7 @@ export class SyncEngine {
           await this.fetchRows(workspace, mirror.databases);
           await this.pullDocs(workspace, mirror.pages, pinned);
           await this.fetchPinned(workspace, pinned);
+          await this.repairRefused(workspace);
           await this.runChecks(workspace);
         } catch (error) {
           // The workspace is gone for this account: forget it here, as another device's removal would.
@@ -1143,13 +1171,13 @@ export class SyncEngine {
         // The server replaced the document's history: unsent edits are set aside (a recovered
         // page), and the page is pulled again from the start of the new epoch.
         await this.setAside(workspaceId, page.id, 'doc.epochMismatch');
-        await this.resetDoc(page.id);
+        await this.resetDoc(page);
         return true;
       case 'access.denied':
         // Edit access went while offline: the edits become a recovered page, and the page is
         // what the server holds.
         await this.setAside(workspaceId, page.id, 'access.denied');
-        await this.resetDoc(page.id);
+        await this.resetDoc(page);
         return true;
       case 'not.found':
         // Read access went too: the edits are set aside; the feed's revoke removes the page.
@@ -1179,9 +1207,13 @@ export class SyncEngine {
 
   /**
    * The page's log emptied (the empty update stands as sent) so it is pulled from the start. Only
-   * what was read here gives way: an update written meanwhile stays, to be sent.
+   * what was read here gives way: an update written meanwhile stays, to be sent. Refused updates
+   * still waiting for a repair cannot have one at the new epoch: they are kept aside first.
    */
-  private async resetDoc(pageId: Id) {
+  private async resetDoc(page: PageRecord) {
+    const pageId = page.id;
+    const waiting = (await this.refusalsOf(page.workspaceId))[pageId];
+    if (waiting) await this.abandonRefusal(page, waiting.updates);
     const doc = await this.store.loadDoc(pageId);
     const upTo = doc.updates.reduce((n, u) => Math.max(n, u.localSeq), doc.snapshotCovers);
     const updateId = uuidv7();
@@ -1492,22 +1524,31 @@ export class SyncEngine {
       if (cursor && pull.epoch !== cursor.epoch) {
         // A hard restore on the server: start again from the new epoch, edits set aside.
         await this.setAside(page.workspaceId, page.id, 'doc.epochMismatch');
-        await this.resetDoc(page.id);
+        await this.resetDoc(page);
         this.wanted.delete(page.id);
         cursor = null;
         continue;
       }
-      added += await this.takePull(page, pull, !cursor);
+      const after = cursor?.headSeq ?? 0;
+      added += await this.takePull(page, pull, !cursor, after, after);
       cursor = { headSeq: pull.cursor, epoch: pull.epoch };
       if (!pull.more) return added;
     }
   }
 
   /**
-   * A pull's answer into the store: the updates this device lacks, its cursor, what was refused.
-   * Returns how many updates were new here.
+   * A pull's answer into the store: what was refused, then the updates this device lacks and its
+   * cursor. `after` is where the answer starts (0 for a repair's), `held` this device's cursor
+   * before it. Returns how many updates were new here.
    */
-  private async takePull(page: PageRecord, pull: DocPull, first: boolean): Promise<number> {
+  private async takePull(
+    page: PageRecord,
+    pull: DocPull,
+    first: boolean,
+    after: number,
+    held: number,
+  ): Promise<number> {
+    await this.noteRefusals(page, { after, upTo: pull.headSeq, rejected: pull.rejected }, held);
     const updates = [];
     if (pull.snapshot)
       updates.push({
@@ -1523,20 +1564,191 @@ export class SyncEngine {
     if (first) this.heldChanged.add(page.workspaceId);
     if (added.length)
       this.emit({ kind: 'doc', pageId: page.id, updates: added.map((u) => u.data) });
-    await this.takeRejected(page, pull.rejected);
     return added.length;
   }
 
-  /** This device's own updates among those the worker refused: kept aside, and the user told. */
-  private async takeRejected(page: PageRecord, rejected: Id[]) {
-    if (!rejected.length) return;
-    const doc = await this.store.loadDoc(page.id);
-    const refused = new Set(rejected);
-    const bad = doc.updates.filter((u) => refused.has(u.updateId)).map((u) => u.localSeq);
+  // 4a. Refused updates ----------------------------------------------------------------------------
+
+  /** The workspace's refused updates waiting for a repair, read from the store once. */
+  private async refusalsOf(workspaceId: Id): Promise<Refusals> {
+    const known = this.refusals.get(workspaceId);
+    if (known) return known;
+    const read = (await this.store.getPref<Refusals>(refusedKey(workspaceId))) ?? {};
+    // Another read may have finished first: it is the one kept.
+    const kept = this.refusals.get(workspaceId) ?? read;
+    this.refusals.set(workspaceId, kept);
+    return kept;
+  }
+
+  /**
+   * A page's waiting refusal replaced (or, null, removed). Read from the store again first: every
+   * tab has its own engine over the one store, and keeps the others' pages.
+   */
+  private async setRefusal(workspaceId: Id, pageId: Id, refusal: Refusal | null) {
+    const all = (await this.store.getPref<Refusals>(refusedKey(workspaceId))) ?? {};
+    if (refusal) all[pageId] = refusal;
+    else delete all[pageId];
+    await this.store.setPref(refusedKey(workspaceId), all);
+    this.refusals.set(workspaceId, all);
+  }
+
+  /**
+   * What a pull's answer or a hub frame says of this device's own updates, read before its updates
+   * are stored and the cursor moves past them (so a stop then reads the answer again). Own updates
+   * the worker refused are not set aside: they wait for a repair (`repairRefused`) that sends the
+   * page's whole state, which carries whatever they referred to and the server lacked (Phase 6's
+   * compaction bug: a snapshot held a key no update carried, and everything typed after it was
+   * refused). A repair sent for them is decided once the answer's validated head passes it: valid,
+   * its refused updates are on the server; refused too, the server will not take what this device
+   * holds, and they are kept aside as a refusal always was (`abandonRefusal`).
+   *
+   * `after` is where the answer starts and `upTo` its validated head (every update up to it is
+   * decided); `held` is this device's cursor before it: a refused update at or below it was told of
+   * before (a repair's pull lists the page's refusals again from the start).
+   */
+  private async noteRefusals(
+    page: PageRecord,
+    answer: { after: number; upTo: number; rejected: Id[] },
+    held: number,
+  ) {
+    const waiting = (await this.refusalsOf(page.workspaceId))[page.id] ?? null;
+    if (!waiting && !answer.rejected.length) return;
+    const rejected = new Set(answer.rejected);
+    let fresh: Id[] = [];
+    if (rejected.size) {
+      const known = new Set(waiting?.updates ?? []);
+      fresh = (await this.store.loadDoc(page.id)).updates
+        .filter(
+          (u) =>
+            rejected.has(u.updateId) && !known.has(u.updateId) && (u.seq === null || u.seq > held),
+        )
+        .map((u) => u.updateId);
+    }
+    const repair = waiting?.repair ?? null;
+    const decided =
+      repair !== null &&
+      repair.seq !== null &&
+      repair.seq > answer.after &&
+      repair.seq <= answer.upTo;
+    if (waiting && repair && decided && rejected.has(repair.updateId)) {
+      await this.abandonRefusal(page, [...waiting.updates, ...fresh]);
+      return;
+    }
+    if (!fresh.length && !decided) return;
+    const carried = new Set(decided && repair ? repair.covers : []);
+    const updates = [...(waiting?.updates ?? []).filter((id) => !carried.has(id)), ...fresh];
+    const next = { updates, repair: decided ? null : repair };
+    await this.setRefusal(page.workspaceId, page.id, updates.length || next.repair ? next : null);
+    if (fresh.length) {
+      // Not on the server after all: the status says so, and a pass sends the repair.
+      this.waitingOne();
+      this.soon(SOON);
+    } else if (!updates.length) await this.recountSoon();
+  }
+
+  /**
+   * Sends a repair for every page of the workspace whose refused updates wait for one, each in the
+   * page's own turn. A repair answered waits for the worker's word (`noteRefusals`) while the
+   * device's cursor is below it; past it with no word (another tab took that answer), it is asked
+   * again, and the server's answer for the same id says.
+   */
+  private async repairRefused(workspace: WorkspaceRecord) {
+    for (const pageId of Object.keys(await this.refusalsOf(workspace.id))) {
+      const page = await this.store.getPage(pageId);
+      if (page) await this.onPage(pageId, () => this.sendRepair(page));
+      // Removed here meanwhile: its log went with it.
+      else await this.setRefusal(workspace.id, pageId, null);
+    }
+  }
+
+  /**
+   * The repair for a page's refused updates: this device's whole state as one update by the repair
+   * route, as a state-hash repair sends it (the worker takes from it only what it adds, so other
+   * people's structs in it are no forgery), and the page from the start. Sent again under the same
+   * id while no answer came (the server keeps the first and answers with its sequence). What no
+   * repair can carry (a reader's, over the 1 MB an update may be, a page gone or no longer
+   * editable) is kept aside as before.
+   */
+  private async sendRepair(page: PageRecord) {
+    const waiting = (await this.refusalsOf(page.workspaceId))[page.id];
+    if (!waiting) return;
+    const cursor = await this.store.docCursor(page.id);
+    const sent = waiting.repair?.seq ?? null;
+    if (sent !== null && cursor && cursor.headSeq < sent) return;
+    const parts = partsOf(await this.store.loadDoc(page.id));
+    const reader =
+      this.heldBack.has(page.id) ||
+      page.access === 'view' ||
+      page.access === 'comment' ||
+      page.access === 'none';
+    let data: Uint8Array | null = null;
+    try {
+      if (cursor && parts.length && !reader) data = this.codec.merge(parts);
+    } catch (error) {
+      // A log that does not merge cannot be sent whole (the document layer moves such updates
+      // aside when it opens the page); a pass that failed on it would fail for ever.
+      console.warn('Could not merge a page for its repair:', error);
+    }
+    if (!cursor || !data || data.byteLength > PUSH_LIMITS.alone) {
+      await this.abandonRefusal(page, waiting.updates);
+      return;
+    }
+    let repair = waiting.repair;
+    if (!repair) {
+      // Kept before it goes: a stop before the answer sends it again under the same id.
+      repair = { updateId: uuidv7(), covers: [...waiting.updates], seq: null };
+      await this.setRefusal(page.workspaceId, page.id, { ...waiting, repair });
+    }
+    let answer;
+    try {
+      answer = await this.api.repairDoc(page.id, {
+        epoch: cursor.epoch,
+        clientSchemaVersion: this.codec.schemaVersion,
+        update: { updateId: repair.updateId, data },
+      });
+    } catch (error) {
+      if (!(error instanceof SyncHttpError)) throw error;
+      if (error.code === 'doc.epochMismatch') {
+        // The pull takes the new epoch, and its reset keeps these aside with the page's edits.
+        this.wanted.add(page.id);
+        return;
+      }
+      if (![403, 404, 410, 413, 426].includes(error.status)) throw error;
+      await this.abandonRefusal(page, waiting.updates);
+      return;
+    }
+    const now = (await this.refusalsOf(page.workspaceId))[page.id];
+    if (now?.repair?.updateId === repair.updateId && answer.ack)
+      await this.setRefusal(page.workspaceId, page.id, {
+        ...now,
+        repair: { ...repair, seq: answer.ack.seq },
+      });
+    await this.takePull(page, answer.pull, false, 0, cursor.headSeq);
+    if (answer.pull.more) await this.pullDocNow(page);
+  }
+
+  /**
+   * Refused updates no repair can carry: kept aside in the store's corrupt area, as every refusal
+   * was before (the page's history has them), and the user told.
+   */
+  private async abandonRefusal(page: PageRecord, ids: Id[]) {
+    const refused = new Set(ids);
+    const bad = (await this.store.loadDoc(page.id)).updates
+      .filter((u) => refused.has(u.updateId))
+      .map((u) => u.localSeq);
     if (bad.length) {
       await this.store.quarantineUpdates(page.id, bad, 'doc.refused');
       this.notice('doc.refused', page.workspaceId, page.id);
     }
+    await this.setRefusal(page.workspaceId, page.id, null);
+    await this.recountSoon();
+  }
+
+  /** Something stopped waiting outside the count a pass makes: "Synced" as soon as nothing does. */
+  private async recountSoon() {
+    if (this.status_.state !== 'syncing') return;
+    if (this.running) this.recount = true;
+    else await this.report('synced', false);
   }
 
   // 4b. Pins ---------------------------------------------------------------------------------------
@@ -1869,6 +2081,8 @@ export class SyncEngine {
   private async check(page: PageRecord): Promise<'done' | 'wait' | 'later' | 'verify'> {
     const cursor = await this.store.docCursor(page.id);
     if (!cursor) return 'done';
+    // Refused updates wait for their own repair; the check comes once they are settled.
+    if ((await this.refusalsOf(page.workspaceId))[page.id]) return 'later';
     const doc = await this.store.loadDoc(page.id);
     if (doc.updates.some((u) => u.seq === null)) return 'later';
     let state: DocStateHash;
@@ -1947,7 +2161,7 @@ export class SyncEngine {
       update = null;
       answer = await this.api.repairDoc(page.id, { ...request, update });
     }
-    await this.takePull(page, answer.pull, false);
+    await this.takePull(page, answer.pull, false, 0, state.upToSeq);
     if (answer.pull.more) await this.pullDoc(page);
     await this.store.setRepairState({
       pageId: page.id,
@@ -2255,6 +2469,11 @@ export class SyncEngine {
     if (frame.cursor <= cursor.headSeq && !frame.rejected.length) return;
     const page = await this.store.getPage(frame.pageId);
     if (!page) return;
+    await this.noteRefusals(
+      page,
+      { after: frame.after, upTo: frame.cursor, rejected: frame.rejected },
+      cursor.headSeq,
+    );
     const added = await this.store.applyRemoteDocUpdates(page.id, {
       epoch: frame.epoch,
       headSeq: frame.cursor,
@@ -2262,7 +2481,6 @@ export class SyncEngine {
     });
     if (added.length)
       this.emit({ kind: 'doc', pageId: page.id, updates: added.map((u) => u.data) });
-    await this.takeRejected(page, frame.rejected);
   }
 
   /** The page over HTTP now, as a pass would; if that fails, the next pass pulls it. */

@@ -1,6 +1,6 @@
 // Phase 3's sync loop against the fake server: signed in with no network, 401 pauses, backoff
 // with `Retry-After`, resume after sleep, long outboxes in batches, the feed past its retention,
-// the state-hash repair path, and pins.
+// the state-hash repair path, updates the worker refuses (repaired, or kept aside), and pins.
 import { describe, expect, it } from 'vitest';
 import { newOp } from '../build';
 import { uuidv7, type Id } from '../ids';
@@ -17,7 +17,7 @@ import {
   VirtualClock,
 } from '../testing/syncHarness';
 import type { StoredUpdate } from '../types';
-import type { DocCodec } from './api';
+import { OfflineError, type DocCodec } from './api';
 import { ACCOUNT_PREF, pushBatches, PUSH_LIMITS } from './engine';
 
 const update = (bytes: number, client = 7) => {
@@ -493,6 +493,135 @@ describe('repair', () => {
     await one.engine.syncOnce();
     await two.engine.syncOnce();
     expect(server.calls.filter((c) => c === 'docStateHash').length).toBe(before + 1);
+  });
+});
+
+describe('updates the worker refuses', () => {
+  /**
+   * Alice's page as Phase 6's compaction bug left a device: its snapshot holds a key no update
+   * carries, so the server never had it, and the worker refuses what refers to it (here, anything
+   * that does not carry it, until the server holds it).
+   */
+  async function broken(server: FakeServer) {
+    const shared = await sharedWorkspace(server);
+    const { one, a } = shared;
+    await append(one.store, a.id, [fakeUpdate(51, 'one')]);
+    await one.engine.syncOnce();
+    const doc = await one.store.loadDoc(a.id);
+    const lost = fakeUpdate(51, ' lost');
+    const top = Math.max(doc.snapshotCovers, ...doc.updates.map((u) => u.localSeq));
+    const parts = [...(doc.snapshot ? [doc.snapshot] : []), ...doc.updates.map((u) => u.data)];
+    await one.store.compactDoc(a.id, fakeCodec.merge([...parts, lost]), top);
+    const key = decode(lost).items![0]!;
+    const holds = (pageId: Id) =>
+      server.docParts(pageId).some((p) => decode(p).items?.includes(key));
+    server.refuse((u) => !holds(u.pageId) && !decode(u.data).items?.includes(key));
+    return shared;
+  }
+
+  /** Whether the server holds everything the device does (the state hash is over items). */
+  async function same(server: FakeServer, store: MemoryStore, pageId: Id) {
+    const doc = await store.loadDoc(pageId);
+    const parts = [...(doc.snapshot ? [doc.snapshot] : []), ...doc.updates.map((u) => u.data)];
+    return (
+      (await fakeCodec.stateHash(parts)) === (await fakeCodec.stateHash(server.docParts(pageId)))
+    );
+  }
+
+  it('repairs over HTTP, so what was typed reaches the server, after a stop too', async () => {
+    const server = new FakeServer({ codec: fakeCodec });
+    const { one, a } = await broken(server);
+    // The first repair finds no network, and the app stops before another pass.
+    const first = device(server, ALICE, {
+      store: one.store,
+      api: () => ({
+        repairDoc: async () => {
+          throw new OfflineError();
+        },
+      }),
+    });
+    await append(one.store, a.id, [fakeUpdate(51, ' after')]);
+    await expect(first.engine.syncOnce()).rejects.toThrow(OfflineError);
+    const row = server.docs.get(a.id)!.rows.at(-1)!;
+    expect([decode(row.data).text, row.refused]).toEqual([' after', true]);
+    expect(await same(server, one.store, a.id)).toBe(false);
+    // Started again: the refusal was kept, and the repair goes.
+    const again = device(server, ALICE, { store: one.store });
+    await again.engine.syncOnce();
+    expect(server.calls.filter((c) => c === 'repairDoc')).toHaveLength(1);
+    expect(await same(server, one.store, a.id)).toBe(true);
+    expect(one.store.corruptUpdates()).toEqual([]);
+    expect([...first.notices(), ...again.notices()]).toEqual([]);
+    expect(again.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+    // The next words refer to what the server now holds, and are taken.
+    await append(one.store, a.id, [fakeUpdate(51, ' next')]);
+    await again.engine.syncOnce();
+    expect(server.docs.get(a.id)!.rows.at(-1)!.refused).toBeUndefined();
+    expect(await same(server, one.store, a.id)).toBe(true);
+    expect(server.calls.filter((c) => c === 'repairDoc')).toHaveLength(1);
+  });
+
+  it('counts refused updates as waiting until their repair is taken', async () => {
+    const server = new FakeServer({ codec: fakeCodec });
+    const { one, a } = await broken(server);
+    // The server answers the repair before its worker has passed it (as the real one does): the
+    // answer's validated head is below it, and it is not served yet.
+    const late = device(server, ALICE, {
+      store: one.store,
+      api: (base) => ({
+        repairDoc: async (pageId, request) => {
+          const answer = await base.repairDoc(pageId, request);
+          const head = answer.ack!.seq - 1;
+          const updates = answer.pull.updates.filter((u) => u.seq <= head);
+          return { ...answer, pull: { ...answer.pull, headSeq: head, cursor: head, updates } };
+        },
+      }),
+    });
+    await append(one.store, a.id, [fakeUpdate(51, ' after')]);
+    await late.engine.syncOnce();
+    expect(late.engine.status).toMatchObject({ state: 'syncing', waiting: 1 });
+    // The next pass pulls past the repair, which the worker took: nothing waits.
+    await late.engine.syncOnce();
+    expect(late.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+    expect(server.calls.filter((c) => c === 'repairDoc')).toHaveLength(1);
+  });
+
+  it('sends a repair whose answer was lost again under the same id, and the server keeps one', async () => {
+    const server = new FakeServer({ codec: fakeCodec });
+    const { one, a } = await broken(server);
+    await append(one.store, a.id, [fakeUpdate(51, ' after')]);
+    server.lose('repairDoc');
+    await expect(one.engine.syncOnce()).rejects.toThrow(OfflineError);
+    const again = device(server, ALICE, { store: one.store });
+    await again.engine.syncOnce();
+    expect(server.calls.filter((c) => c === 'repairDoc')).toHaveLength(2);
+    const repairs = server.docs
+      .get(a.id)!
+      .rows.filter((r) => !r.refused && decode(r.data).text.includes(' lost'));
+    expect(repairs).toHaveLength(1);
+    expect(await same(server, one.store, a.id)).toBe(true);
+    expect(again.notices()).toEqual([]);
+  });
+
+  it('keeps aside, as before, what no repair can carry (edit access gone meanwhile)', async () => {
+    const server = new FakeServer({ codec: fakeCodec });
+    const { one, a, ws } = await broken(server);
+    const reader = device(server, ALICE, {
+      store: one.store,
+      api: (base) => ({
+        repairDoc: async (pageId, request) => {
+          server.demote(ws.id, ALICE.id);
+          return base.repairDoc(pageId, request);
+        },
+      }),
+    });
+    await append(one.store, a.id, [fakeUpdate(51, ' after')]);
+    await reader.engine.syncOnce();
+    expect(reader.notices()).toEqual(['doc.refused']);
+    expect(one.store.corruptUpdates()).toEqual([
+      expect.objectContaining({ pageId: a.id, reason: 'doc.refused' }),
+    ]);
+    expect(reader.engine.status).toMatchObject({ waiting: 0 });
   });
 });
 
