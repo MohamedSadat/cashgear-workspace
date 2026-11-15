@@ -525,3 +525,12 @@ Added as they are found, grouped by phase.
 - A component behind `React.lazy` loads after more than a few ticks under Vitest: import the
   module first, then wait for the Suspense fallback to go. A registry of `BlockDefinition<P>` of
   different `P` does not type-check (variance of `render`): `untyped()`.
+
+### After 0.7.0
+
+- A workspace made while signed in is uploaded at once, while its first-run pages are still being
+  made: whatever an upload reads beside the outbox must be read as one state with it
+  (`uploadState`, which reads the outbox again until it has not changed).
+- The app shows one notice at a time, and a later one replaces the text of the element the earlier
+  one drew: a probe that records each new `.cgw-notice` element (as `collab.ts`'s `probes` does)
+  misses it. Record each text the element shows.
