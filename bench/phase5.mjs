@@ -29,8 +29,8 @@
 //     window: the ERP's own time). Six opens; p95 of what is left (budget 1 s); the ERP's time and
 //     the total tracked.
 // Each figure is checked against its budget and, when bench/previous/phase5.json holds the last
-// run on main on the same processor (CI downloads it), against that: worse by half again and by
-// more than a small margin fails. Writes bench/results/phase5.json.
+// run on main on the same processor (CI downloads it) measured under the same conditions, against
+// that: worse by half again and by more than a small margin fails. Writes bench/results/phase5.json.
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -64,15 +64,28 @@ const results = join(root, 'bench/results');
 const log = (line) => console.log(line);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Budgets, with the margin a regression must also exceed to fail (runners are noisy). */
+/**
+ * What the keystroke figures are measured under; a run on main under older conditions is not
+ * compared with. 2 (Phase 6): the page is live on the hub, so each save goes to the server at
+ * once (a batch at most every 60 ms instead of 500 ms), and the server validates and relays it
+ * while the app types, on the same machine. The app's own work per key is unchanged by that (CPU
+ * slowed 4x: 21 to 22 ms p95 with live saves, 24 to 26 ms with Phase 5's), but on CI's shared
+ * runner the server's work beside it raised the figures (DECISIONS.md, Phase 6, Defaults picked).
+ */
+const CONDITIONS = 2;
+
+/**
+ * Budgets, with the margin a regression must also exceed to fail (runners are noisy), and since
+ * which conditions a figure is compared with the last run on main.
+ */
 const BUDGETS = {
   embedFirstPaintP95: { max: 2000, unit: 'ms', slack: 300 },
-  key10EmbedsWorkP95: { max: 8, unit: 'ms', slack: 2 },
-  key10EmbedsFrameP95: { max: 33, unit: 'ms', slack: 5 },
+  key10EmbedsWorkP95: { max: 8, unit: 'ms', slack: 2, since: 2 },
+  key10EmbedsFrameP95: { max: 33, unit: 'ms', slack: 5, since: 2 },
   erpFirstPageP95: { max: 1000, unit: 'ms', slack: 150 },
   embedFirstPaintDesktopP95: { max: 2000, unit: 'ms', slack: 300 },
-  key10EmbedsDesktopWorkP95: { max: 8, unit: 'ms', slack: 2 },
-  key10EmbedsDesktopFrameP95: { max: 33, unit: 'ms', slack: 5 },
+  key10EmbedsDesktopWorkP95: { max: 8, unit: 'ms', slack: 2, since: 2 },
+  key10EmbedsDesktopFrameP95: { max: 33, unit: 'ms', slack: 5, since: 2 },
   // Tracked, not budgeted.
   embedPictureP95: { max: Infinity, unit: 'ms', slack: 1000 },
   erpOwnTimeP95: { max: Infinity, unit: 'ms', slack: 1000 },
@@ -669,6 +682,7 @@ const out = {
   commit: process.env.GITHUB_SHA ?? null,
   sheet: realSheet ? 'real' : 'mock',
   sheetOrigin: SHEET,
+  conditions: CONDITIONS,
   machine: {
     cpu: cpus()[0]?.model?.trim() ?? null,
     threads: cpus().length,
@@ -737,11 +751,16 @@ const figures = {
 const last = existsSync(previousFile) ? JSON.parse(readFileSync(previousFile, 'utf8')) : null;
 const sameMachine = !!last && last.machine?.cpu === out.machine.cpu && last.sheet === out.sheet;
 const previous = sameMachine ? (last.figures ?? null) : null;
+// Runs before conditions were recorded measured under the first.
+const lastConditions = last?.conditions ?? 1;
+const rebased = [];
 const gate = [];
 for (const [name, value] of Object.entries(figures)) {
   if (value === undefined || value === null) continue;
   const budget = BUDGETS[name];
-  const before = previous?.[name];
+  const comparable = lastConditions >= (budget.since ?? 1);
+  if (previous?.[name] !== undefined && !comparable) rebased.push(name);
+  const before = comparable ? previous?.[name] : undefined;
   const overBudget = value > budget.max;
   const regressed =
     typeof before === 'number' && value > before * 1.5 && value - before > budget.slack;
@@ -766,6 +785,10 @@ for (const g of gate)
     `${g.overBudget || g.regressed ? 'FAIL' : 'ok  '} ${g.name.padEnd(28)} ${String(g.value).padStart(7)} ${g.unit.padEnd(3)} ${String(g.budget ?? 'none').padStart(7)}   ${g.previous ?? '-'}${g.regressed ? '  (regressed)' : ''}`,
   );
 if (!tenLive) log('FAIL fewer than ten live frames while typing');
+if (rebased.length)
+  log(
+    `(${rebased.join(', ')}: the last run on main measured under conditions ${lastConditions}, these under ${CONDITIONS}: budgets only.)`,
+  );
 if (!last) log('(No run on main to compare with: budgets only.)');
 else if (!sameMachine)
   log(
