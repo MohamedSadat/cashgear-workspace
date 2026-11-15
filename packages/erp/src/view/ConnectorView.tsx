@@ -321,7 +321,7 @@ function Loaded({
     setPanel((open) => (open === which ? null : which));
   const disclosure = (which: Exclude<Panel, null>, label: string) => (
     <CgButton
-      appearance={panel === which ? 'soft' : 'ghost'}
+      appearance={panel === which ? 'outline' : 'ghost'}
       intent={panel === which ? 'primary' : undefined}
       size="small"
       aria-expanded={panel === which}
@@ -366,7 +366,7 @@ function Loaded({
           </CgButton>
           {draft && (
             <CgButton
-              appearance={editMode ? 'soft' : 'outline'}
+              appearance="outline"
               intent={editMode ? 'primary' : undefined}
               size="small"
               aria-pressed={editMode}
