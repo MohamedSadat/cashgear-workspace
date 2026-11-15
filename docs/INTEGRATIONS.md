@@ -574,6 +574,118 @@ Requirements this contract meets:
   version history. Copying cells out is a normal clipboard action by the user.
 - Offline, the block says ERP data needs a connection.
 
+### `Commit` and `CommitStatus` (Phase 7)
+
+Written in full on 2026-11-15 (Phase 7, M7.1), before either side ships it, from `vendors.1`'s
+commit (`cashgear-sheet/docs/erp-contract.md`), which the ERP already runs for Sheet. Track E6
+builds the ERP's side; `tests/mocks/erp` and the suite in `tests/contracts/erp` hold Workspace to
+it. Only Vendors is editable in 0.7.0 (decisions, 2026-11-15); Customers and Items on hand stay
+read-only.
+
+**An editable connector's schema.** `ConnectorSummary.access` is `edit` when the session's user
+holds the connector's Edit privilege (Vendors: the Vendors unit's `EditRec`, as Sheet's), else
+`view`. Each field's `editable` and `editReason` are resolved for that user:
+
+| Vendors field | Editable with | Otherwise |
+| --- | --- | --- |
+| `vendorName`, `vendorGroup`, `mobile`, `payMethod`, `address`, `taxFile` | Edit | `needsEdit` |
+| `currency`, `blocked` | AdvEdit | `needsAdvEdit` (or `needsEdit` without Edit) |
+| `vendorAccount`, `bankAccount`, `debitLimit`, `modifiedBy`, `modifiedDate` | Never | `notEditable` |
+
+`maxCommitRecords` is 500 for Vendors and 0 for a connector that is not editable.
+
+```ts
+interface CommitRequest {
+  commitId: string;              // a UUID v4 in lower case: one per commit attempt, the same on every retry
+  schemaVersion: string;         // the schema's; else 400 schema.changed
+  dryRun: boolean;               // true: every check runs, versions included, and nothing is written
+  source: {                      // where in Workspace the change was made, for the ERP's audit
+    workspaceId: string;         // the session's workspace; else 400 request.invalid
+    pageId: string;              // a UUID
+    blockId: string | null;      // 12 characters of base 62, or null
+  };
+  records: {
+    id: string; key: string;
+    version: string;             // as the record was read
+    changes: Record<string, { from: WireValue; to: WireValue }>;  // changed fields only
+  }[];
+}
+
+interface CommitResponse {       // 200
+  commitId: string;
+  dryRun: boolean;
+  committedAt: string | null;    // ISO 8601 with an offset; null for a dry run
+  records: ErpRecord[];          // each changed record as saved (a dry run: as it would be, versions unchanged), every field the user may see
+}
+
+interface ConflictBody {         // 409: nothing written
+  message: string; correlationId: string;
+  conflicts: {
+    id: string; key: string;
+    version: string;             // the record's version now
+    values: Record<string, WireValue>;   // its values now, every field the user may see
+    fields: string[];            // the commit's fields whose value now differs from their `from`; may be empty
+    modifiedBy: string | null; modifiedAt: string | null;
+  }[];
+}
+
+type CommitStatusResponse =      // GET …/CommitStatus/{commitId}, View
+  | { status: 'unknown' }        // nothing was written under that id for the session's company
+  | ({ status: 'committed' } & CommitResponse);   // the stored 200 body
+```
+
+Checks, in order. The first that fails answers, and nothing is written:
+
+| # | Check | Answer |
+| --- | --- | --- |
+| 1 | A live session; a live link | 401 `session.expired`; 403 `link.revoked` |
+| 2 | The connector exists and the user may view it | 404 `connector.notFound`; 403 `privilege.denied` |
+| 3 | The connector's Edit privilege, dry runs included | 403 `privilege.denied` |
+| 4 | The request's shape: a UUID `commitId`; `source` as above; at least one record; ids not repeated; every record with a change; every change with a `to` | 400 `request.invalid` |
+| 5 | At most `maxCommitRecords` records | 413 `batch.tooLarge` |
+| 6 | Not a dry run, and the company's `commitId` already stored | The stored 200 body when the payload's hash matches, else 400 `commit.reused` |
+| 7 | `schemaVersion` is current | 400 `schema.changed` |
+| 8 | Each record and field: `record.notFound`, `version.missing`, `record.locked`; `field.readOnly` (also for a field the schema does not list for this user), `privilege.denied` (an AdvEdit field without AdvEdit), `required`, `maxLength`, `type`, `range`, `scale`, `lookup.notFound` (an unknown or inactive code). Only changed fields are checked | 400 listing **every** error, each with `id`, `key` and `field` |
+| 9 | Each record's `version` is its version now, read under lock | 409 `ConflictBody` listing **every** conflicting record |
+| 10 | Every record written in one transaction, with the modified stamps, the audit rows and the stored commit | 200 `CommitResponse` |
+
+Rules, as `vendors.1`'s:
+
+- **All or nothing**, up to 500 records in one transaction.
+- **Strict versions.** Any write since the record was read is a conflict, even to other fields;
+  `from` is for the audit and for `fields` only.
+- **Idempotency.** The stored commit is keyed by company and `commitId`, with a SHA-256 of the
+  payload: `schemaVersion`, `source` and the records sorted by id, as JSON with sorted keys. A
+  retry gets the stored body; the same id with another payload is `commit.reused`. A dry run stores
+  nothing, so the real commit may reuse its id. A retry racing its first attempt waits for it.
+- **Audit.** One row per changed field in the commit's transaction: the company, the connector, the
+  record's id and key, the field, the value before (as stored, not the request's `from`) and after,
+  the session's user, the time, the `commitId`, the audience `workspace`, and `source`'s workspace,
+  page and block, so the ERP's audit names the page a change came from. A summary row in the ERP's
+  system log names the page too. Workspace's own audit is below.
+- **Values** on the wire as for Query (decimals as strings, dates `YYYY-MM-DD`, empty as `null`);
+  `""` and `null` are equal for text and lookups.
+
+What Workspace does with it (the client, `@cgw/erp`):
+
+- One `commitId` per attempt (`crypto.randomUUID()`), kept in memory with its exact payload until
+  the outcome is known. A commit with no answer, a 429, a 503 or a 500 asks `CommitStatus` first;
+  `committed` ends it, `unknown` sends the same request again with the same id (at most three
+  times, waiting as `Retry-After` asks), then offers "Try again" with the same id. A 401 asks
+  `CommitStatus` after the person connects again. The payload is never changed while its outcome
+  is unknown.
+- "Review changes" is the same request with `dryRun: true`; Commit sends it with `dryRun: false`
+  and a new `commitId` only if the reviewed changes were edited since.
+- Workspace's API records every real commit attempt, without values (`POST
+  /api/v1/pages/{id}/erp-commits`, below). The ERP's audit is the authority; Workspace's says who
+  tried what from which page and how it ended.
+
+Workspace's route for it (Phase 7), on the Workspace session:
+
+| Route | Method | Access | Success |
+| --- | --- | --- | --- |
+| `/api/v1/pages/{id}/erp-commits` | POST | Read the page; `{linkId, connectorId, commitId, blockId, outcome, records, fields}`, `outcome` one of `committed`, `conflict`, `refused`, `unknown`, `failed`; the link is the page's workspace's and not revoked | 204; an `AuditLog` row `erp.commit` on the page with that detail, never a value |
+
 ### Level 2: editable ERP blocks (Phase 7)
 
 - Only for connectors whose `access` is `edit`, and only fields the schema marks editable.
@@ -623,7 +735,32 @@ interface BlockDefinition<Props> {
 - In the document, every plugin block is one node type, `pluginBlock`, with `type`, `version` and
   `props` attributes. A client without the plugin draws a placeholder and keeps the node as it
   is, so the schema rule "never drop what you do not know" holds without a schema version change.
+  Adding `pluginBlock` itself raised the document schema to 6 (Phase 7); a build that knows only
+  5 opens such a page read-only, by the gate (D7).
 - First-party definitions are compiled into the app.
+
+Rules for 0.7.0 (written 2026-11-15, Phase 7, M7.2; `packages/plugins`):
+
+- `type` names the definition (`cashgear.chart`, `cashgear.kanban`); `version` is the version of
+  the definition that last wrote `props`; `props` is JSON text. All three are optional with null
+  defaults.
+- A build that does not know `type` draws a placeholder ("This block needs a newer version of
+  Cash Gear Workspace", with the type), and never changes the node. A build whose definition is
+  older than the block's `version` draws it read-only and never writes its `props`.
+- Reading `props` validates every known prop and keeps every unknown one: a write merges the
+  definition's props over what was read, so a newer build's props survive an older build's edit.
+- A definition never calls the network, never touches a store and never edits the document
+  except through its context: `setProps` (an ordinary, undoable edit of the page) and the data
+  host it is given (a database's rows through `@cgw/database`'s host, with the database's own
+  access). Search, Markdown and plain text write nothing for a plugin block on the server; on the
+  client the definition's `toPlainText` gives a line for copy and export when the build knows it.
+- Chart (`cashgear.chart`, version 1): `{databaseId, viewId, chart: 'bar' | 'line' | 'pie' |
+  'number', groupBy: propertyId | null, measure: {kind: 'count'} | {kind: 'sum' | 'average',
+  propertyId}, title: string | null}`, drawn with `CgChart` from the view's rows (its filters
+  and sort) as the reader may see them.
+- Kanban (`cashgear.kanban`, version 1): `{databaseId, viewId, groupBy: propertyId, cardProperties:
+  propertyId[]}` over a select or status property; moving a card writes that row's property as
+  the board view does, with the database's own access.
 - Third-party plugins, if ever allowed, render only inside a sandboxed iframe with a message
   contract like `sheet-embed.1`, and get no access to the document, the session or other blocks.
 - Charts, kanban, calendar, timeline and embedded presentations are planned as first-party
@@ -678,3 +815,86 @@ Rules:
   the length of one request. It can fill a pending change list in an editable block. It cannot
   commit; a person reviews and commits through the same screen as always.
 - Each workspace can switch AI off entirely.
+
+### As agreed for 0.7.0 (2026-11-15, Phase 7, M7.3 and M7.4)
+
+Bring your own key, Anthropic only, off by default (decisions, 2026-11-15). The server's `Ai`
+module (`server/src/Cgw.Core/Ai`) is the only code that talks to a provider; the client talks
+only to Workspace's API.
+
+| Route | Method | Access | Success |
+| --- | --- | --- | --- |
+| `/api/v1/workspaces/{id}/ai-settings` | GET | Member | 200 `AiSettings` |
+| `/api/v1/workspaces/{id}/ai-settings` | PUT | Owner or admin; `{enabled?, model?, apiKey?}` (`apiKey`: a string sets the key, `null` removes it; absent keeps it) | 200 `AiSettings`; 400 `ai.keyMissing` to turn on with no key; 400 `request.invalid` for a model not offered |
+| `/api/v1/ai/complete` | POST | Member who can read `pageId` when one is named, not a guest; `AiCompleteRequest`; AI on for the workspace | 200, `application/x-ndjson`, streamed `AiEvent`s |
+
+```ts
+interface AiSettings {
+  enabled: boolean;                  // on, and a key is set
+  provider: 'anthropic';
+  model: string;                     // 'claude-opus-5-5' (default), 'claude-sonnet-5-5', 'claude-haiku-5-5'
+  models: string[];                  // what may be chosen
+  // Owners and admins only (absent for others):
+  hasKey?: boolean;
+  keySetAt?: string | null; keySetBy?: { id: string; name: string } | null;
+  usage?: { month: string; requests: number; inputTokens: number; outputTokens: number };
+}
+
+interface AiCompleteRequest {
+  workspaceId: string;
+  action: 'rewrite' | 'summarise' | 'actionItems' | 'generatePage' | 'generateDatabase' | 'ask' | 'erpChanges';
+  pageId?: string;                   // the page the action is about (all but generateDatabase and ask)
+  language: 'en' | 'ar';             // the interface language, for answers not tied to a text's own
+  input: Record<string, unknown>;    // per action, below
+}
+
+type AiEvent =                       // one JSON object a line
+  | { type: 'start'; requestId: string; model: string }
+  | { type: 'text'; text: string }                      // the next piece of the answer
+  | { type: 'sources'; pages: { pageId: string; title: string }[] }   // ask: the pages sent, in order
+  | { type: 'done'; stopReason: 'end' | 'length'; usage: { inputTokens: number; outputTokens: number } }
+  | { type: 'error'; code: 'ai.refused' | 'ai.keyInvalid' | 'ai.provider' | 'ai.limit' };
+```
+
+| Action | `input` | What is sent to the model | Answer |
+| --- | --- | --- | --- |
+| `rewrite` | `{text, instruction: 'improve' \| 'shorter' \| 'longer' \| 'fixGrammar' \| 'translate' \| 'custom', target?: 'en' \| 'ar', prompt?}` | The selected text and the instruction | Markdown |
+| `summarise` | `{text}`: the page's text as the client holds it | That text | Markdown |
+| `actionItems` | `{text}` | That text | JSON `{items: {text: string}[]}` |
+| `generatePage` | `{prompt}` | The prompt | Markdown, its first heading the title |
+| `generateDatabase` | `{prompt}` | The prompt | JSON `{name, properties: {name, type, options?}[], rows: {values}[]}`, at most 20 properties and 100 rows |
+| `ask` | `{question}` | The question and, numbered, the derived text of the server's top 8 search hits the person can read (at most 8,000 characters each) | Markdown citing `[n]`, then `sources` |
+| `erpChanges` | `{instruction, connector: {id, schemaVersion}, fields: FieldSchema[] (editable ones), records: {id, key, values}[]}`: the block's records in memory, from the person's own session | Those, as given | JSON `{changes: {id, field, to}[]}` |
+
+Rules:
+
+- **One place builds the request** (`AiRequestBuilder`): the action's fixed instructions and the
+  `input` fields the table names, nothing else. Text limits: 20,000 characters for `rewrite`,
+  100,000 for `summarise` and `actionItems`, 4,000 for a prompt, 1,000 for a question, 2,000 for
+  an instruction; `erpChanges` at most 500 records and 400 KB; a body at most 1 MB (413
+  `limit.size`).
+- **Only what the person can read.** A named page is checked before anything is sent (404, as
+  every page route answers); `ask` reads pages through `SearchService` under the person's own
+  permission filter and then each page's derived text; `erpChanges` carries only what the
+  person's ERP session already gave this tab. The server never calls the ERP and has no route to
+  it.
+- **Off means off.** With AI off for the workspace (or no key), `complete` answers 403
+  `ai.disabled` before building anything, and no request leaves for any provider.
+- **The key** is encrypted with Data Protection (purpose `Cgw.Ai.Key.v1`, bound to the
+  workspace), decrypted only in the provider call, and never returned, logged or put in an error.
+  `GET` says only whether one is set, when and by whom.
+- **Metering and audit.** One `AiUsage` row a completion (workspace, person, action, model, tokens
+  in and out, time, outcome) and an `AuditLog` row `ai.complete` with the same and no content;
+  `ai.settings` for every settings change, never the key. Rate bucket `ai`: 30 completions a
+  minute a person.
+- **The provider.** Anthropic's Messages API through the official C# SDK, streamed; adaptive
+  thinking with effort `low` for `rewrite`, `summarise` and `actionItems`, `medium` for the rest;
+  JSON answers by structured output; the server-side refusal fallback on. A refusal ends with
+  `ai.refused`, a 401 from the provider with `ai.keyInvalid`. The base address is the SDK's own,
+  overridden only outside Production (`Ai__AnthropicBaseUrl`, the mock in `tests/mocks/ai`).
+- **Proposals.** Every answer is shown beside the document, never written into it: Accept makes it
+  an ordinary edit by the person (replace the selection, insert after it or at the page's top, a
+  new page, a new database with its rows, pending changes in an ERP block); Discard drops it.
+- **No path to Commit.** AI code in the client (`packages/shell/src/ai`) imports nothing of
+  `@cgw/erp` but `@cgw/erp/ai`, whose one function adds proposed changes to a block's pending
+  list; a lint rule and a test hold it. The person reviews and commits on the usual screen.
