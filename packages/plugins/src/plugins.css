@@ -1,0 +1,159 @@
+/* Plugin blocks (`@cgw/plugins`): the chart and the kanban in a page. Classes are `cgw-plugin-*`
+   so the editor's, the shell's and the database views' styles never meet them. Logical properties
+   throughout; colours from the theme's tokens, so light and dark both read. */
+
+.cgw-plugin-root {
+  display: block;
+}
+
+.cgw-plugin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-block: 8px;
+  color: var(--cg-text);
+}
+
+.cgw-plugin-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 32px;
+}
+
+.cgw-plugin-title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+}
+
+button.cgw-plugin-title {
+  cursor: pointer;
+}
+
+button.cgw-plugin-title:hover,
+button.cgw-plugin-title:focus-visible {
+  text-decoration: underline;
+}
+
+.cgw-plugin-badge {
+  flex: none;
+  padding-inline: 6px;
+  border-radius: var(--cg-radius-sm);
+  font-size: var(--cg-font-size-sm);
+  background: var(--cg-surface-subtle);
+}
+
+.cgw-plugin-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: 6px;
+}
+
+.cgw-plugin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 160px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.cgw-plugin-cards {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-inline-size: 100%;
+}
+
+.cgw-plugin-cards > legend {
+  inline-size: 100%;
+  margin-block-end: 4px;
+}
+
+.cgw-plugin-field-label {
+  font-size: var(--cg-font-size-sm);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-plugin-select,
+.cgw-plugin-input {
+  min-block-size: 30px;
+  padding-inline: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: 4px;
+  background: var(--cg-surface);
+  color: inherit;
+  font: inherit;
+}
+
+.cgw-plugin-body {
+  min-block-size: 64px;
+}
+
+.cgw-plugin-board {
+  max-block-size: 520px;
+  overflow: auto;
+}
+
+.cgw-plugin-message {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--cg-surface-subtle);
+}
+
+.cgw-plugin-note {
+  margin: 0;
+  font-size: var(--cg-font-size-sm);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-plugin-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--cg-accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.cgw-plugin-number {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-block: 12px;
+}
+
+.cgw-plugin-number-value {
+  font-size: 2.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cgw-plugin-number-label {
+  color: var(--cg-text-secondary);
+}
+
+.cgw-plugin-chart-canvas {
+  inline-size: 100%;
+}

@@ -158,6 +158,45 @@ export default tseslint.config(
     },
   },
   {
+    // Plugin blocks (Phase 7, INTEGRATIONS.md, Plugin blocks) are given a host: they read data
+    // through it and change the page only by `setProps`, never a store, the API or the network.
+    files: ['packages/plugins/src/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.ts', '**/*.test.tsx', '**/testing/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@cgw/shell', '@cgw/shell/*', '@cgw/web', '@cgw/editor', '@cgw/editor/*'],
+              message: 'Plugin blocks do not depend on the shell or the editor.',
+            },
+            stores,
+            {
+              group: ['@cgw/api', '@cgw/api/*', '@cgw/erp', '@cgw/erp/*'],
+              message: 'Plugin blocks reach data only through their host.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        ...[
+          'localStorage',
+          'sessionStorage',
+          'indexedDB',
+          'fetch',
+          'XMLHttpRequest',
+          'WebSocket',
+          'caches',
+        ].map((name) => ({
+          name,
+          message: 'Plugin blocks never save, load or call the network.',
+        })),
+      ],
+    },
+  },
+  {
     // @cgw/erp calls the ERP and keeps what it answers, and the session's token, in memory only
     // (INTEGRATIONS.md, "Principles" and "A user's session"): no storage, no store, nothing from
     // the workspace layer, the API, the shell or the editor, and no console. `fetch` is allowed.
@@ -197,6 +236,31 @@ export default tseslint.config(
         ),
       ],
       'no-console': ['error'],
+    },
+  },
+  {
+    // AI in the client (Phase 7; INTEGRATIONS.md, AI, "No path to Commit"): it may prepare ERP
+    // changes for a block's pending list and nothing more, so it takes nothing of @cgw/erp but its
+    // `./ai` types, and nothing of the shell's ERP services (which hold the sessions). Held by
+    // `packages/shell/src/ai/boundary.test.ts` too, over every import it reaches.
+    files: ['packages/shell/src/ai/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^@cgw/erp(?!/ai$)(/.*)?$',
+              message:
+                'AI code takes only @cgw/erp/ai: it prepares changes and has no path to Commit.',
+            },
+            {
+              regex: '^\\.\\.?/(.*/)?erp(/|$)',
+              message: 'AI code does not reach the shell’s ERP services, which hold the sessions.',
+            },
+          ],
+        },
+      ],
     },
   },
 );
