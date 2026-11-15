@@ -73,8 +73,20 @@ export function noticeText(notice: NoticeInfo): NoticeKey {
       return 'notices.workspaceLost';
     case 'doc.moveConflict':
       return notice.reason === 'movedTwice' ? 'notices.moveTwice' : 'notices.moveEditLost';
-    default:
+    case 'not.found':
       return 'notices.notFound';
+    // Refused operations (OpsService): what happened meanwhile on another device. A refused move
+    // answers the page; a refused create has no page on the server.
+    case 'tree.section':
+      return notice.pageId ? 'notices.otherSection' : 'notices.otherSectionNew';
+    case 'section.notEmpty':
+      return 'notices.sectionNotEmpty';
+    case 'page.notTrashed':
+      return 'notices.notTrashed';
+    default:
+      // `invalid`, `request.invalid`, and any code this app does not know: the server refused a
+      // change this device let through. Nothing says it is gone; that is `not.found`'s alone.
+      return notice.pageId ? 'notices.notAccepted' : 'notices.notAcceptedUnnamed';
   }
 }
 
@@ -102,6 +114,10 @@ export function noticeTarget(notice: NoticeInfo, recoveredPageId?: Id | null): N
     case 'tree.parentMissing':
     case 'version.conflict':
     case 'doc.repaired':
+    case 'tree.section':
+    case 'page.notTrashed':
+    case 'invalid':
+    case 'request.invalid':
       return { kind: 'page', pageId };
     default:
       return null;

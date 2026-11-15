@@ -436,6 +436,16 @@ export const en = {
       'Another device moved a block of “{{title}}” you were editing, and your edit in it was lost. The page history has the block as you had it.',
     moveTwice:
       'You and another device moved the same block of “{{title}}” at once, so it now appears twice. Delete the copy you do not need.',
+    otherSection:
+      '“{{title}}” stayed where it was, because the page it was moved under went to another section on another device meanwhile.',
+    otherSectionNew:
+      'A new page or row was not made, because the page it was put in went to another section on another device meanwhile.',
+    sectionNotEmpty:
+      'A section was not deleted, because another device put pages in it meanwhile. It is back in the sidebar.',
+    notTrashed:
+      'Another device restored “{{title}}” from the trash meanwhile, so it stays out of the trash and nothing was deleted.',
+    notAccepted: 'The server did not accept a change to “{{title}}”, so the change was undone.',
+    notAcceptedUnnamed: 'The server did not accept a change, so the change was undone.',
     notFound: 'This is no longer available to you.',
   },
   offline: {
