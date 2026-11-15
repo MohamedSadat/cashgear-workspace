@@ -1053,3 +1053,15 @@ Built in M7.1 to M7.4 (the streams' choices, each in its note):
 | What a page action sends | The page's text as this tab holds it, its title first, mentions as the names the reader sees, at most 100,000 characters (refused before sending when longer) | "Only content the user can read"; the newest text, not the worker's derived copy |
 | Accepting a proposal | Rewrite: in place when the range still reads the same, else after its block; summary: the page's top; to-dos and answers: after the selection, else at the end; answers end with a "Sources:" line of page mentions; a new page under this one (its section's top for a row or a page not editable here); a new database under the page with a block showing it, rows as proposed. Every proposal can be copied; on a page not editable here Copy is the only way in | Never overwrite what someone typed meanwhile; each accept is one undoable edit or the session's ordinary operations |
 | Ids a change makes without an id | The block-id plugin's mint now joins the change that made the blocks in Undo history (out of it only when that change was) | It was kept out of history, and the binding writes a batch to Yjs as its last transaction says, so a duplicated block (Ctrl+D), a pasted one and any block inserted without an id could not be undone: latent since Phase 1, found by stream E |
+
+## 2026-11-15: After 0.7.0 (what a refused operation says)
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| "This is no longer available to you." | Only for `not.found`. Every code the shell does not name now falls to "The server did not accept a change to “…”, so the change was undone." | Every code fell to it before, so a refusal unrelated to lost access (`invalid` on a create sent twice, at first run) read as if something had been taken away |
+| `invalid`, `request.invalid` and codes the app does not know | That notice, with a link to the page as the server has it; a version naming no page when the server's answer names none | The engine takes back the server's record after a refusal, so the person's change goes away: undoing it unsaid is worse than saying so. Only a client bug or a client older than the server's rules produces these; a create the server already holds stays silent (`sentTwice`, engine.ts) |
+| `tree.section`, `section.notEmpty`, `page.notTrashed` | Each says what another device did meanwhile: the page moved under went to another section, so the page stayed (a refused create: the new page or row was not made); pages were put in the section, so it was not deleted and is back; the page was restored from the trash, so nothing was deleted. The two that name a page link to it | The local planner refuses the same rules, so the server refuses these only after a change elsewhere |
+| A notice with no page | Names none | Its title would read "Untitled" (a refused create, a section) |
+| `access.denied` | Keeps its text, which speaks of a recovered page | Asked for unchanged; an operation refused for access (a guest making a section, a cover file not readable) still reads that way, a follow-up |
