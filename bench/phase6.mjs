@@ -15,10 +15,13 @@
 //     client id registered to its person: each types into its own paragraph, a key every
 //     PHASE6_KEY_MS (200 ms, five keys a second) with a little jitter, each key one update pushed
 //     through the hub (as the app pushes each live save) with its cursor sent as presence, and
-//     applies every frame relayed to it. For PHASE6_SECONDS (30 s): the server's relay time (the
-//     metrics route: from a push reaching the API to the frame carrying it sent, after the
-//     worker's validation), p95, budget 150 ms; and from a push to each other editor's receipt of
-//     it (this process's clock), tracked; refusals counted (any fails the run);
+//     applies every frame relayed to it; after a frame that could not carry its rows
+//     (`complete: false`: a compaction took them between the relay's reads) it pulls the page, as
+//     the app does. For PHASE6_SECONDS (30 s): the server's relay time (the metrics route: from a
+//     push reaching the API to the frame carrying it sent, after the worker's validation), p95,
+//     budget 150 ms; and from a push to each other editor's receipt of it (this process's clock),
+//     tracked, with what reached an editor only by a pull counted apart; refusals, updates an
+//     editor never got by either way, and documents that differ at the end fail the run;
 //   - the keystroke budget on that page in Chrome, signed in as the owner, typing in the first
 //     paragraph at a key every 35 ms while the 19 members type and their cursors move: editor work
 //     per keystroke (keydown to the end of the transaction it caused) p95 ≤ 8 ms and keystroke to
@@ -284,9 +287,14 @@ class Editor {
     this.doc = new Y.Doc();
     this.pushed = new Map(); // updateId → time pushed
     this.received = new Map(); // updateId → time received
+    this.clocks = new Map(); // updateId → this client's Yjs clock after it
     this.refused = [];
     this.keys = 0;
     this.epoch = 0;
+    this.incomplete = 0; // frames marked `complete: false`
+    this.pulling = Promise.resolve();
+    this.pullErrors = [];
+    this.snapshotsGone = 0; // pulls made again: a compaction deleted the snapshot first
   }
 
   async start(state) {
@@ -300,11 +308,53 @@ class Editor {
           this.received.set(update.updateId, at);
           Y.applyUpdate(this.doc, Buffer.from(update.data, 'base64'), 'remote');
         }
+        // The rows were gone when the relay read them (the worker compacts a page every 200
+        // updates): the frame carries none of them and the client pulls (SYNC_DESIGN.md).
+        if (!frame.complete) {
+          this.incomplete++;
+          this.pull();
+        }
       },
     });
     await call(this.connection, 'JoinWorkspaces', [this.workspaceId]);
     const joined = await call(this.connection, 'JoinPage', this.pageId);
     this.epoch = joined.epoch;
+  }
+
+  /** The page pulled as the app pulls it: its snapshot, then its updates; one pull at a time. */
+  pull() {
+    const once = async () => {
+      let after = 0;
+      for (;;) {
+        const page = await this.api.get(`/api/v1/pages/${this.pageId}/doc?after=${after}`);
+        if (page.snapshot) {
+          const answer = await fetch(page.snapshot.url);
+          if (!answer.ok)
+            throw Object.assign(new Error(`The snapshot answered ${answer.status}`), {
+              gone: answer.status === 404,
+            });
+          Y.applyUpdate(this.doc, new Uint8Array(await answer.arrayBuffer()), 'remote');
+        }
+        for (const u of page.updates)
+          Y.applyUpdate(this.doc, Buffer.from(u.data, 'base64'), 'remote');
+        if (!page.more) return;
+        after = page.cursor;
+      }
+    };
+    // A compaction after the answer deletes the snapshot it named: pull again.
+    const run = async () => {
+      for (let attempt = 1; ; attempt++)
+        try {
+          return await once();
+        } catch (error) {
+          if (!error.gone || attempt >= 5) throw error;
+          this.snapshotsGone++;
+        }
+    };
+    this.pulling = this.pulling
+      .then(run)
+      .catch((error) => void this.pullErrors.push(String(error?.message ?? error)));
+    return this.pulling;
   }
 
   /** This editor's paragraph's text (the k-th block's body). */
@@ -325,6 +375,7 @@ class Editor {
     this.doc.off('update', capture);
     const updateId = uuidv7();
     this.pushed.set(updateId, Date.now());
+    this.clocks.set(updateId, Y.getState(this.doc.store, this.doc.clientID));
     this.keys++;
     try {
       await call(this.connection, 'PushUpdates', this.pageId, {
@@ -364,21 +415,27 @@ class Editor {
 const metrics = async () => (await fetch(`${API}/api/v1/realtime/metrics`)).json();
 const resetMetrics = () => fetch(`${API}/api/v1/realtime/metrics`, { method: 'DELETE' });
 
-/** From each push to each other editor's receipt of it. */
+/**
+ * From each push to each other editor's receipt of it in a frame. An update no frame carried is
+ * `pulled` when the editor's document holds it (its writer's clock reached), else `missing`.
+ */
 function receipts(editors) {
   const times = [];
   let missing = 0;
+  let pulled = 0;
   for (const from of editors)
     for (const [updateId, pushed] of from.pushed)
       for (const to of editors) {
         if (to === from) continue;
         const got = to.received.get(updateId);
-        if (got === undefined) missing++;
-        else times.push(got - pushed);
+        if (got !== undefined) times.push(got - pushed);
+        else if (Y.getState(to.doc.store, from.doc.clientID) >= from.clocks.get(updateId)) pulled++;
+        else missing++;
       }
   return {
     count: times.length,
     missing,
+    pulled,
     p50: round(percentile(times, 0.5)),
     p95: round(percentile(times, 0.95)),
     max: round(Math.max(...times)),
@@ -693,6 +750,8 @@ async function relayRun(editors) {
   const until = Date.now() + SECONDS * 1000;
   await Promise.all(editors.map((editor) => editor.type(until)));
   await sleep(1500);
+  // The pulls that incomplete frames started.
+  await Promise.all(editors.map((editor) => editor.pulling));
   const relayed = (await metrics()).relayed;
   const keys = editors.reduce((n, e) => n + e.keys, 0);
   const refused = editors.flatMap((e) => e.refused);
@@ -708,6 +767,10 @@ async function relayRun(editors) {
       max: round(relayed.maxMs),
     },
     receipts: receipts(editors),
+    // Each frame goes to every editor: the most any one editor saw.
+    incompleteFrames: Math.max(...editors.map((e) => e.incomplete)),
+    pullErrors: [...new Set(editors.flatMap((e) => e.pullErrors))],
+    pullsAgain: editors.reduce((n, e) => n + e.snapshotsGone, 0),
   };
   // Every editor's document is the same as every other's at the end.
   const texts = editors.map((e) =>
@@ -957,7 +1020,7 @@ try {
     try {
       out.relay = await relayRun(setup.editors);
       log(
-        `  ${out.relay.keys} keys, ${out.relay.refused} refused; relay p50 ${out.relay.relayed.p50} ms, p95 ${out.relay.relayed.p95} ms, max ${out.relay.relayed.max} ms; push to the others' receipt p95 ${out.relay.receipts.p95} ms (${out.relay.receipts.missing} never received); converged: ${out.relay.converged}`,
+        `  ${out.relay.keys} keys, ${out.relay.refused} refused; relay p50 ${out.relay.relayed.p50} ms, p95 ${out.relay.relayed.p95} ms, max ${out.relay.relayed.max} ms; push to the others' receipt p95 ${out.relay.receipts.p95} ms (${out.relay.receipts.missing} never received; ${out.relay.receipts.pulled} pulled after ${out.relay.incompleteFrames} incomplete frames, ${out.relay.pullsAgain} pulled again for a snapshot gone); converged: ${out.relay.converged}`,
       );
       const members = setup.editors.slice(1);
       log('Chrome: typing in the first paragraph while the 19 members type and their cursors move');
@@ -1030,6 +1093,8 @@ if (out.relay) {
     problems.push(`${out.relay.refused} pushes refused (${out.relay.refusedCodes.join(', ')})`);
   if (out.relay.receipts.missing)
     problems.push(`${out.relay.receipts.missing} relayed updates never received`);
+  if (out.relay.pullErrors.length)
+    problems.push(`a pull after an incomplete frame failed: ${out.relay.pullErrors.join('; ')}`);
   if (!out.relay.converged) problems.push('the 20 editors ended with different documents');
 }
 for (const part of [out.web, out.desktop].filter(Boolean)) {
