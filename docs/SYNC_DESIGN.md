@@ -151,7 +151,10 @@ Autosave is local and needs no network.
 4. On close, on `visibilitychange` to hidden, and on the desktop window's close request, any
    pending batch is flushed first.
 5. When a page has more than 200 stored updates, the document layer writes a compacted state with
-   `compactDoc`.
+   `compactDoc`, only while no batch waits to be written: the snapshot is the document in memory,
+   and a change in it that no update carries would be kept on this device but never pushed, and
+   the server would refuse everything typed after it as referring to content it lacks (found by
+   the kill test during sync in Phase 6).
 
 Crash recovery: on start, `loadDoc` returns the snapshot and every update after it. Applying them
 rebuilds the document exactly. There is no separate recovery file and no "recover?" prompt: the
@@ -266,8 +269,9 @@ POST /api/v1/pages/{pageId}/doc/repair        { "epoch": 3, "clientSchemaVersion
   people's structs is not taken for a forgery, and one adding structs under someone else's id
   still is.
 
-Payloads are JSON with base64 in Phase 2. A binary framing is an optimisation for Phase 6, when
-update frequency rises.
+Payloads are JSON with base64, over HTTP and over the hub. A binary framing was kept for Phase 6,
+when update frequency rises; Phase 6's measurements met its budgets without one (DECISIONS.md,
+2026-11-15), so it waits until a figure needs it.
 
 ### Channel 2: metadata
 
