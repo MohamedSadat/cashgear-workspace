@@ -28,6 +28,7 @@ import { emptyPlan } from '../remote';
 import {
   OfflineError,
   SyncHttpError,
+  dependsOnCreate as dependsOn,
   type Account,
   type DocCodec,
   type DocPull,
@@ -953,9 +954,22 @@ export class FakeServer {
         this.gate('pushOps', account);
         const space = this.space(account, workspaceId);
         const results: OpResult[] = [];
+        // As the server's OpsService: operations on a create refused in this batch (answered from
+        // before or not), or naming it as their parent, section or database, are refused too,
+        // before anything else is looked at, and nothing of them is kept.
+        const refusedCreates = new Set<Id>();
+        const refusing = (op: Operation, result: OpResult) => {
+          if (result.status === 'rejected' && op.type.endsWith('.create'))
+            refusedCreates.add(op.entityId);
+        };
         for (const op of ops) {
+          if (refusedCreates.size && dependsOn(op, refusedCreates)) {
+            results.push({ opId: op.opId, status: 'rejected', error: { code: 'not.found' } });
+            continue;
+          }
           const seen = space.applied.get(op.opId);
           if (seen) {
+            refusing(op, seen);
             results.push(structuredClone(seen));
             continue;
           }
@@ -1005,6 +1019,7 @@ export class FakeServer {
             }
           if ((result.entityType === 'page' || result.entityType === 'row') && result.entity)
             result.entity = this.pageView(space, account, result.entity as PageRecord);
+          refusing(op, result);
           space.applied.set(op.opId, structuredClone(result));
           results.push(result);
         }

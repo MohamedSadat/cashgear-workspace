@@ -6,7 +6,14 @@ import { newOp } from '../build';
 import { keyBetween } from '../order';
 import { uuidv7, type Id } from '../ids';
 import { decode, fakeCodec, fakeUpdate, FakeServer } from '../testing/fakeServer';
-import { ALICE, device, localWorkspace, now } from '../testing/syncHarness';
+import {
+  ALICE,
+  device,
+  localWorkspace,
+  now,
+  pageRecord,
+  sharedWorkspace,
+} from '../testing/syncHarness';
 import type { LocalStore, PageRecord } from '../types';
 import { SyncEngine } from './engine';
 
@@ -104,6 +111,33 @@ describe('sync engine', () => {
     await two.engine.pullPage(made.id);
     const doc = await two.store.loadDoc(made.id);
     expect(decode(fakeCodec.merge(doc.updates.map((u) => u.data))).text).toBe('typed');
+  });
+
+  it('takes a create the server already holds as made, and sends what followed it again', async () => {
+    // A create sent twice (as a first run's upload did before): the server refuses the second
+    // with the page it holds, and what follows it in the push as depending on a refused create.
+    // Nothing the person did was refused: nothing is said, and the rename is not lost.
+    const server = new FakeServer();
+    const { one, ws, a } = await sharedWorkspace(server);
+    const record = (await one.store.getPage(a.id))!;
+    const again = newOp('page.create', ws.id, a.id, { ...record, version: 1 });
+    const rename = newOp('page.update', ws.id, a.id, { title: 'Alpha, renamed' });
+    await one.store.beginUpload(ws.id, ALICE.id, [again, rename]);
+    await one.engine.syncOnce();
+    expect(one.notices()).toEqual([]);
+    expect(await one.store.nextOutboxBatch(100, ws.id)).toEqual([]);
+    expect(server.spaces.get(ws.id)!.mirror.pages.get(a.id)?.title).toBe('Alpha, renamed');
+    expect((await one.store.getPage(a.id))?.title).toBe('Alpha, renamed');
+    // A create refused for good still says so, and what depended on it goes with it.
+    const lost = pageRecord(ws.id, uuidv7(), 'In no section', null, 'a9');
+    const child = pageRecord(ws.id, lost.sectionId, 'Under it', lost.id, 'a0');
+    await one.store.beginUpload(ws.id, ALICE.id, [
+      newOp('page.create', ws.id, lost.id, lost),
+      newOp('page.create', ws.id, child.id, child),
+    ]);
+    await one.engine.syncOnce();
+    expect(one.notices()).toEqual(['not.found', 'not.found']);
+    expect(await one.store.nextOutboxBatch(100, ws.id)).toEqual([]);
   });
 
   it('carries edits both ways within a pass: titles, moves and document updates', async () => {

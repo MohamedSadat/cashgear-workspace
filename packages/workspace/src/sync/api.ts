@@ -21,6 +21,22 @@ import type {
   WorkspaceRecord,
 } from '../types';
 
+/**
+ * Whether the server refuses an operation because a create before it in the same push was refused
+ * (SYNC_DESIGN.md, Push): it is on that entity, or names it as its parent page, section or
+ * database. The server answers such an operation `not.found`, with no entity, and keeps nothing of
+ * it: sent again, it is decided afresh.
+ */
+export function dependsOnCreate(op: Operation, refused: ReadonlySet<Id>): boolean {
+  if (refused.has(op.entityId)) return true;
+  const payload = op.payload as unknown;
+  if (!payload || typeof payload !== 'object') return false;
+  return (['parentPageId', 'sectionId', 'databaseId'] as const).some((name) => {
+    const value = (payload as Record<string, unknown>)[name];
+    return typeof value === 'string' && refused.has(value);
+  });
+}
+
 export interface Account {
   id: Id;
   email: string;

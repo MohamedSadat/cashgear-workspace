@@ -40,6 +40,7 @@ import {
   type EntityRecord,
   type EntityType,
   type LocalStore,
+  type Operation,
   type OperationType,
   type OpResult,
   type PageRecord,
@@ -53,6 +54,7 @@ import {
 import {
   OfflineError,
   SyncHttpError,
+  dependsOnCreate,
   type Account,
   type DocCodec,
   type DocPull,
@@ -908,7 +910,7 @@ export class SyncEngine {
     for (;;) {
       const ops = await this.store.nextOutboxBatch(100, workspace.id);
       if (!ops.length) return;
-      const results: OpResult[] = [];
+      const answers: OpResult[] = [];
       const rest = [];
       for (const op of ops) {
         if (op.type === 'workspace.create') {
@@ -917,7 +919,7 @@ export class SyncEngine {
             name: op.payload.name,
             icon: op.payload.icon,
           });
-          results.push({
+          answers.push({
             opId: op.opId,
             status: 'applied',
             entityType: 'workspace',
@@ -926,7 +928,11 @@ export class SyncEngine {
         } else rest.push(op);
       }
       if (rest.length)
-        results.push(...(await this.api.pushOps(workspace.id, account.deviceId, rest)));
+        answers.push(...(await this.api.pushOps(workspace.id, account.deviceId, rest)));
+      // A create the server holds already was sent twice: it is taken as made, unsaid, and what
+      // was refused only for following it stays in the outbox for the next push.
+      const { held, again } = sentTwice(ops, answers);
+      const results = again.size ? answers.filter((r) => !again.has(r.opId)) : answers;
       // A refusal can remove a page here (the server has none): its unsent edits are set aside.
       if (results.some((r) => r.status === 'rejected' || r.entity === null))
         this.quarantineDirty = true;
@@ -950,16 +956,18 @@ export class SyncEngine {
         const op = ops.find((o) => o.opId === result.opId);
         if (!op || !SUBTREE_OPS.has(op.type) || result.entityType === 'row') continue;
         this.reconcile.add(workspace.id);
-        if (result.status === 'rejected' && result.entity) subtrees.add(op.entityId);
+        if (result.status === 'rejected' && result.entity && !held.has(op.opId))
+          subtrees.add(op.entityId);
       }
       for (const root of subtrees) await this.resync(workspace.id, root, account);
       for (const result of results) {
         if (result.notice) this.notice(result.notice, workspace.id, entityPage(result.entity));
-        if (result.status === 'rejected' && result.error)
+        if (result.status === 'rejected' && result.error && !held.has(result.opId))
           this.notice(result.error.code, workspace.id, entityPage(result.entity));
       }
       this.emit({ kind: 'mirror', workspaceId: workspace.id });
-      if (ops.length < 100) return;
+      // What was sent again goes at once: the create it followed has left the outbox.
+      if (ops.length < 100 && !again.size) return;
     }
   }
 
@@ -2624,6 +2632,38 @@ const OUTBOX_ALL = 1_000_000;
 
 const isLaterType = (type: EntityType): type is LaterType =>
   type === 'page' || type === 'row' || type === 'database';
+
+/**
+ * A push's creates the server already held (`held`, by operation): sent twice, it refused the
+ * second with the very entity it made. And the operations it refused only because they followed
+ * one (`again`): `not.found` with no entity, on that entity or under it (`dependsOnCreate`); kept
+ * nowhere on the server, they are decided afresh when sent again. A create refused for good
+ * (an answer with no entity) and what follows it are neither.
+ */
+function sentTwice(
+  ops: readonly Operation[],
+  results: readonly OpResult[],
+): { held: Set<Id>; again: Set<Id> } {
+  const held = new Set<Id>();
+  const again = new Set<Id>();
+  const made = new Set<Id>();
+  const answers = new Map(results.map((r) => [r.opId, r]));
+  for (const op of ops) {
+    const answer = answers.get(op.opId);
+    if (answer?.status !== 'rejected') continue;
+    if (op.type.endsWith('.create') && (answer.entity as { id?: Id } | null)?.id === op.entityId) {
+      held.add(op.opId);
+      made.add(op.entityId);
+    } else if (
+      made.size &&
+      !answer.entity &&
+      answer.error?.code === 'not.found' &&
+      dependsOnCreate(op, made)
+    )
+      again.add(op.opId);
+  }
+  return { held, again };
+}
 
 /** The page a notice about an entity points at: the page, the row, the database's page. */
 function entityPage(entity: EntityRecord | null | undefined): Id | undefined {

@@ -327,10 +327,17 @@ For each operation, in order, each in its own transaction:
    `AppliedOps`, all in the same transaction.
 
 A rejected operation does not stop the batch, except that operations depending on a rejected
-create are rejected too.
+create are rejected too: those on its entity, or naming it as their parent page, section or
+database, are answered `not.found` with no entity, and nothing of them is stored.
 
 The client removes an operation from its outbox only when it has a result for it. A lost answer
 means the same batch is sent again; step 1 makes that safe.
+
+A create refused while its answer carries the very entity it would make means the server holds
+it already: the same create was sent twice (an upload that read a page made while it started, as a
+first run's did until 2026-11-15). The client takes it as made and says nothing, and the operations
+refused only because they followed it stay in the outbox and go again at once, where they are
+decided afresh.
 
 **Pull**
 
