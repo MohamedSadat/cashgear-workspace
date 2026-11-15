@@ -12,8 +12,9 @@ test.skip(desktop, 'The desktop signs in through the system browser: desktop-clo
 
 /**
  * A workspace made while signed in, on the page signing in landed on (as offline.spec.ts makes
- * one): `createWorkspace` loads the app again first, and a workspace made before that start's
- * account check has answered stays on this device only (seen on CI's Edge from Phase 6).
+ * one): `createWorkspace` loads the app again first, and until 2026-11-15 a workspace made before
+ * that start's account check had answered stayed on this device only (seen on CI's Edge from
+ * Phase 6).
  */
 async function workspaceHere(page: Page, name: string) {
   await page.getByLabel('Workspace name').fill(name);
@@ -127,6 +128,36 @@ test('a first run while signed in makes its Getting started pages once, and says
     () => (window as unknown as { __notices: string[] }).__notices,
   );
   expect(notices.filter((n) => n.includes('no longer available'))).toEqual([]);
+  expect(errors).toEqual([]);
+  await api.dispose();
+});
+
+test('a workspace made before the account check has answered still goes to the account', async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  const account = await newAccount('Noor');
+  await page.goto('/');
+  await signIn(page, account);
+  await signedIn(page, account);
+  // The app starts again with its "who is signed in" held until the workspace is made: it stayed
+  // on this device only, as a spec's `createWorkspace` straight after signing in could find.
+  let release!: () => void;
+  const held = new Promise<void>((done) => (release = done));
+  await page.route('**/api/v1/account/session', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.reload();
+  await workspaceHere(page, 'Made at once');
+  await expect(page.getByRole('button', { name: `Account: ${account.name}` })).toHaveCount(0);
+  release();
+  await signedIn(page, account);
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+
+  const api = await apiSession(account);
+  const workspaces = (await api.get('/api/v1/workspaces')) as { name: string }[];
+  expect(workspaces.map((w) => w.name)).toEqual(['Made at once']);
   expect(errors).toEqual([]);
   await api.dispose();
 });

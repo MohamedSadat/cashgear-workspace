@@ -49,8 +49,8 @@ async function signedInWorkspace(
     await page.goto('/');
     await signIn(page, account);
     await signedIn(page, account);
-    // Made on the page signing in landed on, not after loading the app again: a workspace made
-    // before a fresh start's account check has answered stays on this device only.
+    // Made on the page signing in landed on, not after loading the app again: until 2026-11-15 a
+    // workspace made before a fresh start's account check had answered stayed on this device only.
     await page.getByLabel('Workspace name').fill(name);
     await page.getByRole('button', { name: 'Create workspace' }).click();
     await expect(editor(page)).toBeVisible();
