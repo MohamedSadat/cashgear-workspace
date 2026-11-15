@@ -38,6 +38,8 @@ export function availability(state: AiSettingsState, context: AiContext): AiAvai
 /** Settings are read again after this long when someone asks (another admin may change them). */
 const FRESH_MS = 60_000;
 
+const IDLE: AiSettingsState = Object.freeze({ status: 'idle' as const });
+
 export class AiSettingsStore {
   private readonly states = new Map<Id, AiSettingsState>();
   private readonly readAt = new Map<Id, number>();
@@ -48,8 +50,13 @@ export class AiSettingsStore {
     private readonly now: () => number = Date.now,
   ) {}
 
+  /**
+   * The workspace's settings as read. The same object until they change: React's
+   * `useSyncExternalStore` reads it as a snapshot, and a new one each time draws again for ever
+   * (Settings did, for a workspace never read: a local one).
+   */
   state(workspaceId: Id): AiSettingsState {
-    return this.states.get(workspaceId) ?? { status: 'idle' };
+    return this.states.get(workspaceId) ?? IDLE;
   }
 
   subscribe = (listener: () => void): (() => void) => {

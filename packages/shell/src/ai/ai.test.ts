@@ -401,6 +401,14 @@ describe('when AI is offered', () => {
     expect(availability({ status: 'idle' }, ready)).toBe('loading');
   });
 
+  it('reads a workspace it never loaded as the same idle state each time', () => {
+    const { api } = fakeApi(() => []);
+    const store = new AiSettingsStore(api);
+    expect(store.state(WS)).toEqual({ status: 'idle' });
+    // A snapshot for useSyncExternalStore: a new object each read would draw again for ever.
+    expect(store.state(WS)).toBe(store.state(WS));
+  });
+
   it('keeps what the server answers, and hears a refusal as off', async () => {
     const { api } = fakeApi(() => []);
     const store = new AiSettingsStore(api);
