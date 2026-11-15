@@ -163,9 +163,10 @@ jobs:
       # The released web builds (target/old-build/<tag>, each from its tag and its own lockfile)
       # that tests/e2e/old-build.spec.ts serves beside this build: v0.2.0 (Phase 3), v0.3.0
       # (Phase 4: a page with a database, and rows it must never see), v0.4.0 (Phase 5: a page
-      # with a workbook and ERP data, schema 4) and v0.5.0 (Phase 6: a schema-5 page naming a
-      # person, and the feed's comments and notifications).
-      - name: The old builds (v0.2.0's, v0.3.0's, v0.4.0's and v0.5.0's web apps)
+      # with a workbook and ERP data, schema 4), v0.5.0 (Phase 6: a schema-5 page naming a
+      # person, and the feed's comments and notifications) and v0.6.0 (Phase 7: a schema-6 page
+      # with plugin blocks).
+      - name: The old builds (v0.2.0's to v0.6.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs
@@ -254,7 +255,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -289,6 +290,11 @@ jobs:
       # API is recycled through the stack's control port; against the server stack started above.
       - name: Phase 6 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase6 -- --desktop
+      # Phase 7's (bench/phase7.mjs): the review of 500 changed ERP records less the ERP's dry
+      # run, and the first AI token less the provider's own time, in Chrome against the server
+      # stack above, the mock ERP and the mock provider it starts.
+      - name: Phase 7 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase7
       - uses: actions/upload-artifact@v4
         if: always()
         with:
