@@ -4,6 +4,7 @@
 // is that window, `goto('/…')` goes to the app's own origin, and `restart` closes the app and
 // starts it again on the same data, as a person reopening it would.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -30,6 +31,8 @@ class DesktopApp {
   child!: ChildProcess;
   browser!: Browser;
   page!: Page;
+  /** The keychain name for this test's runs of the app (the same across its restarts). */
+  readonly keychain = `com.cashgear.workspace.e2e.${randomUUID().slice(0, 8)}`;
   constructor(
     readonly folder: string,
     readonly port: number,
@@ -47,9 +50,10 @@ class DesktopApp {
         CGW_DATA_DIR: join(this.folder, 'data'),
         CGW_SAVE_DIR: join(this.folder, 'saved'),
         // Sign-in in tests: the authorise URL goes to a file, not the system browser, and the
-        // refresh token to a keychain name of the test's own (never the person's sign-in).
+        // refresh token to a keychain name of the test's own (never the person's sign-in, nor
+        // another test's: a sign-out cut short would sign the next test's fresh app in).
         CGW_AUTH_URL_FILE: join(this.folder, 'authorize-url.txt'),
-        CGW_KEYCHAIN_SERVICE: 'com.cashgear.workspace.e2e',
+        CGW_KEYCHAIN_SERVICE: this.keychain,
       },
     });
     const endpoint = `http://127.0.0.1:${this.port}`;

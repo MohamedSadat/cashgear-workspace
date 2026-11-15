@@ -93,7 +93,7 @@ const signer = async () => (launched ??= await chromium.launch({ channel: 'chrom
 test.afterEach(async ({ page }) => {
   await launched?.close();
   launched = null;
-  // The desktop keeps its sign-in in the keychain (one test name for every test): signed out.
+  // The desktop keeps its sign-in in the keychain (a name per test): signed out, and revoked.
   if (desktop && !page.isClosed()) {
     await page.goto('/#/settings').catch(() => {});
     await page

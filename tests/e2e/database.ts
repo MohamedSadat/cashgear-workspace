@@ -376,7 +376,7 @@ export function signers() {
   };
 }
 
-/** The desktop keeps its sign-in in the keychain (one test name for every test): signed out. */
+/** The desktop keeps its sign-in in the keychain (a name per test): signed out, and revoked. */
 export async function signOutDesktop(page: Page) {
   if (!desktop || page.isClosed()) return;
   await page.goto('/#/settings').catch(() => {});
@@ -384,7 +384,7 @@ export async function signOutDesktop(page: Page) {
     .getByRole('button', { name: 'Sign out' })
     .click({ timeout: 15000 })
     .catch(() => {});
-  // Signed out for good: the next test's app starts with the same keychain name.
+  // Signed out for good: the refresh token is revoked at the server too.
   await expect(page.getByRole('button', { name: 'Sign in to sync' }).first())
     .toBeVisible({ timeout: 15000 })
     .catch(() => {});
