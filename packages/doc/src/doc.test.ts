@@ -307,6 +307,51 @@ describe('page document', () => {
     );
   });
 
+  it('never compacts a change still waiting to be written into the snapshot', async () => {
+    // Found by the kill test during sync (Phase 6): a key typed while a write was under way went
+    // into the snapshot the compaction after that write made, with no update carrying it. Killed
+    // before its own write, it was never pushed, and the server refused everything typed after it.
+    const store = new MemoryStore();
+    const pageId = uuidv7();
+    const page = await PageDocument.open(pageId, store, { compactAfter: 0 });
+    const text = new Y.XmlText();
+    page.fragment.insert(0, [text]);
+    await page.flush();
+    const textOf = (doc: Y.Doc) => doc.getXmlFragment(CONTENT).toString();
+    // Each snapshot against what the store's own snapshot and log held up to what it covers.
+    const unheld: string[] = [];
+    const compact = store.compactDoc.bind(store);
+    vi.spyOn(store, 'compactDoc').mockImplementation(async (id, snapshot, covers) => {
+      const held = new Y.Doc();
+      const loaded = await store.loadDoc(id);
+      if (loaded.snapshot) Y.applyUpdate(held, loaded.snapshot);
+      for (const u of loaded.updates) if (u.localSeq <= covers) Y.applyUpdate(held, u.data);
+      const next = new Y.Doc();
+      Y.applyUpdate(next, snapshot);
+      if (textOf(next) !== textOf(held)) unheld.push(`${textOf(next)} over ${textOf(held)}`);
+      return compact(id, snapshot, covers);
+    });
+    // The next write waits until released: a key is typed meanwhile.
+    let release: (() => void) | null = null;
+    const append = store.appendDocUpdates.bind(store);
+    vi.spyOn(store, 'appendDocUpdates').mockImplementationOnce(async (id, updates) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return append(id, updates);
+    });
+    text.insert(text.length, 'a');
+    const writing = page.flush();
+    while (!release) await new Promise((resolve) => setTimeout(resolve, 0));
+    text.insert(text.length, 'b');
+    (release as () => void)();
+    await writing;
+    await page.flush();
+    expect(store.compactDoc).toHaveBeenCalled();
+    expect(unheld).toEqual([]);
+    expect((await PageDocument.open(pageId, store)).fragment.toString()).toBe(
+      page.fragment.toString(),
+    );
+  });
+
   it('sets an update that will not decode aside and opens the rest', async () => {
     const store = new MemoryStore();
     const pageId = uuidv7();

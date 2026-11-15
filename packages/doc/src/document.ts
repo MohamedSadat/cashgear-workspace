@@ -427,7 +427,14 @@ export class PageDocument {
     const historyDue =
       this.sinceHistory >= historyEvery.updates ||
       (this.historyStarted > 0 && Date.now() - this.historyStarted >= historyEvery.ms);
-    if (this.logLength <= compactAfter && !historyDue) return;
+    // The snapshot is the whole document in memory, and compaction drops the log it covers but
+    // the updates not yet on the server. A change typed while the write before this ran waits in
+    // `pending`, in no update yet: in the snapshot it would be kept here and never sent (a kill
+    // before its own write), and the server would refuse everything typed after it as referring
+    // to content it lacks. So the log is compacted only when nothing waits; the next write tries
+    // again. (A history entry is this device's own and may hold it.)
+    const compactNow = this.logLength > compactAfter && !this.pending.length;
+    if (!compactNow && !historyDue) return;
     const snapshot = Y.encodeStateAsUpdate(this.doc);
     try {
       if (historyDue) {
@@ -435,7 +442,7 @@ export class PageDocument {
         this.sinceHistory = 0;
         this.historyStarted = 0;
       }
-      if (this.logLength > compactAfter) {
+      if (compactNow) {
         await this.store.compactDoc(this.pageId, snapshot, this.lastSeq);
         this.logLength = 0;
       }
