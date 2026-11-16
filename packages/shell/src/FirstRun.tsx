@@ -18,6 +18,10 @@ export function FirstRun({
   const [busy, setBusy] = useState(false);
   const create = async () => {
     setBusy(true);
+    // The frame is drawn once the workspace exists, before its first pages are all written: a
+    // page the person opens meanwhile stays open ("Add a page" at once was sent back to "Getting
+    // started" when the writes took longer, the web kill test on CI after Phase 8's strict writes).
+    const before = location.hash;
     try {
       const { createFirstWorkspace } = await import('./gettingStarted');
       const first = await createFirstWorkspace(
@@ -30,7 +34,7 @@ export function FirstRun({
         i18n.language as Language,
       );
       onCreated();
-      navigate({ kind: 'page', pageId: first }, true);
+      if (location.hash === before) navigate({ kind: 'page', pageId: first }, true);
     } finally {
       setBusy(false);
     }
