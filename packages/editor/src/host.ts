@@ -297,6 +297,11 @@ export interface EditorHost {
   assets?: {
     url(assetId: string): Promise<string | null>;
     info(assetId: string): AssetInfo | undefined;
+    /**
+     * An asset's record this device does not hold yet (another device uploaded it), brought by the
+     * host; undefined when there is none to bring. The editor asks and redraws; the host fetches.
+     */
+    load?(assetId: string): Promise<AssetInfo | undefined>;
     store(
       file: File,
     ): Promise<{ assetId: string; width: number | null; height: number | null } | null>;

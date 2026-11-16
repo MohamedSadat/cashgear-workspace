@@ -153,6 +153,16 @@ export class WorkspaceSession {
   private shown: Id | null = null;
   /** Bytes of an asset this device does not hold, from the server (cloud/cloud.ts). */
   remoteAssets: ((assetId: Id) => Promise<Uint8Array | null>) | null = null;
+  /**
+   * Phase 8: an asset's record (name, size, type) from the server, without its bytes
+   * (cloud/cloud.ts): a file block on a device that did not upload the file shows it, and the
+   * bytes come only when the file is opened (`remoteAssets`).
+   */
+  remoteAssetInfo:
+    | ((
+        assetId: Id,
+      ) => Promise<{ fileName: string; sizeBytes: number; contentType: string } | null>)
+    | null = null;
   /** Server search for a synced workspace, merged after local hits by the palette (M2.7). */
   remoteSearch: ((q: string, limit: number) => Promise<RemoteSearchHit[]>) | null = null;
   /** A bookmark's preview from the server, for a synced workspace (cloud/cloud.ts). */

@@ -167,6 +167,7 @@ export class Cloud {
       saved: (pageId) => this.engine.saved(pageId),
     });
     this.session.remoteAssets = (assetId) => this.fetchAsset(assetId);
+    this.session.remoteAssetInfo = (assetId) => this.assetInfo(assetId);
     this.session.remotePreview = (url) => this.preview(url);
     this.session.remoteSearch = (q, limit) => this.search(q, limit);
     this.offline = new OfflineState(this, session);
@@ -857,6 +858,27 @@ export class Cloud {
 
   asset(assetId: Id) {
     return data(this.api.GET('/api/v1/assets/{assetId}', { params: { path: { assetId } } }));
+  }
+
+  /**
+   * Phase 8: an asset's record from the server, without its bytes: what a file block shows on a
+   * device that did not upload the file (its bytes come on Open, `fetchAsset`). Null signed out,
+   * offline, or when the server has none the account may read.
+   */
+  async assetInfo(
+    assetId: Id,
+  ): Promise<{ fileName: string; sizeBytes: number; contentType: string } | null> {
+    if (!this.account_) return null;
+    try {
+      const record = await this.asset(assetId);
+      return {
+        fileName: record.fileName,
+        sizeBytes: Number(record.sizeBytes),
+        contentType: record.contentType,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /** A bookmark's preview, for the open workspace if it syncs; null otherwise or when there is none. */

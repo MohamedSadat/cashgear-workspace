@@ -127,10 +127,61 @@ export function pickFiles(accept: string[]): Promise<File[]> {
   });
 }
 
+/** Per session: records being asked of the server, and those it answered. */
+interface Asked {
+  pending: Map<Id, Promise<AssetInfo | undefined>>;
+  known: Map<Id, AssetInfo>;
+}
+const asked = new WeakMap<WorkspaceSession, Asked>();
+
+const askedOf = (session: WorkspaceSession): Asked => {
+  let state = asked.get(session);
+  if (!state) asked.set(session, (state = { pending: new Map(), known: new Map() }));
+  return state;
+};
+
+/** An asset's record as far as this device knows it: the mirror's, else the server's answer. */
+export const knownAsset = (session: WorkspaceSession, assetId: Id): AssetInfo | undefined =>
+  session.mirror.assets.get(assetId) ?? asked.get(session)?.known.get(assetId);
+
+/**
+ * An asset's record: from the mirror, else (another device uploaded it) the server's record alone
+ * (`session.remoteAssetInfo`, the asset's metadata route), never its bytes, which come when the
+ * file is opened (`assetsOf().open`). Kept per session, so a reload of the mirror does not lose it.
+ * Phase 8: a file block read "This file is not on this device", and did not open, on any device
+ * that had not uploaded it, since Phase 2 brought images from the server and never files.
+ */
+export function assetRecord(
+  session: WorkspaceSession,
+  assetId: Id,
+): Promise<AssetInfo | undefined> {
+  const held = knownAsset(session, assetId);
+  if (held) return Promise.resolve(held);
+  const remote = session.remoteAssetInfo;
+  if (!remote) return Promise.resolve(undefined);
+  const { pending, known } = askedOf(session);
+  let found = pending.get(assetId);
+  if (!found) {
+    found = remote(assetId)
+      .then((record) => {
+        if (record) known.set(assetId, record);
+        return record ?? undefined;
+      })
+      .catch(() => undefined);
+    pending.set(assetId, found);
+    // Not there now (offline, no access yet): asked again the next time the block is drawn.
+    void found.then((record) => {
+      if (!record) pending.delete(assetId);
+    });
+  }
+  return found;
+}
+
 /**
  * Files as the editor and the database views use them (`EditorHost.assets`, `DatabaseHost.assets`
- * have the same shape): URLs from the local store or the server, the records from the mirror, new
- * files kept locally, and "open" saving the file where the person chooses.
+ * have the same shape): URLs from the local store or the server, the records from the mirror (or
+ * the server's record alone, `load`), new files kept locally, and "open" saving the file where the
+ * person chooses (its bytes fetched then, and kept, when this device does not hold them).
  */
 export function assetsOf(
   session: WorkspaceSession,
@@ -138,16 +189,19 @@ export function assetsOf(
 ): NonNullable<EditorHost['assets']> {
   return {
     url: (assetId) => assetUrl(session, assetId),
-    info: (assetId): AssetInfo | undefined => session.mirror.assets.get(assetId),
+    info: (assetId): AssetInfo | undefined => knownAsset(session, assetId),
+    load: (assetId) => assetRecord(session, assetId),
     store: (file) => storeAsset(session, file),
     pick: pickFiles,
     open: (assetId) => {
       void (async () => {
-        const record = session.mirror.assets.get(assetId);
+        // The bytes from this device, else from the server now (kept here, as the uploading
+        // device keeps them: `fetchAsset` stores the record and the bytes).
         const bytes =
           (await session.store.getAssetBytes(assetId)) ??
           (await session.remoteAssets?.(assetId)) ??
           null;
+        const record = knownAsset(session, assetId);
         if (!record || !bytes) return;
         await saveFile(record.fileName, bytes, record.contentType || 'application/octet-stream');
       })().catch((error: unknown) => console.warn('The file could not be saved:', error));

@@ -184,6 +184,8 @@ export function fileView(host: () => EditorHost): NodeViewRenderer {
     const size = el('span', 'cgw-file-size');
     button.append(el('span', 'cgw-file-icon', '📎'), name, size);
     dom.append(button);
+    /** The asset whose record was asked of the host, once per asset. */
+    let asked = '';
     const draw = () => {
       const assetId = node.attrs.assetId as string | null;
       const info = assetId ? host().assets?.info(assetId) : undefined;
@@ -195,6 +197,15 @@ export function fileView(host: () => EditorHost): NodeViewRenderer {
         'aria-label',
         `${strings?.openFile ?? ''} ${info?.fileName ?? ''}`.trim(),
       );
+      // Not on this device (another device uploaded it): the host may bring its record, as it
+      // brings an image's picture; drawn again when it does.
+      const assets = host().assets;
+      if (assetId && !info && assets?.load && asked !== assetId) {
+        asked = assetId;
+        void assets.load(assetId).then((found) => {
+          if (found && node.attrs.assetId === assetId) draw();
+        });
+      }
     };
     button.addEventListener('click', () => {
       const assetId = node.attrs.assetId as string | null;
