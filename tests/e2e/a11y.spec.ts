@@ -125,10 +125,16 @@ test.describe('accessibility', () => {
       const focus = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement | null;
         if (!el || el === document.body) return null;
-        const style = getComputedStyle(el);
+        // The ring is the element's own, or (a tree's row, the library's tree view) its row's.
+        const ring = (node: Element | null) => {
+          if (!node) return false;
+          const style = getComputedStyle(node);
+          return style.outlineStyle !== 'none' || style.boxShadow !== 'none';
+        };
         return {
           role: el.getAttribute('role'),
-          visible: style.outlineStyle !== 'none' || style.boxShadow !== 'none',
+          visible:
+            ring(el) || (el.getAttribute('role') === 'treeitem' && ring(el.firstElementChild)),
           what: el.outerHTML.slice(0, 80),
         };
       });
@@ -206,18 +212,19 @@ test.describe('accessibility', () => {
     );
     expect(unnamed).toEqual([]);
     // The tree says what each row is: sections at level 1, their pages at level 2, which one is
-    // open (the selected row: the library's tree view marks no row `aria-current`), and how many
-    // there are.
+    // open, and how many there are. Each row is named by its title alone (the library's tree
+    // view: a section's buttons are not part of its name); a section with pages is open, one
+    // without (Private, at first) has nothing to open.
     const row = page.getByRole('treeitem', { name: /Getting started/ });
     await expect(row).toHaveAttribute('aria-level', '2');
     await expect(row).toHaveAttribute('aria-setsize', '2');
-    await expect(row).toHaveAttribute('aria-selected', 'true');
+    await expect(row).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('tree', { name: 'Pages' })).toMatchAriaSnapshot(`
       - tree "Pages":
-        - treeitem "Workspace Add a database in Workspace Add a page in Workspace" [level=1]
+        - treeitem "Workspace" [expanded] [level=1]
         - treeitem "Getting started" [level=2] [selected]
         - treeitem "البداية" [level=2]
-        - treeitem "Private Add a database in Private Add a page in Private" [level=1]
+        - treeitem "Private" [level=1]
     `);
   });
 });

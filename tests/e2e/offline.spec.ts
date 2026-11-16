@@ -179,7 +179,8 @@ test('offline: the app starts, pinned pages open, edits and a new page are saved
   // A page this device never held says so, and waits.
   await row(page, 'Made elsewhere').click();
   await expect(page.getByTestId('not-on-device')).toContainText(NOT_HERE);
-  await expect(row(page, 'Made elsewhere')).toHaveAttribute('title', 'Not available offline');
+  // The tooltip is on the row's content (the row itself is the library's tree view's).
+  await expect(row(page, 'Made elsewhere').getByTitle('Not available offline')).toBeVisible();
 
   // The network back: nothing to do. Everything reaches the other device within 10 s.
   const back = Date.now();

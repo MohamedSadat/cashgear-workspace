@@ -70,6 +70,8 @@ export const en = {
     // Phase 8 (Track U4): moving a page in the tree by keys, and what is said after a move.
     moveInstructions: 'Drag, or press {{keys}} with an arrow key, to move',
     moved: '{{title}} moved to {{place}}',
+    expandRow: 'Expand {{title}}',
+    collapseRow: 'Collapse {{title}}',
     rename: 'Rename',
     favourite: 'Add to favourites',
     unfavourite: 'Remove from favourites',

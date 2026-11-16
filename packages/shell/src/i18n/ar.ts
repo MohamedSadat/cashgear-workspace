@@ -64,6 +64,8 @@ export const ar: Catalogue = {
     // Phase 8 (Track U4): moving a page in the tree by keys, and what is said after a move.
     moveInstructions: 'اسحب الصفحة، أو اضغط {{keys}} مع أحد مفاتيح الأسهم، لنقلها',
     moved: 'نُقلت «{{title}}» إلى {{place}}',
+    expandRow: 'توسيع {{title}}',
+    collapseRow: 'طي {{title}}',
     rename: 'إعادة التسمية',
     favourite: 'إضافة إلى المفضلة',
     unfavourite: 'إزالة من المفضلة',

@@ -172,7 +172,6 @@ export function Palette({
     <Dialog title={t('search.title')} onClose={onClose}>
       {/* The dialog focuses the search box; Escape reaches the dialog, which closes. */}
       <CgCommandMenu<Item>
-        className="cgw-palette"
         items={menuItems}
         filter={false}
         searchable

@@ -231,7 +231,10 @@ test.describe('import', () => {
       writeFileSync(join(root, path), bytes);
     }
     await openImport(page, 'Markdown');
-    await panel(page).getByTestId('import-folder').setInputFiles(join(root, 'Handbook'));
+    // "Choose a folder…" (the library's file picker) opens the browser's folder dialog.
+    const chooser = page.waitForEvent('filechooser');
+    await panel(page).getByRole('button', { name: 'Choose a folder…' }).click();
+    await (await chooser).setFiles(join(root, 'Handbook'));
     await expect(report(page)).toBeVisible({ timeout: 60000 });
     await expect(report(page)).toContainText('Pages: 6');
     expect(await skipped(page)).toEqual(

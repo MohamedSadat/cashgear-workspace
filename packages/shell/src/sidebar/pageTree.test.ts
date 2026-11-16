@@ -65,6 +65,18 @@ const tree = () => document.querySelector<HTMLElement>('[role="tree"]')!;
 const rows = () => [...tree().querySelectorAll<HTMLElement>('[role="treeitem"]')];
 const row = (title: string) =>
   rows().find((item) => item.querySelector('.cgw-tree-title')?.textContent === title);
+/** A row's name: the text of what `aria-labelledby` names (the library names rows so), what is
+ * hidden from assistive technology left out. */
+const nameOf = (item: HTMLElement) =>
+  (item.getAttribute('aria-labelledby') ?? '')
+    .split(' ')
+    .map((id) => {
+      const copy = document.getElementById(id)?.cloneNode(true) as HTMLElement | undefined;
+      copy?.querySelectorAll('[aria-hidden="true"]').forEach((hidden) => hidden.remove());
+      return copy?.textContent ?? '';
+    })
+    .join(' ')
+    .trim();
 const press = (target: HTMLElement, key: string, init: KeyboardEventInit = {}) =>
   act(() => {
     target.dispatchEvent(
@@ -79,6 +91,10 @@ describe('the page tree', () => {
     const section = rows()[0];
     expect(section.getAttribute('aria-level')).toBe('1');
     expect(section.querySelector('.cgw-tree-section-name')!.textContent).toBe('Pages');
+    // A heading: always open, no toggle; named by its name alone.
+    expect(section.getAttribute('aria-expanded')).toBe('true');
+    expect(section.querySelector('[data-cg-tree-row] > button')).toBeNull();
+    expect(nameOf(section)).toBe('Pages');
     // A section's own buttons: a database or a page in it.
     expect(
       [...section.querySelectorAll('[data-cg-tree-actions] button')].map((b) =>
@@ -92,15 +108,21 @@ describe('the page tree', () => {
       '1',
       '2',
     ]);
+    // The open page: selected, and the current page.
     expect(gamma.getAttribute('aria-selected')).toBe('true');
+    expect(gamma.getAttribute('aria-current')).toBe('page');
     expect(alpha.getAttribute('aria-selected')).toBe('false');
-    // A row that opens is named by its toggle, the title alone; its text is not said twice.
+    expect(alpha.hasAttribute('aria-current')).toBe(false);
+    // Each row is named by its title alone (its toggle and buttons apart).
+    expect(nameOf(alpha)).toBe('Alpha');
+    expect(nameOf(gamma)).toBe('Gamma');
     expect(alpha.getAttribute('aria-expanded')).toBe('false');
-    expect(alpha.querySelector('button')!.getAttribute('aria-label')).toBe('Alpha');
-    expect(alpha.querySelector('.cgw-tree-title')!.getAttribute('aria-hidden')).toBe('true');
-    // A row that does not open has no toggle, and says its title.
+    expect(alpha.querySelector('[data-cg-tree-row] > button')!.getAttribute('aria-label')).toBe(
+      'Expand Alpha',
+    );
+    // A row that does not open has no toggle.
     expect(gamma.hasAttribute('aria-expanded')).toBe(false);
-    expect(gamma.querySelector('.cgw-tree-title')!.hasAttribute('aria-hidden')).toBe(false);
+    expect(gamma.querySelector('[data-cg-tree-row] > button')).toBeNull();
     expect(
       [...gamma.querySelectorAll('[data-cg-tree-actions] button')].map((b) =>
         b.getAttribute('aria-label'),

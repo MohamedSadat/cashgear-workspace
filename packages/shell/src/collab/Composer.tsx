@@ -8,13 +8,14 @@ import {
   CgMentionArea,
   type CgMentionAreaHandle,
   type CgMentionAreaSuggestion,
+  type CgMentionAreaValue,
 } from '@cashgear/ui';
 import type { Id } from '@cgw/workspace';
 import { useCallback, useId, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BODY_TEXT_LIMIT,
-  bodyFromElement,
+  bodyFromValue,
   bodyProblem,
   bodyTextLength,
   valueFromBody,
@@ -82,7 +83,6 @@ export function Composer({
 }: ComposerProps) {
   const { t } = useTranslation();
   const area = useRef<CgMentionAreaHandle>(null);
-  const box = useRef<HTMLDivElement>(null);
   const id = useId();
   const hintId = `${id}-hint`;
   const countId = `${id}-count`;
@@ -94,14 +94,8 @@ export function Composer({
     initial ? measureOf(initial) : { ready: false, left: null },
   );
 
-  /** The body the area holds now, read from its content (`bodyFromElement` says why). */
-  const read = (): CommentBody => {
-    const el = box.current?.querySelector('[role="textbox"]');
-    return el ? bodyFromElement(el) : [];
-  };
-
-  const measure = () => {
-    const next = measureOf(read());
+  const measure = (value: CgMentionAreaValue) => {
+    const next = measureOf(bodyFromValue(value));
     setState((was) => (was.ready === next.ready && was.left === next.left ? was : next));
   };
 
@@ -109,7 +103,7 @@ export function Composer({
     focus: () => area.current?.focus(),
     clear: () => {
       area.current?.clear();
-      measure();
+      measure([]);
     },
   }));
 
@@ -141,19 +135,17 @@ export function Composer({
     [people, pages, t],
   );
 
-  const submit = () => {
+  const submit = (value: CgMentionAreaValue) => {
     if (disabled) return;
-    const body = read();
+    const body = bodyFromValue(value);
     if (bodyProblem(body)) return;
     onSubmit(body);
   };
 
   return (
-    <div ref={box} className="cgw-composer" data-disabled={disabled || undefined}>
+    <div className="cgw-composer" data-disabled={disabled || undefined}>
       <CgMentionArea
         ref={area}
-        // The area and its "@" list (`workspace.css` gives the list's active option its contrast).
-        className="cgw-composer-area"
         label={label}
         placeholder={placeholder}
         listLabel={t('comments.mentionMenu')}
@@ -191,7 +183,7 @@ export function Composer({
           type="button"
           className="cgw-button is-primary"
           disabled={disabled || !state.ready}
-          onClick={submit}
+          onClick={() => submit(area.current?.getValue() ?? [])}
         >
           {submitLabel}
         </button>

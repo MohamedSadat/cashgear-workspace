@@ -70,10 +70,12 @@ const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
 const button = (name: string) =>
   [...dialog().querySelectorAll('button')].find((b) => b.textContent === name)!;
 
-/** The file input behind a picker: the library's file picker's, or the folder's own. */
+/** The file input behind a picker (the library's file picker): the file's, or the folder's. */
 const fileInput = (picker: 'file' | 'folder') =>
   dialog().querySelector<HTMLInputElement>(
-    picker === 'file' ? '.cgw-import-file input[type="file"]' : '[data-testid="import-folder"]',
+    picker === 'file'
+      ? '.cgw-import-file input[type="file"]'
+      : '[data-cg-file-picker]:not(.cgw-import-file) input[type="file"]',
   )!;
 
 function choose(picker: 'file' | 'folder', file: File) {
@@ -118,7 +120,7 @@ describe('the import panel', () => {
     expect(sectionsForNewPages(session).map((s) => s.id)).toEqual(sidebar);
     const select = dialog().querySelector<HTMLSelectElement>('select')!;
     expect([...select.options].map((o) => o.value)).toEqual(sidebar);
-    expect(select.closest('label')!.textContent).toContain('Section');
+    expect([...select.labels].map((label) => label.textContent).join()).toContain('Section');
     const second = session.mirror.sectionsOf(ws).find((s) => s.name === 'Second')!;
     act(() => {
       select.value = second.id;
@@ -139,6 +141,8 @@ describe('the import panel', () => {
     expect(radios.map((r) => r.value)).toEqual(['markdown', 'notion', 'word']);
     expect(radios[0].checked).toBe(true);
     expect(button('Choose a folder…')).toBeDefined();
+    // The library's file picker asks the browser for a folder.
+    expect(fileInput('folder').hasAttribute('webkitdirectory')).toBe(true);
     expect(dialog().textContent).toContain('one new page at the end of this section');
     expect(dialog().textContent).toContain('2,000 pages and 500 MB');
     act(() => radios[2].click());

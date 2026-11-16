@@ -87,22 +87,9 @@
   cursor: default;
 }
 
-/* Track U (phase-8 swaps): the library has no row that never folds. A section's toggle is not
-   drawn (the tree keeps it open, `beforeCollapse`). */
-.cgw-tree-section > [data-cg-tree-row] > button:first-child {
-  display: none;
-}
-
 .cgw-tree-section-name {
   flex: 1;
   padding-block: 0;
-}
-
-/* Track U (phase-8 swaps): the library draws the selected row's text in the accent on its tint,
-   4.09:1 in the light theme; the theme's text there, bold as the open page was. */
-.cgw-tree [role='treeitem'][aria-selected='true'] > [data-cg-tree-row] {
-  color: var(--cg-text);
-  font-weight: 600;
 }
 
 /* A page's row: icon, title, the offline mark, who has it open. */
@@ -125,9 +112,9 @@
   white-space: nowrap;
 }
 
-/* Track U (phase-8 swaps): the library's row buttons are only transparent until hover, so their
-   names joined every row's name. They are drawn on hover and focus only, as the rows' names
-   assume; a section's always. */
+/* A page's buttons are there only on hover and focus, as they always were: not merely
+   transparent, so the top bar's "Page actions" is the one page-wide (and a screen reader does not
+   meet two buttons in every row). A section's are always there. */
 .cgw-tree [data-cg-tree-actions] {
   display: none;
   gap: 2px;
@@ -427,16 +414,6 @@
 .cgw-trash-title {
   flex: 1;
   font-weight: 500;
-}
-
-/* Palette (Ctrl+K): the library's command menu (Track U1); the comment composer's "@" list is one
-   too. Track U (phase-8 swaps): on the active option's tint (`--cg-selected`, #eaf0ff) the menu's
-   secondary text, a second line or a shortcut, is 4.36:1 in the light theme; the theme's text
-   there instead. */
-:is(.cgw-palette, .cgw-composer-area)
-  [role='option'][aria-selected='true']
-  :is(span[dir='auto'] + span[dir='auto'], kbd) {
-  color: var(--cg-text);
 }
 
 /* A searchable list in a dialog, the palette's former look: the page history, the workbook picker

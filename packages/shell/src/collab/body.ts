@@ -69,54 +69,17 @@ export const mentionedPeople = (body: CommentBody): Id[] => [
 /** The composer's content (the library's editable area, Track U17): text and mention atoms. */
 export type ComposerValue = ReadonlyArray<string | { kind: string; id: string; text: string }>;
 
-const BLOCKS = new Set(['DIV', 'P', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'PRE']);
-
 /**
- * The body the composer's editable area holds: its text, its line breaks (a `<br>`, or a line a
- * browser made a `<div>` of) and its mention atoms (the library's, `data-cg-mention-kind` and
- * `-id`: people and pages; any other kind is left out). Formatting a browser adds is left out.
- *
- * Track U (phase-8 swaps): read here, not with the area's `getValue()`, which counts the `<br>` a
- * browser leaves in an empty line it made a `<div>` of as a line break of its own, so two Enters
- * gave two empty lines.
+ * The body the composer's area holds: its text, its line breaks (a newline in its text) and its
+ * mentions of people and pages. A mention of any other kind is left out.
  */
-export function bodyFromElement(root: Node): CommentBody {
+export function bodyFromValue(value: ComposerValue): CommentBody {
   const out: CommentBody = [];
-  // A line a browser made a block of ends there: what follows it starts a line of its own.
-  let afterBlock = false;
-  const breakBefore = () => {
-    afterBlock = false;
-    const last = out[out.length - 1];
-    if (last && last.type !== 'hardBreak') out.push({ type: 'hardBreak' });
-  };
-  const push = (node: CommentInline) => {
-    if (afterBlock) breakBefore();
-    out.push(node);
-  };
-  const walk = (node: Node) => {
-    for (const child of node.childNodes) {
-      if (child.nodeType === 3) {
-        push({ type: 'text', text: (child as Text).data });
-        continue;
-      }
-      if (child.nodeType !== 1) continue;
-      const el = child as HTMLElement;
-      const mention = el.dataset.cgMentionId;
-      if (el.tagName === 'BR') {
-        // Breaks at the end are trimmed: a browser's placeholder <br> adds nothing.
-        push({ type: 'hardBreak' });
-      } else if (mention !== undefined) {
-        const kind = el.dataset.cgMentionKind;
-        if (kind === 'user') push({ type: 'userMention', attrs: { userId: mention } });
-        else if (kind === 'page') push({ type: 'pageMention', attrs: { pageId: mention } });
-      } else if (BLOCKS.has(el.tagName)) {
-        breakBefore();
-        walk(el);
-        afterBlock = true;
-      } else walk(el);
-    }
-  };
-  walk(root);
+  for (const part of value) {
+    if (typeof part === 'string') out.push({ type: 'text', text: part });
+    else if (part.kind === 'user') out.push({ type: 'userMention', attrs: { userId: part.id } });
+    else if (part.kind === 'page') out.push({ type: 'pageMention', attrs: { pageId: part.id } });
+  }
   return normaliseBody(out);
 }
 

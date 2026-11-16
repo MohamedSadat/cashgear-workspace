@@ -11,12 +11,6 @@
   margin: 0;
 }
 
-.cgw-import-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .cgw-import-buttons {
   flex-wrap: wrap;
 }

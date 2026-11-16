@@ -60,10 +60,17 @@ export function SidePresence({
   collab,
   pageId,
   people,
+  initials = true,
 }: {
   collab: Collab | null;
   pageId: Id;
   people: PeopleDirectory | null;
+  /**
+   * Letters on the avatars. A tree row is named by its title and this image's name: letters drawn
+   * there are text in the row its name leaves out (Axe's label-in-name), so the tree draws the
+   * colours alone.
+   */
+  initials?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const ids = usePageOpenBy(collab, pageId);
@@ -74,6 +81,7 @@ export function SidePresence({
     key: id,
     name: nameOf(id),
     ...avatarColours(id),
+    ...(initials ? {} : { initials: '' }),
   }));
   return (
     <CgAvatarStack

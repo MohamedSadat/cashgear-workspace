@@ -1,8 +1,8 @@
 // The import panel (Settings → Your data → Import from Markdown, Notion or Word): what to import,
 // the section it goes into, the file or folder, then the import's progress with a Stop button, and
 // at its end the report of what was made and what was skipped, and why (M8.4).
-import { CgButton, CgFilePicker, CgProgressBar, CgRadioGroup } from '@cashgear/ui';
-import { useRef, useState, type InputHTMLAttributes } from 'react';
+import { CgField, CgFilePicker, CgProgressBar, CgRadioGroup, CgSelect } from '@cashgear/ui';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../../Dialog';
 import { navigate } from '../../route';
@@ -30,15 +30,6 @@ const ACCEPT: Record<ImportKind, string> = {
   notion: '.zip,application/zip',
   word: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
-
-/**
- * A folder picker: the browsers' attribute, which React does not type. The library's file picker
- * (Track U16) takes files only, so the folder keeps its own input (phase-8 swaps).
- */
-const folderPicker = {
-  webkitdirectory: '',
-  directory: '',
-} as InputHTMLAttributes<HTMLInputElement>;
 
 /**
  * The sections a new page may go at the top of, by the sidebar's own rule for its "Add a page in"
@@ -69,7 +60,6 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
   const [phase, setPhase] = useState<Phase>({ kind: 'choose' });
   const stop = useRef<AbortController | null>(null);
   const drawn = useRef(0);
-  const folder = useRef<HTMLInputElement>(null);
   const busy = phase.kind === 'reading' || phase.kind === 'writing' || phase.kind === 'stopping';
 
   const start = async (source: ImportSource) => {
@@ -126,12 +116,12 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
     await start({ kind: 'bytes', name: chosen.name, bytes });
   };
 
-  const onFolder = async (list: FileList | null) => {
-    const chosen = [...(list ?? [])];
+  /** A folder's files, each with its path from the folder chosen (its own name first). */
+  const onFolder = async (chosen: File[], paths: readonly string[]) => {
     if (!chosen.length || tooLarge(chosen.reduce((n, f) => n + f.size, 0))) return;
     const files = await Promise.all(
-      chosen.map(async (f) => ({
-        path: f.webkitRelativePath || f.name,
+      chosen.map(async (f, i) => ({
+        path: paths[i] || f.webkitRelativePath || f.name,
         bytes: new Uint8Array(await f.arrayBuffer()),
       })),
     );
@@ -165,20 +155,14 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
               ]}
             />
             {sections.length > 1 && (
-              <label className="cgw-import-field">
-                <span>{t('exchange.importSection')}</span>
-                <select
-                  className="cgw-input"
+              <CgField label={t('exchange.importSection')}>
+                <CgSelect
+                  fullWidth
+                  options={sections.map((section) => ({ value: section.id, label: section.name }))}
                   value={sectionId}
-                  onChange={(event) => setSectionId(event.target.value)}
-                >
-                  {sections.map((section) => (
-                    <option key={section.id} value={section.id} dir="auto">
-                      {section.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onValueChange={(value) => value && setSectionId(value)}
+                />
+              </CgField>
             )}
             <p className="cgw-muted">{t('exchange.importWhere')}</p>
             <p className="cgw-muted">
@@ -189,13 +173,14 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
             </p>
             <div className="cgw-dialog-buttons cgw-import-buttons">
               {kind === 'markdown' && (
-                <CgButton
+                <CgFilePicker
                   appearance="outline"
+                  directory
                   disabled={!sectionId}
-                  onClick={() => folder.current?.click()}
+                  onPick={(files, { paths }) => void onFolder(files, paths)}
                 >
                   {t('exchange.chooseFolder')}
-                </CgButton>
+                </CgFilePicker>
               )}
               <CgFilePicker
                 intent="primary"
@@ -209,19 +194,6 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
                 {t('exchange.chooseFile')}
               </CgFilePicker>
             </div>
-            <input
-              ref={folder}
-              type="file"
-              hidden
-              multiple
-              {...folderPicker}
-              aria-label={t('exchange.chooseFolder')}
-              data-testid="import-folder"
-              onChange={(event) => {
-                const list = event.target.files;
-                void onFolder(list).finally(() => (event.target.value = ''));
-              }}
-            />
           </>
         )}
         {busy && (

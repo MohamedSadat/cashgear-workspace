@@ -67,12 +67,15 @@ export function treeNodes(
     untitled,
     unavailable,
     editable,
+    currentPageId = null,
   }: {
     untitled: string;
     /** Offline, and this device does not hold the page. */
     unavailable: (pageId: Id) => boolean;
     /** The account may change the page (rename, move). */
     editable: (page: PageRecord) => boolean;
+    /** The page on screen: its row is the current one (`aria-current="page"`). */
+    currentPageId?: Id | null;
   },
 ): Node[] {
   const roots: Node[] = [];
@@ -86,6 +89,8 @@ export function treeNodes(
         text: row.section.name,
         item: { kind: 'section', section: row.section },
         children,
+        // A heading: always open, no toggle.
+        collapsible: false,
         allowSelection: false,
         allowDrag: false,
         allowRename: false,
@@ -110,6 +115,7 @@ export function treeNodes(
       allowDrag: mayEdit,
       allowRename: mayEdit,
       ...(away ? { className: 'is-unavailable' } : {}),
+      ...(page.id === currentPageId ? { current: 'page' as const } : {}),
     });
     lists.length = row.depth + 1;
     if (children) lists.push(children);

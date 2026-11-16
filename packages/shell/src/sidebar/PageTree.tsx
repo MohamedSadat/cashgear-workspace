@@ -88,19 +88,13 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
         untitled,
         unavailable: (pageId) => !!marks && !marks.has(pageId),
         editable: canEditPage,
+        currentPageId: activePageId,
       }),
     // The mirror changes in place; its revision says when.
-    [session, workspaceId, expanded, revision, untitled, marks],
+    [session, workspaceId, expanded, revision, untitled, marks, activePageId],
   );
-  // Sections always show their pages.
-  const expandedKeys = useMemo(
-    () =>
-      new Set<string>([
-        ...expanded,
-        ...session.mirror.sectionsOf(workspaceId).map((s) => `${SECTION}${s.id}`),
-      ]),
-    [session, workspaceId, expanded, revision],
-  );
+  // Sections never fold (`collapsible: false`): the set is the pages'.
+  const expandedKeys = expanded as ReadonlySet<string>;
   const actions = useRef<CgTreeViewActions>(null);
   const [menu, setMenu] = useState<{ pageId: Id; x: number; y: number } | null>(null);
   const [databaseMenu, setDatabaseMenu] = useState<{
@@ -223,23 +217,6 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
   const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
     const row = event.target as HTMLElement;
     if (row.getAttribute('role') !== 'treeitem') return;
-    // Track U (phase-8 swaps): the tree stops every key at its rows, so the app's shortcuts
-    // (Ctrl+K, Ctrl+\, Ctrl+,) would not reach the window while a row has focus: handed on.
-    if ((event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
-      const copy = new window.KeyboardEvent('keydown', {
-        key: event.key,
-        code: event.code,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        altKey: event.altKey,
-        shiftKey: event.shiftKey,
-        bubbles: true,
-        cancelable: true,
-      });
-      window.dispatchEvent(copy);
-      if (copy.defaultPrevented) event.preventDefault();
-      return;
-    }
     const page = pageOfRow(row);
     if (!page) return;
     const plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
@@ -281,17 +258,25 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
         <span className="cgw-tree-icon" aria-hidden="true">
           {pageGlyph(page)}
         </span>
-        {/* A row that opens is named by its toggle (the title, below): the title is not said
-            twice. */}
-        <span
-          className="cgw-tree-title"
-          dir="auto"
-          {...(context.hasChildren ? { 'aria-hidden': true } : {})}
-        >
+        <span className="cgw-tree-title" dir="auto">
           {page.title || untitled}
         </span>
-        {unavailable && <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>}
-        {people && <SidePresence collab={collab} pageId={page.id} people={people} />}
+        {/* The row is named by this content (`aria-labelledby`): a space between its parts keeps
+            the words apart in the name (Axe's label-in-name read "elsewhereNot" without it). The
+            flex row draws no space. The avatars draw no letters here: letters are text the name
+            would not hold. */}
+        {unavailable && (
+          <>
+            {' '}
+            <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>
+          </>
+        )}
+        {people && (
+          <>
+            {' '}
+            <SidePresence collab={collab} pageId={page.id} people={people} initials={false} />
+          </>
+        )}
       </span>
     );
   };
@@ -389,17 +374,17 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
           if (item?.kind === 'page') navigate({ kind: 'page', pageId: item.page.id });
         }}
         expandedKeys={expandedKeys}
-        // A section stays open.
-        beforeCollapse={(details) => !details.key?.startsWith(SECTION)}
         onExpandedKeysChange={(_keys, details) => {
           // The tree's own corrections (a page not listed) leave what this device keeps alone.
           if (details.source === 'collection' || !details.key) return;
           if (details.key.startsWith(SECTION)) return;
           toggle(details.key, details.expanded);
         }}
-        // Track U (phase-8 swaps): the library names a row's toggle and that name joins the
-        // row's; the toggle is named by the title alone, which the row's text then leaves out.
-        labels={{ expand: '{0}', collapse: '{0}' }}
+        // The toggle's name; the library puts the row's title where `{0}` is.
+        labels={{
+          expand: t('workspace.expandRow', { title: '{0}' }),
+          collapse: t('workspace.collapseRow', { title: '{0}' }),
+        }}
         // A workspace always has sections; without any, an empty tree (no English of its own).
         renderEmpty={() => <></>}
         nodeRenderer={content}
