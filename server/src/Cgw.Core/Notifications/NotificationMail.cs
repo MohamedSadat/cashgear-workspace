@@ -196,22 +196,30 @@ public static class NotificationMails
     /// <summary>The page the unsubscribe link opens (a button, then off); One-Click posts to it.</summary>
     public static string UnsubscribeUrl(string publicUrl, string token) => $"{publicUrl}/mail/unsubscribe?token={Uri.EscapeDataString(token)}";
 
+    /// <summary>
+    /// A name or a title on one line: each run of control characters (line breaks among them) and
+    /// line or paragraph separators made one space, so nothing a person wrote can end the Subject
+    /// header and start another, whatever the mail library does with it.
+    /// </summary>
+    public static string OneLine(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"[\p{Cc}\p{Zl}\p{Zp}]+", " ").Trim();
+
     public static MailMessage Compose(string to, string? locale, string kind, IReadOnlyList<MailItem> items, string appUrl, string unsubscribeUrl)
     {
         var language = Language(locale);
         var words = language == "ar" ? Ar : En;
         var dir = language == "ar" ? "rtl" : "ltr";
-        string Title(MailItem item) => item.PageTitle is { Length: > 0 } title ? title : words.Untitled;
+        string Title(MailItem item) => OneLine(item.PageTitle) is { Length: > 0 } title ? title : words.Untitled;
         string Line(MailItem item) => item.Kind switch
         {
-            NotificationKinds.CommentMention => words.CommentMention(item.Actor, Title(item)),
-            NotificationKinds.Reply => words.Reply(item.Actor, Title(item)),
-            _ => words.Mention(item.Actor, Title(item)),
+            NotificationKinds.CommentMention => words.CommentMention(OneLine(item.Actor), Title(item)),
+            NotificationKinds.Reply => words.Reply(OneLine(item.Actor), Title(item)),
+            _ => words.Mention(OneLine(item.Actor), Title(item)),
         };
         string HtmlLine(MailItem item)
         {
             // The name and the title isolated, so each reads in its own direction inside the sentence.
-            var actor = $"<bdi>{E(item.Actor)}</bdi>";
+            var actor = $"<bdi>{E(OneLine(item.Actor))}</bdi>";
             var title = $"<bdi>{E(Title(item))}</bdi>";
             const string A = "CgwActorSlot", T = "CgwTitleSlot";
             var sentence = item.Kind switch

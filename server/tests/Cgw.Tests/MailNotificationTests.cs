@@ -240,6 +240,84 @@ public sealed class MailNotificationTests(ServerFixture server)
         Assert.DoesNotContain("While off", mail.TextBody);
     }
 
+    private async Task<string?> OutcomeOf(Guid userId)
+    {
+        await using var db = server.NewDb();
+        return await db.MailOutbox.AsNoTracking().Where(m => m.UserId == userId).Select(m => m.Outcome).SingleAsync();
+    }
+
+    [Fact]
+    public async Task A_queued_mail_sends_nothing_made_before_mail_came_back_on_or_past_the_age_limit()
+    {
+        // Queued; then mail turned off and on again before it went: what it holds came before.
+        var team = await TeamAsync();
+        await Mention(team, text: "Before the turn ");
+        var (queue, send) = Jobs(At(PastDelay));
+        await Run(queue);
+        await Set(team.Member.Client, "off");
+        await Set(team.Member.Client, "on");
+        await Run(send);
+        Assert.Empty(MailsTo(team.Member.Email));
+        Assert.Equal(MailOutcomes.Skipped, await OutcomeOf(team.Member.Id));
+        // And it is not mailed later either.
+        await Mail(At(PastDelay * 3));
+        Assert.Empty(MailsTo(team.Member.Email));
+
+        // Queued, and not sent until past the age limit (the cap held it, or its retries ran on).
+        var late = await TeamAsync();
+        await Mention(late, text: "Long ago ");
+        var (lateQueue, _) = Jobs(At(PastDelay));
+        await Run(lateQueue);
+        var (_, lateSend) = Jobs(At(MailSettingsOptions.MaxAge + TimeSpan.FromHours(1)));
+        await Run(lateSend);
+        Assert.Empty(MailsTo(late.Member.Email));
+        Assert.Equal(MailOutcomes.Skipped, await OutcomeOf(late.Member.Id));
+    }
+
+    /// <summary>The raw mails to an address, as written to the pickup folder.</summary>
+    private List<string> RawMailsTo(string address) =>
+        server.MailFiles().Where(f => MimeMessage.Load(f) is var m && m.To.Mailboxes.Any(b => string.Equals(b.Address, address, StringComparison.OrdinalIgnoreCase))
+            && m.Headers.Contains("List-Unsubscribe")).Select(File.ReadAllText).ToList();
+
+    [Fact]
+    public async Task A_name_or_title_with_line_breaks_cannot_add_a_header()
+    {
+        // Nothing the app makes holds a line break in a title or a name; set here by SQL.
+        var team = await TeamAsync();
+        var arabic = await TeamAsync("منى", "الميزانية");
+        Assert.Equal(HttpStatusCode.NoContent, (await arabic.Member.Client.PatchAsJsonAsync("/api/v1/account/me", new { locale = "ar" })).StatusCode);
+        await using (var db = server.NewDb())
+        {
+            await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).Where(p => p.Id == team.Page)
+                .ExecuteUpdateAsync(x => x.SetProperty(p => p.Title, "Budget\r\nBcc: x@example.com"));
+            await db.Users.Where(u => u.Id == team.Ws.Account.Id)
+                .ExecuteUpdateAsync(x => x.SetProperty(u => u.DisplayName, "Olive\r\nBcc: y@example.com"));
+            await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).Where(p => p.Id == arabic.Page)
+                .ExecuteUpdateAsync(x => x.SetProperty(p => p.Title, "الميزانية\nBcc: z@example.com\rX-Injected: 1"));
+        }
+        await Mention(team);
+        await Mention(arabic, text: "راجعي الأرقام ");
+        await Mail(At(PastDelay));
+
+        foreach (var (address, subject) in new[]
+        {
+            (team.Member.Email, "Olive Bcc: y@example.com mentioned you in a comment on “Budget Bcc: x@example.com”"),
+            (arabic.Member.Email, "أشار إليك Olive Owner في تعليق على «الميزانية Bcc: z@example.com X-Injected: 1»"),
+        })
+        {
+            var raw = Assert.Single(RawMailsTo(address));
+            var headers = raw[..raw.IndexOf("\r\n\r\n", StringComparison.Ordinal)];
+            // Header lines, a folded line's continuation joined to its header.
+            var names = Regex.Split(headers, "\r\n(?![ \t])").Select(h => h[..Math.Max(0, h.IndexOf(':'))]).ToList();
+            Assert.Single(names, n => n.Equals("Subject", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(names, n => n.Equals("Bcc", StringComparison.OrdinalIgnoreCase) || n.Equals("X-Injected", StringComparison.OrdinalIgnoreCase));
+            var mail = MimeMessage.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(raw)));
+            Assert.Empty(mail.Bcc);
+            Assert.Equal(address, Assert.Single(mail.To.Mailboxes).Address);
+            Assert.Equal(subject, mail.Subject);
+        }
+    }
+
     [Fact]
     public async Task The_unsubscribe_token_turns_off_its_own_account_once_and_a_forged_or_replayed_one_does_nothing()
     {

@@ -280,8 +280,10 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
                         SELECT TOP (1) @visibility = s.[Visibility], @owner = s.[OwnerUserId] FROM [Sections] s WHERE s.[Id] = @section AND s.[WorkspaceId] = @ws;
                     END
                     IF @found = 0 OR @role IS NULL SET @outcome = {NoPage};
-                    ELSE IF NOT (@deleted IS NULL AND @kind COLLATE {bin} <> N'{PageKinds.Row}' AND @visibility IS NOT NULL AND (
-                            (@visibility COLLATE {bin} = N'private' AND @owner = @user)
+                    -- Decided here only where this is true: false, or unknown (a NULL anywhere, a
+                    -- private section with no owner), is left to the gate.
+                    ELSE IF (@deleted IS NULL AND @kind COLLATE {bin} <> N'{PageKinds.Row}' AND @visibility IS NOT NULL AND (
+                            (@visibility COLLATE {bin} = N'private' AND @owner IS NOT NULL AND @owner = @user)
                             OR (@visibility COLLATE {bin} <> N'private' AND (
                                 @role COLLATE {bin} IN (N'{Roles.Owner}', N'{Roles.Admin}')
                                 OR (@role COLLATE {bin} <> N'{Roles.Guest}' AND NOT EXISTS (
@@ -292,9 +294,11 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
                                         WHERE r.[PageId] = p.[Id] AND r.[WorkspaceId] = @ws
                                             AND ((r.[PrincipalType] COLLATE {bin} = N'user' AND r.[PrincipalId] = @user)
                                                 OR r.[PrincipalType] COLLATE {bin} = N'workspace')))))))))
-                        SET @outcome = {Undecided};
-                    ELSE IF @rowEpoch <> @epoch SELECT @outcome = {GateEpoch}, @value = @rowEpoch;
-                    ELSE IF @version < @schema SET @outcome = {GateVersion};
+                    BEGIN
+                        IF @rowEpoch <> @epoch SELECT @outcome = {GateEpoch}, @value = @rowEpoch;
+                        ELSE IF @version < @schema SET @outcome = {GateVersion};
+                    END
+                    ELSE SET @outcome = {Undecided};
                     """
                 : "";
             var gateColumns = gated ? ", @ws, @kind, @section, @parent, @deleted, @rowEpoch, @schema, @role, @visibility, @owner" : "";

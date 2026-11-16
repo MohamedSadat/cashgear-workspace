@@ -166,9 +166,14 @@ public sealed class MailSendJob(Mailer mailer, MailTokens tokens, MailSettingsOp
             return;
         }
         var language = NotificationMails.Language(user.Locale);
-        // What is still true now: unread, and on a page the person can read (the inbox's rules).
+        // What is still true now: unread, made after mail was last turned on and within the age
+        // limit (as when it was queued: the person may have turned mail off and on since, and the
+        // cap or the retries may have held it), and on a page the person can read (the inbox's rules).
+        var oldest = now - MailSettingsOptions.MaxAge;
+        var since = settings.OnSince;
         var notes = await db.Notifications.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .Where(n => n.MailId == mail.Id && n.ReadAt == null).OrderBy(n => n.Seq).ToListAsync(ct);
+            .Where(n => n.MailId == mail.Id && n.ReadAt == null && n.CreatedAt >= oldest && (since == null || n.CreatedAt > since))
+            .OrderBy(n => n.Seq).ToListAsync(ct);
         var memberships = await NotificationService.MembershipsAsync(db, user.Id, ct);
         var readable = await NotificationService.ReadableAsync(db, memberships, notes.Select(n => (n.WorkspaceId, n.PageId)), ct);
         notes = notes.Where(n => readable.Contains((n.WorkspaceId, n.PageId))).ToList();

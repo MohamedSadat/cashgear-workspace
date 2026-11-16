@@ -330,6 +330,49 @@ public sealed class RealtimeTests(ServerFixture server)
     }
 
     /// <summary>
+    /// A private section with no owner is no one's (<see cref="Cgw.Core.Access"/> gives none). Nothing
+    /// makes one; it is set here by SQL. The hub's batch must not take an unknown owner for a yes: it
+    /// leaves the page to the gate, which refuses everyone, as over HTTP.
+    /// </summary>
+    [Fact]
+    public async Task A_private_section_with_no_owner_is_refused_to_everyone_over_the_hub_as_over_HTTP()
+    {
+        var ws = await Ws.Create(server);
+        var admin = await Kit.Join(server, ws, "admin");
+        var member = await Kit.Join(server, ws, "member");
+        var other = await Kit.Join(server, ws, "member");
+        var guest = await Kit.Join(server, ws, "guest");
+        var personal = Guid.CreateVersion7();
+        await ws.Push(member.Client, ws.Op("section.create", personal,
+            new { id = personal, workspaceId = ws.Id, name = "Mine", orderKey = "a5", visibility = "private", version = 1, createdAt = DateTimeOffset.UtcNow }));
+        var page = Guid.CreateVersion7();
+        Assert.Equal("applied", (await ws.Push(member.Client, ws.Op("page.create", page, Ws.Page(page, ws.Id, personal, null, "a0", "Theirs"))))[0]
+            .GetProperty("status").GetString());
+        // Theirs until now: it pushes.
+        await using (var hub = await HubClient.Connect(server.Api, member.Client))
+            await hub.Ok("PushUpdates", page.ToString(), RealtimeKit.Push((Guid.CreateVersion7(), Kit.Update("page"))));
+        await using (var db = server.NewDb(ws.Id))
+            Assert.Equal(1, await db.Sections.Where(x => x.Id == personal).ExecuteUpdateAsync(x => x.SetProperty(y => y.OwnerUserId, (Guid?)null)));
+
+        var failures = new List<string>();
+        foreach (var (name, client) in new[] { ("its owner before", member.Client), ("another member", other.Client), ("a guest", guest.Client),
+            ("an admin", admin.Client), ("the workspace's owner", ws.Client) })
+        {
+            var http = await client.PostAsJsonAsync($"/api/v1/pages/{page}/doc/updates", RealtimeKit.Push((Guid.CreateVersion7(), Kit.Update("page"))));
+            var problem = await Kit.Json(http);
+            var overHttp = http.IsSuccessStatusCode ? "ok" : $"{(int)http.StatusCode} {problem.GetProperty("code").GetString()} {problem.GetProperty("title").GetString()}";
+            await using var hub = await HubClient.Connect(server.Api, client);
+            var answer = await hub.Call("PushUpdates", page.ToString(), RealtimeKit.Push((Guid.CreateVersion7(), Kit.Update("page"))));
+            var overHub = answer.GetProperty("ok").GetBoolean()
+                ? "ok"
+                : $"{answer.GetProperty("status").GetInt32()} {answer.GetProperty("code").GetString()} {answer.GetProperty("title").GetString()}";
+            const string expected = "404 not.found No such page";
+            if (overHttp != expected || overHub != expected) failures.Add($"{name}: expected {expected}, HTTP {overHttp}, hub {overHub}");
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    /// <summary>
     /// Phase 8: a hub push the page's section decides is one batch, the gate's read with the push's
     /// transaction; a caller it does not decide is decided by the gate on the row the batch read,
     /// then pushed in a second batch (and nothing more is read of the page or the membership).
