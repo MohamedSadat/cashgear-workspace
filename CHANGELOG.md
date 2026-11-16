@@ -4,6 +4,52 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.8.0] - 2026-11-16
+
+Bring work in from Notion, Markdown and Word, edit many cells at once, get an email when someone
+mentions you, and lose nothing the app said was saved, even when the browser crashes.
+
+- **Nothing saved is lost.** Chrome can drop writes it reported complete after a crash at the
+  wrong moment, and sometimes deletes a site's whole local store; on the web the app now keeps a
+  second copy of everything typed and not yet on the server, and puts back what Chrome lost the
+  next time it opens. What this device makes is also written with strict durability, so an
+  operating-system crash or a power cut loses nothing "Saved" covered.
+- **Cells in bulk.** In a database's table, select a rectangle of cells with Shift and the arrow
+  keys, Shift and a click, or by dragging; whole rows and columns too, right to left in Arabic.
+  Copy it into Excel or Cash Gear Sheet as shown, or paste from them: numbers, currencies,
+  percents and dates are read as your device writes them, people by their email. A paste past the
+  last row adds rows (at most 1,000), cells that cannot take a value are left as they were and
+  counted, and the notice after a paste or a clear offers Undo. Delete clears a selection.
+- **Order of your own.** Drag a board's columns, or a gallery's cards, into the order you want,
+  by pointer or keyboard; other people see it too.
+- **Import.** Settings, Your data, imports a Markdown folder or zip, a Notion export (pages and
+  their nesting, databases with typed properties and relations, row pages, links) or a Word
+  document (headings, lists, tables, images, links), into a local or a synced workspace. It runs
+  on your device, under a new page of its own, at most 2,000 pages and 500 MB; it ends with a
+  report of what was made and what was left out, and one that fails or is stopped leaves nothing
+  behind.
+- **Email for mentions and replies.** When someone mentions you or replies to you and you have not
+  read it within 15 minutes, you get one email, in your language, that opens the block. Choose a
+  daily summary or no email in Settings; every email turns email off in one click.
+- **One set of controls.** The slash and "@" menus, the formatting toolbar, the block handle,
+  the sidebar's page tree, the breadcrumb, the icon picker, avatars, the comment box, the search
+  palette and the database's menus, pickers, cell editors, board and calendar now come from Cash
+  Gear's shared UI library, so they look and behave alike across Cash Gear's apps, in Arabic and
+  English, light and dark. A board's columns move by keyboard as well as by pointer, and the tree
+  takes Alt+Shift with the arrow keys to move a page.
+- **Clearer notices.** A change the server refuses for access now says what was refused (a new
+  section, a cover you cannot read, a move) and that it was undone.
+- **Fixed.** A file attached on one device read "This file is not on this device" on the others
+  and could not be opened there, since 0.2.0; it now shows its name and opens. The sync status no
+  longer says "Signed out" for a moment as the app starts.
+- **Faster server.** Each key typed costs the server about 40 % of the processor time it did in
+  0.7.0, and reaches the others on the page sooner.
+- **For whoever runs the server.** The update adds the mail settings and mail queue tables. Mail
+  for mentions uses the SMTP account already set (`Smtp__From`), at most `Mail__DailyCap` (1,500)
+  a day, with links built from `Api__PublicUrl` and `Web__AppUrl`; the worker now shares the
+  API's Data Protection key ring. `install.ps1` already gives both processes these settings
+  (`docs/OPERATIONS.md`).
+
 ## [0.7.0] - 2026-11-15
 
 Change Cash Gear ERP vendors from a page after reviewing every change, add charts and boards over
