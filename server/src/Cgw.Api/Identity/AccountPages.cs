@@ -154,7 +154,7 @@ public static class AccountPages
     }
 
     /// <param name="query">The page's parameters for the other language's link, when they are not the request's query (a page answering a POST).</param>
-    private static IResult Page(HttpContext http, string lang, string title, string body, IEnumerable<KeyValuePair<string, string>>? query = null)
+    internal static IResult Page(HttpContext http, string lang, string title, string body, IEnumerable<KeyValuePair<string, string>>? query = null)
     {
         var t = T(lang);
         var dir = lang == "ar" ? "rtl" : "ltr";

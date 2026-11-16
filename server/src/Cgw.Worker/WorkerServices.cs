@@ -1,3 +1,4 @@
+using Cgw.Core;
 using Cgw.Core.Data;
 using Cgw.Core.Sync;
 using Cgw.Worker.Jobs;
@@ -22,6 +23,8 @@ public static class WorkerServices
     public static IServiceCollection AddCgwWorker(this IServiceCollection services, IConfiguration configuration)
     {
         Yjs.Configure(configuration["Ydoc:Library"]);
+        // The API's key ring: the unsubscribe tokens in mails are read there.
+        services.AddCgwDataProtection(configuration);
         services.AddScoped<ChangeLog>();
         services.AddSingleton<DocStates>();
         services.AddSingleton<ICompactionFaults, NoFaults>();
@@ -44,6 +47,9 @@ public static class WorkerServices
         services.AddSingleton<IJob, ReconcileJob>();
         services.AddSingleton<IJob, RecomputeJob>();
         services.AddSingleton<IJob, TicketCleanupJob>();
+        // Phase 8: notification mail (queued per person, then sent on a loop of its own).
+        services.AddSingleton<IJob, NotificationMailJob>();
+        services.AddSingleton<IJob, MailSendJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

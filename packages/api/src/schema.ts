@@ -81,6 +81,22 @@ export interface paths {
     patch: operations['updateMe'];
     trace?: never;
   };
+  '/api/v1/account/notification-settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getNotificationSettings'];
+    put: operations['updateNotificationSettings'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/account/notifications': {
     parameters: {
       query?: never;
@@ -411,6 +427,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['acceptInvite'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/mail/unsubscribe': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['unsubscribeMail'];
     delete?: never;
     options?: never;
     head?: never;
@@ -1608,6 +1640,9 @@ export interface components {
       /** Format: int32 */
       unread: number | string;
     };
+    NotificationSettingsDto: {
+      email: string;
+    };
     OperationDto: {
       /** Format: int64 */
       baseVersion: null | number | string;
@@ -2004,6 +2039,9 @@ export interface components {
       /** Format: int32 */
       unread: number | string;
     };
+    UnsubscribeRequest: {
+      token: null | string;
+    };
     UserRefDto: {
       /** Format: uuid */
       id: string;
@@ -2311,6 +2349,50 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  getNotificationSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationSettingsDto'];
+        };
+      };
+    };
+  };
+  updateNotificationSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationSettingsDto'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationSettingsDto'];
+        };
       };
     };
   };
@@ -2880,6 +2962,28 @@ export interface operations {
         content: {
           'application/json': components['schemas']['WorkspaceDto'];
         };
+      };
+    };
+  };
+  unsubscribeMail: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UnsubscribeRequest'];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

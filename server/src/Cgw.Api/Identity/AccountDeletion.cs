@@ -108,6 +108,9 @@ public sealed class AccountDeletion(
         await db.UserLogins.Where(l => l.UserId == userId).ExecuteDeleteAsync(ct);
         await db.UserTokens.Where(t => t.UserId == userId).ExecuteDeleteAsync(ct);
         await db.UserRoles.Where(r => r.UserId == userId).ExecuteDeleteAsync(ct);
+        // Phase 8: the mail choice and any mail still queued for the account.
+        await db.MailSettings.Where(s => s.UserId == userId).ExecuteDeleteAsync(ct);
+        await db.MailOutbox.Where(m => m.UserId == userId).ExecuteDeleteAsync(ct);
         audit.Add(actor, "account.delete", targetType: "user", targetId: userId,
             detail: new { workspacesDeleted = memberships.Count(m => m.Others == 0), workspacesLeft = memberships.Count(m => m.Others > 0) });
         await db.SaveChangesAsync(ct);

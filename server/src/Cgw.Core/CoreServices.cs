@@ -1,6 +1,8 @@
 using Cgw.Core.Blob;
 using Cgw.Core.Data;
 using Cgw.Core.Mail;
+using Cgw.Core.Notifications;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +26,23 @@ public static class CoreServices
         services.AddSingleton<Mailer>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<Audit>();
+        // Phase 8: notification mail's settings, timing and unsubscribe tokens (both processes).
+        services.AddSingleton<MailSettingsOptions>();
+        services.AddSingleton<MailTokens>();
         return services;
+    }
+
+    /// <summary>
+    /// The Data Protection key ring both processes share (cookies and Identity tokens in the API; from
+    /// Phase 8 the unsubscribe tokens the worker writes into mails and the API reads): application
+    /// <c>cgw</c>, the keys in the database, encrypted with the machine's DPAPI when
+    /// <c>DataProtection__Dpapi</c> is <c>true</c>.
+    /// </summary>
+    public static IDataProtectionBuilder AddCgwDataProtection(this IServiceCollection services, IConfiguration configuration, bool persist = true)
+    {
+        var protection = services.AddDataProtection().SetApplicationName("cgw");
+        if (persist) protection.PersistKeysToDbContext<CgwDb>();
+        if (configuration["DataProtection:Dpapi"] == "true" && OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi(protectToLocalMachine: true);
+        return protection;
     }
 }

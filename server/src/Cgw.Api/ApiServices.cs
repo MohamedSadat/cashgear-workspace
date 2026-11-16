@@ -68,9 +68,7 @@ public static class ApiServices
         // Cookies and Identity tokens are protected with keys kept in the database, so every API
         // instance and every restart reads the same ones. On Windows hosts they are encrypted at rest
         // with DPAPI (DataProtection__Dpapi=true).
-        var protection = services.AddDataProtection().SetApplicationName("cgw");
-        if (!StartupTasks.GeneratingDocument) protection.PersistKeysToDbContext<CgwDb>();
-        if (configuration["DataProtection:Dpapi"] == "true" && OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi(protectToLocalMachine: true);
+        services.AddCgwDataProtection(configuration, persist: !StartupTasks.GeneratingDocument);
 
         services.AddIdentityCore<User>(o =>
             {
@@ -250,7 +248,9 @@ public static class ApiServices
         api.MapGet("/version", () => TypedResults.Ok(new VersionInfo(typeof(ApiServices).Assembly.GetName().Version?.ToString(3) ?? "0.0.0", "v1")))
             .WithName("getVersion").AllowAnonymous().RequireRateLimiting(RateLimits.Anonymous);
         api.MapAccount();
+        api.MapMail();
         app.MapAccountPages();
+        app.MapMailPages();
         app.MapConnect();
         api.MapCgwModules();
         app.MapCgwRealtime();

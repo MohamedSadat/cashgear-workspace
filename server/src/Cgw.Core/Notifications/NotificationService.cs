@@ -72,7 +72,9 @@ public sealed class NotificationService(CgwDb db, ChangeLog changes, TimeProvide
     private sealed record Row(Guid Id, long Seq, Guid WorkspaceId, Guid PageId);
 
     /// <summary>The person's memberships now: workspace and role.</summary>
-    private async Task<Dictionary<Guid, Member>> MembershipsAsync(Guid userId, CancellationToken ct) =>
+    private Task<Dictionary<Guid, Member>> MembershipsAsync(Guid userId, CancellationToken ct) => MembershipsAsync(db, userId, ct);
+
+    public static async Task<Dictionary<Guid, Member>> MembershipsAsync(CgwDb db, Guid userId, CancellationToken ct) =>
         (await db.WorkspaceMembers.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
             .Where(m => m.UserId == userId)
             .Join(db.Workspaces.Where(w => w.DeletedAt == null), m => m.WorkspaceId, w => w.Id, (m, _) => m)
@@ -80,7 +82,15 @@ public sealed class NotificationService(CgwDb db, ChangeLog changes, TimeProvide
         .ToDictionary(m => m.WorkspaceId, m => new Member(m.WorkspaceId, m.UserId, m.Role));
 
     /// <summary>Which of these (workspace, page) pairs the person can read now, a few queries a workspace.</summary>
-    private async Task<HashSet<(Guid Workspace, Guid Page)>> ReadableAsync(Dictionary<Guid, Member> memberships, IEnumerable<(Guid Workspace, Guid Page)> pages, CancellationToken ct)
+    private Task<HashSet<(Guid Workspace, Guid Page)>> ReadableAsync(Dictionary<Guid, Member> memberships, IEnumerable<(Guid Workspace, Guid Page)> pages, CancellationToken ct) =>
+        ReadableAsync(db, memberships, pages, ct);
+
+    /// <summary>
+    /// The inbox's rule, for the inbox and for mail (Phase 8): which of these (workspace, page) pairs
+    /// the person, by these memberships, can read now; a page they lost is never shown, counted or mailed.
+    /// </summary>
+    public static async Task<HashSet<(Guid Workspace, Guid Page)>> ReadableAsync(CgwDb db, Dictionary<Guid, Member> memberships, IEnumerable<(Guid Workspace, Guid Page)> pages,
+        CancellationToken ct)
     {
         var readable = new HashSet<(Guid, Guid)>();
         var previous = db.Scope.WorkspaceId;

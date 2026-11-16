@@ -6,13 +6,18 @@ using MimeKit;
 
 namespace Cgw.Core.Mail;
 
-public sealed record MailMessage(string To, string Subject, string Text, string Html);
+public sealed record MailMessage(string To, string Subject, string Text, string Html)
+{
+    /// <summary>Headers of the mail's own (Phase 8: <c>List-Unsubscribe</c>, <c>List-Unsubscribe-Post</c>).</summary>
+    public IReadOnlyList<KeyValuePair<string, string>> Headers { get; init; } = [];
+}
 
 /// <summary>
-/// Sign-up confirmation, password reset and invites (Q8). SMTP settings come from the environment
-/// (<c>Smtp__Host</c>, <c>Smtp__Port</c>, <c>Smtp__User</c>, <c>Smtp__Password</c>,
-/// <c>Smtp__From</c>); with <c>Smtp__PickupDirectory</c> set, mail is written there as .eml files
-/// instead (development and tests).
+/// Sign-up confirmation, password reset and invites (Q8), and from Phase 8 notification mail. SMTP
+/// settings come from the environment (<c>Smtp__Host</c>, <c>Smtp__Port</c>, <c>Smtp__User</c>,
+/// <c>Smtp__Password</c>, <c>Smtp__From</c>); with <c>Smtp__PickupDirectory</c> set, mail is
+/// written there as .eml files instead (development and tests). Nothing of a mail (its address,
+/// subject or body) is logged.
 /// </summary>
 public sealed class Mailer(IConfiguration configuration, ILogger<Mailer> logger)
 {
@@ -24,6 +29,7 @@ public sealed class Mailer(IConfiguration configuration, ILogger<Mailer> logger)
         mime.From.Add(MailboxAddress.Parse(smtp["From"] ?? "Cash Gear Workspace <no-reply@cashgearerp.com>"));
         mime.To.Add(MailboxAddress.Parse(message.To));
         mime.Subject = message.Subject;
+        foreach (var (name, value) in message.Headers) mime.Headers.Add(name, value);
         mime.Body = new BodyBuilder { TextBody = message.Text, HtmlBody = message.Html }.ToMessageBody();
 
         var pickup = smtp["PickupDirectory"];
@@ -37,7 +43,7 @@ public sealed class Mailer(IConfiguration configuration, ILogger<Mailer> logger)
             var partial = file + ".partial";
             await mime.WriteToAsync(partial, ct);
             File.Move(partial, file);
-            logger.LogInformation("Mail to the pickup folder: {Subject}", message.Subject);
+            logger.LogInformation("Mail written to the pickup folder");
             return;
         }
         var host = smtp["Host"];

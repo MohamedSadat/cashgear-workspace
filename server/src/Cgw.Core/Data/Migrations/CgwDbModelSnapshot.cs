@@ -716,6 +716,91 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("LinkPreviews");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.MailOutbox", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(200)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextAttemptAt")
+                        .HasDatabaseName("IX_MailOutbox_Waiting")
+                        .HasFilter("[Outcome] IS NULL");
+
+                    b.HasIndex("SentAt")
+                        .HasFilter("[SentAt] IS NOT NULL");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("MailOutbox", (string)null);
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.MailSettings", b =>
+                {
+                    b.Property<byte[]>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("LastMailAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTimeOffset?>("OnSince")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("Stamp")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("MailSettings");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.Notification", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -744,6 +829,9 @@ namespace Cgw.Core.Data.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<DateTimeOffset?>("EmailedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
                     b.Property<string>("Excerpt")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -754,6 +842,9 @@ namespace Cgw.Core.Data.Migrations
                         .HasMaxLength(20)
                         .IsUnicode(false)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<byte[]>("MailId")
+                        .HasColumnType("binary(16)");
 
                     b.Property<byte[]>("PageId")
                         .IsRequired()
@@ -780,6 +871,15 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("binary(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_Notifications_MailDue")
+                        .HasFilter("[ReadAt] IS NULL AND [MailId] IS NULL AND [EmailedAt] IS NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("CreatedAt"), new[] { "UserId", "Kind" });
+
+                    b.HasIndex("MailId")
+                        .HasFilter("[MailId] IS NOT NULL");
 
                     b.HasIndex("UserId", "DedupeKey")
                         .IsUnique();

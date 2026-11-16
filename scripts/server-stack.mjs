@@ -203,6 +203,9 @@ const env = {
         RateLimits__realtime: '10000',
         // Phase 7: the AI specs and bench/phase7.mjs complete many times a minute.
         RateLimits__ai: '10000',
+        // Phase 8: mentions and replies are mailed once unread for 5 s, not 15 minutes, and a
+        // person at most every 5 s (tests/e2e/mail.spec.ts reads them from the pickup folder).
+        Mail__NotificationDelaySeconds: '5',
         // Phase 6: the hub's relay times for bench/phase6.mjs (GET /api/v1/realtime/metrics;
         // never mapped in Production).
         Realtime__Metrics: 'true',

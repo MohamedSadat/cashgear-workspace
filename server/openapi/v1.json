@@ -26,6 +26,29 @@
         }
       }
     },
+    "/api/v1/mail/unsubscribe": {
+      "post": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "unsubscribeMail",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnsubscribeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/v1/invites/accept": {
       "post": {
         "tags": [
@@ -395,6 +418,54 @@
         "responses": {
           "204": {
             "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/account/notification-settings": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "getNotificationSettings",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "updateNotificationSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSettingsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsDto"
+                }
+              }
+            }
           }
         }
       }
@@ -4913,6 +4984,17 @@
           }
         }
       },
+      "NotificationSettingsDto": {
+        "required": [
+          "email"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
       "OperationDto": {
         "required": [
           "opId",
@@ -6565,6 +6647,20 @@
           }
         }
       },
+      "UnsubscribeRequest": {
+        "required": [
+          "token"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "UserRefDto": {
         "required": [
           "id",
@@ -7297,6 +7393,9 @@
       "name": "Cgw.Api"
     },
     {
+      "name": "Account"
+    },
+    {
       "name": "Workspaces"
     },
     {
@@ -7304,9 +7403,6 @@
     },
     {
       "name": "AI"
-    },
-    {
-      "name": "Account"
     },
     {
       "name": "Documents"

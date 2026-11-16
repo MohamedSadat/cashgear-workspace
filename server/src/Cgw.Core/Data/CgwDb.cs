@@ -64,6 +64,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
+    public DbSet<MailSettings> MailSettings => Set<MailSettings>();
+    public DbSet<MailOutbox> MailOutbox => Set<MailOutbox>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -412,6 +414,11 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.BlockId).HasMaxLength(12).IsFixedLength().IsUnicode(false);
             e.Property(x => x.Excerpt).HasMaxLength(200);
             e.Property(x => x.DedupeKey).HasMaxLength(200).IsUnicode(false);
+            // Phase 8: the mail job's queue, unread entries not yet given to a mail.
+            e.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_Notifications_MailDue")
+                .HasFilter("[ReadAt] IS NULL AND [MailId] IS NULL AND [EmailedAt] IS NULL")
+                .IncludeProperties(x => new { x.UserId, x.Kind });
+            e.HasIndex(x => x.MailId).HasFilter("[MailId] IS NOT NULL");
         });
 
         // Phase 7: AI settings and metering.
@@ -430,6 +437,26 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Action).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.Model).HasMaxLength(64).IsUnicode(false);
             e.Property(x => x.Outcome).HasMaxLength(20).IsUnicode(false);
+        });
+
+        // Phase 8: mail choices per account and the mail queue (not tenant-owned: a person's, across workspaces).
+        b.Entity<MailSettings>(e =>
+        {
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.Mode).HasMaxLength(10).IsUnicode(false);
+        });
+        b.Entity<MailOutbox>(e =>
+        {
+            e.ToTable("MailOutbox");
+            e.HasKey(x => x.Id);
+            // What waits, by when it may go next.
+            e.HasIndex(x => x.NextAttemptAt).HasDatabaseName("IX_MailOutbox_Waiting").HasFilter("[Outcome] IS NULL");
+            // The daily cap counts what went in the last day.
+            e.HasIndex(x => x.SentAt).HasFilter("[SentAt] IS NOT NULL");
+            e.HasIndex(x => x.UserId);
+            e.Property(x => x.Kind).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.Outcome).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.LastError).HasMaxLength(200).IsUnicode(false);
         });
 
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).

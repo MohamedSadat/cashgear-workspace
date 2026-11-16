@@ -148,6 +148,8 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Ai__AnthropicBaseUrl` | Development and tests only: where the provider is (the mock in `tests/mocks/ai`). Ignored in Production, where a workspace's key goes only to Anthropic's API. For AI, the API host must reach `https://api.anthropic.com` on 443 |
 | `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
 | `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
+| `Mail__NotificationDelaySeconds` | Phase 8: a mention, a mention in a comment or a reply is mailed once it has been unread this long, and a person gets at most one such mail in this long (900, 15 minutes; a daily summary once a day). The e2e stack sets 5. Leave unset in production |
+| `Mail__DailyCap` | Phase 8: notification mails sent in any 24 hours, at most (1,500); what is over waits in the queue for room. Keep it under the SMTP account's own limit (Google Workspace: 2,000 a day, and the account mails count there too); a personal Gmail account allows 500 |
 | `Logging__Format` | `json` for structured logs with the correlation id in every line |
 | `Logging__EventLog__Enabled` | `true` (`install.ps1` sets it and registers the sources): under IIS and as a service the console goes nowhere, so warnings and errors also go to the Application event log, as "Cash Gear Workspace API" and "Cash Gear Workspace worker", and each account mail sent or not sent, by kind only (never its address or link) |
 | `Logging__LogLevel__Microsoft.AspNetCore` | `Warning` (`install.ps1` sets it), so ASP.NET Core's request lines, which hold the query string, are not logged |
@@ -198,6 +200,20 @@ reconnect and catch up. The worker's validation loop runs every 25 ms when idle 
 each time), and gains `ticketCleanup` (every 10 minutes). The web app's CSP gains the API's
 `wss:` origin, from the same `VITE_CGW_API`.
 
+Version 0.8.0's migration (`Phase8Mail`) adds `MailSettings` and `MailOutbox` and two columns
+with their filtered indexes to `Notifications` (`EmailedAt`, `MailId`), in a transaction like the
+others. The worker gains `notificationMail` (on the shared loop, every 30 s: a mail queued for each
+person with mentions or replies unread past the delay) and `mailSend` (on a loop of its own, every
+10 s: each queued mail made and sent, under the daily cap, retried after 1, 5 and 15 minutes, 1 and
+4 hours, then given up). Notification mail goes out through the same `Smtp__*` account as the
+account mails, from `Smtp__From`, and carries `List-Unsubscribe` with `List-Unsubscribe-Post`
+(one click in the mail client turns it off, RFC 8058). The worker now reads the Data Protection key
+ring in `DataProtectionKeys` as the API does (it writes the unsubscribe tokens the API reads): it
+already has the database's rights, and with `DataProtection__Dpapi=true` the keys are encrypted
+for the machine, which both identities on the host can read. The unsubscribe link,
+`https://workspace-api.cashgearerp.com/mail/unsubscribe?token=…`, carries its token in the query
+string, which the site's IIS log already leaves out (above).
+
 The ERP's side (Track E, in its repositories, deployed by you): run
 `CashGear.IdentitySystem/DbScripts/Create_WorkspaceConnect.sql` on CGService before deploying a
 UnifiedAPI built with Track E (Sheet's sessions read its columns too), deploy UnifiedAPI, then add
@@ -234,6 +250,7 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 | Storage used | `Workspaces.StorageUsedBytes` (Q10: recorded, not enforced) | — |
 | Retention | `JobStates` for `feedRetention` and `trashRetention` (every 10 minutes); `AuditLog` `page.purgedByRetention` | The change feed keeps 90 days and the trash 60 (DECISIONS.md, Phase 3); a device away longer than 90 days takes the whole tree when it returns (`410 feed.expired`) |
 | Database results | `JobStates` for `recompute`; `Databases.ComputePending` rows waiting | Formula and rollup results of big databases lag while it is behind; filters on them use the last results |
+| Notification mail | `JobStates` for `notificationMail` and `mailSend`; `MailOutbox` rows with `Outcome` null (waiting) and their `LastError`; the worker's event log: "A notification mail was not sent (attempt N of 6)" with the failure's type and SMTP status only, "The daily mail cap (N) is reached" | Failures: the SMTP account (as for account mail). The cap reached day after day: raise `Mail__DailyCap` if the account allows it, or ask people to choose the daily summary |
 | Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its

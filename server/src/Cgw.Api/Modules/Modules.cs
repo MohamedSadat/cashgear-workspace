@@ -47,6 +47,7 @@ public static class Modules
         services.AddScoped<PageGate>();
         services.AddScoped<CommentService>();
         services.AddScoped<NotificationService>();
+        services.AddScoped<MailSettingsService>();
         services.AddScoped<ErpCommitService>();
         // Phase 7: AI. One client connection pool for the provider, renewed every few minutes.
         services.AddSingleton(sp => AiOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));

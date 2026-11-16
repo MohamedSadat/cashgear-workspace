@@ -704,6 +704,72 @@ public sealed class Notification : ITenantOwned
     public string DedupeKey { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ReadAt { get; set; }
+    /// <summary>Phase 8: the mail that told the person of it, once sent.</summary>
+    public DateTimeOffset? EmailedAt { get; set; }
+    /// <summary>Phase 8: the queued mail (<see cref="MailOutbox"/>) that is to carry it; set once, so it is never queued twice.</summary>
+    public Guid? MailId { get; set; }
+}
+
+public static class MailModes
+{
+    /// <summary>Mentions and replies still unread after the delay, at most one mail in each delay (the default).</summary>
+    public const string On = "on";
+    /// <summary>The same, at most one mail a day.</summary>
+    public const string Digest = "digest";
+    public const string Off = "off";
+
+    public static bool Known(string? mode) => mode is On or Digest or Off;
+}
+
+/// <summary>
+/// A person's mail choices (Phase 8, M8.5), one row an account, made on its first change or its
+/// first mail; no row reads as <see cref="MailModes.On"/>. <see cref="Stamp"/> is in every
+/// unsubscribe token: a new one voids the tokens of every mail sent before it.
+/// </summary>
+public sealed class MailSettings
+{
+    public Guid UserId { get; set; }
+    public string Mode { get; set; } = MailModes.On;
+    public Guid Stamp { get; set; }
+    /// <summary>When mail was last turned on again after being off: nothing made before it is mailed.</summary>
+    public DateTimeOffset? OnSince { get; set; }
+    /// <summary>When the last mail for the person was queued: the next waits a delay (or a day for the digest).</summary>
+    public DateTimeOffset? LastMailAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public static class MailOutcomes
+{
+    public const string Sent = "sent";
+    /// <summary>Nothing left to say when its turn came: read in the app, or no longer readable.</summary>
+    public const string Skipped = "skipped";
+    /// <summary>Mail was turned off, or the account deleted, before it went.</summary>
+    public const string Off = "off";
+    /// <summary>Its retries were spent.</summary>
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// The mail queue (Phase 8): a mail to one person, made when it is sent from the notifications that
+/// name it (<see cref="Notification.MailId"/>), so access and whether each is still unread are
+/// checked again then; nothing of its content, and not the address, is stored. Sent with retries
+/// under a daily cap; kept a week after it ends.
+/// </summary>
+public sealed class MailOutbox
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    /// <summary><see cref="MailModes.On"/> (mentions and replies) or <see cref="MailModes.Digest"/>.</summary>
+    public string Kind { get; set; } = MailModes.On;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset NextAttemptAt { get; set; }
+    public int Attempts { get; set; }
+    public DateTimeOffset? SentAt { get; set; }
+    /// <summary>Null while it waits; then one of <see cref="MailOutcomes"/>.</summary>
+    public string? Outcome { get; set; }
+    public DateTimeOffset? EndedAt { get; set; }
+    /// <summary>The last failure's kind (an exception's type, an SMTP status), never its message.</summary>
+    public string? LastError { get; set; }
 }
 
 /// <summary>Each worker job's last run, for its lag and the health check.</summary>
