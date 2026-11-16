@@ -1,18 +1,26 @@
-// The calendar view: a month grid of the rows by the view's `calendarBy` date property (or a
-// prompt to choose one), spans drawn across the days they cover, "+N more" where a day is full,
-// previous, next and today, the week starting on the locale's first day (Saturday in Arabic,
-// Sunday in English unless `Intl` says otherwise), and the rows with no date in a side list. The
-// grid is a CSS grid, so RTL mirrors it.
+// The calendar view: a month of the rows by the view's `calendarBy` date property (or a prompt to
+// choose one), drawn by the library's `CgMonthCalendar`: spans across the days they cover (a
+// zero-length row and an end on or before the start take one day; ends are inclusive), "+N more"
+// where a day is full, previous, next and today, the week starting on the locale's first day
+// (Saturday in Arabic, Sunday in English unless `Intl` says otherwise); and the rows with no date
+// in a side list of the view's own. The grid mirrors in RTL.
 //
-// A row moves to another day by dragging it (it keeps its time and its length: one `row.update`),
-// or with Alt and the arrow keys on it; a row with no date is dragged onto a day or placed on the
-// selected one. A day's "+" (or Enter on it) makes a row there. The days are one grid stop: the
-// arrows, Home, End, PageUp and PageDown move between them.
+// A row moves to another day by dragging it, or with Alt and the arrow keys on it (it keeps its
+// time and its length: one `row.update`). A row with no date is dragged from the list onto a day
+// (the calendar finds and marks the day under the pointer: `dayAt`, `markDropDay`) or placed on
+// the selected one. A day's "+" (or Enter, or a double click, or the toolbar's New) makes a row
+// there, its title typed before the row exists. The days are one grid stop: the arrows, Home,
+// End, PageUp and PageDown move between them.
 import {
   CgLiveAnnouncer,
+  CgMonthCalendar,
   cgStartsDrag,
   cgTrackDrag,
+  type CgDayOfWeek,
   type CgLiveAnnouncerHandle,
+  type CgMonthCalendarHandle,
+  type CgMonthCalendarItem,
+  type CgMonthCalendarLabels,
 } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
@@ -34,7 +42,6 @@ import {
   LOCAL_ROW_LIMIT,
   TITLE_PROPERTY,
   type DatabaseRecord,
-  type DateValue,
   type PropertyDef,
   type ViewRecord,
 } from '../../core';
@@ -46,38 +53,33 @@ import { newPropertyDef } from '../../properties/defs';
 import { layoutOf, sameRange, visibleRange, type Range } from '../../table/windowing';
 import { draftRow } from '../board/shared';
 import type { ViewProps } from '../types';
-import { dateOfDay, dayNumber, monthOf, shiftDays, weekStartOf, type Month } from './dates';
 import {
-  calendarItems,
-  dayMove,
-  hiddenPerDay,
-  itemsOn,
-  lanesFor,
-  layoutWeeks,
-  monthGrid,
-  type CalendarItem,
-  type Segment,
-} from './layout';
+  dateOfDay,
+  dayNumber,
+  daysInMonth,
+  firstOfMonth,
+  monthOf,
+  shiftDays,
+  weekStartOf,
+  type Month,
+} from './dates';
+import { calendarItems, type CalendarItem } from './layout';
 import '../board/card.css';
 import './calendar.css';
 
-const DAY_HEAD = 26;
-const LANE = 22;
-const MORE = 20;
 const UNDATED_ITEM = 34;
-
-const formats = new Map<string, Intl.DateTimeFormat>();
-function format(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = `${locale}|${JSON.stringify(options)}`;
-  let f = formats.get(key);
-  if (!f) formats.set(key, (f = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', ...options })));
-  return f;
-}
-const dayDate = (day: number) => new Date(day * 86_400_000);
-
-type Popup =
-  | { kind: 'new'; day: number; anchor: HTMLElement }
-  | { kind: 'more'; day: number; anchor: HTMLElement; items: CalendarItem[] };
+/** `weekStartOf`'s 1 (Monday) to 7 (Sunday), as the calendar names them. */
+const WEEKDAYS: readonly CgDayOfWeek[] = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+];
+const pad = (n: number) => String(n).padStart(2, '0');
+const monthText = (month: Month) => `${String(month.year).padStart(4, '0')}-${pad(month.month)}`;
 
 export function CalendarView({
   database,
@@ -100,13 +102,10 @@ export function CalendarView({
 
   const [month, setMonth] = useState<Month>(() => monthOf(ctx.today));
   const [activeDay, setActiveDay] = useState(today);
-  const [popup, setPopup] = useState<Popup | null>(null);
+  const [popup, setPopup] = useState<{ day: number; anchor: HTMLElement } | null>(null);
   const [undatedOpen, setUndatedOpen] = useState(false);
   const live = useRef<CgLiveAnnouncerHandle>(null);
-  const root = useRef<HTMLDivElement>(null);
-  const pendingFocus = useRef<
-    { kind: 'day'; day: number } | { kind: 'item'; rowId: string } | null
-  >(null);
+  const calendar = useRef<CgMonthCalendarHandle>(null);
 
   // Every row is needed to place them: fetch the rest while some remain, up to the local limit.
   const loaded = snapshot.rows.length;
@@ -122,57 +121,36 @@ export function CalendarView({
         : { items: [], undated: [] },
     [snapshot.rows, def, usable, ctx.offsetMinutes],
   );
-  const grid = useMemo(() => monthGrid(month, weekStart), [month, weekStart]);
-  const weeks = useMemo(() => layoutWeeks(items, grid), [items, grid]);
-  const weekHeight = embedded ? 104 : 124;
-  const lanes = lanesFor(weekHeight, DAY_HEAD, LANE, MORE);
-
-  // The selected day stays in the month shown: moving out of it turns the page.
-  const goToDay = (day: number, focus = true) => {
-    setActiveDay(day);
-    const target = monthOf(dateOfDay(day));
-    if (target.year !== month.year || target.month !== month.month) setMonth(target);
-    if (focus) pendingFocus.current = { kind: 'day', day };
-  };
-  const turn = (n: number) => {
-    const total = month.year * 12 + month.month - 1 + n;
-    const next = { year: Math.floor(total / 12), month: (total % 12) + 1 };
-    setMonth(next);
-    const first = dayNumber(
-      `${String(next.year).padStart(4, '0')}-${String(next.month).padStart(2, '0')}-01`,
-    );
-    setActiveDay(first);
-  };
-  const goToday = () => goToDay(today, false);
-
-  useLayoutEffect(() => {
-    const pending = pendingFocus.current;
-    if (!pending || !root.current) return;
-    const el =
-      pending.kind === 'day'
-        ? root.current.querySelector<HTMLElement>(`[data-day="${pending.day}"]`)
-        : root.current.querySelector<HTMLElement>(
-            `[data-cal-item][data-row-id="${pending.rowId}"]`,
-          );
-    if (el) {
-      pendingFocus.current = null;
-      el.focus({ preventScroll: true });
-    }
-  });
+  // The rows as the calendar takes them: their days on the person's own calendar (a date-time
+  // with its time there), so the grid places them as the cells do.
+  const entries = useMemo<CgMonthCalendarItem<CalendarItem>[]>(
+    () =>
+      items.map((item) => ({
+        key: item.row.id,
+        title: item.row.title,
+        start: item.time ? `${dateOfDay(item.start)}T${item.time}` : dateOfDay(item.start),
+        end: item.end > item.start ? dateOfDay(item.end) : null,
+        movable: writable,
+        data: item,
+      })),
+    [items, writable],
+  );
+  const first = dayNumber(firstOfMonth(month));
+  const last = first + daysInMonth(month.year, month.month) - 1;
 
   // ---- Changes --------------------------------------------------------------------------------
-  /** Moves a dated row by whole days, or puts a row with no date on a day: one `row.update`. */
-  const moveRow = (row: RowRecord, value: DateValue | null, daysOrDay: number) => {
+  /** Puts a row with no date on a day: one `row.update`, said aloud. */
+  const placeRow = (row: RowRecord, day: number) => {
     if (!def || !writable) {
       live.current?.announce(t('calendar.fixedDate'));
       return;
     }
-    const next = value ? shiftDays(value, daysOrDay) : { start: dateOfDay(daysOrDay) };
-    void actions.setValue(row, def, next);
+    const start = dateOfDay(day);
+    void actions.setValue(row, def, { start });
     live.current?.announce(
       t('calendar.moved', {
         title: row.title || t('untitled'),
-        date: formatDatePart(next.start, locale),
+        date: formatDatePart(start, locale),
       }),
     );
   };
@@ -189,194 +167,81 @@ export function CalendarView({
       void actions.createRow({ view });
       return;
     }
-    const day = activeDay >= grid.first && activeDay <= grid.last ? activeDay : today;
-    goToDay(day, false);
-    requestAnimationFrame(() => {
-      const anchor = root.current?.querySelector<HTMLElement>(`[data-day="${day}"]`);
-      if (anchor) setPopup({ kind: 'new', day, anchor });
-    });
+    const day = activeDay >= first && activeDay <= last ? activeDay : today;
+    calendar.current?.startCreate(dateOfDay(day));
     // Only a new press of the toolbar's New opens it: the other values are read as they are now.
   }, [newRowRequest]);
 
-  // ---- Pointer drag: a row onto another day -------------------------------------------------------
+  // ---- A row with no date dragged onto a day --------------------------------------------------------
   const stopDrag = useRef<(() => void) | null>(null);
   useEffect(() => () => stopDrag.current?.(), []);
-  const marked = useRef<HTMLElement[]>([]);
-  const mark = (cells: HTMLElement[]) => {
-    for (const el of marked.current) if (!cells.includes(el)) el.removeAttribute('data-drop');
-    for (const el of cells) if (!marked.current.includes(el)) el.setAttribute('data-drop', '');
-    marked.current = cells;
-  };
-
-  const rowsById = useMemo(() => new Map(snapshot.rows.map((r) => [r.id, r])), [snapshot.rows]);
-  const itemsById = useMemo(() => new Map(items.map((i) => [i.row.id, i])), [items]);
-
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+  const rowsById = useMemo(() => new Map(undated.map((r) => [r.id, r])), [undated]);
+  const onUndatedPointerDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || !writable) return;
     const el = (event.target as HTMLElement).closest<HTMLElement>('[data-cal-drag]');
     if (!el || !cgStartsDrag(event.target, el)) return;
-    const rowId = el.dataset.rowId!;
-    const row = rowsById.get(rowId);
+    const row = rowsById.get(el.dataset.rowId ?? '');
     if (!row) return;
-    const item = itemsById.get(rowId) ?? null;
-    let cells: { day: number; el: HTMLElement; rect: DOMRect }[] = [];
-    let grab: number | null = null;
-    let target: number | null = null;
-    const scroller = root.current?.querySelector<HTMLElement>('.cgw-cal-scroll') ?? null;
-    let start = { left: 0, top: 0 };
-    const dayAt = (x: number, y: number) => {
-      const dx = (scroller?.scrollLeft ?? 0) - start.left;
-      const dy = (scroller?.scrollTop ?? 0) - start.top;
-      return cells.find(
-        (c) =>
-          x >= c.rect.left - dx &&
-          x < c.rect.right - dx &&
-          y >= c.rect.top - dy &&
-          y < c.rect.bottom - dy,
-      );
-    };
-    const press = { x: event.clientX, y: event.clientY };
+    let target: string | null = null;
     stopDrag.current?.();
     stopDrag.current = cgTrackDrag(event.nativeEvent, el, {
-      scroller,
       ghostClassName: 'cgw-drag-ghost',
-      onStart() {
-        start = { left: scroller?.scrollLeft ?? 0, top: scroller?.scrollTop ?? 0 };
-        cells = [...(root.current?.querySelectorAll<HTMLElement>('[data-day]') ?? [])].map((c) => ({
-          day: Number(c.dataset.day),
-          el: c,
-          rect: c.getBoundingClientRect(),
-        }));
-        grab = dayAt(press.x, press.y)?.day ?? item?.start ?? null;
-      },
       onMove(x, y) {
-        const cell = dayAt(x, y);
-        target = cell?.day ?? null;
-        if (target === null) return mark([]);
-        const from = item ? target - ((grab ?? item.start) - item.start) : target;
-        const length = item ? item.end - item.start : 0;
-        mark(cells.filter((c) => c.day >= from && c.day <= from + length).map((c) => c.el));
+        const day = calendar.current?.dayAt(x, y) ?? null;
+        if (day === target) return;
+        target = day;
+        calendar.current?.markDropDay(day);
       },
-      onDrop() {
-        mark([]);
+      onDrop(x, y) {
+        calendar.current?.markDropDay(null);
         stopDrag.current = null;
-        if (target === null) return;
-        if (item) {
-          const days = target - (grab ?? item.start);
-          if (days) moveRow(row, item.value, days);
-        } else moveRow(row, null, target);
+        // Where the pointer was let go, not where the last frame saw it.
+        const day = calendar.current?.dayAt(x, y) ?? target;
+        if (day) placeRow(row, dayNumber(day));
       },
       onCancel() {
-        mark([]);
+        calendar.current?.markDropDay(null);
         stopDrag.current = null;
       },
     });
   };
 
-  // ---- Keyboard ------------------------------------------------------------------------------------
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    const dirRtl = getComputedStyle(target).direction === 'rtl';
-    if (target.matches('[data-cal-item]')) {
-      const rowId = target.dataset.rowId ?? '';
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        host.openRow(rowId);
-        return;
-      }
-      const item = itemsById.get(rowId);
-      if (item && event.altKey && writable) {
-        const step =
-          event.key === 'ArrowLeft'
-            ? dirRtl
-              ? 1
-              : -1
-            : event.key === 'ArrowRight'
-              ? dirRtl
-                ? -1
-                : 1
-              : event.key === 'ArrowUp'
-                ? -7
-                : event.key === 'ArrowDown'
-                  ? 7
-                  : 0;
-        if (!step) return;
-        event.preventDefault();
-        moveRow(item.row, item.value, step);
-        pendingFocus.current = { kind: 'item', rowId: item.row.id };
-        const target = monthOf(dateOfDay(item.start + step));
-        if (target.year !== month.year || target.month !== month.month) setMonth(target);
-        setActiveDay(item.start + step);
-      }
-      return;
-    }
-    if (!target.matches('[data-day]')) return;
-    const day = Number(target.dataset.day);
-    if (event.key === 'Enter' && writable) {
-      event.preventDefault();
-      setPopup({ kind: 'new', day, anchor: target });
-      return;
-    }
-    const next = dayMove(day, event.key, dirRtl, weekStart, event.shiftKey);
-    if (next === null) return;
-    event.preventDefault();
-    goToDay(next);
-  };
-
-  const onClick = (event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    const item = target.closest<HTMLElement>('[data-cal-item]');
-    if (item?.dataset.rowId) {
-      host.openRow(item.dataset.rowId);
-      return;
-    }
-    const day = target.closest<HTMLElement>('[data-day]');
-    if (day && !target.closest('button')) setActiveDay(Number(day.dataset.day));
-  };
-  const onDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    const day = target.closest<HTMLElement>('[data-day]');
-    if (day && writable && !target.closest('button, [data-cal-item]'))
-      setPopup({ kind: 'new', day: Number(day.dataset.day), anchor: day });
-  };
-
   // ---- Drawing -------------------------------------------------------------------------------------
+  const name = host.pageTitle(database.id) || t('untitledDatabase');
+  const labels = useMemo<CgMonthCalendarLabels<CalendarItem>>(
+    () => ({
+      grid: t('calendar.label', { name }),
+      previousMonth: t('calendar.previous'),
+      nextMonth: t('calendar.next'),
+      today: t('calendar.today'),
+      more: (count) => t('calendar.more', { count }),
+      moreLabel: (count, date) => t('calendar.moreLabel', { count, date }),
+      dayItems: (date) => t('calendar.dayItems', { date }),
+      create: (date) => t('calendar.newOn', { date }),
+      moved: (item, date) => t('calendar.moved', { title: item.title || t('untitled'), date }),
+      item: (_item, info) =>
+        info.end
+          ? t('calendar.span', { title: info.title, start: info.start, end: info.end })
+          : info.time
+            ? t('calendar.timed', { time: info.time, title: info.title })
+            : info.title,
+      moveHint: t('calendar.moveHint'),
+      // No `weekItems`: the calendar would make it the week's cell's name (`aria-label`), and that
+      // cell shows its rows' titles, which a name must hold (Axe, label-content-name-mismatch).
+      // Unnamed, the cell is named by the rows it holds, as the view's own grid was.
+      untitled: t('untitled'),
+    }),
+    [t, name],
+  );
+
   if (!usable || !def) return <CalendarSetup database={database} view={view} env={env} />;
 
-  const name = host.pageTitle(database.id) || t('untitledDatabase');
-  const monthName = format(locale, { month: 'long', year: 'numeric' }).format(dayDate(grid.first));
-  const weekdays = Array.from({ length: 7 }, (_, i) => grid.start + i);
   const capped = !snapshot.complete && loaded >= LOCAL_ROW_LIMIT;
   const fetching = !snapshot.complete && !capped && !snapshot.error;
-  const dateLabel = (day: number) => format(locale, { dateStyle: 'full' }).format(dayDate(day));
 
   return (
-    <div ref={root} className={`cgw-cal${embedded ? ' is-embedded' : ''}`}>
+    <div className={`cgw-cal${embedded ? ' is-embedded' : ''}`}>
       <div className="cgw-cal-head">
-        <h3 className="cgw-cal-month" id={`${idPrefix}-month`}>
-          {monthName}
-        </h3>
-        <button
-          type="button"
-          className="cgw-icon-button cgw-cal-turn"
-          aria-label={t('calendar.previous')}
-          title={t('calendar.previous')}
-          onClick={() => turn(-1)}
-        >
-          <span aria-hidden="true">‹</span>
-        </button>
-        <button type="button" className="cgw-text-button" onClick={goToday}>
-          {t('calendar.today')}
-        </button>
-        <button
-          type="button"
-          className="cgw-icon-button cgw-cal-turn"
-          aria-label={t('calendar.next')}
-          title={t('calendar.next')}
-          onClick={() => turn(1)}
-        >
-          <span aria-hidden="true">›</span>
-        </button>
         <span className="cgw-cal-status" role="status">
           {fetching
             ? t('calendar.loadingAll', { count: loaded })
@@ -395,52 +260,36 @@ export function CalendarView({
           {t('calendar.noDate', { count: undated.length })}
         </button>
       </div>
-      <div
-        className="cgw-cal-main"
-        onPointerDown={onPointerDown}
-        onKeyDown={onKeyDown}
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
-      >
-        <div className="cgw-cal-scroll">
-          <div
-            className="cgw-cal-grid"
-            role="grid"
-            aria-label={t('calendar.label', { name })}
-            aria-describedby={`${idPrefix}-month`}
-            aria-readonly={!writable || undefined}
-          >
-            <div className="cgw-cal-weekdays" role="row">
-              {weekdays.map((day) => (
-                <div
-                  key={day}
-                  role="columnheader"
-                  className="cgw-cal-weekday"
-                  aria-label={format(locale, { weekday: 'long' }).format(dayDate(day))}
-                >
-                  {format(locale, { weekday: 'short' }).format(dayDate(day))}
-                </div>
-              ))}
-            </div>
-            {weeks.map((pieces, w) => (
-              <Week
-                key={grid.start + w * 7}
-                start={grid.start + w * 7}
-                pieces={pieces}
-                lanes={lanes}
-                height={weekHeight}
-                month={grid}
-                today={today}
-                activeDay={activeDay}
-                writable={writable}
-                env={env}
-                dateLabel={dateLabel}
-                onNew={(day, anchor) => setPopup({ kind: 'new', day, anchor })}
-                onMore={(day, anchor, list) => setPopup({ kind: 'more', day, anchor, items: list })}
-              />
-            ))}
-          </div>
-        </div>
+      <div className="cgw-cal-main">
+        <CgMonthCalendar<CalendarItem>
+          className="cgw-cal-month-view"
+          actionsRef={calendar}
+          items={entries}
+          labels={labels}
+          locale={locale}
+          firstDayOfWeek={WEEKDAYS[weekStart - 1]}
+          today={ctx.today}
+          month={monthText(month)}
+          onMonthChange={(next) => setMonth(monthOf(`${next}-01`))}
+          selectedDay={dateOfDay(activeDay)}
+          onSelectedDayChange={(date) => setActiveDay(dayNumber(date))}
+          maxItemRows={embedded ? 2 : 3}
+          aria-readonly={!writable || undefined}
+          onItemOpen={(item) => host.openRow(item.data!.row.id)}
+          onCreate={
+            writable
+              ? (date, details) => setPopup({ day: dayNumber(date), anchor: details.anchor })
+              : undefined
+          }
+          onItemMove={
+            writable
+              ? (item, details) => {
+                  const { row, value } = item.data!;
+                  void actions.setValue(row, def, shiftDays(value, details.days));
+                }
+              : undefined
+          }
+        />
         {undatedOpen ? (
           <Undated
             id={`${idPrefix}-undated`}
@@ -448,12 +297,14 @@ export function CalendarView({
             env={env}
             writable={writable}
             activeDay={activeDay}
-            onPlace={(row) => moveRow(row, null, activeDay)}
+            onPointerDown={onUndatedPointerDown}
+            onOpen={(row) => host.openRow(row.id)}
+            onPlace={(row) => placeRow(row, activeDay)}
           />
         ) : null}
       </div>
       <CgLiveAnnouncer ref={live} />
-      {popup?.kind === 'new' ? (
+      {popup ? (
         <CellFlyout
           anchor={popup.anchor}
           label={t('calendar.newOn', { date: formatDatePart(dateOfDay(popup.day), locale) })}
@@ -467,187 +318,13 @@ export function CalendarView({
               env={env}
               onCommit={(title) => createOn(popup.day, title)}
               onDone={() => {
-                pendingFocus.current = { kind: 'day', day: popup.day };
+                calendar.current?.getDayElement(dateOfDay(popup.day))?.focus();
                 setPopup(null);
               }}
             />
           </div>
         </CellFlyout>
       ) : null}
-      {popup?.kind === 'more' ? (
-        <CellFlyout
-          anchor={popup.anchor}
-          label={t('calendar.dayItems', { date: formatDatePart(dateOfDay(popup.day), locale) })}
-          width={260}
-          onClose={() => setPopup(null)}
-        >
-          <ul
-            className="cgw-cal-more-list"
-            aria-label={t('calendar.dayItems', {
-              date: formatDatePart(dateOfDay(popup.day), locale),
-            })}
-          >
-            {popup.items.map((item, i) => (
-              <li key={item.row.id}>
-                <button
-                  type="button"
-                  className="cgw-cal-more-item"
-                  data-cg-initial-focus={i === 0 ? '' : undefined}
-                  onClick={() => {
-                    setPopup(null);
-                    host.openRow(item.row.id);
-                  }}
-                >
-                  {item.time ? <span className="cgw-cal-time">{item.time}</span> : null}
-                  <span dir="auto">{item.row.title || t('untitled')}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CellFlyout>
-      ) : null}
-    </div>
-  );
-}
-
-interface WeekProps {
-  start: number;
-  pieces: Segment[];
-  lanes: number;
-  height: number;
-  month: { first: number; last: number };
-  today: number;
-  activeDay: number;
-  writable: boolean;
-  env: CellEnv;
-  dateLabel(day: number): string;
-  onNew(day: number, anchor: HTMLElement): void;
-  onMore(day: number, anchor: HTMLElement, items: CalendarItem[]): void;
-}
-
-/** One week's row: its seven days, then the rows over them in lanes. */
-function Week({
-  start,
-  pieces,
-  lanes,
-  height,
-  month,
-  today,
-  activeDay,
-  writable,
-  env,
-  dateLabel,
-  onNew,
-  onMore,
-}: WeekProps) {
-  const { t } = env;
-  const hidden = hiddenPerDay(pieces, lanes);
-  const activeCol = activeDay - start;
-  const shown = pieces.filter((p) => p.lane < lanes);
-  return (
-    <div className="cgw-cal-week" role="row" style={{ blockSize: height }}>
-      {Array.from({ length: 7 }, (_, col) => {
-        const day = start + col;
-        const active = day === activeDay;
-        const date = new Date(day * 86_400_000);
-        return (
-          <div
-            key={day}
-            role="gridcell"
-            className="cgw-cal-day"
-            data-day={day}
-            data-outside={day < month.first || day > month.last || undefined}
-            data-today={day === today || undefined}
-            aria-selected={active}
-            aria-label={dateLabel(day)}
-            tabIndex={active ? 0 : -1}
-          >
-            <span className="cgw-cal-num" aria-hidden="true">
-              {date.getUTCDate().toLocaleString(env.locale)}
-            </span>
-            {writable ? (
-              <button
-                type="button"
-                className="cgw-icon-button cgw-cal-add"
-                tabIndex={active ? 0 : -1}
-                aria-label={t('calendar.newOn', { date: dateLabel(day) })}
-                title={t('calendar.newOn', { date: dateLabel(day) })}
-                onClick={(event) =>
-                  onNew(day, event.currentTarget.closest<HTMLElement>('[data-day]')!)
-                }
-              >
-                <span aria-hidden="true">＋</span>
-              </button>
-            ) : null}
-            {hidden[col] ? (
-              <button
-                type="button"
-                className="cgw-cal-more"
-                tabIndex={active ? 0 : -1}
-                aria-label={t('calendar.moreLabel', { count: hidden[col], date: dateLabel(day) })}
-                onClick={(event) =>
-                  onMore(
-                    day,
-                    event.currentTarget.closest<HTMLElement>('[data-day]')!,
-                    itemsOn(pieces, col),
-                  )
-                }
-              >
-                {t('calendar.more', { count: hidden[col] })}
-              </button>
-            ) : null}
-          </div>
-        );
-      })}
-      {/* A row's children are its cells: the rows drawn over the week's days are the cell after
-          them (a screen reader reads the days, then what is on them). Named by its rows; what
-          it holds is its description. */}
-      <div
-        className="cgw-cal-lanes"
-        role="gridcell"
-        aria-description={t('calendar.weekItems', {
-          start: dateLabel(start),
-          end: dateLabel(start + 6),
-        })}
-        style={{ gridTemplateRows: `repeat(${lanes}, ${LANE}px)` }}
-      >
-        {shown.map((p) => {
-          const { item } = p;
-          const title = item.row.title || t('untitled');
-          const covers = activeCol >= p.col && activeCol < p.col + p.span;
-          const label =
-            item.end > item.start
-              ? t('calendar.span', {
-                  title,
-                  start: dateLabel(item.start),
-                  end: dateLabel(item.end),
-                })
-              : item.time
-                ? t('calendar.timed', { time: item.time, title })
-                : title;
-          return (
-            <div
-              key={`${item.row.id}:${p.week}`}
-              className="cgw-cal-item"
-              role="button"
-              tabIndex={covers ? 0 : -1}
-              data-cal-item=""
-              data-cal-drag={writable ? '' : undefined}
-              data-row-id={item.row.id}
-              data-before={p.before || undefined}
-              data-after={p.after || undefined}
-              aria-label={label}
-              aria-description={writable ? t('calendar.moveHint') : undefined}
-              style={{ gridColumn: `${p.col + 1} / span ${p.span}`, gridRow: p.lane + 1 }}
-            >
-              {item.time && !p.before ? <span className="cgw-cal-time">{item.time}</span> : null}
-              <span className="cgw-cal-title" dir="auto">
-                {title}
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -659,6 +336,8 @@ function Undated({
   env,
   writable,
   activeDay,
+  onPointerDown,
+  onOpen,
   onPlace,
 }: {
   id: string;
@@ -666,6 +345,8 @@ function Undated({
   env: CellEnv;
   writable: boolean;
   activeDay: number;
+  onPointerDown(event: PointerEvent<HTMLElement>): void;
+  onOpen(row: RowRecord): void;
   onPlace(row: RowRecord): void;
 }) {
   const { t } = env;
@@ -681,11 +362,33 @@ function Undated({
   useLayoutEffect(measure, [measure]);
   const day = formatDatePart(dateOfDay(activeDay), env.locale);
   const drawn = rows.slice(range.start, range.end);
+  const rowOf = (target: EventTarget) => {
+    const rowId = (target as HTMLElement).closest<HTMLElement>('[data-cal-item]')?.dataset.rowId;
+    return rows.find((r) => r.id === rowId);
+  };
+  const onClick = (event: MouseEvent<HTMLElement>) => {
+    const row = rowOf(event.target);
+    if (row) onOpen(row);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = rowOf(event.target);
+    if (!row) return;
+    event.preventDefault();
+    onOpen(row);
+  };
   return (
     <aside id={id} className="cgw-cal-undated" aria-label={t('calendar.noDateTitle')}>
       <h4 className="cgw-cal-undated-title">{t('calendar.noDateTitle')}</h4>
       {rows.length ? (
-        <ul ref={box} className="cgw-cal-undated-list" onScroll={measure}>
+        <ul
+          ref={box}
+          className="cgw-cal-undated-list"
+          onScroll={measure}
+          onPointerDown={onPointerDown}
+          onClick={onClick}
+          onKeyDown={onKeyDown}
+        >
           <li
             aria-hidden="true"
             style={{ blockSize: layout.total }}

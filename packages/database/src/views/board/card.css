@@ -1,6 +1,7 @@
-/* Cards (board and gallery), the copy that follows the pointer while a card is dragged, and the
-   drop indicator. Logical properties (mirrored in RTL), colours from the --cg-* tokens; the dragged
-   copy (`cgTrackDrag`'s) and the drop line (`CgDropIndicator`) are placed by the library. */
+/* Cards (the gallery's; the board's content inside `CgKanbanBoard`'s boxes), the copy that follows
+   the pointer while a card is dragged, and the drop indicator. Logical properties (mirrored in
+   RTL), colours from the --cg-* tokens; the dragged copy (`cgTrackDrag`'s) and the drop line
+   (`CgDropIndicator`) are placed by the library. */
 
 .cgw-card {
   position: absolute;
@@ -92,30 +93,16 @@
   font-weight: 600;
 }
 
-/* The copy under the pointer (a card, a column or a calendar row), in the body: `cgTrackDrag`
+/* The copy under the pointer (a gallery card or a row with no date), in the body: `cgTrackDrag`
    places it (fixed, by translate3d from the viewport's top left). */
 body > .cgw-drag-ghost {
   font-family: var(--cg-font-family);
   will-change: transform;
 }
 
-/* A drop line (a card between two others, a gallery card between two, a column between two). */
+/* A drop line (a gallery card between two others). */
 .cgw-db-drop-indicator {
   background: var(--cgw-db-active);
-}
-
-/* A column a card only joins (a sorted board): the whole column marked. */
-.cgw-board-cards[data-drop='column']::after {
-  position: absolute;
-  z-index: 2;
-  inset: 0;
-  min-block-size: 40px;
-  border-radius: var(--cg-radius-md, 6px);
-  background: var(--cgw-db-active-bg);
-  outline: 2px dashed var(--cgw-db-active);
-  outline-offset: -2px;
-  content: '';
-  pointer-events: none;
 }
 
 .cgw-views-sr {

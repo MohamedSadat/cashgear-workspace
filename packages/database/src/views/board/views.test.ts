@@ -71,8 +71,13 @@ async function type(input: HTMLInputElement, text: string) {
 }
 
 /** A seeded Tasks database shown as a view of `type` (its default configuration, then `config`). */
-async function viewOf(type: ViewType, rows: number, config: Record<string, unknown> = {}) {
-  const s = seed(rows, { today: '2026-11-13' });
+async function viewOf(
+  type: ViewType,
+  rows: number,
+  config: Record<string, unknown> = {},
+  options: { pageSize?: number } = {},
+) {
+  const s = seed(rows, { today: '2026-11-13', ...options });
   const database = s.host.database(s.tasksId)!;
   const base = s.host.views(s.tasksId)[0];
   const id = s.host.newId();
@@ -91,31 +96,45 @@ async function viewOf(type: ViewType, rows: number, config: Record<string, unkno
 }
 const ops = (host: { applied: { type: string }[] }, kind: string) =>
   host.applied.filter((op) => op.type === kind);
+/** A board's column (`CgKanbanBoard`'s section) by its group key, and its cards' boxes. */
+const columnOf = (key: string) =>
+  container.querySelector<HTMLElement>(`section[data-cg-kanban-column="${key}"]`)!;
+const firstCard = (key: string) =>
+  columnOf(key).querySelector<HTMLElement>('[data-cg-kanban-card]')!;
+const rowIdOf = (card: HTMLElement) =>
+  card.querySelector<HTMLElement>('[data-row-id]')!.dataset.rowId!;
 
 describe('the board', () => {
   it('draws a column per status with its count, and the cards', async () => {
     const { view, host, tasksId } = await viewOf('board', 30);
     await mount(view);
-    const columns = [...container.querySelectorAll<HTMLElement>('.cgw-board-column')];
-    expect(columns.map((c) => c.dataset.group)).toEqual(['', 'stTodo01', 'stDoing1', 'stDone01']);
+    const columns = [...container.querySelectorAll<HTMLElement>('section[data-cg-kanban-column]')];
+    expect(columns.map((c) => c.dataset.cgKanbanColumn)).toEqual([
+      '',
+      'stTodo01',
+      'stDoing1',
+      'stDone01',
+    ]);
     const counts = new Map<string, number>();
     for (const r of host.rowsOf(tasksId))
       counts.set(r.values[P.status] as string, (counts.get(r.values[P.status] as string) ?? 0) + 1);
-    expect(columns[1].querySelectorAll('[data-card]').length).toBe(counts.get('stTodo01'));
+    expect(columns[1].querySelectorAll('[data-cg-kanban-card]').length).toBe(
+      counts.get('stTodo01'),
+    );
     expect(columns[1].getAttribute('aria-label')).toContain(`Cards: ${counts.get('stTodo01')}`);
     expect(columns[0].textContent).toContain('No cards');
     // One card is in the tab order.
-    expect(container.querySelectorAll('[data-card][tabindex="0"]').length).toBe(1);
+    expect(container.querySelectorAll('[data-cg-kanban-card][tabindex="0"]').length).toBe(1);
   });
 
   it('moves a card to the next column by keyboard: one row.update of its status', async () => {
     const { view, host } = await viewOf('board', 12);
     await mount(view);
-    const card = container.querySelector<HTMLElement>('[data-group="stTodo01"] [data-card]')!;
-    const rowId = card.dataset.rowId!;
+    const card = firstCard('stTodo01');
+    const rowId = rowIdOf(card);
     card.focus();
     await key(card, ' ');
-    expect(card.hasAttribute('data-cg-dragging')).toBe(true);
+    expect(card.hasAttribute('data-cg-picked')).toBe(true);
     await key(card, 'ArrowRight');
     await key(card, ' ');
     const updates = ops(host, 'row.update');
@@ -130,7 +149,7 @@ describe('the board', () => {
   it('mirrors the arrows in Arabic: left is the next column', async () => {
     const { view, host } = await viewOf('board', 12);
     await mount(view, 'ar');
-    const card = container.querySelector<HTMLElement>('[data-group="stTodo01"] [data-card]')!;
+    const card = firstCard('stTodo01');
     card.focus();
     await key(card, ' ');
     await key(card, 'ArrowLeft');
@@ -143,7 +162,7 @@ describe('the board', () => {
   it('reorders within a column with one page.move, and Escape cancels', async () => {
     const { view, host } = await viewOf('board', 20);
     await mount(view);
-    const first = container.querySelector<HTMLElement>('[data-group="stTodo01"] [data-card]')!;
+    const first = firstCard('stTodo01');
     first.focus();
     await key(first, ' ');
     await key(first, 'Escape');
@@ -158,7 +177,7 @@ describe('the board', () => {
   it('makes a new card preset to its column on Enter, and nothing on Escape', async () => {
     const { view, host } = await viewOf('board', 4);
     await mount(view);
-    const done = container.querySelector<HTMLElement>('[data-group="stDone01"]')!;
+    const done = columnOf('stDone01');
     await click(done.querySelector('.cgw-board-new')!);
     let input = done.querySelector<HTMLInputElement>('.cgw-inline-editor')!;
     await key(input, 'Escape');
@@ -177,9 +196,33 @@ describe('the board', () => {
   it('draws only the cards in the window of a long column', async () => {
     const { view } = await viewOf('board', 3000);
     await mount(view);
-    const drawn = container.querySelectorAll('[data-card]').length;
+    const drawn = container.querySelectorAll('[data-cg-kanban-card]').length;
     expect(drawn).toBeGreaterThan(10);
     expect(drawn).toBeLessThan(200);
+  });
+
+  it('asks for the next page of a column whose last card is in view, until it has them all', async () => {
+    const { view, host, tasksId } = await viewOf('board', 24, {}, { pageSize: 2 });
+    await mount(view);
+    await flush();
+    const counts = new Map<string, number>();
+    for (const r of host.rowsOf(tasksId)) {
+      const key = (r.values[P.status] as string | undefined) ?? '';
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    for (const [key, count] of counts)
+      expect(columnOf(key).querySelectorAll('[data-cg-kanban-card]').length).toBe(count);
+    expect(container.textContent).not.toContain('Load more');
+  });
+
+  it('loads more of a long column from its foot', async () => {
+    const { view } = await viewOf('board', 3000, {}, { pageSize: 100 });
+    await mount(view);
+    const todo = columnOf('stTodo01');
+    const more = [...todo.querySelectorAll('button')].find((b) => b.textContent === 'Load more')!;
+    expect(todo.querySelector('[data-cg-kanban-card][aria-setsize="100"]')).toBeTruthy();
+    await click(more);
+    expect(todo.querySelector('[data-cg-kanban-card][aria-setsize="200"]')).toBeTruthy();
   });
 
   it('asks for a group property when the board has none', async () => {
@@ -224,10 +267,14 @@ describe('the list', () => {
 });
 
 describe('the calendar', () => {
+  /** `CgMonthCalendar`'s month heading, and its rows' bars (by row id). */
+  const heading = () => container.querySelector('[data-cg-month-calendar] [aria-live]')!;
+  const bars = () => [...container.querySelectorAll<HTMLElement>('[data-cg-month-item]')];
+
   it("shows today's month from the week's first day, and the rows on their days", async () => {
     const { view, host, tasksId } = await viewOf('calendar', 200);
     await mount(view);
-    expect(container.querySelector('.cgw-cal-month')!.textContent).toBe('November 2026');
+    expect(heading().textContent).toBe('November 2026');
     const headers = [...container.querySelectorAll('[role="columnheader"]')].map(
       (c) => c.textContent,
     );
@@ -237,10 +284,9 @@ describe('the calendar', () => {
       const start = (r.values[P.due] as { start: string } | undefined)?.start ?? '';
       return start >= '2026-11-01' && start <= '2026-12-05';
     });
-    const placed = new Set(
-      [...container.querySelectorAll<HTMLElement>('[data-cal-item]')].map((e) => e.dataset.rowId),
-    );
-    const hidden = [...container.querySelectorAll('.cgw-cal-more')].length;
+    const placed = new Set(bars().map((e) => e.dataset.cgMonthItem));
+    const hidden = [...container.querySelectorAll('[role="gridcell"] [aria-haspopup="dialog"]')]
+      .length;
     expect(placed.size + hidden).toBeGreaterThan(0);
     for (const id of placed) expect(shown.some((r) => r.id === id)).toBe(true);
     const undated = host.rowsOf(tasksId).filter((r) => !r.values[P.due]).length;
@@ -250,20 +296,23 @@ describe('the calendar', () => {
   });
 
   // Axe: a row's children are its cells (the rows drawn over a week are a cell of its own after
-  // the days), and the "No date" toggle names its list only while the list is there.
+  // the days, named by the rows it shows), and the "No date" toggle names its list only while the
+  // list is there.
   it("draws a week's rows in a cell of the week, and names the undated list only when open", async () => {
     const { view } = await viewOf('calendar', 200);
     await mount(view);
-    const items = [...container.querySelectorAll<HTMLElement>('[data-cal-item]')];
+    const items = bars();
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) {
       const cell = item.parentElement!.closest('[role]')!;
       expect(cell.getAttribute('role')).toBe('gridcell');
-      expect(cell.getAttribute('aria-description')).toMatch(/^Rows in the week from /);
+      // Named by the rows it shows (an `aria-label` would have to hold their titles).
       expect(cell.hasAttribute('aria-label')).toBe(false);
       expect(cell.parentElement!.getAttribute('role')).toBe('row');
     }
-    for (const row of container.querySelectorAll('.cgw-cal-week[role="row"]'))
+    const weeks = [...container.querySelectorAll('[role="grid"] > [role="row"]')].slice(1);
+    expect(weeks.length).toBeGreaterThanOrEqual(4);
+    for (const row of weeks)
       for (const child of row.children) expect(child.getAttribute('role')).toBe('gridcell');
     const toggle = container.querySelector<HTMLElement>('.cgw-cal-undated-toggle')!;
     expect(toggle.hasAttribute('aria-controls')).toBe(false);
@@ -286,8 +335,8 @@ describe('the calendar', () => {
   it('moves a row a day on with Alt and the arrow, keeping it a date: one row.update', async () => {
     const { view, host } = await viewOf('calendar', 300);
     await mount(view);
-    const item = container.querySelector<HTMLElement>('[data-cal-item]')!;
-    const rowId = item.dataset.rowId!;
+    const item = bars()[0];
+    const rowId = item.dataset.cgMonthItem!;
     const before = host.rowRecords.get(rowId)!.values[P.due] as { start: string };
     item.focus();
     await key(item, 'ArrowRight', { altKey: true });
@@ -306,14 +355,103 @@ describe('the calendar', () => {
     const { view } = await viewOf('calendar', 5);
     await mount(view);
     await click(container.querySelector('[aria-label="Next month"]')!);
-    expect(container.querySelector('.cgw-cal-month')!.textContent).toBe('December 2026');
+    expect(heading().textContent).toBe('December 2026');
     await click(
-      [...container.querySelectorAll('.cgw-cal-head button')].find(
+      [...container.querySelectorAll('[data-cg-month-calendar] button')].find(
         (b) => b.textContent === 'Today',
       )!,
     );
-    expect(container.querySelector('.cgw-cal-month')!.textContent).toBe('November 2026');
+    expect(heading().textContent).toBe('November 2026');
     await frame();
+  });
+
+  it('drops a row with no date on the day under the pointer, marking the day on the way', async () => {
+    const { view, host } = await viewOf('calendar', 60);
+    await mount(view);
+    await act(async () => container.querySelector<HTMLElement>('.cgw-cal-undated-toggle')!.click());
+    // jsdom lays nothing out: the days get boxes of 100 by 80, seven to a row.
+    const box = (left: number, top: number, width: number, height: number) =>
+      ({
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+        width,
+        height,
+        x: left,
+        y: top,
+      }) as DOMRect;
+    const days = [...container.querySelectorAll<HTMLElement>('[data-cg-month-day]')];
+    days.forEach(
+      (d, i) =>
+        (d.getBoundingClientRect = () => box((i % 7) * 100, 100 + Math.floor(i / 7) * 80, 100, 80)),
+    );
+    const scroller = container.querySelector<HTMLElement>('[role="grid"]')!.parentElement!;
+    scroller.getBoundingClientRect = () => box(0, 100, 700, 600);
+    const target = days.find((d) => d.getAttribute('aria-label')?.includes('18'))!;
+    const index = days.indexOf(target);
+    const x = (index % 7) * 100 + 50;
+    const y = 100 + Math.floor(index / 7) * 80 + 40;
+    const item = container.querySelector<HTMLElement>('.cgw-cal-undated [data-cal-drag]')!;
+    const pointer = async (el: EventTarget, type: string, px: number, py: number) =>
+      act(async () => {
+        el.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            pointerId: 3,
+            clientX: px,
+            clientY: py,
+          }),
+        );
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      });
+    await pointer(item, 'pointerdown', 900, 120);
+    await pointer(window, 'pointermove', 880, 130);
+    await pointer(window, 'pointermove', x, y);
+    expect(target.hasAttribute('data-drop')).toBe(true);
+    await pointer(window, 'pointerup', x, y);
+    expect(target.hasAttribute('data-drop')).toBe(false);
+    const day = Number(target.dataset.cgMonthDay);
+    expect(ops(host, 'row.update')[0]).toMatchObject({
+      payload: {
+        values: { [P.due]: { start: new Date(day * 86_400_000).toISOString().slice(0, 10) } },
+      },
+    });
+  });
+
+  it('places a row with no date on the selected day, and the toolbar’s New makes one there', async () => {
+    const { view, host, tasksId } = await viewOf('calendar', 60);
+    await mount(view);
+    // Today, 13 November, is selected; the arrow selects the 14th.
+    const selected = () =>
+      container.querySelector<HTMLElement>('[role="gridcell"][aria-selected="true"]')!;
+    selected().focus();
+    await key(selected(), 'ArrowRight');
+    await act(async () => container.querySelector<HTMLElement>('.cgw-cal-undated-toggle')!.click());
+    const undated = host.rowsOf(tasksId).filter((r) => !r.values[P.due]);
+    expect(undated.length).toBeGreaterThan(0);
+    const place = container.querySelector<HTMLElement>(
+      '.cgw-cal-undated [aria-label^="Place on"]',
+    )!;
+    await click(place);
+    expect(ops(host, 'row.update')[0]).toMatchObject({
+      payload: { values: { [P.due]: { start: '2026-11-14' } } },
+    });
+    const newButton = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'New',
+    )!;
+    await click(newButton);
+    await frame();
+    await flush();
+    const input = document.querySelector<HTMLInputElement>('[role="dialog"] .cgw-inline-editor')!;
+    expect(input).toBeTruthy();
+    await type(input, 'Plan the week');
+    await key(input, 'Enter');
+    expect(ops(host, 'page.create')[0]).toMatchObject({
+      payload: { title: 'Plan the week', row: { values: { [P.due]: { start: '2026-11-14' } } } },
+    });
   });
 
   it('asks for a date property when it has none', async () => {

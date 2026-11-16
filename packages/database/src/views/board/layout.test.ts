@@ -1,22 +1,15 @@
-// The board's arithmetic: card heights, a column's window, where a drop lands and what it writes
-// (order keys between neighbours, a group's value in another column), keyboard moves (RTL).
+// The board's arithmetic: card heights and what a drop writes (order keys between neighbours, a
+// group's value in another column). The board's window, drops and keys are `CgKanbanBoard`'s.
 import { describe, expect, it } from 'vitest';
 import { keysBetween, type RowRecord } from '@cgw/workspace';
 import type { GroupRule, PropertyDef } from '../../core';
 import { P, rowRecord, tasksProperties } from '../../testing/fixtures';
 import {
-  CARD_GAP,
   CARD_LINE,
   CARD_PADDING,
   CARD_TITLE,
-  boardKey,
   cardHeight,
   cardLines,
-  cardsIn,
-  columnLayout,
-  dropIndex,
-  moveDrop,
-  moveFocus,
   movableGroup,
   movedGroupValue,
   needsMove,
@@ -46,38 +39,10 @@ describe('board cards', () => {
     expect(cardHeight(row(2), [])).toBe(CARD_PADDING * 2 + CARD_TITLE);
     expect(cardHeight(row(2), [], 100)).toBe(100 + CARD_PADDING * 2 + CARD_TITLE);
   });
-
-  it('lays a column out with the gap and finds the cards in a window', () => {
-    const rows = [row(0), row(1, { [P.notes]: 'x' }), row(2), row(3)];
-    const layout = columnLayout(rows, [def(P.notes)]);
-    const small = CARD_PADDING * 2 + CARD_TITLE + CARD_GAP;
-    expect([...layout.offsets]).toEqual([
-      0,
-      small,
-      small * 2 + CARD_LINE,
-      small * 3 + CARD_LINE,
-      small * 4 + CARD_LINE,
-    ]);
-    expect(cardsIn(layout, 0, small)).toEqual({ start: 0, end: 1 });
-    expect(cardsIn(layout, small + 1, small * 2)).toEqual({ start: 1, end: 2 });
-    expect(cardsIn(layout, -500, 10_000)).toEqual({ start: 0, end: 4 });
-    expect(cardsIn(layout, 10_000, 20_000)).toEqual({ start: 0, end: 0 });
-    expect(cardsIn(columnLayout([], []), 0, 500)).toEqual({ start: 0, end: 0 });
-  });
 });
 
 describe('dropping a card', () => {
   const rows = [row(0), row(1), row(2), row(3)];
-  const layout = columnLayout(rows, []);
-  const h = layout.offsets[1];
-
-  it('lands before the first card whose middle is below the pointer', () => {
-    expect(dropIndex(layout, -10)).toBe(0);
-    expect(dropIndex(layout, h / 2 - CARD_GAP - 1)).toBe(0);
-    expect(dropIndex(layout, h / 2)).toBe(1);
-    expect(dropIndex(layout, h * 3.2)).toBe(3);
-    expect(dropIndex(layout, h * 10)).toBe(4);
-  });
 
   it('counts the index among the other cards, and knows a drop where the card is', () => {
     expect(targetIndex(false, -1, 2)).toBe(2);
@@ -171,37 +136,5 @@ describe("a card's value in another column", () => {
     expect(movableGroup({ ...def(P.status), trashedAt: '2026-11-01T00:00:00Z' })).toBe(false);
     expect(movedGroupValue(created, rule, row(1), '2026-11-01', '2026-11-02')).toBeUndefined();
     expect(movableGroup(def(P.status))).toBe(true);
-  });
-});
-
-describe('the keyboard on a board', () => {
-  const counts = [3, 0, 2];
-
-  it('moves the focus up and down a column and across to columns with cards', () => {
-    expect(moveFocus(counts, { col: 0, index: 1 }, 'down')).toEqual({ col: 0, index: 2 });
-    expect(moveFocus(counts, { col: 0, index: 2 }, 'down')).toBeNull();
-    expect(moveFocus(counts, { col: 0, index: 0 }, 'up')).toBeNull();
-    expect(moveFocus(counts, { col: 0, index: 2 }, 'next')).toEqual({ col: 2, index: 1 });
-    expect(moveFocus(counts, { col: 2, index: 0 }, 'previous')).toEqual({ col: 0, index: 0 });
-    expect(moveFocus(counts, { col: 2, index: 0 }, 'next')).toBeNull();
-    expect(moveFocus(counts, { col: 0, index: 1 }, 'last')).toEqual({ col: 0, index: 2 });
-    expect(moveFocus(counts, { col: 0, index: 0 }, 'first')).toBeNull();
-  });
-
-  it('moves a picked-up card to any insertion point, empty columns included', () => {
-    expect(moveDrop(counts, { col: 0, index: 3 }, 'down')).toBeNull();
-    expect(moveDrop(counts, { col: 0, index: 2 }, 'down')).toEqual({ col: 0, index: 3 });
-    expect(moveDrop(counts, { col: 0, index: 2 }, 'next')).toEqual({ col: 1, index: 0 });
-    expect(moveDrop(counts, { col: 1, index: 0 }, 'next')).toEqual({ col: 2, index: 0 });
-    expect(moveDrop(counts, { col: 2, index: 0 }, 'next')).toBeNull();
-    expect(moveDrop(counts, { col: 0, index: 2 }, 'last')).toEqual({ col: 0, index: 3 });
-  });
-
-  it('mirrors left and right in RTL', () => {
-    expect(boardKey('ArrowRight', false)).toBe('next');
-    expect(boardKey('ArrowRight', true)).toBe('previous');
-    expect(boardKey('ArrowLeft', true)).toBe('next');
-    expect(boardKey('ArrowUp', true)).toBe('up');
-    expect(boardKey('a', false)).toBeNull();
   });
 });

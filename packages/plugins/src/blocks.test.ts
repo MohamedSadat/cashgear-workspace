@@ -254,11 +254,19 @@ describe('the kanban block', () => {
       { type: 'cashgear.kanban', props: JSON.stringify({ databaseId: s.tasksId }) },
       { databases: s.host },
     );
-    const columns = [...container.querySelectorAll<HTMLElement>('.cgw-board-column')];
-    expect(columns.map((c) => c.dataset.group)).toEqual(['', 'stTodo01', 'stDoing1', 'stDone01']);
+    // The database's board, drawn by `CgKanbanBoard`: its sections are the columns.
+    const columns = [...container.querySelectorAll<HTMLElement>('section[data-cg-kanban-column]')];
+    expect(columns.map((c) => c.dataset.cgKanbanColumn)).toEqual([
+      '',
+      'stTodo01',
+      'stDoing1',
+      'stDone01',
+    ]);
     s.host.applied.length = 0;
-    const card = container.querySelector<HTMLElement>('[data-group="stTodo01"] [data-card]')!;
-    const rowId = card.dataset.rowId!;
+    const card = container.querySelector<HTMLElement>(
+      'section[data-cg-kanban-column="stTodo01"] [data-cg-kanban-card]',
+    )!;
+    const rowId = card.querySelector<HTMLElement>('[data-row-id]')!.dataset.rowId!;
     card.focus();
     await key(card, ' ');
     await key(card, 'ArrowRight');
@@ -282,9 +290,9 @@ describe('the kanban block', () => {
       },
       { databases: s.host },
     );
-    const groups = [...container.querySelectorAll<HTMLElement>('.cgw-board-column')].map(
-      (c) => c.dataset.group,
-    );
+    const groups = [
+      ...container.querySelectorAll<HTMLElement>('section[data-cg-kanban-column]'),
+    ].map((c) => c.dataset.cgKanbanColumn);
     expect(groups.length).toBeGreaterThan(1);
     await click(container.querySelector('.cgw-plugin-settings-button')!);
     await choose(field('Columns').querySelector('select')!, P.status);

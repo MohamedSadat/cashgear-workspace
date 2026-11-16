@@ -33,10 +33,13 @@ async function drag(page: Page, from: Locator, to: { x: number; y: number }) {
   await page.mouse.up();
 }
 
+// The board's columns are `CgKanbanBoard`'s sections, its cards their boxes.
 const column = (db: Locator, name: string) =>
-  db.locator('[data-group]').filter({ has: db.page().getByText(name, { exact: true }) });
+  db
+    .locator('section[data-cg-kanban-column]')
+    .filter({ has: db.page().getByText(name, { exact: true }) });
 const card = (scope: Locator, title: string) =>
-  scope.locator('[role="article"]').filter({ hasText: title });
+  scope.locator('[data-cg-kanban-card]').filter({ hasText: title });
 
 test('RTL board: the columns run right to left, and a card dragged to another column takes its status', async ({
   page,
@@ -56,12 +59,12 @@ test('RTL board: the columns run right to left, and a card dragged to another co
 
   const moved = card(todo, 'راجع الميزانية');
   await expect(moved).toBeVisible();
-  const before = await done.locator('[role="article"]').count();
+  const before = await done.locator('[data-cg-kanban-card]').count();
   const target = (await done.boundingBox())!;
   await drag(page, moved, { x: target.x + target.width / 2, y: target.y + 80 });
   await expect(card(done, 'راجع الميزانية')).toBeVisible();
   await expect(card(todo, 'راجع الميزانية')).toHaveCount(0);
-  await expect(done.locator('[role="article"]')).toHaveCount(before + 1);
+  await expect(done.locator('[data-cg-kanban-card]')).toHaveCount(before + 1);
   // Kept: the row's status is the column's.
   await page.reload();
   await expect(card(column(fullPage(page), 'منجزة'), 'راجع الميزانية')).toBeVisible();
@@ -88,23 +91,24 @@ test('RTL calendar: the week starts on Saturday on the right, and a row dragged 
   expect(first.x).toBeGreaterThan(second.x);
 
   // The template's rows are due from yesterday to a week on; one is moved two days later.
-  const item = calendar.locator('[data-cal-item]').first();
+  // `CgMonthCalendar`'s bars and day cells (days since 1970-01-01, as `epochDay`).
+  const item = calendar.locator('[data-cg-month-item]').first();
   await expect(item).toBeVisible();
-  const title = (await item.locator('.cgw-cal-title').innerText()).trim();
+  const title = (await item.innerText()).trim();
   const fromDay = await item.evaluate((el) => {
     const box = el.getBoundingClientRect();
     const middle = box.left + box.width / 2;
-    for (const cell of document.querySelectorAll<HTMLElement>('[data-day]')) {
+    for (const cell of document.querySelectorAll<HTMLElement>('[data-cg-month-day]')) {
       const r = cell.getBoundingClientRect();
       if (middle > r.left && middle < r.right && box.top > r.top && box.top < r.bottom)
-        return Number(cell.dataset.day);
+        return Number(cell.dataset.cgMonthDay);
     }
     return null;
   });
   expect(fromDay).not.toBeNull();
   const toDay = fromDay! + 2;
   const iso = new Date(toDay * 86_400_000).toISOString().slice(0, 10);
-  const cell = calendar.locator(`[data-day="${toDay}"]`);
+  const cell = calendar.locator(`[data-cg-month-day="${toDay}"]`);
   await expect(cell).toBeVisible();
   const target = (await cell.boundingBox())!;
   await drag(page, item, { x: target.x + target.width / 2, y: target.y + target.height / 2 });

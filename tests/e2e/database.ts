@@ -207,7 +207,7 @@ export const cardOf = (scope: Locator, title: string) =>
     }),
   });
 
-/** A calendar's day cell is keyed by days since 1970-01-01 (UTC). */
+/** A calendar's day cell (`CgMonthCalendar`'s) is keyed by days since 1970-01-01 (UTC). */
 export const epochDay = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number);
   return Date.UTC(y, m - 1, d) / 86_400_000;
@@ -215,9 +215,9 @@ export const epochDay = (iso: string) => {
 
 /** Whether a calendar draws the row titled `title` on the day `iso` (YYYY-MM-DD). */
 export async function onCalendarDay(scope: Locator, title: string, iso: string) {
-  const day = await scope.locator(`[data-day="${epochDay(iso)}"]`).boundingBox();
+  const day = await scope.locator(`[data-cg-month-day="${epochDay(iso)}"]`).boundingBox();
   const item = await scope
-    .locator('[data-cal-item]')
+    .locator('[data-cg-month-item]')
     .filter({ hasText: new RegExp(`^\\s*${title}\\s*$`) })
     .first()
     .boundingBox();

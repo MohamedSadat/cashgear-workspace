@@ -521,14 +521,15 @@ test('board columns and gallery cards moved by the mouse keep their order', asyn
   await newDatabase(page, 'Tasks', { title: 'Board order' });
   let db = fullPage(page);
   await showView(db, 'Board');
+  // The columns (`CgKanbanBoard`'s sections) by their group keys.
   const keys = () =>
     db
-      .locator('.cgw-board-column[data-group]')
-      .evaluateAll((cols) => cols.map((c) => c.querySelector('.cgw-board-name')!.textContent));
+      .locator('section[data-cg-kanban-column]')
+      .evaluateAll((cols) => cols.map((c) => (c as HTMLElement).dataset.cgKanbanColumn));
   const before = await keys();
-  // The first column's handle, dragged past the middle of the third column.
-  const third = (await db.locator('.cgw-board-column[data-group]').nth(2).boundingBox())!;
-  await drag(page, db.locator('.cgw-db-column-grip').first(), {
+  // The first column's grip, dragged past the middle of the third column.
+  const third = (await db.locator('section[data-cg-kanban-column]').nth(2).boundingBox())!;
+  await drag(page, db.locator('[data-cg-kanban-column-grip]').first(), {
     x: third.x + third.width * 0.75,
     y: third.y + 20,
   });

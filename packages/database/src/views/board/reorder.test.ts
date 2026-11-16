@@ -16,7 +16,7 @@ const { seed } = await import('../../testing/fixtures');
 const { VIEW_TYPES } = await import('../registry');
 const { galleryDropIndex, galleryLayout, galleryColumns, cardWidth } =
   await import('../gallery/layout');
-const { columnDropIndex, movedOrder, orderedGroups } = await import('./layout');
+const { movedOrder, orderedGroups } = await import('./layout');
 
 type Root = ReturnType<typeof createRoot>;
 let root: Root | null = null;
@@ -117,15 +117,16 @@ async function viewOf(type: 'board' | 'gallery', rows: number, config = {}) {
 }
 const ops = (host: { applied: { type: string }[] }, kind: string) =>
   host.applied.filter((op) => op.type === kind);
-const columnKeys = () =>
-  [...container.querySelectorAll<HTMLElement>('.cgw-board-column[data-group]')].map(
-    (c) => c.dataset.group,
-  );
+/** The board's columns (`CgKanbanBoard`'s sections) and their grips. */
+const sections = () => [
+  ...container.querySelectorAll<HTMLElement>('section[data-cg-kanban-column]'),
+];
+const columnKeys = () => sections().map((c) => c.dataset.cgKanbanColumn);
 const grip = (group: string) =>
-  container.querySelector<HTMLElement>(`[data-group="${group}"] .cgw-db-column-grip`)!;
+  container.querySelector<HTMLElement>(`[data-cg-kanban-column-grip="${group}"]`)!;
 /** The line among the columns where a moved column would land, while it shows. */
 const columnLine = () =>
-  container.querySelector('.cgw-board-columns > [data-cg-drop-indicator]:not([hidden])');
+  container.querySelector('[data-cg-kanban-board] [data-cg-drop-indicator]:not([hidden])');
 
 describe('the column order arithmetic', () => {
   it('puts the named keys first, in order, then the rest as they came', () => {
@@ -133,21 +134,6 @@ describe('the column order arithmetic', () => {
     expect(orderedGroups(groups, ['c', 'a']).map((g) => g.key)).toEqual(['c', 'a', '', 'b']);
     expect(orderedGroups(groups, undefined)).toBe(groups);
     expect(movedOrder(['a', 'b', 'c'], 'a', 2)).toEqual(['b', 'c', 'a']);
-  });
-
-  it('finds a drop between columns by their middles, right to left in RTL', () => {
-    const boxes = [
-      { left: 0, right: 100 },
-      { left: 110, right: 210 },
-      { left: 220, right: 320 },
-    ];
-    expect(columnDropIndex(boxes, 160, false)).toBe(1);
-    expect(columnDropIndex(boxes, 170, false)).toBe(2);
-    const rtl = [...boxes].reverse();
-    // In RTL the first column is the rightmost: left of its middle is after it.
-    expect(columnDropIndex(rtl, 290, true)).toBe(0);
-    expect(columnDropIndex(rtl, 260, true)).toBe(1);
-    expect(columnDropIndex(rtl, 10, true)).toBe(3);
   });
 });
 
@@ -195,12 +181,11 @@ describe('a board column moved', () => {
   it('by the pointer: dragged by its header to between two others', async () => {
     const { view } = await viewOf('board', 6);
     await mount(view);
-    const scroller = container.querySelector('.cgw-board-scroll')!;
+    const scroller = container.querySelector('[data-cg-kanban-board] > [role="region"]')!;
     place(scroller, 0, 0, 2000, 800);
-    container
-      .querySelectorAll('.cgw-board-column[data-group]')
-      .forEach((c, i) => place(c, 10 + i * 284, 0, 272, 600));
-    const head = container.querySelector('[data-group=""] .cgw-board-name')!;
+    sections().forEach((c, i) => place(c, 10 + i * 284, 0, 272, 600));
+    // Its name in the header, not a control: a press there drags the column.
+    const head = container.querySelector('[data-cg-kanban-column-head=""] [dir="auto"]')!;
     await pointer(head, 'pointerdown', 100, 20);
     await pointer(window, 'pointermove', 130, 22);
     // Past the middle of the third column (10 + 2 * 284 + 136 = 714).
@@ -215,7 +200,7 @@ describe('a board column moved', () => {
     const s = await viewOf('board', 4);
     s.host.setCanEdit(false);
     await mount(s.view);
-    expect(container.querySelector('.cgw-db-column-grip')).toBeNull();
+    expect(container.querySelector('[data-cg-kanban-column-grip]')).toBeNull();
   });
 });
 

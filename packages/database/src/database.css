@@ -241,8 +241,6 @@
 
 .cgw-icon-button:focus-visible,
 .cgw-text-button:focus-visible,
-.cgw-db-menu-item:focus-visible,
-.cgw-db-handle:focus-visible,
 .cgw-row-prop-value:focus-visible,
 .cgw-row-prop-name:focus-visible {
   outline: var(--cg-focus-ring-width, 2px) solid var(--cg-focus-ring-color, var(--cg-accent));
@@ -307,20 +305,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-.cgw-db-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 18px;
-  block-size: 22px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--cg-text-secondary);
-  cursor: grab;
-  touch-action: none;
 }
 
 .cgw-placeholder {
@@ -823,65 +807,32 @@ textarea.cgw-inline-editor:focus-visible {
   text-overflow: ellipsis;
 }
 
-.cgw-chip[data-colour='gray'],
-.cgw-db-swatch[data-colour='gray'] {
+.cgw-chip[data-colour='gray'] {
   --cgw-db-chip-bg: var(--cgw-db-gray-bg);
 }
-.cgw-chip[data-colour='brown'],
-.cgw-db-swatch[data-colour='brown'] {
+.cgw-chip[data-colour='brown'] {
   --cgw-db-chip-bg: var(--cgw-db-brown-bg);
 }
-.cgw-chip[data-colour='orange'],
-.cgw-db-swatch[data-colour='orange'] {
+.cgw-chip[data-colour='orange'] {
   --cgw-db-chip-bg: var(--cgw-db-orange-bg);
 }
-.cgw-chip[data-colour='yellow'],
-.cgw-db-swatch[data-colour='yellow'] {
+.cgw-chip[data-colour='yellow'] {
   --cgw-db-chip-bg: var(--cgw-db-yellow-bg);
 }
-.cgw-chip[data-colour='green'],
-.cgw-db-swatch[data-colour='green'] {
+.cgw-chip[data-colour='green'] {
   --cgw-db-chip-bg: var(--cgw-db-green-bg);
 }
-.cgw-chip[data-colour='blue'],
-.cgw-db-swatch[data-colour='blue'] {
+.cgw-chip[data-colour='blue'] {
   --cgw-db-chip-bg: var(--cgw-db-blue-bg);
 }
-.cgw-chip[data-colour='purple'],
-.cgw-db-swatch[data-colour='purple'] {
+.cgw-chip[data-colour='purple'] {
   --cgw-db-chip-bg: var(--cgw-db-purple-bg);
 }
-.cgw-chip[data-colour='pink'],
-.cgw-db-swatch[data-colour='pink'] {
+.cgw-chip[data-colour='pink'] {
   --cgw-db-chip-bg: var(--cgw-db-pink-bg);
 }
-.cgw-chip[data-colour='red'],
-.cgw-db-swatch[data-colour='red'] {
+.cgw-chip[data-colour='red'] {
   --cgw-db-chip-bg: var(--cgw-db-red-bg);
-}
-
-.cgw-db-swatch {
-  display: inline-block;
-  inline-size: 14px;
-  block-size: 14px;
-  border: 1px solid var(--cg-border);
-  border-radius: 3px;
-  background: var(--cgw-db-chip-bg, var(--cgw-db-default-bg));
-}
-
-.cgw-chip-remove {
-  display: inline-flex;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  opacity: 0.6;
-  cursor: pointer;
-}
-
-.cgw-chip-remove:hover {
-  opacity: 1;
 }
 
 .cgw-person {
@@ -964,33 +915,6 @@ textarea.cgw-inline-editor:focus-visible {
   padding: 0;
 }
 
-.cgw-picker-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--cg-radius-sm, 3px);
-  background: var(--cg-surface-subtle);
-}
-
-.cgw-picker-input {
-  flex: 1;
-  min-inline-size: 6rem;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
-.cgw-picker-list {
-  display: flex;
-  flex-direction: column;
-  max-block-size: 18rem;
-  overflow: auto;
-}
-
 .cgw-picker-option {
   position: relative;
   display: flex;
@@ -1006,54 +930,12 @@ textarea.cgw-inline-editor:focus-visible {
   background: var(--cg-hover, var(--cgw-db-active-bg));
 }
 
-.cgw-picker-option[data-drop]::before {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-start: -1px;
-  block-size: 2px;
-  content: '';
-  background: var(--cg-accent);
-}
-
-.cgw-picker-check {
-  inline-size: 1em;
-  color: var(--cg-accent);
-  text-align: center;
-}
-
-.cgw-picker-more {
-  margin-inline-start: auto;
-  opacity: 0;
-}
-
-.cgw-picker-option:hover .cgw-picker-more,
-.cgw-picker-option[data-active] .cgw-picker-more {
-  opacity: 1;
-}
-
-.cgw-picker-group {
-  padding-block: 6px 2px;
-  padding-inline: 4px;
-  color: var(--cg-text-secondary);
-  font-size: 12px;
-}
-
-.cgw-picker-create {
-  color: var(--cg-text-secondary);
-}
-
 .cgw-picker-empty,
 .cgw-picker-note {
   margin: 0;
   padding: 6px 4px;
   color: var(--cg-text-secondary);
   font-size: 12px;
-}
-
-.cgw-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .cgw-panel-title {
@@ -1076,40 +958,9 @@ textarea.cgw-inline-editor:focus-visible {
   padding: 0;
 }
 
-/* The option editor's Delete (the option picker, a stand-in kept for Track U). */
-.cgw-db-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  inline-size: 100%;
-  min-block-size: 28px;
-  padding-inline: 6px;
-  border: 0;
-  border-radius: var(--cg-radius-sm, 3px);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.cgw-db-menu-item:hover,
-.cgw-db-menu-item:focus-visible {
-  background: var(--cg-hover, var(--cgw-db-active-bg));
-}
-
-.cgw-db-menu-item:disabled {
-  color: var(--cg-disabled-text);
-  cursor: default;
-}
-
 .cgw-db-menu-hint {
   color: var(--cg-text-secondary);
   font-size: 12px;
-}
-
-.cgw-danger {
-  color: var(--cg-danger-text);
 }
 
 .cgw-convert p {

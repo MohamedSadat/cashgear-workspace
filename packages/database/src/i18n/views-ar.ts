@@ -17,6 +17,9 @@ export const viewsAr: Strings<typeof viewsEn> = {
     dropped: 'نُقلت {{title}} إلى {{place}}.',
     cancelled: 'أُلغي النقل.',
     fixedGroup: 'مجموعتها تحسبها مساحة العمل، فلا يمكن نقلها إلى مجموعة أخرى.',
+    moveTo: 'انقل إلى {{name}}',
+    moveUp: 'انقل إلى الأعلى',
+    moveDown: 'انقل إلى الأسفل',
   },
   board: {
     label: '{{name}}: لوحة',
@@ -44,6 +47,8 @@ export const viewsAr: Strings<typeof viewsEn> = {
     columnPickedUp: 'رُفع العمود {{name}}. تنقله مفاتيح الأسهم، وتضعه المسافة، ويلغي Escape النقل.',
     columnPosition: '{{name}}، الموضع {{index}} من {{count}}',
     columnDropped: 'نُقل العمود {{name}} إلى الموضع {{index}}.',
+    moveColumnLeft: 'انقل إلى اليسار',
+    moveColumnRight: 'انقل إلى اليمين',
   },
   list: {
     label: '{{name}}: قائمة',

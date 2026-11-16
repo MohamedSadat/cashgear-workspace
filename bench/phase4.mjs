@@ -467,10 +467,11 @@ async function web(account, seeded) {
     const boardTab = page.getByRole('tab', { name: 'Board' });
     await boardTab.focus();
     await page.keyboard.press('Enter');
-    const columns = page.locator('.cgw-database-page [data-group]');
-    await columns.nth(2).locator('[role="article"]').first().waitFor({ timeout: 60000 });
+    // The board's columns are `CgKanbanBoard`'s sections, its cards their boxes.
+    const columns = page.locator('.cgw-database-page section[data-cg-kanban-column]');
+    await columns.nth(2).locator('[data-cg-kanban-card]').first().waitFor({ timeout: 60000 });
     const drag = async (from, to, measure) => {
-      const card = columns.nth(from).locator('[role="article"]').first();
+      const card = columns.nth(from).locator('[data-cg-kanban-card]').first();
       const a = await card.boundingBox();
       const b = await columns.nth(to).boundingBox();
       const x0 = a.x + a.width / 2;

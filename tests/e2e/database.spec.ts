@@ -550,7 +550,8 @@ test('deleting a property or an option never corrupts a row', async ({ page, aut
     // The option deleted: the row reads empty there, and holds what it held.
     const colour = await propertyMenu(page, 'Colour', 'Select');
     await colour.getByRole('menuitem', { name: 'Edit options' }).click();
-    await colour.getByRole('button', { name: 'Option: Gold' }).click();
+    // Managing the options, an option opens its editor (`CgOptionPicker`: no button of its own).
+    await colour.getByRole('option', { name: 'Gold', exact: true }).click();
     await colour.getByRole('button', { name: 'Delete option' }).click();
     await page.keyboard.press('Escape');
     await expect(row).not.toContainText('Gold');

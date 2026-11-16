@@ -14,6 +14,9 @@ export const viewsEn = {
     dropped: 'Moved {{title}} to {{place}}.',
     cancelled: 'The move was cancelled.',
     fixedGroup: 'Its group is worked out by the workspace, so it cannot move to another one.',
+    moveTo: 'Move to {{name}}',
+    moveUp: 'Move up',
+    moveDown: 'Move down',
   },
   board: {
     label: '{{name}}: board',
@@ -42,6 +45,8 @@ export const viewsEn = {
       'Picked up the column {{name}}. The arrow keys move it, Space drops it, Escape cancels.',
     columnPosition: '{{name}}, position {{index}} of {{count}}',
     columnDropped: 'Moved the column {{name}} to position {{index}}.',
+    moveColumnLeft: 'Move to the left',
+    moveColumnRight: 'Move to the right',
   },
   list: {
     label: '{{name}}: list',

@@ -24,7 +24,6 @@ import {
   withHidden,
   withSort,
 } from './model/viewConfig';
-import { moveIndex } from './pickers/OptionPicker';
 import { previewConversion, shapeForType } from './properties/defs';
 import { suggestionsAt } from './properties/FormulaEditor';
 import { buildItems } from './table/items';
@@ -411,13 +410,6 @@ describe('the type change preview', () => {
     const preview = previewConversion(database, from, to, rows, lookups);
     expect(preview.converted).toBe(2);
     expect(cellText(from, 'x', lookups)).toBe('x');
-  });
-});
-
-describe('reorder', () => {
-  it('moves an id to an index of the list without it', () => {
-    expect(moveIndex(['a', 'b', 'c', 'd'], 'a', 2)).toEqual(['b', 'c', 'a', 'd']);
-    expect(moveIndex(['a', 'b', 'c'], 'c', 0)).toEqual(['c', 'a', 'b']);
   });
 });
 

@@ -1,7 +1,8 @@
-// A row as a card (the board's and the gallery's): its picture when it has one, its title and a
-// line for each shown property with a value, drawn by `renderCell`. No handlers of its own: the
-// view listens on its box and finds the card by `data-card` (open, drag, keys, menu), so a card is
-// drawn again only when its row, its place or whether it has the focus changes.
+// A row as a card: its picture when it has one (the gallery's), its title and a line for each shown
+// property with a value, drawn by `renderCell`. The gallery's `Card` is the whole box, with no
+// handlers of its own (the view listens on its box and finds the card by `data-card`), so a card is
+// drawn again only when its row, its place or whether it has the focus changes. The board draws
+// only `CardContent` inside `CgKanbanBoard`'s own card box, which holds the focus and the drag.
 import type { RowRecord } from '@cgw/workspace';
 import { memo, type CSSProperties, type ReactNode } from 'react';
 import { renderCell } from '../../cells/CellDisplay';
@@ -9,9 +10,44 @@ import type { CellEnv } from '../../cells/env';
 import type { PropertyDef } from '../../core';
 import { cardLines } from './layout';
 
+/** A card's title and its lines. */
+export function CardContent({
+  row,
+  shown,
+  env,
+  titleId,
+}: {
+  row: RowRecord;
+  shown: readonly PropertyDef[];
+  env: CellEnv;
+  /** The title's id, for a box named by it. */
+  titleId?: string;
+}) {
+  const title = row.title || env.t('untitled');
+  return (
+    <>
+      <div className="cgw-card-title" id={titleId}>
+        {row.icon ? (
+          <span className="cgw-card-icon" aria-hidden="true">
+            {row.icon}
+          </span>
+        ) : null}
+        <span className={row.title ? undefined : 'cgw-card-untitled'} dir="auto">
+          {title}
+        </span>
+      </div>
+      {cardLines(row, shown).map((def) => (
+        <div key={def.id} className="cgw-card-line" title={def.name}>
+          {renderCell(def, row, env)}
+        </div>
+      ))}
+    </>
+  );
+}
+
 export interface CardProps {
   row: RowRecord;
-  /** Unique in the view (a row may be in several columns): `group:rowId`. */
+  /** Unique in the view: the row's id. */
   cardKey: string;
   /** The element id prefix of the view (for the title's id). */
   idPrefix: string;
@@ -40,7 +76,6 @@ export const Card = memo(function Card({
   draggable,
 }: CardProps) {
   const id = cardDomId(idPrefix, cardKey);
-  const title = row.title || env.t('untitled');
   return (
     <div
       id={id}
@@ -56,21 +91,7 @@ export const Card = memo(function Card({
     >
       {cover}
       <div className="cgw-card-body">
-        <div className="cgw-card-title" id={`${id}-t`}>
-          {row.icon ? (
-            <span className="cgw-card-icon" aria-hidden="true">
-              {row.icon}
-            </span>
-          ) : null}
-          <span className={row.title ? undefined : 'cgw-card-untitled'} dir="auto">
-            {title}
-          </span>
-        </div>
-        {cardLines(row, shown).map((def) => (
-          <div key={def.id} className="cgw-card-line" title={def.name}>
-            {renderCell(def, row, env)}
-          </div>
-        ))}
+        <CardContent row={row} shown={shown} env={env} titleId={`${id}-t`} />
       </div>
     </div>
   );

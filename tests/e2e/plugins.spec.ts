@@ -59,10 +59,11 @@ test('a chart and a kanban board over a database: drawn from its rows, set, and 
   await insert(page, 'Kanban board');
   const board = pluginBlocks(page).nth(1);
   await chooseTasks(page, board);
-  const columns = board.locator('.cgw-board-column');
+  // The board's columns are `CgKanbanBoard`'s sections, its cards the boxes that take the focus.
+  const columns = board.locator('section[data-cg-kanban-column]');
   await expect(columns.first()).toBeVisible();
-  const todo = board.locator('.cgw-board-column[data-group]').nth(1);
-  const card = todo.locator('[data-row-id]').first();
+  const todo = columns.nth(1);
+  const card = todo.locator('[data-cg-kanban-card]').first();
   const title = (await card.locator('.cgw-card-title').textContent())?.trim() ?? '';
   expect(title).not.toBe('');
   // Picked up, moved one column on, put down: the board's own keys.
@@ -72,7 +73,7 @@ test('a chart and a kanban board over a database: drawn from its rows, set, and 
   await page.keyboard.press('Space');
   await expect(
     board
-      .locator('.cgw-board-column[data-group]')
+      .locator('section[data-cg-kanban-column]')
       .nth(2)
       .locator('.cgw-card-title', { hasText: title }),
   ).toBeVisible();
@@ -85,7 +86,7 @@ test('a chart and a kanban board over a database: drawn from its rows, set, and 
   await expect(
     pluginBlocks(page)
       .nth(1)
-      .locator('.cgw-board-column[data-group]')
+      .locator('section[data-cg-kanban-column]')
       .nth(2)
       .locator('.cgw-card-title', { hasText: title }),
   ).toBeVisible();
@@ -93,7 +94,7 @@ test('a chart and a kanban board over a database: drawn from its rows, set, and 
   await treeRow(page, 'Tasks').click();
   await expect(
     fullPage(page)
-      .locator('.cgw-board-column[data-group]')
+      .locator('section[data-cg-kanban-column]')
       .nth(2)
       .locator('.cgw-card-title', { hasText: title }),
   ).toBeVisible({ timeout: 30000 });

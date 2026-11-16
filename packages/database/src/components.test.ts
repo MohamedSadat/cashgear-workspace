@@ -222,7 +222,9 @@ describe('the table', () => {
     const col = host.database(tasksId)!.properties.findIndex((p) => p.id === P.priority);
     for (let i = 0; i < col; i++) await key(g, 'ArrowRight');
     await key(g, 'Enter');
-    const search = document.querySelector<HTMLInputElement>('.cgw-picker-input')!;
+    const search = document.querySelector<HTMLInputElement>(
+      '[data-cg-option-picker] [role="combobox"]',
+    )!;
     expect(search).toBeTruthy();
     const options = [...document.querySelectorAll('[role="option"]')].map((o) => o.textContent);
     expect(options.join('|')).toContain('High');
@@ -236,7 +238,47 @@ describe('the table', () => {
       .properties.find((p) => p.id === P.priority)!
       .options!.find((o) => o.name === 'Urgent')!;
     expect(update[0]).toMatchObject({ payload: { values: { [P.priority]: option.id } } });
-    expect(document.querySelector('.cgw-picker-input')).toBeNull();
+    expect(document.querySelector('[data-cg-option-picker]')).toBeNull();
+  });
+
+  it('finds an option as every search does: ta marbuta, alef maqsura, Arabic-Indic digits', async () => {
+    const { OptionPicker } = await import('./pickers/OptionPicker');
+    const def = {
+      id: 'pSchool1',
+      name: 'Place',
+      type: 'select' as const,
+      options: [
+        { id: 'oSchool1', name: 'مدرسة', colour: 'blue' as const },
+        { id: 'oHosp001', name: 'مستشفى', colour: 'red' as const },
+        { id: 'oYear001', name: 'Plan 2026', colour: 'green' as const },
+      ],
+    };
+    const onDefChange = vi.fn();
+    await mount(
+      h(OptionPicker, {
+        def,
+        selected: [],
+        multiple: false,
+        canManage: true,
+        onSelect: vi.fn(),
+        onDefChange,
+      }),
+      'ar',
+    );
+    const search = container.querySelector<HTMLInputElement>('[role="combobox"]')!;
+    const listed = () =>
+      [...container.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
+    await type(search, 'مدرسه');
+    expect(listed()).toEqual(['مدرسة']);
+    await type(search, 'مستشفي');
+    expect(listed()).toEqual(['مستشفى']);
+    await type(search, '٢٠٢٦');
+    // Found by its digits (and, as a name of its own, offered as a new one after it).
+    expect(listed()[0]).toBe('Plan 2026');
+    // A name that reads as one already there is not offered as a new option.
+    await type(search, 'مدرسه');
+    await key(search, 'Enter');
+    expect(onDefChange).not.toHaveBeenCalled();
   });
 
   it('chooses several tags and writes them once, when the flyout closes', async () => {
@@ -248,7 +290,9 @@ describe('the table', () => {
     await key(g, 'Delete');
     const cleared = opsOf(host, 'row.update').length;
     await key(g, 'Enter');
-    const search = document.querySelector<HTMLInputElement>('.cgw-picker-input')!;
+    const search = document.querySelector<HTMLInputElement>(
+      '[data-cg-option-picker] [role="combobox"]',
+    )!;
     await key(search, 'Enter');
     await key(search, 'ArrowDown');
     await key(search, 'Enter');
@@ -499,7 +543,7 @@ describe('a row page', () => {
     )!;
     await mouse(high, 'click');
     expect(opsOf(host, 'row.update')).toHaveLength(1);
-    expect(document.querySelector('.cgw-picker-input')).toBeNull();
+    expect(document.querySelector('[data-cg-option-picker]')).toBeNull();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
