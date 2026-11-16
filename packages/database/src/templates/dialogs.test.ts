@@ -118,4 +118,63 @@ describe('the CSV import dialog', () => {
     await click(button('Done'));
     expect(closed).toHaveBeenCalledWith({ databaseId: tasksId, created: 2 });
   });
+
+  // Chrome on Windows with Excel installed types a .csv as Excel's; some systems type it not at all.
+  const csv = (name: string, type: string) =>
+    new File(['Name,Priority\r\nOne,High\r\n'], name, { type });
+  async function choose(file: File) {
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    await act(async () => {
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+    await flush();
+  }
+  /** A drop on the picker's box, as a browser sends it (jsdom has no DataTransfer). */
+  async function drop(file: File) {
+    const zone = document.querySelector('[data-cg-file-picker]')!;
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', {
+        value: { types: ['Files'], files: [file], dropEffect: 'none' },
+      });
+      await act(async () => {
+        zone.dispatchEvent(event);
+      });
+    }
+    await flush();
+    await flush();
+  }
+  const refused = () => document.querySelector('.cgw-csv-error[role="alert"]')?.textContent;
+
+  it.each([
+    ['the type Excel gives it', 'application/vnd.ms-excel'],
+    ['no type', ''],
+  ])('takes a .csv, .tsv or .txt file by its name, with %s, chosen or dropped', async (_, type) => {
+    const { host, tasksId } = seed(1);
+    await mount(h(ImportDialog, { host, databaseId: tasksId, onClose: vi.fn() }));
+    await choose(csv('chosen.csv', type));
+    expect(refused()).toBeUndefined();
+    expect(document.body.textContent).toContain('chosen.csv: 1 rows');
+    await drop(csv('dropped.TSV', type));
+    expect(refused()).toBeUndefined();
+    expect(document.body.textContent).toContain('dropped.TSV: 1 rows');
+    await drop(csv('notes.txt', type));
+    expect(document.body.textContent).toContain('notes.txt: 1 rows');
+  });
+
+  it('refuses a file whose name and type are neither CSV nor text, chosen or dropped', async () => {
+    const { host, tasksId } = seed(1);
+    await mount(h(ImportDialog, { host, databaseId: tasksId, onClose: vi.fn() }));
+    await drop(csv('book.xls', 'application/vnd.ms-excel'));
+    expect(refused()).toBe('The file could not be read.');
+    expect(document.body.textContent).not.toContain('book.xls:');
+    await choose(csv('book.xlsx', ''));
+    expect(refused()).toBe('The file could not be read.');
+    // A file named as CSV is still taken after a refusal.
+    await choose(csv('tasks.csv', 'application/vnd.ms-excel'));
+    expect(refused()).toBeUndefined();
+    expect(document.body.textContent).toContain('tasks.csv: 1 rows');
+  });
 });

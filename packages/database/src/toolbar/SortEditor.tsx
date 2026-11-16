@@ -1,10 +1,10 @@
 // A view's sorts: several rules, each a property and a direction, applied in turn; reordered by
-// their handles (drag, or ArrowUp and ArrowDown on the handle). Each change is one view write.
-import { CgButton } from '@cashgear/ui';
+// their handles in the library's `CgSortableList` (drag, or ArrowUp, ArrowDown, Home and End on
+// the handle). Each change is one view write.
+import { CgButton, CgSortableList } from '@cashgear/ui';
 import type { DatabaseRecord, SortRule } from '../core';
 import { useDbT } from '../i18n';
 import { liveProperties, propertyOf } from '../model/properties';
-import { moveIndex, useReorder } from '../pickers/reorder';
 
 export function SortEditor({
   database,
@@ -20,36 +20,31 @@ export function SortEditor({
   const { t } = useDbT();
   const live = liveProperties(database);
   const ids = sorts.map((s) => s.propertyId);
-  const { state, handleProps } = useReorder(ids, (id, to) => {
-    const order = moveIndex(ids, id, to);
-    onChange(order.map((p) => sorts.find((s) => s.propertyId === p)!));
-  });
+  /** `toIndex`: the rule's place after the move. */
+  const move = (id: string, toIndex: number) => {
+    const moved = sorts.find((s) => s.propertyId === id);
+    if (!moved) return;
+    const next = sorts.filter((s) => s !== moved);
+    next.splice(Math.max(0, Math.min(next.length, toIndex)), 0, moved);
+    onChange(next);
+  };
   const unused = live.filter((p) => !ids.includes(p.id));
 
   return (
     <div className="cgw-sort-editor">
       {sorts.length === 0 ? <p className="cgw-picker-note">{t('sort.empty')}</p> : null}
-      <ul className="cgw-sort-list" aria-label={t('sort.title')}>
-        {sorts.map((rule, i) => {
+      <CgSortableList
+        className="cgw-sort-list"
+        label={t('sort.title')}
+        items={sorts}
+        getKey={(rule) => rule.propertyId}
+        handleLabel={() => t('sort.drag')}
+        disabled={!editable}
+        onMove={move}
+        renderItem={(rule, { index: i }) => {
           const def = propertyOf(database, rule.propertyId);
           return (
-            <li
-              key={rule.propertyId}
-              className="cgw-sort-rule"
-              data-reorder-id={rule.propertyId}
-              data-drop={state.dragging && state.over === i ? 'true' : undefined}
-            >
-              {editable ? (
-                <button
-                  type="button"
-                  className="cgw-db-handle"
-                  aria-label={t('sort.drag')}
-                  aria-keyshortcuts="ArrowUp ArrowDown"
-                  {...handleProps(rule.propertyId)}
-                >
-                  <span aria-hidden="true">⠿</span>
-                </button>
-              ) : null}
+            <>
               <select
                 className="cgw-select"
                 aria-label={t('sort.property')}
@@ -98,10 +93,10 @@ export function SortEditor({
                   <span aria-hidden="true">×</span>
                 </button>
               ) : null}
-            </li>
+            </>
           );
-        })}
-      </ul>
+        }}
+      />
       {editable && unused.length ? (
         <CgButton
           appearance="outline"

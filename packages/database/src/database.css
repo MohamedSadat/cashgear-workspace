@@ -547,7 +547,7 @@
   background-color: color-mix(in srgb, var(--cg-surface) 84%, var(--cg-accent));
 }
 
-/* The row's handle, at the start of its title cell: it selects the whole row. */
+/* The row's handle (`CgDragHandle`), at the start of its title cell: it selects the whole row. */
 .cgw-tcell-title {
   padding-inline-start: 0;
 }
@@ -569,9 +569,6 @@
   border-radius: var(--cg-radius-sm, 3px);
   background: none;
   color: var(--cg-text-secondary);
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: -2px;
   cursor: pointer;
   visibility: hidden;
 }
@@ -755,7 +752,10 @@
   font-size: 12px;
 }
 
-.cgw-inline-editor {
+/* The library's draftless editors (`CgInlineTextEditor`, `CgInlineNumberEditor`), drawn as the cell
+   itself: no border, padding or ring of their own (the cell shows that it is being edited). */
+.cgw-inline-editor,
+.cgw-inline-editor:focus-visible {
   box-sizing: border-box;
   inline-size: 100%;
   min-block-size: 100%;
@@ -764,12 +764,15 @@
   border: 0;
   outline: none;
   background: transparent;
+  box-shadow: none;
   color: inherit;
   font: inherit;
+  text-align: start;
   resize: none;
 }
 
-textarea.cgw-inline-editor {
+textarea.cgw-inline-editor,
+textarea.cgw-inline-editor:focus-visible {
   position: absolute;
   z-index: 2;
   inset-block-start: 0;
@@ -788,6 +791,7 @@ textarea.cgw-inline-editor {
 }
 
 .cgw-inline-editor[aria-invalid='true'] {
+  box-shadow: none;
   text-decoration: underline wavy var(--cg-danger-text);
 }
 
@@ -1002,9 +1006,7 @@ textarea.cgw-inline-editor {
   background: var(--cg-hover, var(--cgw-db-active-bg));
 }
 
-.cgw-picker-option[data-drop]::before,
-.cgw-sort-rule[data-drop]::before,
-.cgw-props-item[data-drop]::before {
+.cgw-picker-option[data-drop]::before {
   position: absolute;
   inset-inline: 0;
   inset-block-start: -1px;
@@ -1067,11 +1069,14 @@ textarea.cgw-inline-editor {
   padding-block-start: 6px;
 }
 
-.cgw-db-menu {
-  display: flex;
-  flex-direction: column;
+/* A `CgMenuPanel` that is a flyout's or a panel's whole list (the types, the views): no padding of
+   its own. */
+.cgw-db-menu-panel {
+  min-inline-size: 0;
+  padding: 0;
 }
 
+/* The option editor's Delete (the option picker, a stand-in kept for Track U). */
 .cgw-db-menu-item {
   display: flex;
   align-items: center;
@@ -1098,30 +1103,9 @@ textarea.cgw-inline-editor {
   cursor: default;
 }
 
-.cgw-db-menu-glyph {
-  inline-size: 1.2em;
-  color: var(--cg-text-secondary);
-  text-align: center;
-}
-
-.cgw-db-menu-text {
-  flex: 1;
-}
-
 .cgw-db-menu-hint {
   color: var(--cg-text-secondary);
   font-size: 12px;
-}
-
-.cgw-db-menu-separator {
-  block-size: 1px;
-  margin-block: 4px;
-  background: var(--cg-border);
-}
-
-.cgw-db-menu-switch {
-  padding-block: 4px;
-  padding-inline: 6px;
 }
 
 .cgw-danger {
@@ -1218,7 +1202,6 @@ textarea.cgw-inline-editor {
 }
 
 .cgw-files-item,
-.cgw-sort-rule,
 .cgw-props-item,
 .cgw-group-key {
   position: relative;

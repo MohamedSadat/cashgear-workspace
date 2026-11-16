@@ -11,7 +11,15 @@ import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { editor, newPage, waitSaved } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus } from './cloud';
-import { fullPage, network, pageId, signedInWorkspace, signers, signOutDesktop } from './database';
+import {
+  fullPage,
+  network,
+  pageId,
+  rowCount,
+  signedInWorkspace,
+  signers,
+  signOutDesktop,
+} from './database';
 import {
   REAL_SHEET,
   SHEET_ORIGIN,
@@ -320,7 +328,7 @@ test('a range is imported into a database, and a view is exported to a workbook 
     await tree.getByRole('treeitem', { name: /Stock list Sheet1/ }).click({ timeout: 30000 });
     const db = fullPage(page);
     await expect(db).toBeVisible();
-    await expect(db.getByRole('status')).toHaveText('Rows: 2');
+    await expect(rowCount(db)).toHaveText('Rows: 2');
     await expect(db.getByText('Bolts')).toBeVisible();
     await expect(db.getByText('Nuts')).toBeVisible();
     await expect(db.getByText('Washers')).toHaveCount(0);

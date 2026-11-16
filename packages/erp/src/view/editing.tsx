@@ -328,7 +328,7 @@ export function EditBar({
       </CgButton>
       {onAi && (
         <CgButton
-          appearance={aiOpen ? 'outline' : 'ghost'}
+          appearance={aiOpen ? 'soft' : 'ghost'}
           intent={aiOpen ? 'primary' : undefined}
           size="small"
           aria-expanded={aiOpen}

@@ -1,12 +1,19 @@
-// Text, number, URL, email and phone cells (and the title) are edited in place. The input is
-// uncontrolled: typing changes nothing React draws (Phase 1's rule), and the value is written once,
-// on commit: Enter, Tab or leaving the cell. Escape leaves it as it was.
+// Text, number, URL, email and phone cells (and the title) are edited in place, in the library's
+// draftless editors (`CgInlineTextEditor`, `CgInlineNumberEditor`): the field is uncontrolled, so
+// typing changes nothing React draws (Phase 1's rule), and the value is written once, on commit:
+// Enter, Tab or leaving the cell. Escape leaves it as it was. A number that does not read as one
+// is marked on Enter or Tab and the editor stays open.
+import {
+  CgInlineNumberEditor,
+  CgInlineTextEditor,
+  type CgInlineDoneDetails,
+  type CgInlineEditEnd,
+} from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
-import { useLayoutEffect, useRef, type KeyboardEvent } from 'react';
 import { parseNumberText, type PropertyDef } from '../core';
 import type { CellEnv } from './env';
 
-export type EditEnd = 'enter' | 'tab' | 'shiftTab' | 'escape' | 'blur';
+export type EditEnd = CgInlineEditEnd;
 
 /** The text an inline editor starts from. */
 export function editText(def: PropertyDef, row: RowRecord): string {
@@ -56,74 +63,47 @@ export function InlineEditor({
   className,
   label,
 }: InlineEditorProps) {
-  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
-  const done = useRef(false);
   const initial = seed ?? editText(def, row);
-  const multiline = def.type === 'text';
-
-  useLayoutEffect(() => {
-    const input = ref.current;
-    if (!input) return;
-    input.focus({ preventScroll: true });
-    if (seed == null) input.select();
-    else input.setSelectionRange(input.value.length, input.value.length);
-  }, [seed]);
-
-  const finish = (end: EditEnd) => {
-    if (done.current) return;
-    const input = ref.current;
-    if (end !== 'escape' && input) {
-      const value = parseTyped(def, input.value);
-      if (value === 'invalid') {
-        if (end === 'enter' || end === 'tab' || end === 'shiftTab') {
-          input.setAttribute('aria-invalid', 'true');
-          input.title = env.t('cell.invalidNumber');
-          return;
-        }
-      } else if (commit) commit(value);
-      else void env.actions.setValue(row, def, value);
-    }
-    done.current = true;
-    onDone(end);
+  const write = (value: string | number | null) => {
+    if (commit) commit(value);
+    else void env.actions.setValue(row, def, value);
   };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    event.stopPropagation();
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      finish('escape');
-    } else if (event.key === 'Enter' && !(multiline && event.shiftKey)) {
-      event.preventDefault();
-      finish('enter');
-    } else if (event.key === 'Tab') {
-      event.preventDefault();
-      finish(event.shiftKey ? 'shiftTab' : 'tab');
-    } else if (ref.current?.hasAttribute('aria-invalid')) {
-      ref.current.removeAttribute('aria-invalid');
-    }
-  };
-
   const shared = {
-    ref,
+    label,
     className: `cgw-inline-editor ${className ?? ''}`,
-    defaultValue: initial,
-    'aria-label': label,
-    // Links, addresses and numbers read left to right; text takes its first strong character's.
-    dir: (def.type === 'url' || def.type === 'email' || def.type === 'phone' ? 'ltr' : 'auto') as
-      'ltr' | 'auto',
-    spellCheck: def.type === 'text' || def.type === 'title',
-    onKeyDown,
-    onBlur: () => finish('blur'),
-    onMouseDown: (event: { stopPropagation(): void }) => event.stopPropagation(),
+    initialSelection: seed == null ? ('all' as const) : ('end' as const),
+    onDone: ({ end }: CgInlineDoneDetails) => onDone(end),
   };
-  if (multiline) return <textarea {...shared} rows={1} />;
+  if (def.type === 'number')
+    return (
+      <CgInlineNumberEditor
+        {...shared}
+        // The editor starts from the text (a typed key, or the stored value as it was written).
+        defaultValue={initial === '' ? null : 0}
+        format={() => initial}
+        parse={(text) => {
+          const value = parseTyped(def, text);
+          return value === 'invalid' ? undefined : (value as number | null);
+        }}
+        invalidMessage={env.t('cell.invalidNumber')}
+        dir="auto"
+        onCommit={(value) => write(value)}
+      />
+    );
   return (
-    <input
+    <CgInlineTextEditor
       {...shared}
-      type="text"
-      inputMode={def.type === 'number' ? 'decimal' : def.type === 'phone' ? 'tel' : undefined}
-      autoComplete="off"
+      defaultValue={initial}
+      multiline={def.type === 'text'}
+      // Links, addresses and phone numbers read left to right; text takes its first strong
+      // character's.
+      dir={def.type === 'url' || def.type === 'email' || def.type === 'phone' ? 'ltr' : 'auto'}
+      inputMode={def.type === 'phone' ? 'tel' : undefined}
+      spellCheck={def.type === 'text' || def.type === 'title'}
+      onCommit={(text) => {
+        const value = parseTyped(def, text);
+        if (value !== 'invalid') write(value);
+      }}
     />
   );
 }

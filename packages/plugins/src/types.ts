@@ -64,7 +64,7 @@ export interface BlockDefinition<Props extends object = object> {
   readonly props: PropSchema<Props>;
   readonly slash: {
     readonly label: Localized;
-    /** A glyph for the menu (as the block actions' glyphs, until Track U8's icons). */
+    /** The menu's icon: a `CgIcon` name (Track U8), as the block actions' glyphs. */
     readonly icon: string;
     /** Words it is found by, in both languages. */
     readonly keywords: readonly string[];

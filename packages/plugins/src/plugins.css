@@ -43,15 +43,6 @@ button.cgw-plugin-title {
   min-block-size: 24px;
 }
 
-/*
- * CgChart's "Chart data" toggle is 20 px high: a target at least 24 px (WCAG 2.2, 2.5.8). A
- * stand-in until Track U fixes it in the library (PROGRESS.md, Phase 7).
- */
-.cgw-plugin-root summary {
-  min-block-size: 24px;
-  line-height: 24px;
-}
-
 button.cgw-plugin-title:hover,
 button.cgw-plugin-title:focus-visible {
   text-decoration: underline;

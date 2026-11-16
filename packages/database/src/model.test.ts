@@ -24,7 +24,7 @@ import {
   withHidden,
   withSort,
 } from './model/viewConfig';
-import { moveIndex } from './pickers/reorder';
+import { moveIndex } from './pickers/OptionPicker';
 import { previewConversion, shapeForType } from './properties/defs';
 import { suggestionsAt } from './properties/FormulaEditor';
 import { buildItems } from './table/items';

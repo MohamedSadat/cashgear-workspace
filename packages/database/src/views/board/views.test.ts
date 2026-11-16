@@ -115,7 +115,7 @@ describe('the board', () => {
     const rowId = card.dataset.rowId!;
     card.focus();
     await key(card, ' ');
-    expect(card.hasAttribute('data-dragging')).toBe(true);
+    expect(card.hasAttribute('data-cg-dragging')).toBe(true);
     await key(card, 'ArrowRight');
     await key(card, ' ');
     const updates = ops(host, 'row.update');

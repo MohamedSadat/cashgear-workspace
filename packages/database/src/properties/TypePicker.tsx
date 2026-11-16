@@ -1,32 +1,37 @@
-// The list of property types to pick from: for a new property, and for a type change.
+// The list of property types to pick from: for a new property, and for a type change. A
+// `CgMenuPanel` of `CgMenuPanelItem`s (the arrows, Home and End walk it).
+import { CgMenuPanel, CgMenuPanelItem } from '@cashgear/ui';
+import type { ReactNode } from 'react';
 import type { PropertyType } from '../core';
 import { useDbT } from '../i18n';
 import { PICKABLE_TYPES, TYPE_GLYPH } from '../model/properties';
-import { MenuItem, MenuList } from './MenuList';
 
 export function TypePicker({
   current,
   label,
+  header,
   onPick,
 }: {
   current?: PropertyType;
   label: string;
+  /** Above the list, such as a `CgMenuPanelHeader` with a back button. */
+  header?: ReactNode;
   onPick(type: PropertyType): void;
 }) {
   const { t } = useDbT();
   return (
-    <MenuList label={label}>
+    <CgMenuPanel label={label} header={header} className="cgw-db-menu-panel">
       {PICKABLE_TYPES.map((type, i) => (
-        <MenuItem
+        <CgMenuPanelItem
           key={type}
-          glyph={TYPE_GLYPH[type]}
+          icon={TYPE_GLYPH[type]}
           checked={current === undefined ? undefined : current === type}
           initialFocus={current === undefined ? i === 0 : current === type}
           onSelect={() => onPick(type)}
         >
           {t(`type.${type}`)}
-        </MenuItem>
+        </CgMenuPanelItem>
       ))}
-    </MenuList>
+    </CgMenuPanel>
   );
 }

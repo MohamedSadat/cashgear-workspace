@@ -1,6 +1,7 @@
 // A new relation or rollup is set up before it is written: neither is a property without its
 // settings (a relation names its database; a rollup its relation, property and function), so the
 // "Add a property" menus open these settings in place of writing an empty one.
+import { CgMenuPanelHeader } from '@cashgear/ui';
 import { CellFlyout } from '../cells/CellFlyout';
 import type { DatabaseRecord, PropertyDef, PropertyType } from '../core';
 import { useDatabaseContext } from '../context';
@@ -29,9 +30,7 @@ export function NewPropertySetup({
   return (
     <CellFlyout anchor={anchor} label={title} width={300} onClose={() => onClose()}>
       <div className="cgw-panel">
-        <div className="cgw-panel-head">
-          <span className="cgw-panel-title">{title}</span>
-        </div>
+        <CgMenuPanelHeader title={title} />
         {def.type === 'relation' ? (
           <RelationSetup
             host={host}

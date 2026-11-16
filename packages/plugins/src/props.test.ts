@@ -102,6 +102,8 @@ describe('the registry', () => {
       expect(definition.slash.label.ar).toMatch(/\p{Script=Arabic}/u);
       expect(definition.slash.keywords.join(' ')).toMatch(/\p{Script=Arabic}/u);
     }
+    // The slash menu draws a `CgIcon` by its name.
+    expect(FIRST_PARTY.list().map((d) => d.slash.icon)).toEqual(['chart', 'board']);
   });
 
   it('refuses a type that is not a dotted name, a version that is not whole, and a repeat', () => {

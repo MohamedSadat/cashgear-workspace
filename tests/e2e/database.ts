@@ -40,6 +40,11 @@ export const WORDS = {
 /** The database on its own page. */
 export const fullPage = (page: Page) => page.locator('.cgw-database-page .cgw-db');
 export const grid = (scope: Page | Locator) => scope.locator('[role="grid"].cgw-grid');
+/**
+ * A view's row count, its foot ("Rows: 3"). Not `getByRole('status')`: each view also holds the
+ * `CgLiveAnnouncer` its moves and selections are spoken through, a status region too.
+ */
+export const rowCount = (scope: Page | Locator) => scope.locator('.cgw-table-foot');
 
 /**
  * Columns outside the table's window are not drawn, and how many fit depends on the window (the
@@ -92,7 +97,7 @@ export async function newDatabase(
   return pageId(page);
 }
 
-/** Shows a view by its tab, as the keys do (a mouse click on a reorderable tab is the library's). */
+/** Shows a view by its tab, by the keys (a click selects it as well). */
 export async function showView(scope: Page | Locator, name: string | RegExp) {
   const tab = scope.getByRole('tab', { name, exact: typeof name === 'string' });
   await tab.focus();

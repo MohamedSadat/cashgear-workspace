@@ -1,7 +1,9 @@
 // The cells edited in a flyout: date, select, multi-select, status, person, files and relation.
 // The choice is held as a draft while the flyout is open and written as one `row.update` when it
 // closes (a single select, or a day without a time, closes it at once); option changes are written
-// to the property as they are made. Files write each upload and each removal.
+// to the property as they are made. Files write each upload and each removal. People and related
+// rows are chosen in the library's `CgItemPicker`, over results found here.
+import { CgItemPicker, type CgItemPickerItem } from '@cashgear/ui';
 import { normaliseText, type RowRecord } from '@cgw/workspace';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RELATION_LIMIT, type DateValue, type PropertyDef, type Value } from '../core';
@@ -9,7 +11,6 @@ import type { RowRef } from '../host';
 import { isDateValue, readCell } from '../model/format';
 import { DatePicker } from '../pickers/DatePicker';
 import { FilesEditor } from '../pickers/FilesEditor';
-import { ListPicker, type PickerItem } from '../pickers/ListPicker';
 import { OptionPicker } from '../pickers/OptionPicker';
 import { PersonChip } from './CellDisplay';
 import { CellFlyout } from './CellFlyout';
@@ -178,18 +179,19 @@ function PeopleBody({
   const { t } = env;
   const [selected, setSelected] = useState(initial);
   const [query, setQuery] = useState(seed ?? '');
-  const items = useMemo<PickerItem[]>(() => {
+  const items = useMemo<CgItemPickerItem[]>(() => {
     const q = normaliseText(query.trim());
     return [...env.people.values()]
       .filter((p) => !q || normaliseText(p.name).includes(q))
-      .map((p) => ({ id: p.id, label: p.name, content: <PersonChip id={p.id} env={env} /> }));
+      .map((p) => ({ key: p.id, label: p.name, content: <PersonChip id={p.id} env={env} /> }));
   }, [env, query]);
   return (
-    <ListPicker
+    <CgItemPicker
+      className="cgw-picker"
       items={items}
       selected={selected}
       multiple
-      onSelect={(ids) => {
+      onSelectionChange={(ids) => {
         setSelected(ids);
         onDraft(ids);
       }}
@@ -198,10 +200,11 @@ function PeopleBody({
         content: <PersonChip id={id} env={env} />,
       })}
       query={query}
-      onQuery={setQuery}
+      onQueryChange={setQuery}
       searchLabel={t('person.search')}
       emptyText={t('person.none')}
       listLabel={t('person.list')}
+      removeLabel={(name) => t('removeNamed', { name })}
     />
   );
 }
@@ -257,24 +260,27 @@ function RelationBody({
     const title = env.host.pageTitle(id) ?? titles.current.get(id);
     return title === undefined ? t('relation.unknown') : title || t('untitled');
   };
-  const items = results.map((r) => ({ id: r.id, label: r.title || t('untitled') }));
+  const items = results.map((r) => ({ key: r.id, label: r.title || t('untitled') }));
   return (
-    <ListPicker
+    <CgItemPicker
+      className="cgw-picker"
       items={items}
       selected={selected}
       multiple
-      onSelect={(ids) => {
+      onSelectionChange={(ids) => {
         const kept = ids.slice(0, RELATION_LIMIT);
         setSelected(kept);
         onDraft(kept);
       }}
       chip={(id) => ({ label: titleOf(id) })}
       query={query}
-      onQuery={setQuery}
+      onQueryChange={setQuery}
       searchLabel={t('relation.search')}
       emptyText={target ? t('relation.none') : t('relation.noTarget')}
       listLabel={t('relation.list')}
+      removeLabel={(name) => t('removeNamed', { name })}
       loading={loading}
+      loadingText={t('loading')}
       note={selected.length >= RELATION_LIMIT ? t('relation.limit') : null}
     />
   );

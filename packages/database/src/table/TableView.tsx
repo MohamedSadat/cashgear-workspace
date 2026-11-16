@@ -11,7 +11,14 @@
 // Escape lets go. The selection is the table's state (selection.ts), so the virtual window
 // scrolls under it. Ctrl+C copies it (TSV and HTML), Ctrl+V pastes into it, Delete clears it, each
 // one batch of operations; the notice after a paste or a clear offers Undo (also Ctrl+Z here).
-import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
+import {
+  CgContextMenu,
+  CgLiveAnnouncer,
+  cgEdgeScrollStep,
+  type CgContextMenuActions,
+  type CgContextMenuItem,
+  type CgLiveAnnouncerHandle,
+} from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
   useCallback,
@@ -47,8 +54,6 @@ import { newPropertyDef } from '../properties/defs';
 import { NewPropertySetup, SET_UP_FIRST } from '../properties/NewPropertySetup';
 import { PropertyMenu, type PropertyPanel } from '../properties/PropertyMenu';
 import { TypePicker } from '../properties/TypePicker';
-import { edgeStep } from '../views/board/drag';
-import { Live, type LiveHandle } from '../views/board/shared';
 import type { ViewProps } from '../views/types';
 import { CellNotice } from './CellNotice';
 import { buildItems, HEADER_HEIGHT, indexOfRow, itemHeight, type TableItem } from './items';
@@ -182,7 +187,7 @@ export function TableView({
 
   // ---- The selection ------------------------------------------------------------------------
   const [selection, setSelection] = useState<TableSelection | null>(null);
-  const live = useRef<LiveHandle>(null);
+  const live = useRef<CgLiveAnnouncerHandle>(null);
   const activePos: GridPos = { item: activeItem, col: activeCol };
   const rect =
     items.length && (activeItem >= 0 || selection)
@@ -205,7 +210,7 @@ export function TableView({
   const sayRect = (next: TableSelection | null, at: GridPos) => {
     if (!next) return;
     const r = selectionRect(next, at, { count: items.length, cols: columns.length });
-    live.current?.say(
+    live.current?.announce(
       t('cells.selected', {
         rows: rowItemsIn(r, isRowAt).length.toLocaleString(locale),
         columns: (r.right - r.left + 1).toLocaleString(locale),
@@ -458,7 +463,7 @@ export function TableView({
       setSelection({ anchor, mode: 'cells' });
       setActive(at);
     },
-    say: (text) => live.current?.say(text),
+    say: (text) => live.current?.announce(text),
   });
   const onCopy = (event: ClipboardEvent<HTMLDivElement>) => {
     if (event.target !== grid.current || editing) return;
@@ -712,8 +717,8 @@ export function TableView({
       const box = el.getBoundingClientRect();
       // Nothing laid out (jsdom): nothing to scroll.
       if (!box.width || !box.height) return;
-      const dy = edgeStep(y, box.top + HEADER_HEIGHT, box.bottom);
-      const dx = mode === 'cells' ? edgeStep(x, box.left, box.right) : 0;
+      const dy = cgEdgeScrollStep(y, box.top + HEADER_HEIGHT, box.bottom);
+      const dx = mode === 'cells' ? cgEdgeScrollStep(x, box.left, box.right) : 0;
       if (dx || dy) {
         el.scrollBy?.(dx, dy);
         to(cellAtClient(x, y));
@@ -925,7 +930,7 @@ export function TableView({
         ) : null}
       </div>
       {cells.notice ? <CellNotice notice={cells.notice} t={t} onClose={cells.closeNotice} /> : null}
-      <Live ref={live} />
+      <CgLiveAnnouncer ref={live} />
       <div className="cgw-table-foot" role="status">
         {snapshot.loading && !snapshot.rows.length
           ? t('table.loadingRows')

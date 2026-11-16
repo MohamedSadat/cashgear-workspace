@@ -29,6 +29,7 @@ import {
   openRow,
   picker,
   propertyMenu,
+  rowCount,
   rowOf,
   rowValue,
   showView,
@@ -177,7 +178,7 @@ test('a database with every property type is made, edited and shown in all five 
   const widget = rowOf(db, 'Widget');
   await expectInRow(db, widget, 'Hardware');
   await expectInRow(db, widget, 'Fits the left bracket');
-  await expect(db.getByRole('status')).toHaveText('Rows: 2');
+  await expect(rowCount(db)).toHaveText('Rows: 2');
 
   // The other four views, every property shown on each.
   const views: [string, string][] = [
@@ -320,7 +321,7 @@ test('a row opens as a page with its properties, and keeps its body', async ({ p
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('Control+Enter');
   await expect(page.getByLabel('Page title')).toHaveValue('Review the budget');
-  await expect(page.locator('.cgw-breadcrumbs')).toContainText('Tasks');
+  await expect(page.getByRole('navigation', { name: 'Where this page is' })).toContainText('Tasks');
   await expect(page.getByRole('region', { name: 'Properties of Review the budget' })).toBeVisible();
   await chooseOptions(page, 'Status', ['Done']);
   await expect(rowValue(page, 'Status')).toHaveText('Done');
@@ -363,7 +364,7 @@ test('an inline database from the slash menu, and a linked view of it', async ({
   const blocks = editor(page).locator('.cgw-db');
   await expect(blocks).toHaveCount(1);
   const inline = blocks.first();
-  await expect(inline.getByRole('status')).toHaveText('Rows: 3');
+  await expect(rowCount(inline)).toHaveText('Rows: 3');
   // At a page's width the toolbar leaves the tabs room: "Table" is drawn whole, not "Tal".
   expect(await tabClipped(inline.getByRole('tab', { name: 'Table' }))).toBe(false);
   // The inline database is a page under this one (no rows in the sidebar).
@@ -400,10 +401,10 @@ test('database templates, and a row made from a row template', async ({ page }) 
     await expect(db.getByRole('tab', { name: view })).toBeVisible();
   await expect(cardOf(db, 'Planning for next quarter')).toBeVisible();
   // Its row template, "Weekly sync", makes a row with the template's values, at the end.
-  await expect(db.getByRole('status')).toHaveText('Rows: 3');
+  await expect(rowCount(db)).toHaveText('Rows: 3');
   await db.getByRole('button', { name: 'New from a template' }).click();
   await page.getByRole('menuitem', { name: 'Weekly sync' }).click();
-  await expect(db.getByRole('status')).toHaveText('Rows: 4');
+  await expect(rowCount(db)).toHaveText('Rows: 4');
   await expect(cardOf(db, 'Weekly sync').last()).toContainText('Weekly sync');
 
   // A row template of our own: made, given a value and a body, then used.
@@ -464,7 +465,7 @@ test('CSV: a file imported as a new database, and a view exported', async ({
   await expect(db.getByRole('columnheader', { name: 'In stock, Checkbox' })).toBeVisible();
   await expect(db.getByRole('columnheader', { name: 'Due, Date' })).toBeVisible();
   await expect(grid(db)).toContainText('Bolt, small');
-  await expect(db.getByRole('status')).toHaveText('Rows: 3');
+  await expect(rowCount(db)).toHaveText('Rows: 3');
 
   // The view, exported: the same rows back, with a BOM.
   await db.getByRole('button', { name: /^View options/ }).click();
@@ -506,7 +507,7 @@ test('a row trashed and restored comes back with its values', async ({ page }) =
   await page.keyboard.press('Shift+F10');
   await page.getByRole('menuitem', { name: 'Delete' }).click();
   await expect(row).toHaveCount(0);
-  await expect(db.getByRole('status')).toHaveText('Rows: 3');
+  await expect(rowCount(db)).toHaveText('Rows: 3');
   await page.goto('/#/trash');
   const trashed = page.getByTestId('trashed-rows');
   await expect(trashed).toContainText('Review the budget');
@@ -516,7 +517,7 @@ test('a row trashed and restored comes back with its values', async ({ page }) =
   await treeRow(page, 'Tasks').click();
   await showView(db, 'All tasks');
   await expect(row).toHaveText(before);
-  await expect(db.getByRole('status')).toHaveText('Rows: 4');
+  await expect(rowCount(db)).toHaveText('Rows: 4');
   expect(errors).toEqual([]);
 });
 

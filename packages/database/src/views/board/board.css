@@ -30,6 +30,7 @@
 }
 
 .cgw-board-columns {
+  position: relative;
   display: flex;
   box-sizing: border-box;
   align-items: flex-start;
@@ -48,36 +49,19 @@
   background: var(--cg-surface-subtle, var(--cgw-db-default-bg));
 }
 
-/* A column being moved (Phase 8), and where it would land: a bar in the gap before (or after)
-   the column marked, by logical offsets so it mirrors in RTL. */
-.cgw-board-column[data-dragging],
-.cgw-board-head[data-dragging] {
+/* A column being moved (Phase 8); where it would land is a `CgDropIndicator` in the gap before (or
+   after) a column, placed from the columns' inline start so it mirrors in RTL. */
+.cgw-board-column[data-cg-dragging],
+.cgw-board-head[data-cg-dragging] {
   opacity: 0.5;
 }
 
-.cgw-board-column[data-column-drop]::before {
-  position: absolute;
+.cgw-board-columns > .cgw-db-drop-indicator {
   z-index: 4;
-  inset-block: 0;
-  inline-size: 3px;
-  border-radius: 2px;
-  background: var(--cgw-db-active);
-  content: '';
-  pointer-events: none;
-}
-
-.cgw-board-column[data-column-drop='before']::before {
-  inset-inline-start: -8px;
-}
-
-.cgw-board-column[data-column-drop='after']::before {
-  inset-inline-end: -8px;
 }
 
 .cgw-db-column-grip {
   color: var(--cg-text-secondary);
-  font-size: 11px;
-  letter-spacing: -2px;
   cursor: grab;
 }
 

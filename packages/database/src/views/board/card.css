@@ -1,6 +1,6 @@
 /* Cards (board and gallery), the copy that follows the pointer while a card is dragged, and the
-   drop indicator. Logical properties (mirrored in RTL), colours from the --cg-* tokens; only the
-   dragged copy is placed by physical pointer coordinates (top and left), as pointers report them. */
+   drop indicator. Logical properties (mirrored in RTL), colours from the --cg-* tokens; the dragged
+   copy (`cgTrackDrag`'s) and the drop line (`CgDropIndicator`) are placed by the library. */
 
 .cgw-card {
   position: absolute;
@@ -28,7 +28,7 @@
   box-shadow: 0 0 0 var(--cg-focus-ring-width, 2px) var(--cg-focus-ring-color, var(--cg-accent));
 }
 
-.cgw-card[data-dragging] {
+.cgw-card[data-cg-dragging] {
   opacity: 0.35;
 }
 
@@ -92,46 +92,30 @@
   font-weight: 600;
 }
 
-/* The copy under the pointer (a card or a calendar row), in the body: placed by translate3d from
-   the viewport's top left. */
+/* The copy under the pointer (a card, a column or a calendar row), in the body: `cgTrackDrag`
+   places it (fixed, by translate3d from the viewport's top left). */
 body > .cgw-drag-ghost {
-  position: fixed;
-  z-index: 10000;
-  inset: 0 auto auto 0;
-  margin: 0;
-  box-shadow: var(--cg-shadow-lg, 0 10px 28px rgba(0, 0, 0, 0.22));
   font-family: var(--cg-font-family);
-  opacity: 0.96;
-  pointer-events: none;
   will-change: transform;
 }
 
+/* A drop line (a card between two others, a gallery card between two, a column between two). */
 .cgw-db-drop-indicator {
+  background: var(--cgw-db-active);
+}
+
+/* A column a card only joins (a sorted board): the whole column marked. */
+.cgw-board-cards[data-drop='column']::after {
   position: absolute;
   z-index: 2;
-  inset-block-start: 0;
-  inset-inline: 0;
-  block-size: 2px;
-  border-radius: 1px;
-  background: var(--cgw-db-active);
-  pointer-events: none;
-  will-change: transform;
-}
-
-/* Between two gallery cards (Phase 8): a bar down the gap, placed by logical offsets. */
-.cgw-db-drop-indicator[data-mode='tile'] {
-  inset-inline-end: auto;
-  inline-size: 3px;
-  border-radius: 2px;
-}
-
-.cgw-db-drop-indicator[data-mode='column'] {
-  block-size: 100%;
+  inset: 0;
   min-block-size: 40px;
   border-radius: var(--cg-radius-md, 6px);
   background: var(--cgw-db-active-bg);
   outline: 2px dashed var(--cgw-db-active);
   outline-offset: -2px;
+  content: '';
+  pointer-events: none;
 }
 
 .cgw-views-sr {

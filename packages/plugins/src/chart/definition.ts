@@ -10,7 +10,7 @@ export const chart: BlockDefinition<ChartProps> = {
   props: chartProps,
   slash: {
     label: { en: 'Chart', ar: 'مخطط' },
-    icon: '▥',
+    icon: 'chart',
     keywords: [
       'chart graph bar line pie number count sum average database',
       'مخطط رسم بياني أعمدة خطي دائري رقم عدد مجموع متوسط قاعدة بيانات',

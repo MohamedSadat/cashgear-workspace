@@ -1,8 +1,17 @@
 // A property's menu, opened from its column header (or its name in a row's panel): its name; its
 // type, changed with the conversion stated and previewed before it happens; its settings (number
 // format, time of day, options, formula, relation, rollup); and, in a view, sort, filter, hide,
-// insert and move; duplicate and delete. Panels replace each other inside one flyout.
-import { CgButton, CgSwitch } from '@cashgear/ui';
+// insert and move; duplicate and delete. Panels replace each other inside one flyout. The main
+// panel is the library's `CgMenuPanel` (the name its field: ArrowDown enters the menu, ArrowUp on
+// the first item comes back), each other panel opens under a `CgMenuPanelHeader` with Back.
+import {
+  CgButton,
+  CgMenuPanel,
+  CgMenuPanelHeader,
+  CgMenuPanelItem,
+  CgMenuPanelSeparator,
+  CgMenuPanelSwitch,
+} from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import { CellFlyout } from '../cells/CellFlyout';
@@ -28,7 +37,6 @@ import { placeProperty, withHidden, withSort } from '../model/viewConfig';
 import { OptionPicker } from '../pickers/OptionPicker';
 import { conversionRule, previewConversion, shapeForType } from './defs';
 import { FormulaEditor } from './FormulaEditor';
-import { MenuItem, MenuList, MenuSeparator, menuKeys } from './MenuList';
 import { RelationSetup, RollupSetup } from './RelationSetup';
 import { TypePicker } from './TypePicker';
 
@@ -100,14 +108,7 @@ export function PropertyMenuBody({
   };
 
   const header = (title: string) => (
-    <div className="cgw-panel-head">
-      <button type="button" className="cgw-icon-button" aria-label={t('back')} onClick={back}>
-        <span aria-hidden="true" className="cgw-back-glyph">
-          ‹
-        </span>
-      </button>
-      <span className="cgw-panel-title">{title}</span>
-    </div>
+    <CgMenuPanelHeader title={title} onBack={back} backLabel={t('back')} />
   );
 
   if (panel.kind === 'type')
@@ -296,194 +297,190 @@ export function PropertyMenuBody({
     if (event.key === 'Enter') {
       event.preventDefault();
       rename(event.currentTarget.value);
-    } else if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      event.currentTarget
-        .closest('.cgw-panel')
-        ?.querySelector<HTMLElement>('[role="menuitem"],[role="menuitemradio"]')
-        ?.focus();
     }
   };
 
   return (
-    <div className="cgw-panel" onKeyDown={menuKeys}>
-      <input
-        className="cgw-text-input"
-        data-cg-initial-focus=""
-        aria-label={t('property.name')}
-        defaultValue={def.name}
-        dir="auto"
-        readOnly={!editable}
-        onBlur={(event) => editable && rename(event.target.value)}
-        onKeyDown={onNameKey}
-      />
-      <MenuList label={t('property.menu', { name: def.name })}>
-        {editable && !isTitle ? (
-          <MenuItem
-            glyph={TYPE_GLYPH[def.type]}
-            hint={t(`type.${def.type}`)}
-            onSelect={() => setPanel({ kind: 'type' })}
+    <CgMenuPanel
+      className="cgw-panel"
+      label={t('property.menu', { name: def.name })}
+      fields={
+        <input
+          className="cgw-text-input"
+          data-cg-initial-focus=""
+          aria-label={t('property.name')}
+          defaultValue={def.name}
+          dir="auto"
+          readOnly={!editable}
+          onBlur={(event) => editable && rename(event.target.value)}
+          onKeyDown={onNameKey}
+        />
+      }
+    >
+      {editable && !isTitle ? (
+        <CgMenuPanelItem
+          icon={TYPE_GLYPH[def.type]}
+          hint={t(`type.${def.type}`)}
+          onSelect={() => setPanel({ kind: 'type' })}
+        >
+          {t('property.changeType')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && def.type === 'number' ? (
+        <CgMenuPanelItem icon="#" onSelect={() => setPanel({ kind: 'number' })}>
+          {t('property.numberFormat')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable &&
+      (def.type === 'select' || def.type === 'multiSelect' || def.type === 'status') ? (
+        <CgMenuPanelItem icon="◉" onSelect={() => setPanel({ kind: 'options' })}>
+          {t('property.options')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && def.type === 'formula' ? (
+        <CgMenuPanelItem icon="ƒ" onSelect={() => setPanel({ kind: 'formula' })}>
+          {t('property.editFormula')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && def.type === 'relation' ? (
+        <CgMenuPanelItem icon="↗" onSelect={() => setPanel({ kind: 'relation' })}>
+          {t('property.relationSetup')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && def.type === 'rollup' ? (
+        <CgMenuPanelItem icon="∑" onSelect={() => setPanel({ kind: 'rollup' })}>
+          {t('property.rollupSetup')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && isDateType(def.type) ? (
+        <CgMenuPanelSwitch
+          checked={def.date?.includeTime === true}
+          onCheckedChange={(on) =>
+            void actions.updateProperty({ ...def, date: { includeTime: on } })
+          }
+        >
+          {t('property.includeTime')}
+        </CgMenuPanelSwitch>
+      ) : null}
+      {isComputedType(def.type) ? (
+        <p className="cgw-picker-note">{t('property.computed')}</p>
+      ) : null}
+      {isAutomaticType(def.type) ? (
+        <p className="cgw-picker-note">{t('property.automatic')}</p>
+      ) : null}
+      {view ? (
+        <>
+          <CgMenuPanelSeparator />
+          <CgMenuPanelItem
+            icon="↑"
+            onSelect={() => {
+              void actions.updateView(
+                view,
+                withSort(view.config, { propertyId: def.id, direction: 'asc' }),
+              );
+              onClose();
+            }}
           >
-            {t('property.changeType')}
-          </MenuItem>
-        ) : null}
-        {editable && def.type === 'number' ? (
-          <MenuItem glyph="#" onSelect={() => setPanel({ kind: 'number' })}>
-            {t('property.numberFormat')}
-          </MenuItem>
-        ) : null}
-        {editable &&
-        (def.type === 'select' || def.type === 'multiSelect' || def.type === 'status') ? (
-          <MenuItem glyph="◉" onSelect={() => setPanel({ kind: 'options' })}>
-            {t('property.options')}
-          </MenuItem>
-        ) : null}
-        {editable && def.type === 'formula' ? (
-          <MenuItem glyph="ƒ" onSelect={() => setPanel({ kind: 'formula' })}>
-            {t('property.editFormula')}
-          </MenuItem>
-        ) : null}
-        {editable && def.type === 'relation' ? (
-          <MenuItem glyph="↗" onSelect={() => setPanel({ kind: 'relation' })}>
-            {t('property.relationSetup')}
-          </MenuItem>
-        ) : null}
-        {editable && def.type === 'rollup' ? (
-          <MenuItem glyph="∑" onSelect={() => setPanel({ kind: 'rollup' })}>
-            {t('property.rollupSetup')}
-          </MenuItem>
-        ) : null}
-        {editable && isDateType(def.type) ? (
-          <div className="cgw-db-menu-switch">
-            <CgSwitch
-              checked={def.date?.includeTime === true}
-              label={t('property.includeTime')}
-              onCheckedChange={(on) =>
-                void actions.updateProperty({ ...def, date: { includeTime: on } })
-              }
-            />
-          </div>
-        ) : null}
-        {isComputedType(def.type) ? (
-          <p className="cgw-picker-note">{t('property.computed')}</p>
-        ) : null}
-        {isAutomaticType(def.type) ? (
-          <p className="cgw-picker-note">{t('property.automatic')}</p>
-        ) : null}
-        {view ? (
-          <>
-            <MenuSeparator />
-            <MenuItem
-              glyph="↑"
+            {t('property.sortAsc')}
+          </CgMenuPanelItem>
+          <CgMenuPanelItem
+            icon="↓"
+            onSelect={() => {
+              void actions.updateView(
+                view,
+                withSort(view.config, { propertyId: def.id, direction: 'desc' }),
+              );
+              onClose();
+            }}
+          >
+            {t('property.sortDesc')}
+          </CgMenuPanelItem>
+          {onFilter ? (
+            <CgMenuPanelItem
+              icon="⏷"
               onSelect={() => {
-                void actions.updateView(
-                  view,
-                  withSort(view.config, { propertyId: def.id, direction: 'asc' }),
-                );
+                onClose();
+                onFilter(def);
+              }}
+            >
+              {t('property.filter')}
+            </CgMenuPanelItem>
+          ) : null}
+          {!isTitle ? (
+            <CgMenuPanelItem
+              icon="◌"
+              disabled={!editable}
+              onSelect={() => {
+                void actions.updateView(view, withHidden(view.config, def.id, true));
                 onClose();
               }}
             >
-              {t('property.sortAsc')}
-            </MenuItem>
-            <MenuItem
-              glyph="↓"
-              onSelect={() => {
-                void actions.updateView(
-                  view,
-                  withSort(view.config, { propertyId: def.id, direction: 'desc' }),
-                );
-                onClose();
-              }}
-            >
-              {t('property.sortDesc')}
-            </MenuItem>
-            {onFilter ? (
-              <MenuItem
-                glyph="⏷"
-                onSelect={() => {
-                  onClose();
-                  onFilter(def);
-                }}
+              {t('property.hide')}
+            </CgMenuPanelItem>
+          ) : null}
+          {editable ? (
+            <>
+              <CgMenuPanelSeparator />
+              <CgMenuPanelItem
+                icon="⇤"
+                onSelect={() => insert(leftSide)}
+                disabled={isTitle && leftSide === 'before'}
               >
-                {t('property.filter')}
-              </MenuItem>
-            ) : null}
-            {!isTitle ? (
-              <MenuItem
-                glyph="◌"
-                disabled={!editable}
-                onSelect={() => {
-                  void actions.updateView(view, withHidden(view.config, def.id, true));
-                  onClose();
-                }}
+                {t('property.insertLeft')}
+              </CgMenuPanelItem>
+              <CgMenuPanelItem
+                icon="⇥"
+                onSelect={() => insert(rightSide)}
+                disabled={isTitle && rightSide === 'before'}
               >
-                {t('property.hide')}
-              </MenuItem>
-            ) : null}
-            {editable ? (
-              <>
-                <MenuSeparator />
-                <MenuItem
-                  glyph="⇤"
-                  onSelect={() => insert(leftSide)}
-                  disabled={isTitle && leftSide === 'before'}
-                >
-                  {t('property.insertLeft')}
-                </MenuItem>
-                <MenuItem
-                  glyph="⇥"
-                  onSelect={() => insert(rightSide)}
-                  disabled={isTitle && rightSide === 'before'}
-                >
-                  {t('property.insertRight')}
-                </MenuItem>
-                <MenuItem glyph="←" disabled={!canMoveLeft} onSelect={() => move(leftSide)}>
-                  {t('property.moveLeft')}
-                </MenuItem>
-                <MenuItem glyph="→" disabled={!canMoveRight} onSelect={() => move(rightSide)}>
-                  {t('property.moveRight')}
-                </MenuItem>
-              </>
-            ) : null}
-          </>
-        ) : null}
-        {editable && !isTitle ? (
-          <>
-            <MenuSeparator />
-            <MenuItem
-              glyph="⧉"
-              onSelect={() => {
-                const copy: PropertyDef = {
-                  ...structuredClone(def),
-                  id: newPropertyId(),
-                  name: t('property.copyName', { name: def.name }),
-                };
-                delete copy.trashedAt;
-                if (copy.relation) copy.relation = { ...copy.relation, reversePropertyId: null };
-                void actions.addProperty(
-                  copy,
-                  view ? { view, anchor: def.id, side: 'after' } : undefined,
-                );
-                onClose();
-              }}
-            >
-              {t('property.duplicate')}
-            </MenuItem>
-            <MenuItem
-              glyph="🗑"
-              danger
-              onSelect={() => {
-                void actions.deleteProperty(def);
-                onClose();
-              }}
-            >
-              {t('property.delete')}
-            </MenuItem>
-          </>
-        ) : null}
-        {isTitle ? <p className="cgw-picker-note">{t('property.titleFixed')}</p> : null}
-      </MenuList>
-    </div>
+                {t('property.insertRight')}
+              </CgMenuPanelItem>
+              <CgMenuPanelItem icon="←" disabled={!canMoveLeft} onSelect={() => move(leftSide)}>
+                {t('property.moveLeft')}
+              </CgMenuPanelItem>
+              <CgMenuPanelItem icon="→" disabled={!canMoveRight} onSelect={() => move(rightSide)}>
+                {t('property.moveRight')}
+              </CgMenuPanelItem>
+            </>
+          ) : null}
+        </>
+      ) : null}
+      {editable && !isTitle ? (
+        <>
+          <CgMenuPanelSeparator />
+          <CgMenuPanelItem
+            icon="⧉"
+            onSelect={() => {
+              const copy: PropertyDef = {
+                ...structuredClone(def),
+                id: newPropertyId(),
+                name: t('property.copyName', { name: def.name }),
+              };
+              delete copy.trashedAt;
+              if (copy.relation) copy.relation = { ...copy.relation, reversePropertyId: null };
+              void actions.addProperty(
+                copy,
+                view ? { view, anchor: def.id, side: 'after' } : undefined,
+              );
+              onClose();
+            }}
+          >
+            {t('property.duplicate')}
+          </CgMenuPanelItem>
+          <CgMenuPanelItem
+            icon="🗑"
+            danger
+            onSelect={() => {
+              void actions.deleteProperty(def);
+              onClose();
+            }}
+          >
+            {t('property.delete')}
+          </CgMenuPanelItem>
+        </>
+      ) : null}
+      {isTitle ? <p className="cgw-picker-note">{t('property.titleFixed')}</p> : null}
+    </CgMenuPanel>
   );
 }
 

@@ -20,6 +20,7 @@ import {
   newDatabase,
   openRow,
   otherDevice,
+  rowCount,
   rowOf,
   rowValue,
   showView,
@@ -67,7 +68,7 @@ test('a database reaches a second device, and offline edits on two devices follo
   for (const view of ['Board', 'All tasks', 'Calendar', 'My tasks'])
     await expect(there.getByRole('tab', { name: view })).toBeVisible();
   await showView(there, 'All tasks');
-  await expect(there.getByRole('status')).toHaveText('Rows: 4', { timeout: 30000 });
+  await expect(rowCount(there)).toHaveText('Rows: 4', { timeout: 30000 });
   await expect(there.getByRole('columnheader', { name: 'Notes, Text' })).toBeVisible();
 
   // Both offline: one row edited on each, a property of its own each and one property on both.
@@ -167,12 +168,12 @@ test('over 5,000 rows: imported through the server, shown by its query, offline 
   await page.reload();
   await expect(db).toBeVisible();
   expect((await query).status()).toBe(200);
-  await expect(db.getByRole('status')).toHaveText(/^Rows: \d+ of 6000$/, { timeout: 60000 });
+  await expect(rowCount(db)).toHaveText(/^Rows: \d+ of 6000$/, { timeout: 60000 });
   await expect(rowOf(db, 'Item 0001')).toBeVisible();
   // The table scrolls inside the page and draws only the rows in its window (it grew to its rows'
   // height before, the page scrolled, and every row loaded was drawn).
   await grid(db).evaluate((el) => (el.scrollTop = el.scrollHeight));
-  await expect(db.getByRole('status')).toHaveText(/^Rows: 200 of 6000$/, { timeout: 30000 });
+  await expect(rowCount(db)).toHaveText(/^Rows: 200 of 6000$/, { timeout: 30000 });
   const drawn = await grid(db).evaluate((el) => ({
     rows: el.querySelectorAll('[role="row"][aria-rowindex]').length,
     scrolls: el.scrollHeight > el.clientHeight,
@@ -193,10 +194,10 @@ test('over 5,000 rows: imported through the server, shown by its query, offline 
   await expect(first).toHaveText('Item 6000');
   // Search through the server.
   await db.getByRole('searchbox', { name: 'Search rows by title' }).fill('Item 4321');
-  await expect(db.getByRole('status')).toHaveText('Rows: 1', { timeout: 30000 });
+  await expect(rowCount(db)).toHaveText('Rows: 1', { timeout: 30000 });
   await expect(rowOf(db, 'Item 4321')).toBeVisible();
   await db.getByRole('searchbox', { name: 'Search rows by title' }).fill('');
-  await expect(db.getByRole('status')).toHaveText(/of 6000$/, { timeout: 30000 });
+  await expect(rowCount(db)).toHaveText(/of 6000$/, { timeout: 30000 });
 
   // Offline: the rows on this device, and the notice saying so.
   const net = await network(page, page.context());
@@ -313,7 +314,7 @@ test('the same filter and sort give the same rows here and on the server', async
     grid(db).locator('[role="row"][aria-rowindex] .cgw-title-text').allInnerTexts();
   await expect.poll(async () => (await here()).length).toBeGreaterThan(5);
   const shown = await here();
-  expect(await db.getByRole('status').innerText()).toBe(`Rows: ${shown.length}`);
+  expect(await rowCount(db).innerText()).toBe(`Rows: ${shown.length}`);
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
 
   // The server's query of the same view.

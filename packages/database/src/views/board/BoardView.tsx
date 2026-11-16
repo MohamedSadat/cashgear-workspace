@@ -4,18 +4,29 @@
 // groups are listed at the end, a column can be collapsed. The board scrolls as one; each column
 // draws only the cards inside the window (fixed heights worked out from each row, layout.ts).
 //
-// A card moves by pointer (drag.ts: a copy follows the pointer and one indicator shows where it
-// lands; no card is drawn again during the drag) or by keyboard (Space picks it up, the arrows
-// move it, Space drops it, Escape cancels). Into another column: one `row.update` of the group
-// property (and a `page.move` when its place there needs a new order key); within a column: a
-// `page.move` with `host.rowOrderKey`. With a sort, cards keep the sort's order: a move only
+// A card moves by pointer (`cgTrackDrag`: a copy follows the pointer and a `CgDropIndicator` shows
+// where it lands; no card is drawn again during the drag) or by keyboard (Space picks it up, the
+// arrows move it, Space drops it, Escape cancels). Into another column: one `row.update` of the
+// group property (and a `page.move` when its place there needs a new order key); within a column:
+// a `page.move` with `host.rowOrderKey`. With a sort, cards keep the sort's order: a move only
 // changes the column. Left and right are mirrored in RTL, where columns run right to left.
 //
 // Columns move too (Phase 8): a drag of a column's header (its handle, its name) or its handle by
 // the keys (Space picks it up, the arrows move it, Space drops it, Escape cancels), spoken through
-// the same live region. The order is the view's (`GroupRule.order`, one `view.upsert`), so it
+// the same `CgLiveAnnouncer`. The order is the view's (`GroupRule.order`, one `view.upsert`), so it
 // reaches other devices as the view's settings do and leaves the property's options as they are.
-import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
+import {
+  CgContextMenu,
+  CgDragHandle,
+  CgDropIndicator,
+  CgLiveAnnouncer,
+  cgStartsDrag,
+  cgTrackDrag,
+  type CgContextMenuActions,
+  type CgContextMenuItem,
+  type CgDropIndicatorHandle,
+  type CgLiveAnnouncerHandle,
+} from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
   useCallback,
@@ -48,8 +59,7 @@ import type { ListLayout } from '../../table/windowing';
 import { GroupLabel, groupText } from '../GroupLabel';
 import type { ViewProps } from '../types';
 import { Card, cardDomId } from './Card';
-import { startsDrag, trackDrag } from './drag';
-import { draftRow, Live, type LiveHandle } from './shared';
+import { draftRow } from './shared';
 import {
   CARD_GAP,
   COLUMN_HEAD,
@@ -75,6 +85,8 @@ import './card.css';
 
 /** Pixels drawn above and below the window. */
 const OVERSCAN = 480;
+/** The gap between two columns (board.css), where a moved column's drop line is drawn. */
+const COLUMN_GAP = 12;
 /** The window's top is kept in steps of this many pixels, so a scroll redraws only now and then. */
 const STEP = 160;
 
@@ -136,10 +148,13 @@ export function BoardView({
   const [active, setActive] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const bodies = useRef(new Map<string, HTMLDivElement>());
-  const live = useRef<LiveHandle>(null);
+  const live = useRef<CgLiveAnnouncerHandle>(null);
   const pendingFocus = useRef<string | null>(null);
   const picked = useRef<Picked | null>(null);
-  const indicator = useRef<HTMLDivElement | null>(null);
+  /** Each column's drop line (in its cards' box), and the one among the columns. */
+  const indicators = useRef(new Map<string, CgDropIndicatorHandle>());
+  const columnIndicator = useRef<CgDropIndicatorHandle>(null);
+  const columnsBox = useRef<HTMLDivElement>(null);
 
   // ---- The window ---------------------------------------------------------------------------
   const [win, setWin] = useState({ top: 0, height: 800 });
@@ -239,33 +254,37 @@ export function BoardView({
     }
   });
 
-  // ---- The drop indicator: one element, moved by hand, never drawn by React -----------------------
-  const showIndicator = (colKey: string, top: number | null) => {
+  // ---- Where a card lands: a column's line, moved through its ref (never drawn by React), or the
+  // whole column marked (a sorted board, or a column the card only joins) -------------------------
+  const shownIndicator = useRef<{ key: string; top: number | null } | null>(null);
+  const hideIndicator = () => {
+    const shown = shownIndicator.current;
+    shownIndicator.current = null;
+    if (!shown) return;
+    indicators.current.get(shown.key)?.hide();
+    bodies.current.get(shown.key)?.removeAttribute('data-drop');
+  };
+  /** The line at `top` in a column's cards (`width`: theirs, when known), or null: the column. */
+  const showIndicator = (colKey: string, top: number | null, width?: number) => {
     const body = bodies.current.get(colKey);
-    let el = indicator.current;
-    if (!el) {
-      el = document.createElement('div');
-      el.className = 'cgw-db-drop-indicator';
-      el.setAttribute('aria-hidden', 'true');
-      indicator.current = el;
-    }
-    if (!body) {
-      el.remove();
+    const shown = shownIndicator.current;
+    // Most frames of a drag land where the last one did: nothing to move.
+    if (shown?.key === colKey && shown.top === top && body) return;
+    if (shown?.key !== colKey) hideIndicator();
+    if (!body) return;
+    shownIndicator.current = { key: colKey, top };
+    if (top === null) {
+      indicators.current.get(colKey)?.hide();
+      body.setAttribute('data-drop', 'column');
       return;
     }
-    if (el.parentElement !== body) body.append(el);
-    if (top === null) {
-      el.dataset.mode = 'column';
-      el.style.transform = '';
-    } else {
-      el.dataset.mode = 'line';
-      el.style.transform = `translateY(${Math.max(0, top - CARD_GAP / 2 - 1)}px)`;
-    }
+    body.removeAttribute('data-drop');
+    indicators.current.get(colKey)?.show({
+      block: Math.max(1, top - CARD_GAP / 2),
+      inline: 0,
+      length: width ?? body.clientWidth,
+    });
   };
-  const hideIndicator = () => {
-    indicator.current?.remove();
-  };
-  useEffect(() => hideIndicator, []);
 
   /** The indicator's top for an insertion at `index` among a column's other cards. */
   const lineTop = (column: Column, index: number, row: RowRecord) => {
@@ -285,7 +304,7 @@ export function BoardView({
     if (fromKey !== toKey) {
       const value = movedGroupValue(groupDef, rule, row, fromKey, toKey);
       if (value === undefined || !groupDef) {
-        live.current?.say(t('card.fixedGroup'));
+        live.current?.announce(t('card.fixedGroup'));
         return;
       }
       if (!sorted && place !== null && needsMove(row, others, place))
@@ -295,7 +314,7 @@ export function BoardView({
       if (sorted || place === null || !needsMove(row, others, place)) return;
       void actions.moveRow(row, placeAt(others, place));
     }
-    live.current?.say(t('card.dropped', { title: row.title || t('untitled'), place: name }));
+    live.current?.announce(t('card.dropped', { title: row.title || t('untitled'), place: name }));
   };
 
   // ---- Pointer drag --------------------------------------------------------------------------------
@@ -305,7 +324,7 @@ export function BoardView({
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !draggable || picked.current) return;
     const card = (event.target as HTMLElement).closest<HTMLElement>('[data-card]');
-    if (!card || !startsDrag(event.target, card)) return;
+    if (!card || !cgStartsDrag(event.target, card)) return;
     const cardKey = card.dataset.card!;
     const split = cardKey.indexOf(':');
     const fromKey = cardKey.slice(0, split);
@@ -319,7 +338,9 @@ export function BoardView({
     let drop: { key: string; index: number | null } | null = null;
 
     stopDrag.current?.();
-    stopDrag.current = trackDrag(event.nativeEvent, card, el, {
+    stopDrag.current = cgTrackDrag(event.nativeEvent, card, {
+      scroller: el,
+      ghostClassName: 'cgw-drag-ghost',
       onStart() {
         start = { left: el?.scrollLeft ?? 0, top: el?.scrollTop ?? 0 };
         geometry = columnsRef.current.map((c) => {
@@ -370,7 +391,7 @@ export function BoardView({
         const index = targetIndex(same, from, all);
         drop = { key: column.key, index };
         if (index === null) hideIndicator();
-        else showIndicator(column.key, column.layout.offsets[all]);
+        else showIndicator(column.key, column.layout.offsets[all], g.right - g.left);
       },
       onDrop() {
         hideIndicator();
@@ -390,29 +411,44 @@ export function BoardView({
     const keys = columnsRef.current.map((c) => c.key);
     const next = movedOrder(keys, key, index);
     if (next.every((k, i) => k === keys[i])) {
-      live.current?.say(t('card.cancelled'));
+      live.current?.announce(t('card.cancelled'));
       return;
     }
     void actions.updateView(view, withGroupOrder(view.config, next));
-    live.current?.say(
+    live.current?.announce(
       t('board.columnDropped', {
         name: groupText(groupDef, rule!, key, env),
         index: next.indexOf(key) + 1,
       }),
     );
   };
-  /** Marks where a column would land: before the column at an insertion index, or after the last. */
+  /**
+   * Shows where a column would land: a line in the gap before the column at an insertion index,
+   * or after the last. Measured only when the place changes.
+   */
+  const columnDrop = useRef<number | null>(null);
   const markColumnDrop = (index: number | null) => {
-    for (const el of scroller.current?.querySelectorAll('[data-column-drop]') ?? [])
-      el.removeAttribute('data-column-drop');
-    if (index === null) return;
+    if (index === columnDrop.current) return;
+    columnDrop.current = index;
+    const box = columnsBox.current;
     const sections = [
-      ...(scroller.current?.querySelectorAll<HTMLElement>('.cgw-board-column[data-group]') ?? []),
+      ...(box?.querySelectorAll<HTMLElement>('.cgw-board-column[data-group]') ?? []),
     ];
-    const target = sections[Math.min(index, sections.length - 1)];
-    target?.setAttribute('data-column-drop', index >= sections.length ? 'after' : 'before');
+    const target = index === null ? undefined : sections[Math.min(index, sections.length - 1)];
+    if (!box || !target || index === null) return columnIndicator.current?.hide();
+    const outer = box.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    // From the columns' inline start: their right edge in RTL.
+    const start =
+      getComputedStyle(box).direction === 'rtl' ? outer.right - rect.right : rect.left - outer.left;
+    columnIndicator.current?.show({
+      orientation: 'vertical',
+      block: rect.top - outer.top,
+      inline:
+        index >= sections.length ? start + rect.width + COLUMN_GAP / 2 : start - COLUMN_GAP / 2,
+      length: rect.height,
+    });
   };
-  useEffect(() => () => markColumnDrop(null), []);
 
   /** A column picked up by the keys: where it came from and where it would land. */
   const pickedColumn = useRef<{ key: string; from: number; index: number } | null>(null);
@@ -421,9 +457,9 @@ export function BoardView({
     pickedColumn.current = null;
     markColumnDrop(null);
     if (!p) return;
-    document.getElementById(`${idPrefix}-col-${p.key}`)?.removeAttribute('data-dragging');
+    document.getElementById(`${idPrefix}-col-${p.key}`)?.removeAttribute('data-cg-dragging');
     if (!commit || p.index === p.from) {
-      live.current?.say(t('card.cancelled'));
+      live.current?.announce(t('card.cancelled'));
       return;
     }
     commitColumn(p.key, p.index);
@@ -439,8 +475,8 @@ export function BoardView({
       const from = columns.findIndex((c) => c.key === key);
       if (from < 0) return;
       pickedColumn.current = { key, from, index: from };
-      document.getElementById(`${idPrefix}-col-${key}`)?.setAttribute('data-dragging', '');
-      live.current?.say(t('board.columnPickedUp', { name }));
+      document.getElementById(`${idPrefix}-col-${key}`)?.setAttribute('data-cg-dragging', '');
+      live.current?.announce(t('board.columnPickedUp', { name }));
       return;
     }
     event.preventDefault();
@@ -463,14 +499,14 @@ export function BoardView({
     p.index = index;
     // Shown as an insertion among every column: after itself when it goes later.
     markColumnDrop(index > p.from ? index + 1 : index);
-    live.current?.say(t('board.columnPosition', { name, index: index + 1, count }));
+    live.current?.announce(t('board.columnPosition', { name, index: index + 1, count }));
   };
 
   const onHeadPointerDown = (event: PointerEvent<HTMLElement>, key: string) => {
     if (event.button !== 0 || !editable || pickedColumn.current) return;
     const head = event.currentTarget;
     const target = event.target as HTMLElement;
-    if (!target.closest('.cgw-db-column-grip') && !startsDrag(event.target, head)) return;
+    if (!target.closest('.cgw-db-column-grip') && !cgStartsDrag(event.target, head)) return;
     event.stopPropagation();
     const el = scroller.current;
     const from = columnsRef.current.findIndex((c) => c.key === key);
@@ -480,7 +516,9 @@ export function BoardView({
     let drop: number | null = null;
     const rtlNow = getComputedStyle(head).direction === 'rtl';
     stopDrag.current?.();
-    stopDrag.current = trackDrag(event.nativeEvent, head, el, {
+    stopDrag.current = cgTrackDrag(event.nativeEvent, head, {
+      scroller: el,
+      ghostClassName: 'cgw-drag-ghost',
       onStart() {
         startLeft = el?.scrollLeft ?? 0;
         boxes = columnsRef.current.map((c) => {
@@ -518,7 +556,7 @@ export function BoardView({
     const column = columns[p.pos.col];
     if (!column || !rule) return;
     const others = column.rows.filter((r) => r.id !== p.row.id).length;
-    live.current?.say(
+    live.current?.announce(
       t('card.position', {
         group: groupText(groupDef, rule, column.key, env),
         index: p.pos.index + 1,
@@ -538,9 +576,9 @@ export function BoardView({
     if (!p) return;
     document
       .getElementById(cardDomId(idPrefix, `${p.fromKey}:${p.row.id}`))
-      ?.removeAttribute('data-dragging');
+      ?.removeAttribute('data-cg-dragging');
     if (!commit) {
-      live.current?.say(t('card.cancelled'));
+      live.current?.announce(t('card.cancelled'));
       return;
     }
     const column = columns[p.pos.col];
@@ -553,7 +591,7 @@ export function BoardView({
           ? null
           : p.pos.index;
     if (same && index === null) {
-      live.current?.say(t('card.cancelled'));
+      live.current?.announce(t('card.cancelled'));
       return;
     }
     commitMove(p.row, p.fromKey, column.key, index);
@@ -599,8 +637,8 @@ export function BoardView({
         fromIndex: from,
         pos: { col: pos.col, index: from },
       };
-      card.setAttribute('data-dragging', '');
-      live.current?.say(t('card.pickedUp', { title: row.title || t('untitled') }));
+      card.setAttribute('data-cg-dragging', '');
+      live.current?.announce(t('card.pickedUp', { title: row.title || t('untitled') }));
       return;
     }
     if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
@@ -630,7 +668,7 @@ export function BoardView({
 
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     const card = (event.target as HTMLElement).closest<HTMLElement>('[data-card]');
-    if (!card || !startsDrag(event.target, card)) return;
+    if (!card || !cgStartsDrag(event.target, card)) return;
     if (card.dataset.rowId) host.openRow(card.dataset.rowId);
   };
   const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
@@ -720,7 +758,8 @@ export function BoardView({
         onClick={onClick}
         onContextMenu={onContextMenu}
       >
-        <div className="cgw-board-columns">
+        <div ref={columnsBox} className="cgw-board-columns">
+          <CgDropIndicator ref={columnIndicator} className="cgw-db-drop-indicator" />
           {columns.map((column, col) => {
             const isCollapsed = collapsed.has(column.key);
             const label = groupText(groupDef, rule, column.key, env);
@@ -751,17 +790,13 @@ export function BoardView({
                   onPointerDown={(event) => onHeadPointerDown(event, column.key)}
                 >
                   {editable ? (
-                    <button
-                      type="button"
+                    <CgDragHandle
                       className="cgw-icon-button cgw-db-column-grip"
-                      aria-label={t('board.moveColumn', { name: label })}
+                      label={t('board.moveColumn', { name: label })}
                       aria-description={t('board.moveColumnHint')}
-                      title={t('board.moveColumn', { name: label })}
                       onKeyDown={(event) => onGripKeyDown(event, column.key)}
                       onBlur={() => pickedColumn.current && endColumnPick(false)}
-                    >
-                      <span aria-hidden="true">⋮⋮</span>
-                    </button>
+                    />
                   ) : null}
                   <button
                     type="button"
@@ -818,6 +853,13 @@ export function BoardView({
                         blockSize: column.layout.total + (hasDraft ? DRAFT_HEIGHT + CARD_GAP : 0),
                       }}
                     >
+                      <CgDropIndicator
+                        ref={(handle) => {
+                          if (handle) indicators.current.set(column.key, handle);
+                          else indicators.current.delete(column.key);
+                        }}
+                        className="cgw-db-drop-indicator"
+                      />
                       {drawn.map((i) => {
                         const row = column.rows[i];
                         const cardKey = `${column.key}:${row.id}`;
@@ -930,7 +972,7 @@ export function BoardView({
               total: snapshot.total,
             })}
       </div>
-      <Live ref={live} />
+      <CgLiveAnnouncer ref={live} />
       <CgContextMenu<RowRecord> items={cardItems} actionsRef={cardMenu} ariaLabel={t('row.menu')} />
       <CgContextMenu<string>
         items={columnItems}

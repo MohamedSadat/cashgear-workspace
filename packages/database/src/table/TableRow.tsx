@@ -1,7 +1,9 @@
 // One item of the table: a row of cells, a group header, "load more" or "New". Memoised: while
 // the table scrolls only items that come into the window are drawn, and an item is drawn again
 // only when its row, the columns, the active or edited cell in it, or the selected columns of it
-// change. A row's title cell starts with its handle, which selects the whole row (Phase 8).
+// change. A row's title cell starts with its handle (`CgDragHandle`), which selects the whole row
+// and, dragged, whole rows from it (Phase 8).
+import { CgDragHandle } from '@cashgear/ui';
 import { memo, useState, type CSSProperties, type ReactNode } from 'react';
 import { renderCell } from '../cells/CellDisplay';
 import type { CellEnv } from '../cells/env';
@@ -255,14 +257,11 @@ function TableRowView(props: TableRowProps) {
         if (def.type === 'title') {
           content = (
             <>
-              <button
-                type="button"
+              <CgDragHandle
                 className="cgw-db-row-select"
                 tabIndex={-1}
-                aria-label={env.t('cells.selectRow', { title: row.title || env.t('untitled') })}
-              >
-                <span aria-hidden="true">⋮⋮</span>
-              </button>
+                label={env.t('cells.selectRow', { title: row.title || env.t('untitled') })}
+              />
               <span className="cgw-title-text">
                 {row.icon ? (
                   <span className="cgw-row-icon" aria-hidden="true">

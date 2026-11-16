@@ -2,7 +2,7 @@
 // property, an operator its kind takes (the core's `operatorsFor`), and a value editor for that
 // kind. Each change is written to the view (text and numbers when the field is left or Enter is
 // pressed, not per key). A condition on a deleted property stays, marked as ignored.
-import { CgButton, CgDateEdit } from '@cashgear/ui';
+import { CgButton, CgDateEdit, CgItemPicker } from '@cashgear/ui';
 import { useState, type ReactNode } from 'react';
 import { CellFlyout } from '../cells/CellFlyout';
 import {
@@ -30,7 +30,6 @@ import {
   type FilterNode,
   type FilterPath,
 } from '../model/viewConfig';
-import { ListPicker } from '../pickers/ListPicker';
 import { STATUS_GROUPS } from '../pickers/OptionPicker';
 
 const RELATIVE: RelativeDate[] = [
@@ -520,20 +519,22 @@ function RelationValue({
       </button>
       {anchor ? (
         <CellFlyout anchor={anchor} label={t('relation.search')} onClose={() => setAnchor(null)}>
-          <ListPicker
-            items={rows.map((r) => ({ id: r.id, label: r.title || t('untitled') }))}
+          <CgItemPicker
+            className="cgw-picker"
+            items={rows.map((r) => ({ key: r.id, label: r.title || t('untitled') }))}
             selected={value ? [value] : []}
             multiple={false}
-            onSelect={(ids) => {
+            onSelectionChange={(ids) => {
               onChange(ids[0] ?? null);
               setAnchor(null);
             }}
             chip={(id) => ({ label: host.pageTitle(id) ?? t('relation.unknown') })}
             query={query}
-            onQuery={search}
+            onQueryChange={search}
             searchLabel={t('relation.search')}
             emptyText={t('relation.none')}
             listLabel={t('relation.list')}
+            removeLabel={(name) => t('removeNamed', { name })}
           />
         </CellFlyout>
       ) : null}

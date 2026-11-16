@@ -415,8 +415,8 @@ describe('the toolbar and menus', () => {
         t.textContent?.includes(name),
       )!;
     expect(tab('Board').getAttribute('aria-selected')).toBe('true');
-    // As a browser sends a click while `CgTabs` holds the pointer on the tab's wrapper (for its
-    // drag): down on the tab, then up and the click on the wrapper.
+    // A click: `CgTabs` holds the pointer (on the tab's wrapper) only once a press travels past
+    // its drag threshold, so down, up and the click all reach the tab.
     const press = async (target: Element, type: string, x: number) => {
       const init = { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 10 };
       await act(async () => {
@@ -431,8 +431,8 @@ describe('the toolbar and menus', () => {
     let wrapper = tab('All tasks').parentElement!;
     expect(wrapper.dataset.tabKey).toBeTruthy();
     await press(tab('All tasks'), 'pointerdown', 10);
-    await press(wrapper, 'pointerup', 11);
-    await press(wrapper, 'click', 11);
+    await press(tab('All tasks'), 'pointerup', 11);
+    await press(tab('All tasks'), 'click', 11);
     expect(tab('All tasks').getAttribute('aria-selected')).toBe('true');
     expect(tab('Board').getAttribute('aria-selected')).toBe('false');
 

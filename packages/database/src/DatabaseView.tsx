@@ -5,13 +5,15 @@
 import {
   CgButton,
   CgContextMenu,
+  CgMenuPanel,
+  CgMenuPanelItem,
   CgTabs,
   type CgContextMenuActions,
   type CgContextMenuItem,
   type CgTabDescriptor,
 } from '@cashgear/ui';
 import type { Id } from '@cgw/workspace';
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CellFlyout } from './cells/CellFlyout';
 import { useCellEnv } from './cells/env';
 import {
@@ -34,7 +36,6 @@ import {
   withGroup,
   withSorts,
 } from './model/viewConfig';
-import { MenuItem, MenuList } from './properties/MenuList';
 import { FilterEditor, newCondition } from './toolbar/FilterEditor';
 import { GroupEditor } from './toolbar/GroupEditor';
 import { PropertiesEditor } from './toolbar/PropertiesEditor';
@@ -67,8 +68,6 @@ type Panel =
   | { kind: 'rename'; anchor: HTMLElement; view: ViewRecord };
 
 const SEARCH_DELAY = 250;
-/** How far (px) the pointer moves before `CgTabs` takes a press on a tab as a drag. */
-const TAB_DRAG_DISTANCE = 4;
 
 export function DatabaseView({
   host,
@@ -130,26 +129,6 @@ export function DatabaseView({
   const showMade = (id: Id) => {
     if (shownViews.current.some((v) => v.id === id)) choose(id);
     else pendingView.current = id;
-  };
-
-  // ---- A mouse click on a tab ---------------------------------------------------------------
-  // `CgTabs` with `reorderable` captures the pointer on the tab's wrapper at pointerdown (for its
-  // drag), so the click that follows lands on the wrapper and the tab button's own handler never
-  // runs (a Track U defect). The click is taken here instead, unless the pointer travelled as far
-  // as `CgTabs` takes for a drag. The keys (Enter, Space) still go through `CgTabs`.
-  const pressed = useRef<{ key: Id; x: number; y: number } | null>(null);
-  const onTabClick = (event: MouseEvent<HTMLElement>) => {
-    const target = event.target as Element;
-    // On the button itself, `CgTabs` selects the tab (nothing captured the pointer).
-    if (target.closest('[role="tab"]')) return;
-    const header = target.closest<HTMLElement>('[data-tab-key]');
-    const key = header?.dataset.tabKey;
-    const press = pressed.current;
-    pressed.current = null;
-    if (!header || !key || header.closest('.cgw-db') !== event.currentTarget) return;
-    if (!press || press.key !== key || event.button !== 0) return;
-    if (Math.hypot(event.clientX - press.x, event.clientY - press.y) >= TAB_DRAG_DISTANCE) return;
-    if (key !== view?.id && views.some((v) => v.id === key)) choose(key);
   };
 
   // ---- Search: the input is the browser's own; the query follows after a pause ------------------
@@ -306,9 +285,6 @@ export function DatabaseView({
       </span>
     ),
     headerAttributes: {
-      onPointerDown: (event) => {
-        pressed.current = { key: v.id, x: event.clientX, y: event.clientY };
-      },
       onContextMenu: (event) => {
         event.preventDefault();
         void viewMenu.current?.showFromEvent(event, v);
@@ -494,18 +470,18 @@ export function DatabaseView({
       }
       case 'addView':
         return (
-          <MenuList label={t('views.add')}>
+          <CgMenuPanel label={t('views.add')} className="cgw-db-menu-panel">
             {VIEW_ORDER.map((type, i) => (
-              <MenuItem
+              <CgMenuPanelItem
                 key={type}
-                glyph={viewType(type).glyph}
+                icon={viewType(type).glyph}
                 initialFocus={i === 0}
                 onSelect={() => void createView(type)}
               >
                 {t(`viewType.${type}`)}
-              </MenuItem>
+              </CgMenuPanelItem>
             ))}
-          </MenuList>
+          </CgMenuPanel>
         );
       case 'rename':
         return (
@@ -551,7 +527,6 @@ export function DatabaseView({
         data-embedded={embedded || undefined}
         aria-label={title}
         aria-readonly={!editable || undefined}
-        onClick={onTabClick}
       >
         {showsTitle ? (
           <div className="cgw-db-title">

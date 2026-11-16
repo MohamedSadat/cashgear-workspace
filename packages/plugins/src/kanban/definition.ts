@@ -10,7 +10,7 @@ export const kanban: BlockDefinition<KanbanProps> = {
   props: kanbanProps,
   slash: {
     label: { en: 'Kanban board', ar: 'لوحة كانبان' },
-    icon: '▦',
+    icon: 'board',
     keywords: [
       'kanban board columns cards status select database',
       'كانبان لوحة أعمدة بطاقات حالة اختيار قاعدة بيانات',

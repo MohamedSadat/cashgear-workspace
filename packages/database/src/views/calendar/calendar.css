@@ -213,8 +213,8 @@
   border-end-end-radius: 0;
 }
 
-.cgw-cal-item[data-dragging],
-.cgw-cal-undated-item[data-dragging] {
+.cgw-cal-item[data-cg-dragging],
+.cgw-cal-undated-item[data-cg-dragging] {
   opacity: 0.35;
 }
 

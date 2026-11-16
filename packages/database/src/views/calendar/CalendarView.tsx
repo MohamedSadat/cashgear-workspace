@@ -8,6 +8,12 @@
 // or with Alt and the arrow keys on it; a row with no date is dragged onto a day or placed on the
 // selected one. A day's "+" (or Enter on it) makes a row there. The days are one grid stop: the
 // arrows, Home, End, PageUp and PageDown move between them.
+import {
+  CgLiveAnnouncer,
+  cgStartsDrag,
+  cgTrackDrag,
+  type CgLiveAnnouncerHandle,
+} from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
   useCallback,
@@ -38,8 +44,7 @@ import { formatDatePart } from '../../model/format';
 import { isDateType, liveProperties, propertyOf, uniqueName } from '../../model/properties';
 import { newPropertyDef } from '../../properties/defs';
 import { layoutOf, sameRange, visibleRange, type Range } from '../../table/windowing';
-import { startsDrag, trackDrag } from '../board/drag';
-import { draftRow, Live, type LiveHandle } from '../board/shared';
+import { draftRow } from '../board/shared';
 import type { ViewProps } from '../types';
 import { dateOfDay, dayNumber, monthOf, shiftDays, weekStartOf, type Month } from './dates';
 import {
@@ -97,7 +102,7 @@ export function CalendarView({
   const [activeDay, setActiveDay] = useState(today);
   const [popup, setPopup] = useState<Popup | null>(null);
   const [undatedOpen, setUndatedOpen] = useState(false);
-  const live = useRef<LiveHandle>(null);
+  const live = useRef<CgLiveAnnouncerHandle>(null);
   const root = useRef<HTMLDivElement>(null);
   const pendingFocus = useRef<
     { kind: 'day'; day: number } | { kind: 'item'; rowId: string } | null
@@ -159,12 +164,12 @@ export function CalendarView({
   /** Moves a dated row by whole days, or puts a row with no date on a day: one `row.update`. */
   const moveRow = (row: RowRecord, value: DateValue | null, daysOrDay: number) => {
     if (!def || !writable) {
-      live.current?.say(t('calendar.fixedDate'));
+      live.current?.announce(t('calendar.fixedDate'));
       return;
     }
     const next = value ? shiftDays(value, daysOrDay) : { start: dateOfDay(daysOrDay) };
     void actions.setValue(row, def, next);
-    live.current?.say(
+    live.current?.announce(
       t('calendar.moved', {
         title: row.title || t('untitled'),
         date: formatDatePart(next.start, locale),
@@ -209,7 +214,7 @@ export function CalendarView({
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !writable) return;
     const el = (event.target as HTMLElement).closest<HTMLElement>('[data-cal-drag]');
-    if (!el || !startsDrag(event.target, el)) return;
+    if (!el || !cgStartsDrag(event.target, el)) return;
     const rowId = el.dataset.rowId!;
     const row = rowsById.get(rowId);
     if (!row) return;
@@ -232,7 +237,9 @@ export function CalendarView({
     };
     const press = { x: event.clientX, y: event.clientY };
     stopDrag.current?.();
-    stopDrag.current = trackDrag(event.nativeEvent, el, scroller, {
+    stopDrag.current = cgTrackDrag(event.nativeEvent, el, {
+      scroller,
+      ghostClassName: 'cgw-drag-ghost',
       onStart() {
         start = { left: scroller?.scrollLeft ?? 0, top: scroller?.scrollTop ?? 0 };
         cells = [...(root.current?.querySelectorAll<HTMLElement>('[data-day]') ?? [])].map((c) => ({
@@ -445,7 +452,7 @@ export function CalendarView({
           />
         ) : null}
       </div>
-      <Live ref={live} />
+      <CgLiveAnnouncer ref={live} />
       {popup?.kind === 'new' ? (
         <CellFlyout
           anchor={popup.anchor}

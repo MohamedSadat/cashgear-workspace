@@ -4,12 +4,23 @@
 // virtualised (only those in the window are drawn). One card is in the tab order; the arrows
 // move through the grid (mirrored in RTL), Enter opens a card. "New" types a title in place.
 //
-// Cards move (Phase 8) as the board's do: a drag by the pointer (a copy follows it, one indicator
-// shows where it lands) or by the keys (Space picks a card up, the arrows move it through the grid,
-// Space or Enter drops it, Escape cancels), spoken through a live region. The order is the rows'
-// own (their order keys, one `page.move`), as a board's within a column and every view without a
-// sort; a view with a sort keeps the sort's order, so its cards do not move by hand.
-import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
+// Cards move (Phase 8) as the board's do: a drag by the pointer (`cgTrackDrag`: a copy follows it,
+// one `CgDropIndicator` shows where it lands) or by the keys (Space picks a card up, the arrows
+// move it through the grid, Space or Enter drops it, Escape cancels), spoken through the
+// `CgLiveAnnouncer`. The order is the rows' own (their order keys, one `page.move`), as a board's
+// within a column and every view without a sort; a view with a sort keeps the sort's order, so its
+// cards do not move by hand.
+import {
+  CgContextMenu,
+  CgDropIndicator,
+  CgLiveAnnouncer,
+  cgStartsDrag,
+  cgTrackDrag,
+  type CgContextMenuActions,
+  type CgContextMenuItem,
+  type CgDropIndicatorHandle,
+  type CgLiveAnnouncerHandle,
+} from '@cashgear/ui';
 import type { Id, RowRecord } from '@cgw/workspace';
 import {
   memo,
@@ -26,9 +37,7 @@ import {
   type PointerEvent,
 } from 'react';
 import { InlineEditor } from '../../cells/InlineEditor';
-import { startsDrag, trackDrag } from '../board/drag';
 import { needsMove, placeAt, targetIndex } from '../board/layout';
-import { Live, type LiveHandle } from '../board/shared';
 import { useCellEnv } from '../../cells/env';
 import { TITLE_PROPERTY } from '../../core';
 import { useDatabaseContext } from '../../context';
@@ -154,47 +163,45 @@ export function GalleryView({
     return id ? rows.findIndex((r) => r.id === id) : -1;
   };
   // ---- Moving a card ---------------------------------------------------------------------------
-  const live = useRef<LiveHandle>(null);
+  const live = useRef<CgLiveAnnouncerHandle>(null);
   const grid = useRef<HTMLDivElement>(null);
-  const indicator = useRef<HTMLDivElement | null>(null);
+  const indicator = useRef<CgDropIndicatorHandle>(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const geometry = useRef({ layout, cols, width });
   geometry.current = { layout, cols, width };
+  const shownAt = useRef<number | null>(null);
   /** The indicator before the card at an insertion index (after the last card at the end). */
   const showIndicator = (index: number) => {
-    const body = grid.current;
-    if (!body) return;
-    let el = indicator.current;
-    if (!el) {
-      el = document.createElement('div');
-      el.className = 'cgw-db-drop-indicator';
-      el.dataset.mode = 'tile';
-      el.setAttribute('aria-hidden', 'true');
-      indicator.current = el;
-    }
+    // Most frames of a drag land where the last one did: nothing to move.
+    if (shownAt.current === index) return;
+    shownAt.current = index;
     const g = geometry.current;
     const at = galleryDropAt(index, rowsRef.current.length, g.cols, g.width);
     const top = g.layout.offsets[at.row] ?? 0;
     const bottom = g.layout.offsets[at.row + 1] ?? top;
-    el.style.insetInlineStart = `${at.inline - 1}px`;
-    el.style.insetBlockStart = `${top}px`;
-    el.style.blockSize = `${Math.max(20, bottom - top - GALLERY_GAP)}px`;
-    if (el.parentElement !== body) body.append(el);
+    indicator.current?.show({
+      orientation: 'vertical',
+      block: top,
+      inline: at.inline,
+      length: Math.max(20, bottom - top - GALLERY_GAP),
+    });
   };
-  const hideIndicator = () => indicator.current?.remove();
-  useEffect(() => hideIndicator, []);
+  const hideIndicator = () => {
+    shownAt.current = null;
+    indicator.current?.hide();
+  };
 
   /** Moves a card to `index` among the other cards; tells the person where it went. */
   const commitMove = (row: RowRecord, index: number | null) => {
     const list = rowsRef.current;
     const others = list.filter((r) => r.id !== row.id);
     if (index === null || !needsMove(row, others, index)) {
-      live.current?.say(t('card.cancelled'));
+      live.current?.announce(t('card.cancelled'));
       return;
     }
     void actions.moveRow(row, placeAt(others, index));
-    live.current?.say(
+    live.current?.announce(
       t('gallery.dropped', {
         title: row.title || t('untitled'),
         index: (index + 1).toLocaleString(locale),
@@ -207,15 +214,16 @@ export function GalleryView({
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !draggable || picked.current) return;
     const card = (event.target as HTMLElement).closest<HTMLElement>('[data-card]');
-    if (!card || !startsDrag(event.target, card)) return;
+    if (!card || !cgStartsDrag(event.target, card)) return;
     const row = rowsRef.current.find((r) => r.id === card.dataset.card);
     const body = grid.current;
     if (!row || !body) return;
     const from = rowsRef.current.indexOf(row);
     let drop: number | null = null;
     stopDrag.current?.();
-    stopDrag.current = trackDrag(event.nativeEvent, card, scroller.current, {
-      onStart() {},
+    stopDrag.current = cgTrackDrag(event.nativeEvent, card, {
+      scroller: scroller.current,
+      ghostClassName: 'cgw-drag-ghost',
       onMove(x, y) {
         const box = body.getBoundingClientRect();
         const rtlNow = getComputedStyle(body).direction === 'rtl';
@@ -251,9 +259,9 @@ export function GalleryView({
     picked.current = null;
     hideIndicator();
     if (!p) return;
-    document.getElementById(cardDomId(idPrefix, p.row.id))?.removeAttribute('data-dragging');
+    document.getElementById(cardDomId(idPrefix, p.row.id))?.removeAttribute('data-cg-dragging');
     if (!commit || p.index === p.from) {
-      live.current?.say(t('card.cancelled'));
+      live.current?.announce(t('card.cancelled'));
       return;
     }
     commitMove(p.row, p.index);
@@ -282,7 +290,7 @@ export function GalleryView({
       p.index = next;
       // Shown as an insertion among every card: after itself when it goes later.
       showIndicator(next > p.from ? next + 1 : next);
-      live.current?.say(
+      live.current?.announce(
         t('gallery.position', {
           index: (next + 1).toLocaleString(locale),
           count: rows.length.toLocaleString(locale),
@@ -293,8 +301,8 @@ export function GalleryView({
     if (event.key === ' ' && draggable) {
       event.preventDefault();
       picked.current = { row, from: index, index };
-      target.setAttribute('data-dragging', '');
-      live.current?.say(t('card.pickedUp', { title: row.title || t('untitled') }));
+      target.setAttribute('data-cg-dragging', '');
+      live.current?.announce(t('card.pickedUp', { title: row.title || t('untitled') }));
       return;
     }
     if (event.key === 'Enter') {
@@ -401,6 +409,7 @@ export function GalleryView({
         onContextMenu={onContextMenu}
       >
         <div ref={grid} className="cgw-gallery-grid" style={{ blockSize: layout.total }}>
+          <CgDropIndicator ref={indicator} className="cgw-db-drop-indicator" />
           {tiles.map((i) => {
             const r = Math.floor(i / cols);
             const c = i % cols;
@@ -482,7 +491,7 @@ export function GalleryView({
           ? t('rowCount', { count: snapshot.total })
           : t('rowsShown', { shown: rows.length, total: snapshot.total })}
       </div>
-      <Live ref={live} />
+      <CgLiveAnnouncer ref={live} />
       <CgContextMenu<RowRecord> items={cardItems} actionsRef={cardMenu} ariaLabel={t('row.menu')} />
     </div>
   );

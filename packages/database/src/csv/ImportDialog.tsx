@@ -1,13 +1,14 @@
-// The CSV import dialog: pick a file (or drop it), say whether its first row is a header, then
-// either map its columns onto this database's properties (matched by name at first) or make a new
-// database from it (its properties worked out by `inferProperties`, each type changeable), check
-// the first rows as they will be read, and import. Up to `LOCAL_ROW_LIMIT` rows are written on the
-// device, by operations in batches; a larger file in a synced workspace goes to the server's
-// import route (`host.importCsv`); at most 50,000 rows and 20 MB either way.
-import { CgButton, CgPopup } from '@cashgear/ui';
+// The CSV import dialog: pick a file (or drop it: `CgFilePicker`), say whether its first row is a
+// header, then either map its columns onto this database's properties (matched by name at first)
+// or make a new database from it (its properties worked out by `inferProperties`, each type
+// changeable), check the first rows as they will be read, and import. Up to `LOCAL_ROW_LIMIT` rows
+// are written on the device, by operations in batches; a larger file in a synced workspace goes to
+// the server's import route (`host.importCsv`); at most 50,000 rows and 20 MB either way. A
+// dropped file the picker does not take is said to be unreadable.
+import { CgButton, CgFilePicker, CgPopup } from '@cashgear/ui';
 import type { Id } from '@cgw/workspace';
 import { parseCsv } from '@cgw/workspace';
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   LOCAL_ROW_LIMIT,
   type DatabaseRecord,
@@ -41,6 +42,13 @@ const BATCH = 400;
 const PREVIEW = 5;
 const CSV_MAX_ROWS = 50_000;
 const CSV_MAX_BYTES = 20 * 1024 * 1024;
+/**
+ * What the picker takes, chosen or dropped: a file matches when its name has one of the endings or
+ * its type is one of the types, so a `.csv` whose type is Excel's (`application/vnd.ms-excel`, as
+ * Chrome on Windows reports it with Excel installed) or empty is taken by its name. Excel's type is
+ * not listed itself: it would take `.xls` workbooks too.
+ */
+const CSV_ACCEPT = '.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain';
 
 export interface ImportDialogProps {
   host: DatabaseHost;
@@ -76,7 +84,6 @@ interface Loaded {
 export function ImportDialog({ host, databaseId, place, initialFile, onClose }: ImportDialogProps) {
   const { t } = useDbT();
   const database = useHost(host, () => (databaseId ? host.database(databaseId) : null));
-  const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<Loaded | null>(null);
   const [hasHeader, setHasHeader] = useState(true);
   const [mode, setMode] = useState<'into' | 'new'>(databaseId ? 'into' : 'new');
@@ -130,10 +137,6 @@ export function ImportDialog({ host, databaseId, place, initialFile, onClose }: 
     setHasHeader(on);
     if (file && database)
       setMapping(defaultMapping(database, csvTable(file.parsed, on, columnName)));
-  };
-  const onDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    void read(event.dataTransfer.files?.[0]);
   };
 
   // ---- Importing --------------------------------------------------------------------------------
@@ -299,32 +302,23 @@ export function ImportDialog({ host, databaseId, place, initialFile, onClose }: 
       footer={footer}
     >
       <div className="cgw-csv">
-        <div
-          className="cgw-csv-pick"
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={onDrop}
+        <CgFilePicker
+          accept={CSV_ACCEPT}
+          appearance="outline"
+          data-cg-initial-focus=""
+          dropZone
+          containerClassName="cgw-csv-pick"
+          disabled={phase.kind === 'importing'}
+          hint={
+            <span className="cgw-csv-hint">
+              {file ? t('csv.file', { name: file.name, count: rowsInFile }) : t('csv.drop')}
+            </span>
+          }
+          onPick={([picked]) => void read(picked)}
+          onReject={() => setPhase({ kind: 'pick', error: t('csv.readFailed') })}
         >
-          <input
-            ref={input}
-            type="file"
-            accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain"
-            className="cgw-views-sr"
-            tabIndex={-1}
-            aria-hidden="true"
-            onChange={(event) => void read(event.target.files?.[0])}
-          />
-          <CgButton
-            appearance="outline"
-            data-cg-initial-focus=""
-            disabled={phase.kind === 'importing'}
-            onClick={() => input.current?.click()}
-          >
-            {file ? t('csv.change') : t('csv.pick')}
-          </CgButton>
-          <span className="cgw-csv-hint">
-            {file ? t('csv.file', { name: file.name, count: rowsInFile }) : t('csv.drop')}
-          </span>
-        </div>
+          {file ? t('csv.change') : t('csv.pick')}
+        </CgFilePicker>
         {phase.kind === 'pick' && phase.error ? (
           <p className="cgw-csv-error" role="alert">
             {phase.error}

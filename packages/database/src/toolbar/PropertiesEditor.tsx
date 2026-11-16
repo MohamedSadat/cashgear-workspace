@@ -1,14 +1,13 @@
-// The view's properties: each shown or hidden (the title always shown), in the view's order
-// (drag a handle, or ArrowUp and ArrowDown on it); Show all and Hide all; adding a property; and
-// the deleted properties, each of which can be restored.
-import { CgButton, CgSwitch } from '@cashgear/ui';
+// The view's properties: each shown or hidden (the title always shown), in the view's order (the
+// library's `CgSortableList`: drag a handle, or ArrowUp, ArrowDown, Home and End on it); Show all
+// and Hide all; adding a property; and the deleted properties, each of which can be restored.
+import { CgButton, CgMenuPanelHeader, CgSortableList, CgSwitch } from '@cashgear/ui';
 import { useState } from 'react';
 import { TITLE_PROPERTY, type DatabaseRecord, type PropertyType, type ViewRecord } from '../core';
 import { useDatabaseContext } from '../context';
 import { useDbT } from '../i18n';
 import { TYPE_GLYPH, orderedProperties, uniqueName } from '../model/properties';
 import { moveProperty, withAllHidden, withHidden } from '../model/viewConfig';
-import { useReorder } from '../pickers/reorder';
 import { newPropertyDef } from '../properties/defs';
 import { TypePicker } from '../properties/TypePicker';
 
@@ -27,29 +26,16 @@ export function PropertiesEditor({
   const [adding, setAdding] = useState(false);
   const ordered = orderedProperties(database, view.config);
   const hidden = new Set(view.config.properties.hidden);
-  const ids = ordered.map((p) => p.id);
-  const { state, handleProps } = useReorder(
-    ids,
-    (id, to) => void actions.updateView(view, moveProperty(view.config, database, id, to)),
-  );
   const deleted = database.properties.filter((p) => p.trashedAt);
 
   if (adding)
     return (
       <div className="cgw-panel">
-        <div className="cgw-panel-head">
-          <button
-            type="button"
-            className="cgw-icon-button"
-            aria-label={t('back')}
-            onClick={() => setAdding(false)}
-          >
-            <span aria-hidden="true" className="cgw-back-glyph">
-              ‹
-            </span>
-          </button>
-          <span className="cgw-panel-title">{t('property.addLabel')}</span>
-        </div>
+        <CgMenuPanelHeader
+          title={t('property.addLabel')}
+          onBack={() => setAdding(false)}
+          backLabel={t('back')}
+        />
         <TypePicker
           label={t('property.addLabel')}
           onPick={(type: PropertyType) => {
@@ -93,28 +79,21 @@ export function PropertiesEditor({
           </CgButton>
         </div>
       ) : null}
-      <ul className="cgw-props-list" aria-label={t('properties.title')}>
-        {ordered.map((def, i) => {
+      <CgSortableList
+        className="cgw-props-list"
+        label={t('properties.title')}
+        items={ordered}
+        getKey={(def) => def.id}
+        handleLabel={(def) => t('properties.drag', { name: def.name })}
+        disabled={!editable}
+        onMove={(id, to) =>
+          void actions.updateView(view, moveProperty(view.config, database, id, to))
+        }
+        renderItem={(def) => {
           const fixed = titleFirst && def.id === TITLE_PROPERTY;
           const isShown = fixed || !hidden.has(def.id);
           return (
-            <li
-              key={def.id}
-              className="cgw-props-item"
-              data-reorder-id={def.id}
-              data-drop={state.dragging && state.over === i ? 'true' : undefined}
-            >
-              {editable ? (
-                <button
-                  type="button"
-                  className="cgw-db-handle"
-                  aria-label={t('properties.drag', { name: def.name })}
-                  aria-keyshortcuts="ArrowUp ArrowDown"
-                  {...handleProps(def.id)}
-                >
-                  <span aria-hidden="true">⠿</span>
-                </button>
-              ) : null}
+            <>
               <span className="cgw-th-glyph" aria-hidden="true">
                 {TYPE_GLYPH[def.type]}
               </span>
@@ -129,10 +108,10 @@ export function PropertiesEditor({
                   void actions.updateView(view, withHidden(view.config, def.id, !on))
                 }
               />
-            </li>
+            </>
           );
-        })}
-      </ul>
+        }}
+      />
       {editable ? (
         <CgButton appearance="outline" size="small" onClick={() => setAdding(true)}>
           {t('property.add')}

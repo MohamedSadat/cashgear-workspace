@@ -1,30 +1,8 @@
-// Small pieces the board, list, calendar and gallery share: a live region the views speak through
-// (moves, drops) without drawing anything, and the stand-in row a new row's title is typed into
-// before the row exists (so an abandoned "New" leaves no empty row behind).
+// The stand-in row the board, list, calendar and gallery type a new row's title into before the
+// row exists (so an abandoned "New" leaves no empty row behind). The views speak their moves and
+// drops through the library's `CgLiveAnnouncer`, written through its ref (nothing drawn).
 import type { RowRecord } from '@cgw/workspace';
-import { forwardRef, useImperativeHandle, useRef } from 'react';
 import type { DatabaseRecord } from '../../core';
-
-export interface LiveHandle {
-  say(text: string): void;
-}
-
-/** A polite live region, written to directly (no React state: a drag must not draw anything). */
-export const Live = forwardRef<LiveHandle>(function Live(_props, ref) {
-  const el = useRef<HTMLDivElement>(null);
-  useImperativeHandle(ref, () => ({
-    say(text: string) {
-      const node = el.current;
-      if (!node) return;
-      // The same text twice in a row is still read: clear it first.
-      node.textContent = '';
-      requestAnimationFrame(() => {
-        if (el.current) el.current.textContent = text;
-      });
-    },
-  }));
-  return <div ref={el} className="cgw-views-sr" aria-live="polite" aria-atomic="true" />;
-});
 
 const drafts = new WeakMap<DatabaseRecord, RowRecord>();
 

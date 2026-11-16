@@ -123,6 +123,9 @@ const columnKeys = () =>
   );
 const grip = (group: string) =>
   container.querySelector<HTMLElement>(`[data-group="${group}"] .cgw-db-column-grip`)!;
+/** The line among the columns where a moved column would land, while it shows. */
+const columnLine = () =>
+  container.querySelector('.cgw-board-columns > [data-cg-drop-indicator]:not([hidden])');
 
 describe('the column order arithmetic', () => {
   it('puts the named keys first, in order, then the rest as they came', () => {
@@ -202,10 +205,10 @@ describe('a board column moved', () => {
     await pointer(window, 'pointermove', 130, 22);
     // Past the middle of the third column (10 + 2 * 284 + 136 = 714).
     await pointer(window, 'pointermove', 740, 24);
-    expect(container.querySelector('[data-column-drop]')).toBeTruthy();
+    expect(columnLine()).toBeTruthy();
     await pointer(window, 'pointerup', 740, 24);
     expect(columnKeys()).toEqual(['stTodo01', 'stDoing1', '', 'stDone01']);
-    expect(container.querySelector('[data-column-drop]')).toBeNull();
+    expect(columnLine()).toBeNull();
   });
 
   it('cannot be moved without the right to edit', async () => {
@@ -239,7 +242,7 @@ describe('a gallery card moved', () => {
     expect(first.getAttribute('aria-description')).toBe('Space picks the card up, Enter opens it.');
     first.focus();
     await key(first, ' ');
-    expect(first.hasAttribute('data-dragging')).toBe(true);
+    expect(first.hasAttribute('data-cg-dragging')).toBe(true);
     await key(first, 'ArrowRight');
     await key(first, 'ArrowRight');
     await key(first, ' ');
@@ -266,7 +269,11 @@ describe('a gallery card moved', () => {
     await pointer(first, 'pointerdown', 40, 40);
     await pointer(window, 'pointermove', 60, 60);
     await pointer(window, 'pointermove', 12 + width - 20, 12 + down);
-    expect(container.querySelector('.cgw-db-drop-indicator[data-mode="tile"]')).toBeTruthy();
+    expect(
+      container.querySelector(
+        '.cgw-gallery-grid > [data-cg-drop-indicator][data-orientation="vertical"]:not([hidden])',
+      ),
+    ).toBeTruthy();
     await pointer(window, 'pointerup', 12 + width - 20, 12 + down);
     expect(host.applied.map((op) => op.type)).toEqual(['page.move']);
     const expected = before.filter((id) => id !== before[0]);
@@ -284,7 +291,7 @@ describe('a gallery card moved', () => {
     expect(first.hasAttribute('aria-description')).toBe(false);
     first.focus();
     await key(first, ' ');
-    expect(first.hasAttribute('data-dragging')).toBe(false);
+    expect(first.hasAttribute('data-cg-dragging')).toBe(false);
     expect(host.applied).toHaveLength(0);
   });
 });
