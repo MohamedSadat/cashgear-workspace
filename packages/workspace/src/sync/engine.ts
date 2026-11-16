@@ -94,7 +94,17 @@ export type SyncEvent =
   /** A page's document was replaced (an epoch change, edit access lost): reopen it. */
   | { kind: 'docReset'; pageId: Id }
   | { kind: 'members'; workspaceId: Id }
-  | { kind: 'notice'; code: string; workspaceId: Id; pageId?: Id }
+  | {
+      kind: 'notice';
+      code: string;
+      workspaceId: Id;
+      pageId?: Id;
+      /**
+       * Phase 8: for an operation the server refused, which one (its type, and for an update the
+       * fields it set), so the message can name what was undone (`access.denied`).
+       */
+      refused?: RefusedOp;
+    }
   /** Pending quarantine entries exist: make recovered pages of them. */
   | { kind: 'recover'; workspaceId: Id }
   /** Pins or the pages held here changed: redraw what is available offline. */
@@ -424,6 +434,15 @@ export class SyncEngine {
     if (account) {
       this.failures = 0;
       if (options.offline) void this.report('offline');
+      else {
+        // Signed in: "Syncing" at once, not the start's "Signed out" until the first pass ends
+        // (about 200 ms at one desktop start in five, Phase 8's kill test); the count follows.
+        if (this.status_.state === 'signedOut') {
+          this.status_ = { ...this.status_, state: 'syncing' };
+          for (const listener of this.statusListeners) listener(this.status_);
+        }
+        void this.report('syncing', false);
+      }
       this.kick(0);
     } else void this.report('signedOut');
   }
@@ -546,8 +565,14 @@ export class SyncEngine {
     for (const listener of this.listeners) listener(event);
   }
 
-  private notice(code: string, workspaceId: Id, pageId?: Id) {
-    this.emit({ kind: 'notice', code, workspaceId, ...(pageId ? { pageId } : {}) });
+  private notice(code: string, workspaceId: Id, pageId?: Id, refused?: RefusedOp) {
+    this.emit({
+      kind: 'notice',
+      code,
+      workspaceId,
+      ...(pageId ? { pageId } : {}),
+      ...(refused ? { refused } : {}),
+    });
   }
 
   private clear() {
@@ -963,7 +988,12 @@ export class SyncEngine {
       for (const result of results) {
         if (result.notice) this.notice(result.notice, workspace.id, entityPage(result.entity));
         if (result.status === 'rejected' && result.error && !held.has(result.opId))
-          this.notice(result.error.code, workspace.id, entityPage(result.entity));
+          this.notice(
+            result.error.code,
+            workspace.id,
+            entityPage(result.entity),
+            refusedOp(ops.find((o) => o.opId === result.opId)),
+          );
       }
       this.emit({ kind: 'mirror', workspaceId: workspace.id });
       // What was sent again goes at once: the create it followed has left the outbox.
@@ -2683,6 +2713,23 @@ function sentTwice(
       again.add(op.opId);
   }
   return { held, again };
+}
+
+/** A refused operation, as a notice names it: its type, and the fields an update set. */
+export interface RefusedOp {
+  type: Operation['type'];
+  fields?: string[];
+}
+
+function refusedOp(op: Operation | undefined): RefusedOp | undefined {
+  if (!op) return undefined;
+  if (!op.type.endsWith('.update')) return { type: op.type };
+  const payload = op.payload as { values?: Record<string, unknown> } & Record<string, unknown>;
+  // A row's update names its properties' ids; the rest name their record's fields.
+  return {
+    type: op.type,
+    fields: Object.keys(op.type === 'row.update' ? (payload.values ?? {}) : payload),
+  };
 }
 
 /** The page a notice about an entity points at: the page, the row, the database's page. */

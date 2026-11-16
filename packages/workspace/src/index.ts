@@ -25,6 +25,7 @@ export {
   pushBatches,
   type HoldProgress,
   type OfflineProgress,
+  type RefusedOp,
   type SyncEvent,
   type SyncOptions,
   type SyncState,

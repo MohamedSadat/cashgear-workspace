@@ -363,4 +363,23 @@ describe('sync engine', () => {
     await expect(one.engine.syncOnce()).rejects.toThrow();
     expect((await one.store.nextOutboxBatch(100, ws.id)).length).toBeGreaterThan(0);
   });
+
+  it('says "syncing", not "signed out", from the moment an account is signed in', async () => {
+    const server = new FakeServer();
+    const one = device(server);
+    const { ws } = await localWorkspace(one.store);
+    await one.engine.upload(ws.id);
+    one.engine.setAccount(null);
+    await one.engine.syncOnce();
+    expect(one.engine.status.state).toBe('signedOut');
+    const seen: string[] = [];
+    const off = one.engine.onStatus((status) => seen.push(status.state));
+    one.engine.setAccount(ALICE);
+    // Before any pass or store read has finished.
+    expect(one.engine.status.state).toBe('syncing');
+    await one.engine.syncOnce();
+    off();
+    expect(one.engine.status.state).toBe('synced');
+    expect(seen).not.toContain('signedOut');
+  });
 });
