@@ -124,7 +124,10 @@ test.describe('the block editor', () => {
     const address = page.getByLabel('Link address');
     await address.fill('javascript:alert(1)');
     await address.press('Enter');
-    await expect(toolbar.getByRole('alert')).toBeVisible();
+    // The link field and its alert are in the toolbar's panel, beside the toolbar itself.
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Only https, http, mailto and tel links' }),
+    ).toBeVisible();
     await expect(editor(page).locator('a')).toHaveCount(0);
     await address.fill('example.com/report');
     await address.press('Enter');

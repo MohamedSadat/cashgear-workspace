@@ -41,11 +41,32 @@ export function insertMention(view: EditorView, id: string, person = false) {
 /** A person's item id in the "@" menu: pages and people both have UUIDs. */
 const PERSON = 'person:';
 
-/** The "@" menu's date items: today and tomorrow on this device, or a date from the picker. */
+/**
+ * The "@" menu's date items: today and tomorrow on this device, or a date from the picker. Their
+ * glyphs, like a person's and a page's without an icon of its own, are `CgIcon` names.
+ */
 const DATE_ITEMS = [
-  { id: 'date:today', days: 0, label: 'dateToday', glyph: '📅', words: ['today', 'date', 'now'] },
-  { id: 'date:tomorrow', days: 1, label: 'dateTomorrow', glyph: '📅', words: ['tomorrow', 'date'] },
-  { id: 'date:pick', days: 0, label: 'datePick', glyph: '🗓', words: ['date', 'pick', 'calendar'] },
+  {
+    id: 'date:today',
+    days: 0,
+    label: 'dateToday',
+    glyph: 'calendar',
+    words: ['today', 'date', 'now'],
+  },
+  {
+    id: 'date:tomorrow',
+    days: 1,
+    label: 'dateTomorrow',
+    glyph: 'calendar',
+    words: ['tomorrow', 'date'],
+  },
+  {
+    id: 'date:pick',
+    days: 0,
+    label: 'datePick',
+    glyph: 'calendar-month',
+    words: ['date', 'pick', 'calendar'],
+  },
 ] as const;
 
 /** Lower case, without Arabic diacritics and tatweel, for matching what is typed after `@`. */
@@ -83,13 +104,13 @@ export function mentionItems(host: EditorHost, query: string): SlashItem[] {
   const people: SlashItem[] = found.map((person) => ({
     id: `${PERSON}${person.id}`,
     label: person.name || editorString(host, 'someone'),
-    glyph: '👤',
+    glyph: 'person',
     group: dates.length || pageList.length ? editorString(host, 'mentionPeople') : undefined,
   }));
   const pages: SlashItem[] = pageList.map((page) => ({
     id: page.id,
     label: page.title || (strings?.untitled ?? ''),
-    glyph: page.icon ?? '📄',
+    glyph: page.icon || 'page',
     group: dates.length || people.length ? strings?.mentionPages : undefined,
   }));
   return typed && dates.length ? [...people, ...dates, ...pages] : [...people, ...pages, ...dates];

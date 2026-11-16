@@ -367,32 +367,26 @@ describe('a thread in real editors over Yjs', () => {
     const view = a.be.editor.view;
     const mine = view.dom.parentElement!.parentElement!.querySelector<HTMLElement>('.cgw-handle')!;
     mine.dataset.pos = String(find(a, x)!.pos);
-    const data = {
-      types: [] as string[],
-      values: {} as Record<string, string>,
-      setData(kind: string, value: string) {
-        this.types.push(kind);
-        this.values[kind] = value;
-      },
-      getData(kind: string) {
-        return this.values[kind] ?? '';
-      },
-      setDragImage() {},
-      effectAllowed: '',
-      dropEffect: '',
-    };
+    // A pointer drag (cgTrackDrag): pressed on the handle, moved past the threshold, released.
     const fire = (target: EventTarget, name: string, extra: Record<string, unknown>) => {
       const event = new Event(name, { bubbles: true, cancelable: true });
-      for (const [key, value] of Object.entries(extra))
+      for (const [key, value] of Object.entries({ pointerId: 1, button: 0, ...extra }))
         Object.defineProperty(event, key, { value });
       target.dispatchEvent(event);
     };
-    // Dropped on the last block's lower half: after it.
+    // Released over the last block's lower half (jsdom has no layout: every box is empty, and
+    // what is under the pointer is given): after it.
     const last = view.nodeDOM(list(a)[2].pos) as HTMLElement;
-    fire(mine, 'dragstart', { dataTransfer: data });
-    fire(last.firstElementChild!, 'dragover', { dataTransfer: data, clientX: 0, clientY: 1 });
-    fire(last.firstElementChild!, 'drop', { clientX: 0, clientY: 1 });
-    fire(mine, 'dragend', {});
+    const under = document as unknown as { elementFromPoint?: (x: number, y: number) => Element };
+    const before = under.elementFromPoint;
+    under.elementFromPoint = () => last.firstElementChild!;
+    try {
+      fire(mine, 'pointerdown', { clientX: 0, clientY: 0 });
+      fire(window, 'pointermove', { clientX: 0, clientY: 10 });
+      fire(window, 'pointerup', { clientX: 0, clientY: 10 });
+    } finally {
+      under.elementFromPoint = before;
+    }
     expect(texts(a)).toEqual(['second line', 'third', 'alpha beta gamma']);
     await tick();
     exchange(all);

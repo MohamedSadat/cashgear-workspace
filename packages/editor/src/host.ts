@@ -102,6 +102,10 @@ export interface LinkPreview {
 export interface SlashItem {
   id: string;
   label: string;
+  /**
+   * Its icon: a `CgIcon` name (a block's, Track U8, as `BlockAction.glyph`), or an emoji or other
+   * text drawn as given (a page's own icon).
+   */
   glyph: string;
   group?: string;
   shortcut?: string;

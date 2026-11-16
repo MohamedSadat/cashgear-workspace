@@ -1,7 +1,8 @@
 // "Comment" in the bubble toolbar and the block menu (Phase 6, contracts section 6): offered only
 // when the host gives `comments.create`; in the toolbar beside the marks on an editable page, and
 // alone on a page this person may comment on but not edit; in the block menu on the whole block.
-import { afterAll, describe, expect, it } from 'vitest';
+// The toolbar is `@cashgear/ui`'s CgSelectionToolbar, drawn in a flyout on the document's body.
+import { afterEach, describe, expect, it } from 'vitest';
 import { installDom } from './testing';
 
 installDom();
@@ -46,8 +47,9 @@ type EditorHost = import('./host').EditorHost;
 type CommentAnchor = import('./host').CommentAnchor;
 
 const cleanups: (() => void)[] = [];
-afterAll(() => {
-  for (const cleanup of cleanups) cleanup();
+// One editor and its overlays at a time: the toolbar of a page that is not editable stays shown.
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await act(async () => cleanup());
 });
 const { docOf, paragraph } = build;
 const strings = {
@@ -109,38 +111,42 @@ async function setup(options: { editable: boolean; comment: boolean }) {
     });
   };
   const buttons = () =>
-    [...container.querySelectorAll<HTMLButtonElement>('.cgw-bubble button')].map(
+    [...document.querySelectorAll<HTMLButtonElement>('.cgw-bubble button')].map(
       (b) => b.getAttribute('aria-label') ?? '',
     );
-  return { be, editor, container, created, selectBeta, buttons };
+  const button = (label: string) =>
+    document.querySelector<HTMLButtonElement>(`.cgw-bubble [aria-label="${label}"]`)!;
+  return { be, editor, container, created, selectBeta, buttons, button };
 }
 
 describe('"Comment"', () => {
   it('sits in the bubble toolbar beside the marks, and comments on the selection', async () => {
-    const { container, created, selectBeta, buttons } = await setup({
+    const { created, selectBeta, buttons, button } = await setup({
       editable: true,
       comment: true,
     });
     await selectBeta();
     expect(buttons()).toContain('Bold');
     expect(buttons().at(-1)).toBe('Comment');
-    const button = container.querySelector<HTMLButtonElement>('[aria-label="Comment"]')!;
-    await act(async () => button.click());
+    // The toolbar is named, and its tools are pressed in place (the marks say whether they are on).
+    const toolbar = document.querySelector('.cgw-bubble [role="toolbar"]')!;
+    expect(toolbar.getAttribute('aria-label')).toBe('Formatting');
+    expect(button('Bold').getAttribute('aria-pressed')).toBe('false');
+    expect(button('Turn into').getAttribute('aria-expanded')).toBe('false');
+    await act(async () => button('Comment').click());
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({ quote: 'beta' });
     expect(created[0].start).toEqual(expect.any(String));
   });
 
   it('is alone in the toolbar on a page this person may comment on but not edit', async () => {
-    const { selectBeta, buttons, created, container } = await setup({
+    const { selectBeta, buttons, created, button } = await setup({
       editable: false,
       comment: true,
     });
     await selectBeta();
     expect(buttons()).toEqual(['Comment']);
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Comment"]')!.click(),
-    );
+    await act(async () => button('Comment').click());
     expect(created[0]).toMatchObject({ quote: 'beta' });
   });
 

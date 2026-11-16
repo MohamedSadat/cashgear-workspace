@@ -42,7 +42,7 @@ export function openSlash(view: EditorView): boolean {
   if (!empty || !$from.parent.isTextblock || $from.parent.type.spec.code) return false;
   const before = $from.parent.textBetween(Math.max(0, $from.parentOffset - 1), $from.parentOffset);
   const tr = view.state.tr;
-  if (before && !/s/.test(before)) tr.insertText(' ');
+  if (before && !/\s/.test(before)) tr.insertText(' ');
   const from = tr.selection.from;
   tr.insertText('/').setMeta(slashKey, { active: true, from, query: '' });
   view.dispatch(tr);

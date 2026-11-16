@@ -1,9 +1,11 @@
 // The touch toolbar: on a narrow or touch screen, while the editor has focus, a row of block tools
 // sits above the on-screen keyboard: insert (the slash menu), bold, italic, move up and down,
 // indent, outdent and the block menu. With no hover and no Alt+Shift+arrows on a phone, it is how
-// blocks are moved there. Pointer-down is prevented, so the editor keeps its caret.
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { currentBlock, indent, moveSibling, outdent } from '../blocks';
+// blocks are moved there. `@cashgear/ui`'s CgSelectionToolbar docked (Track U2): presses in it keep
+// the focus in the editor, so the editor keeps its caret.
+import { CgSelectionToolbar, type CgToolbarItem } from '@cashgear/ui';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { currentBlock, indent, moveSibling, outdent, type BlockInfo } from '../blocks';
 import type { BlockEditor } from '../editor';
 import type { EditorHost } from '../host';
 import { openSlash } from '../slash';
@@ -22,24 +24,7 @@ function useMedia(query: string): boolean {
   return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
 }
 
-/** How far the on-screen keyboard reaches up from the bottom of the layout viewport. */
-function useKeyboardInset(): number {
-  const [inset, setInset] = useState(0);
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const update = () =>
-      setInset(Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop));
-    viewport.addEventListener('resize', update);
-    viewport.addEventListener('scroll', update);
-    update();
-    return () => {
-      viewport.removeEventListener('resize', update);
-      viewport.removeEventListener('scroll', update);
-    };
-  }, []);
-  return inset;
-}
+const none = () => () => {};
 
 export function TouchToolbar({
   editor: blockEditor,
@@ -50,10 +35,8 @@ export function TouchToolbar({
 }) {
   const editor = blockEditor.editor;
   const wanted = useMedia(QUERY);
-  const inset = useKeyboardInset();
   const bar = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(() => editor.isFocused);
-  const [, render] = useState(0);
 
   // Nothing is listened to on a wide screen: the toolbar costs no keystroke there.
   useEffect(() => {
@@ -64,103 +47,94 @@ export function TouchToolbar({
       const into = event.relatedTarget as Node | null;
       if (!into || !bar.current?.contains(into)) setFocused(false);
     };
-    const onTransaction = () => render((n) => n + 1);
     editor.on('focus', onFocus);
     editor.on('blur', onBlur);
-    editor.on('transaction', onTransaction);
     return () => {
       editor.off('focus', onFocus);
       editor.off('blur', onBlur);
-      editor.off('transaction', onTransaction);
     };
   }, [editor, wanted]);
+  // Drawn again only when what it shows changes: Bold and Italic pressed, the page editable.
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!wanted) return none();
+      editor.on('transaction', listener);
+      return () => {
+        editor.off('transaction', listener);
+      };
+    },
+    [editor, wanted],
+  );
+  const state = useSyncExternalStore(subscribe, () =>
+    wanted ? `${editor.isEditable}:${editor.isActive('bold')}:${editor.isActive('italic')}` : 'off',
+  );
 
   const s = host.strings;
-  if (!wanted || !focused || !editor.isEditable || !s) return null;
-
-  const block = currentBlock(editor.state);
-  const run = (make: () => ReturnType<typeof indent>) => {
-    const tr = make();
-    if (tr) editor.view.dispatch(tr.scrollIntoView());
-    editor.view.focus();
-  };
-  const tools: { key: string; label: string; glyph: string; act: () => void; pressed?: boolean }[] =
-    [
-      { key: 'insert', label: s.insertBlock, glyph: '+', act: () => openSlash(editor.view) },
+  const items = useMemo((): CgToolbarItem[] => {
+    if (!s) return [];
+    const [, bold, italic] = state.split(':');
+    // The block the caret is in when a tool is pressed.
+    const run = (make: (block: BlockInfo) => ReturnType<typeof indent>) => {
+      const block = currentBlock(editor.state);
+      const tr = block && make(block);
+      if (tr) editor.view.dispatch(tr.scrollIntoView());
+      editor.view.focus();
+    };
+    const tool = (name: string, text: string, icon: CgToolbarItem['icon'], act: () => void) => ({
+      name,
+      text,
+      icon,
+      iconOnly: true,
+      className: 'cgw-touchbar-button',
+      onClick: () => act(),
+    });
+    return [
+      tool('insert', s.insertBlock, 'add', () => void openSlash(editor.view)),
       {
-        key: 'bold',
-        label: s.bold,
-        glyph: 'B',
-        pressed: editor.isActive('bold'),
-        act: () => editor.chain().focus().toggleMark('bold').run(),
+        ...tool('bold', s.bold, 'text-bold', () => {
+          editor.chain().focus().toggleMark('bold').run();
+        }),
+        checked: bold === 'true',
       },
       {
-        key: 'italic',
-        label: s.italic,
-        glyph: 'I',
-        pressed: editor.isActive('italic'),
-        act: () => editor.chain().focus().toggleMark('italic').run(),
+        ...tool('italic', s.italic, 'text-italic', () => {
+          editor.chain().focus().toggleMark('italic').run();
+        }),
+        checked: italic === 'true',
       },
-      {
-        key: 'up',
-        label: s.moveUp,
-        glyph: '↑',
-        act: () => block && run(() => moveSibling(editor.state, block, -1)),
-      },
-      {
-        key: 'down',
-        label: s.moveDown,
-        glyph: '↓',
-        act: () => block && run(() => moveSibling(editor.state, block, 1)),
-      },
-      {
-        key: 'indent',
-        label: s.indent,
-        glyph: '⇥',
-        act: () => block && run(() => indent(editor.state, block)),
-      },
-      {
-        key: 'outdent',
-        label: s.outdent,
-        glyph: '⇤',
-        act: () => block && run(() => outdent(editor.state, block)),
-      },
-      {
-        key: 'menu',
-        label: s.blockMenu,
-        glyph: '⋯',
-        act: () => {
-          const open = blockEditor.ui.openBlockMenu;
-          if (!block || !open || !bar.current) return;
-          open(block.pos, bar.current.getBoundingClientRect());
-        },
-      },
+      tool('up', s.moveUp, 'chevron-up', () =>
+        run((block) => moveSibling(editor.state, block, -1)),
+      ),
+      tool('down', s.moveDown, 'chevron-down', () =>
+        run((block) => moveSibling(editor.state, block, 1)),
+      ),
+      tool('indent', s.indent, 'indent-increase', () =>
+        run((block) => indent(editor.state, block)),
+      ),
+      tool('outdent', s.outdent, 'indent-decrease', () =>
+        run((block) => outdent(editor.state, block)),
+      ),
+      tool('menu', s.blockMenu, 'more', () => {
+        const block = currentBlock(editor.state);
+        const open = blockEditor.ui.openBlockMenu;
+        if (!block || !open || !bar.current) return;
+        open(block.pos, bar.current.getBoundingClientRect());
+      }),
     ];
+  }, [s, state, editor, blockEditor]);
+
+  if (!wanted || !focused || !editor.isEditable || !s?.touchToolbar) return null;
 
   return (
-    <div
+    <CgSelectionToolbar
       ref={bar}
+      mode="docked"
       className="cgw-touchbar"
-      role="toolbar"
-      aria-label={s.touchToolbar}
-      style={{ bottom: inset }}
-      onPointerDown={(event) => event.preventDefault()}
-      onMouseDown={(event) => event.preventDefault()}
-    >
-      {tools.map((tool) => (
-        <button
-          key={tool.key}
-          type="button"
-          className="cgw-touchbar-button"
-          aria-label={tool.label}
-          title={tool.label}
-          aria-pressed={tool.pressed}
-          data-tool={tool.key}
-          onClick={tool.act}
-        >
-          <span aria-hidden="true">{tool.glyph}</span>
-        </button>
-      ))}
-    </div>
+      label={s.touchToolbar}
+      items={items}
+      size="large"
+      autoCollapseText={false}
+      zIndex={40}
+    />
   );
 }

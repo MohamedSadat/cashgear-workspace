@@ -1,7 +1,8 @@
 // The block menu, from the handle or Ctrl+/: turn into, colour, duplicate, delete, move up and
 // down, copy a link to the block, and (Phase 6, when the host lets this person comment) comment on
-// the whole block. Part of the Track U3 stand-in. Arrow keys move through it; Escape returns to
-// the editor.
+// the whole block. Arrow keys move through it; Escape returns to the editor. (Track U3 gave the
+// handle that opens it; the menu itself is the editor's own, its turn-into and colour lists open
+// in place under their items.)
 import { COLOUR_TOKENS } from '@cgw/doc';
 import { NodeSelection } from '@tiptap/pm/state';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -114,7 +115,7 @@ export function BlockMenu({
       onClick={onSelect}
     >
       <span>{label}</span>
-      {hint && <span className="cgw-command-shortcut">{hint}</span>}
+      {hint && <span className="cgw-block-menu-hint">{hint}</span>}
     </button>
   );
   return (

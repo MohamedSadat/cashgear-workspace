@@ -27,7 +27,6 @@ export { EDITOR_STRING_DEFAULTS, editorString } from './host';
 export { QUOTE_MAX, commentAnchorFor, resolveAnchor, type ResolvedAnchor } from './comments';
 export * as blocks from './blocks';
 export { EditorOverlays } from './ui/EditorOverlays';
-export { CommandMenu, type CommandMenuProps } from './ui/SlashMenu';
 export {
   BLOCK_ACTIONS,
   actionByName,

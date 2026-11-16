@@ -1,91 +1,123 @@
-// The slash menu: a filtered list of block commands at the caret, used by keyboard or pointer.
-// A stand-in for Track U1's command menu in CashGear.React.UI, behind the props it will take.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+// The slash menu: the block commands at the caret, filtered by what is typed after `/`, chosen by
+// keyboard or pointer. `@cashgear/ui`'s CgCommandMenu (Track U1), floating at the caret while the
+// editor keeps the focus: the editor forwards the menu's keys to it (`editor.ui.slashKeys`) and
+// points its `aria-activedescendant` at the active option.
+import { CgCommandMenu, type CgCommandMenuHandle, type CgCommandMenuItem } from '@cashgear/ui';
+import type { EditorView } from '@tiptap/pm/view';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type ReactElement,
+} from 'react';
 import type { BlockEditor } from '../editor';
 import type { EditorHost, SlashItem } from '../host';
-import { closeSlash, removeSlashText, slashState } from '../slash';
+import { closeSlash, removeSlashText, slashState, type SlashKeys } from '../slash';
 
-export interface CommandMenuProps {
+/** The keys a menu at the caret takes from the editor; Home, End and the rest stay the text's. */
+const MENU_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Enter', 'Tab']);
+
+export interface CaretMenuProps {
+  editor: BlockEditor;
+  /** The open menu's keys are set here (`editor.ui.slashKeys`, `.mentionKeys`). */
+  setKeys(keys: SlashKeys | null): void;
   items: SlashItem[];
-  /** Where to draw it: the caret's rectangle, in viewport coordinates. */
-  anchor: { left: number; right: number; top: number; bottom: number };
-  activeIndex: number;
-  onActiveIndex(index: number): void;
-  onChoose(item: SlashItem): void;
-  emptyText: string;
+  /** Where the typed `/` or `@` is: the menu sits below it, above when there is no room. */
+  at: number;
   label: string;
+  emptyText: string;
+  onChoose(item: SlashItem): void;
 }
 
-/** The menu itself: a listbox, active item by aria-activedescendant, focus stays in the editor. */
-export function CommandMenu({
+const toItem = (item: SlashItem): CgCommandMenuItem<SlashItem> => ({
+  key: item.id,
+  label: item.label,
+  group: item.group,
+  icon: item.glyph || undefined,
+  shortcut: item.shortcut,
+  data: item,
+});
+
+/** The caret's rectangle in the viewport, the same object while it does not move. */
+function useCaretRect(view: EditorView, at: number) {
+  let coords: { left: number; right: number; top: number; bottom: number } | null = null;
+  try {
+    coords = view.coordsAtPos(at);
+  } catch {
+    coords = null;
+  }
+  const key = coords ? `${coords.left}:${coords.right}:${coords.top}:${coords.bottom}` : '';
+  return useMemo(
+    () =>
+      coords && {
+        x: coords.left,
+        y: coords.top,
+        width: Math.max(0, coords.right - coords.left),
+        height: Math.max(0, coords.bottom - coords.top),
+      },
+    // The key holds the coordinates.
+    [key],
+  );
+}
+
+/**
+ * A command menu at the caret (the slash and "@" menus). Focus stays in the editor: the arrows,
+ * Enter and Tab reach the menu through `setKeys`, and the editor's `aria-activedescendant` names
+ * the active option while it is open. Nothing here changes per keystroke outside the menu itself.
+ */
+export function CaretMenu({
+  editor,
+  setKeys,
   items,
-  anchor,
-  activeIndex,
-  onActiveIndex,
-  onChoose,
-  emptyText,
+  at,
   label,
-}: CommandMenuProps) {
-  const list = useRef<HTMLDivElement>(null);
-  const [place, setPlace] = useState<{ top: number; left: number }>({
-    top: anchor.bottom + 4,
-    left: anchor.left,
-  });
-  useLayoutEffect(() => {
-    const el = list.current;
-    if (!el) return;
-    const rtl = getComputedStyle(el).direction === 'rtl';
-    const height = el.offsetHeight;
-    const width = el.offsetWidth;
-    const below = anchor.bottom + 4 + height <= window.innerHeight;
-    const top = below ? anchor.bottom + 4 : Math.max(8, anchor.top - 4 - height);
-    let left = rtl ? anchor.right - width : anchor.left;
-    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
-    setPlace({ top, left });
-  }, [anchor.left, anchor.right, anchor.top, anchor.bottom, items.length]);
+  emptyText,
+  onChoose,
+}: CaretMenuProps): ReactElement | null {
+  const view = editor.editor.view;
+  const menu = useRef<CgCommandMenuHandle>(null);
+  const anchor = useCaretRect(view, at);
+  const menuItems = useMemo(() => items.map(toItem), [items]);
+  const choose = useRef(onChoose);
+  choose.current = onChoose;
+
   useEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex]);
-  let group = '';
+    setKeys({
+      onKey: (event) =>
+        MENU_KEYS.has(event.key) ? (menu.current?.handleKeyDown(event) ?? false) : false,
+    });
+    return () => setKeys(null);
+  }, [setKeys]);
+
+  const onActive = useCallback(
+    (id: string | undefined) => {
+      if (id) view.dom.setAttribute('aria-activedescendant', id);
+      else view.dom.removeAttribute('aria-activedescendant');
+    },
+    [view],
+  );
+  // Closed, the editor names no option.
+  useEffect(() => () => view.dom.removeAttribute('aria-activedescendant'), [view]);
+
+  if (!anchor || !label) return null;
   return (
-    <div
-      ref={list}
-      className="cgw-command-menu"
-      role="listbox"
-      aria-label={label}
-      id="cgw-command-menu"
-      style={{ top: place.top, left: place.left }}
+    <CgCommandMenu<SlashItem>
+      ref={menu}
+      anchor={anchor}
+      items={menuItems}
+      filter={false}
+      label={label}
+      emptyText={emptyText}
+      selectOnTab
+      width={300}
+      maxHeight="min(360px, 60vh)"
+      onActiveDescendantChange={onActive}
+      onSelect={(item) => item.data && choose.current(item.data)}
+      // A press anywhere in the menu leaves the focus (and the menu) with the editor.
       onMouseDown={(event) => event.preventDefault()}
-    >
-      {items.length === 0 && <div className="cgw-command-empty">{emptyText}</div>}
-      {items.map((item, index) => {
-        const header = item.group && item.group !== group ? item.group : null;
-        group = item.group ?? group;
-        return (
-          <div key={item.id}>
-            {header && (
-              <div className="cgw-command-group" role="presentation">
-                {header}
-              </div>
-            )}
-            <div
-              id={`cgw-command-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              className="cgw-command-item"
-              onMouseEnter={() => onActiveIndex(index)}
-              onClick={() => onChoose(item)}
-            >
-              <span className="cgw-command-glyph" aria-hidden="true">
-                {item.glyph}
-              </span>
-              <span className="cgw-command-label">{item.label}</span>
-              {item.shortcut && <span className="cgw-command-shortcut">{item.shortcut}</span>}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    />
   );
 }
 
@@ -118,14 +150,12 @@ export function SlashMenu({ editor, host }: { editor: BlockEditor; host: EditorH
     () => (slash.active ? (host.slash?.list(slash.query) ?? []) : []),
     [slash.active, slash.query, host],
   );
-  const [active, setActive] = useState(0);
-  useEffect(() => setActive(0), [slash.query, slash.active]);
-
-  const choose = (item: SlashItem | undefined) => {
-    if (!item) return;
-    removeSlashText(editor.editor.view);
-    void host.slash?.run(item.id);
-  };
+  const setKeys = useCallback(
+    (keys: SlashKeys | null) => {
+      editor.ui.slashKeys = keys;
+    },
+    [editor],
+  );
 
   // Close when nothing matches a longer query, as editors do.
   useEffect(() => {
@@ -133,46 +163,20 @@ export function SlashMenu({ editor, host }: { editor: BlockEditor; host: EditorH
       closeSlash(editor.editor.view);
   }, [slash.active, items.length, slash.query, editor]);
 
-  const state = useRef({ items, active });
-  state.current = { items, active };
-  useEffect(() => {
-    editor.ui.slashKeys = {
-      onKey(event) {
-        const { items: list, active: index } = state.current;
-        if (event.key === 'ArrowDown') setActive((index + 1) % Math.max(1, list.length));
-        else if (event.key === 'ArrowUp')
-          setActive((index - 1 + list.length) % Math.max(1, list.length));
-        else if (event.key === 'Enter' || event.key === 'Tab') {
-          if (!list.length) return false;
-          choose(list[index]);
-        } else return false;
-        event.preventDefault();
-        return true;
-      },
-    };
-    return () => {
-      editor.ui.slashKeys = null;
-    };
-  });
-
   if (!slash.active) return null;
-  const view = editor.editor.view;
-  let anchor;
-  try {
-    anchor = view.coordsAtPos(slash.from);
-  } catch {
-    return null;
-  }
   const strings = host.strings;
   return (
-    <CommandMenu
+    <CaretMenu
+      editor={editor}
+      setKeys={setKeys}
       items={items}
-      anchor={anchor}
-      activeIndex={active}
-      onActiveIndex={setActive}
-      onChoose={choose}
-      emptyText={strings?.noCommands ?? ''}
+      at={slash.from}
       label={strings?.commandMenu ?? ''}
+      emptyText={strings?.noCommands ?? ''}
+      onChoose={(item) => {
+        removeSlashText(editor.editor.view);
+        void host.slash?.run(item.id);
+      }}
     />
   );
 }

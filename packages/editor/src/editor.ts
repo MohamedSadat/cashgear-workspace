@@ -146,7 +146,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       Tables,
       TableOfContents,
       Clipboard.configure({ host: getHost }),
-      BlockHandle.configure({ host: getHost, ui: () => ui }),
+      BlockHandle.configure({ ui: () => ui }),
       Presence.configure({ host: getHost, onHostChange }),
       Comments.configure({ host: getHost, onHostChange }),
       ...(options.extensions?.(getHost) ?? []),

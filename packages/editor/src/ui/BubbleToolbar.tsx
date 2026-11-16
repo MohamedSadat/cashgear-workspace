@@ -1,20 +1,23 @@
 // The bubble toolbar on a text selection: marks, link, colour, "turn into" and, when the host lets
 // this person comment (Phase 6), "Comment"; when the host offers AI (Phase 7), "Ask AI", which
-// only tells the host the selection. A stand-in for Track U2's selection toolbar (a
-// CgToolbar in a CgFlyout that follows a rectangle). Mousedown is prevented everywhere, so the
-// editor keeps its selection while the toolbar is used. On a page this person may comment on but
-// not edit (or in a code block, where marks do not apply), it holds "Comment" alone.
-import { CgIcon } from '@cashgear/ui';
+// only tells the host the selection. `@cashgear/ui`'s CgSelectionToolbar (Track U2): a CgToolbar in
+// a CgFlyout that follows the selection's rectangle, the link field, the colours or the "turn into"
+// list in its panel. Presses in it keep the focus where it was, so the editor keeps its selection
+// while the toolbar is used. On a page this person may comment on but not edit (or in a code block,
+// where marks do not apply), it holds "Comment" alone.
+import { CgIcon, CgSelectionToolbar, type CgToolbarItem } from '@cashgear/ui';
 import { COLOUR_TOKENS, safeHref, type ColourToken } from '@cgw/doc';
 import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import {
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { BLOCK_ACTIONS } from '../actions';
 import { textOfRange } from '../ai';
@@ -25,6 +28,10 @@ import { editorString, type EditorHost } from '../host';
 import { slashState } from '../slash';
 
 type Panel = null | 'link' | 'colour' | 'turnInto';
+
+/** The tools that open the toolbar's panel, each named by its panel. */
+const OPENS_PANEL = ['turnInto', 'link', 'colour'] as const;
+const MARKS = ['bold', 'italic', 'underline', 'strike', 'code', 'link'] as const;
 
 interface Snapshot {
   show: boolean;
@@ -60,7 +67,11 @@ function snapshot(editor: Editor, focused: boolean, canComment: boolean): Snapsh
   };
 }
 
-function useSelectionSnapshot(editor: Editor, canComment: boolean): Snapshot {
+function useSelectionSnapshot(
+  editor: Editor,
+  canComment: boolean,
+  surface: RefObject<HTMLDivElement | null>,
+): Snapshot {
   const cache = useRef<Snapshot>({ show: false, commentOnly: false, key: '' });
   const comments = useRef(canComment);
   comments.current = canComment;
@@ -76,7 +87,7 @@ function useSelectionSnapshot(editor: Editor, canComment: boolean): Snapshot {
       const onBlur = ({ event }: { event: FocusEvent }) => {
         // Focus moving into the toolbar (the link field) keeps it open.
         const into = event.relatedTarget as Node | null;
-        focused.current = !!into && !!document.querySelector('.cgw-bubble')?.contains(into);
+        focused.current = !!into && !!surface.current?.contains(into);
         listener();
       };
       editor.on('transaction', listener);
@@ -88,7 +99,7 @@ function useSelectionSnapshot(editor: Editor, canComment: boolean): Snapshot {
         editor.off('blur', onBlur);
       };
     },
-    [editor],
+    [editor, surface],
   );
   return useSyncExternalStore(subscribe, () => {
     const next = snapshot(editor, focused.current || editor.isFocused, comments.current);
@@ -97,18 +108,17 @@ function useSelectionSnapshot(editor: Editor, canComment: boolean): Snapshot {
   });
 }
 
-function Button({
+/** A button in the panel under the toolbar (the link's, a colour). */
+function PanelButton({
   label,
   active,
   onPress,
   children,
-  expanded,
 }: {
   label: string;
   active?: boolean;
   onPress: () => void;
   children: ReactNode;
-  expanded?: boolean;
 }) {
   return (
     <button
@@ -117,8 +127,6 @@ function Button({
       aria-label={label}
       title={label}
       aria-pressed={active}
-      aria-expanded={expanded}
-      onMouseDown={(event) => event.preventDefault()}
       onClick={onPress}
     >
       {children}
@@ -139,6 +147,41 @@ function useAiAvailable(host: EditorHost): boolean {
   return useSyncExternalStore(subscribe, ai ? () => ai.available() : notAvailable);
 }
 
+/** The selection's rectangle in the viewport: from its start to its end, over every line. */
+function selectionRect(editor: Editor) {
+  const { from, to } = editor.state.selection;
+  try {
+    const start = editor.view.coordsAtPos(from);
+    const end = editor.view.coordsAtPos(to);
+    const left = Math.min(start.left, end.left);
+    const right = Math.max(start.right, end.right);
+    const top = Math.min(start.top, end.top);
+    const bottom = Math.max(start.bottom, end.bottom);
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  } catch {
+    return null;
+  }
+}
+
+/** A block kind's name for "turn into", in the host's words. */
+function kindName(editor: Editor, host: EditorHost): string {
+  const block = currentBlock(editor.state);
+  const body = block && firstBody(block);
+  if (!body) return '';
+  if (body.node.type.name === 'codeBlock') return host.blockName?.('code') ?? 'code';
+  const { kind, level } = body.node.attrs;
+  const name =
+    kind === 'heading'
+      ? `heading${level ?? 1}`
+      : ((
+          { bulletItem: 'bulletList', numberedItem: 'numberedList', checkItem: 'todo' } as Record<
+            string,
+            string
+          >
+        )[kind] ?? kind);
+  return host.blockName?.(name) ?? name;
+}
+
 export function BubbleToolbar({
   editor: blockEditor,
   host,
@@ -147,83 +190,117 @@ export function BubbleToolbar({
   host: EditorHost;
 }) {
   const editor = blockEditor.editor;
-  const snap = useSelectionSnapshot(editor, !!host.comments?.create);
+  const surface = useRef<HTMLDivElement>(null);
+  const canComment = !!host.comments?.create;
+  const snap = useSelectionSnapshot(editor, canComment, surface);
   const aiAvailable = useAiAvailable(host);
   const [panel, setPanel] = useState<Panel>(null);
   const [href, setHref] = useState('');
   const [invalid, setInvalid] = useState(false);
-  const bar = useRef<HTMLDivElement>(null);
-  const [place, setPlace] = useState({ top: -9999, left: -9999 });
   const s = host.strings;
 
   useLayoutEffect(() => {
-    if (!snap.show) {
-      setPanel(null);
-      return;
-    }
-    const { from, to } = editor.state.selection;
-    const start = editor.view.coordsAtPos(from);
-    const end = editor.view.coordsAtPos(to);
-    const el = bar.current;
-    const width = el?.offsetWidth ?? 320;
-    const height = el?.offsetHeight ?? 36;
-    const centre = (Math.min(start.left, end.left) + Math.max(start.right, end.right)) / 2;
-    const top = start.top - height - 8 < 8 ? end.bottom + 8 : start.top - height - 8;
-    const left = Math.max(8, Math.min(centre - width / 2, window.innerWidth - width - 8));
-    setPlace({ top, left });
-  }, [snap, editor, panel]);
+    if (!snap.show) setPanel(null);
+  }, [snap.show]);
+  // CgToolbar's items have no `aria-expanded`: the tools that open the panel are marked here.
+  useLayoutEffect(() => {
+    for (const name of OPENS_PANEL)
+      surface.current
+        ?.querySelector(`[data-cg-toolbar-name="${name}"]`)
+        ?.setAttribute('aria-expanded', String(panel === name));
+  });
 
-  if (!snap.show || !s) return null;
+  const rect = useMemo(() => (snap.show ? selectionRect(editor) : null), [snap, editor]);
+  const shown = snap.show && !!s?.formatting;
+  const kind = shown && !snap.commentOnly ? kindName(editor, host) : '';
+  const marks = shown ? MARKS.map((mark) => (editor.isActive(mark) ? 1 : 0)).join('') : '';
+  const items = useMemo((): CgToolbarItem[] => {
+    if (!shown || !s) return [];
+    const comment: CgToolbarItem | null = canComment
+      ? {
+          name: 'comment',
+          text: editorString(host, 'comment'),
+          icon: 'comment',
+          iconOnly: true,
+          beginGroup: true,
+          onClick: () => {
+            commentOnSelection(editor.state, host);
+            setPanel(null);
+          },
+        }
+      : null;
+    if (snap.commentOnly) return comment ? [comment] : [];
+    const on = (index: number) => marks[index] === '1';
+    const mark = (name: string, text: string, index: number, icon: CgToolbarItem['icon']) => ({
+      name,
+      text,
+      icon,
+      iconOnly: true,
+      checked: on(index),
+      onClick: () => void editor.chain().focus().toggleMark(name).run(),
+    });
+    const list: CgToolbarItem[] = [
+      {
+        name: 'turnInto',
+        text: s.turnInto,
+        icon: (
+          <span className="cgw-bubble-opens">
+            <span className="cgw-bubble-kind">{kind}</span> ▾
+          </span>
+        ),
+        iconOnly: true,
+        onClick: () => setPanel((open) => (open === 'turnInto' ? null : 'turnInto')),
+      },
+      { ...mark('bold', s.bold, 0, 'text-bold'), beginGroup: true },
+      mark('italic', s.italic, 1, 'text-italic'),
+      mark('underline', s.underline, 2, 'text-underline'),
+      mark('strike', s.strike, 3, 'text-strikethrough'),
+      mark('code', s.code, 4, 'code'),
+      {
+        name: 'link',
+        text: s.link,
+        icon: 'link',
+        iconOnly: true,
+        checked: on(5),
+        onClick: () => {
+          setHref(String(editor.getAttributes('link').href ?? ''));
+          setInvalid(false);
+          setPanel((open) => (open === 'link' ? null : 'link'));
+        },
+      },
+      {
+        name: 'colour',
+        text: s.colour,
+        icon: (
+          <span className="cgw-bubble-opens">
+            <CgIcon name="text-color" /> ▾
+          </span>
+        ),
+        iconOnly: true,
+        onClick: () => setPanel((open) => (open === 'colour' ? null : 'colour')),
+      },
+    ];
+    if (comment) list.push(comment);
+    if (aiAvailable && host.ai)
+      list.push({
+        name: 'askAi',
+        text: editorString(host, 'askAi'),
+        icon: <span aria-hidden="true">✦</span>,
+        iconOnly: true,
+        beginGroup: true,
+        onClick: () => {
+          const { from, to } = editor.state.selection;
+          const text = textOfRange(editor, from, to, host);
+          if (!text.trim()) return;
+          setPanel(null);
+          host.ai?.askAboutSelection({ from, to, text });
+        },
+      });
+    return list;
+  }, [shown, s, snap.commentOnly, canComment, host, editor, kind, marks, aiAvailable]);
 
-  const comment = host.comments?.create ? (
-    <Button
-      label={editorString(host, 'comment')}
-      onPress={() => {
-        commentOnSelection(editor.state, host);
-        setPanel(null);
-      }}
-    >
-      <CgIcon name="comment" />
-    </Button>
-  ) : null;
-  if (snap.commentOnly)
-    return (
-      <div
-        ref={bar}
-        className="cgw-bubble"
-        role="toolbar"
-        aria-label={s.formatting}
-        style={{ top: place.top, left: place.left }}
-        onMouseDown={(event) => event.preventDefault()}
-      >
-        <div className="cgw-bubble-row">{comment}</div>
-      </div>
-    );
+  if (!shown || !s) return null;
 
-  const mark = (name: string) => () => editor.chain().focus().toggleMark(name).run();
-  const block = currentBlock(editor.state);
-  const body = block && firstBody(block);
-  const kindName = (() => {
-    if (!body) return '';
-    if (body.node.type.name === 'codeBlock') return 'code';
-    const { kind, level } = body.node.attrs;
-    const name =
-      kind === 'heading'
-        ? `heading${level ?? 1}`
-        : ((
-            { bulletItem: 'bulletList', numberedItem: 'numberedList', checkItem: 'todo' } as Record<
-              string,
-              string
-            >
-          )[kind] ?? kind);
-    return host.blockName?.(name) ?? name;
-  })();
-
-  const openLink = () => {
-    setHref(String(editor.getAttributes('link').href ?? ''));
-    setInvalid(false);
-    setPanel(panel === 'link' ? null : 'link');
-  };
   const applyLink = () => {
     const value = href.trim();
     if (!value) {
@@ -247,192 +324,129 @@ export function BubbleToolbar({
     setPanel(null);
   };
 
-  return (
-    <div
-      ref={bar}
-      className="cgw-bubble"
-      role="toolbar"
-      aria-label={s.formatting}
-      style={{ top: place.top, left: place.left }}
-      onMouseDown={(event) => {
-        if (!(event.target instanceof HTMLInputElement)) event.preventDefault();
-      }}
-    >
-      <div className="cgw-bubble-row">
-        <Button
-          label={s.turnInto}
-          expanded={panel === 'turnInto'}
-          onPress={() => setPanel(panel === 'turnInto' ? null : 'turnInto')}
-        >
-          <span className="cgw-bubble-kind">{kindName}</span> ▾
-        </Button>
-        <span className="cgw-bubble-sep" />
-        <Button label={s.bold} active={editor.isActive('bold')} onPress={mark('bold')}>
-          <CgIcon name="text-bold" />
-        </Button>
-        <Button label={s.italic} active={editor.isActive('italic')} onPress={mark('italic')}>
-          <CgIcon name="text-italic" />
-        </Button>
-        <Button
-          label={s.underline}
-          active={editor.isActive('underline')}
-          onPress={mark('underline')}
-        >
-          <CgIcon name="text-underline" />
-        </Button>
-        <Button label={s.strike} active={editor.isActive('strike')} onPress={mark('strike')}>
-          <CgIcon name="text-strikethrough" />
-        </Button>
-        <Button label={s.code} active={editor.isActive('code')} onPress={mark('code')}>
-          {'</>'}
-        </Button>
-        <Button
-          label={s.link}
-          active={editor.isActive('link')}
-          expanded={panel === 'link'}
-          onPress={openLink}
-        >
-          <CgIcon name="link" />
-        </Button>
-        <Button
-          label={s.colour}
-          expanded={panel === 'colour'}
-          onPress={() => setPanel(panel === 'colour' ? null : 'colour')}
-        >
-          <CgIcon name="text-color" /> ▾
-        </Button>
-        {comment && (
-          <>
-            <span className="cgw-bubble-sep" />
-            {comment}
-          </>
-        )}
-        {aiAvailable && host.ai && (
-          <>
-            <span className="cgw-bubble-sep" />
-            <Button
-              label={editorString(host, 'askAi')}
-              onPress={() => {
-                const { from, to } = editor.state.selection;
-                const text = textOfRange(editor, from, to, host);
-                if (!text.trim()) return;
-                setPanel(null);
-                host.ai?.askAboutSelection({ from, to, text });
-              }}
-            >
-              <span aria-hidden="true">✦</span>
-            </Button>
-          </>
-        )}
-      </div>
-      {panel === 'link' && (
-        <form
-          className="cgw-bubble-link"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyLink();
+  const panels: Record<Exclude<Panel, null>, () => ReactNode> = {
+    link: () => (
+      <form
+        className="cgw-bubble-link"
+        onSubmit={(event) => {
+          event.preventDefault();
+          applyLink();
+        }}
+      >
+        <input
+          autoFocus
+          dir="ltr"
+          className="cgw-bubble-input"
+          aria-label={s.linkAddress}
+          placeholder={s.linkPlaceholder}
+          aria-invalid={invalid}
+          value={href}
+          onChange={(event) => {
+            setHref(event.target.value);
+            setInvalid(false);
           }}
-        >
-          <input
-            autoFocus
-            dir="ltr"
-            className="cgw-bubble-input"
-            aria-label={s.linkAddress}
-            placeholder={s.linkPlaceholder}
-            aria-invalid={invalid}
-            value={href}
-            onChange={(event) => {
-              setHref(event.target.value);
-              setInvalid(false);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                setPanel(null);
-                editor.commands.focus();
-              }
-            }}
-          />
-          {invalid && (
-            <span className="cgw-bubble-error" role="alert">
-              {s.linkInvalid}
-            </span>
-          )}
-          {editor.isActive('link') && (
-            <>
-              <Button
-                label={s.openLink}
-                onPress={() => host.openExternal?.(String(editor.getAttributes('link').href))}
-              >
-                ↗
-              </Button>
-              <Button
-                label={s.removeLink}
-                onPress={() => {
-                  editor.chain().focus().extendMarkRange('link').unsetMark('link').run();
-                  setPanel(null);
-                }}
-              >
-                ✕
-              </Button>
-            </>
-          )}
-        </form>
-      )}
-      {panel === 'colour' && (
-        <div className="cgw-bubble-colours">
-          {(['textColour', 'highlight'] as const).map((type) => (
-            <div
-              key={type}
-              className="cgw-bubble-swatches"
-              role="group"
-              aria-label={type === 'textColour' ? s.textColour : s.highlight}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              setPanel(null);
+              editor.commands.focus();
+            }
+          }}
+        />
+        {invalid && (
+          <span className="cgw-bubble-error" role="alert">
+            {s.linkInvalid}
+          </span>
+        )}
+        {editor.isActive('link') && (
+          <>
+            <PanelButton
+              label={s.openLink}
+              onPress={() => host.openExternal?.(String(editor.getAttributes('link').href))}
             >
-              <Button label={s.defaultColour} onPress={() => setColour(type, null)}>
-                <span className="cgw-swatch" data-default="" />
-              </Button>
-              {COLOUR_TOKENS.map((token) => (
-                <Button
-                  key={token}
-                  label={s[`colour_${token}`] ?? token}
-                  active={editor.isActive(type, { token })}
-                  onPress={() => setColour(type, token)}
-                >
-                  <span
-                    className={`cgw-swatch cgw-${type === 'textColour' ? 'colour' : 'highlight'}`}
-                    data-colour={type === 'textColour' ? token : undefined}
-                    data-highlight={type === 'highlight' ? token : undefined}
-                  >
-                    ●
-                  </span>
-                </Button>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-      {panel === 'turnInto' && (
-        <div className="cgw-bubble-menu" role="menu">
-          {BLOCK_ACTIONS.filter((action) => action.turnInto).map((action) => (
-            <button
-              key={action.name}
-              type="button"
-              role="menuitem"
-              className="cgw-bubble-menu-item"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                void action.apply(editor, host);
+              ↗
+            </PanelButton>
+            <PanelButton
+              label={s.removeLink}
+              onPress={() => {
+                editor.chain().focus().extendMarkRange('link').unsetMark('link').run();
                 setPanel(null);
               }}
             >
-              <span className="cgw-command-glyph" aria-hidden="true">
-                {action.glyph}
-              </span>
-              {host.blockName?.(action.name) ?? action.name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+              ✕
+            </PanelButton>
+          </>
+        )}
+      </form>
+    ),
+    colour: () => (
+      <div className="cgw-bubble-colours">
+        {(['textColour', 'highlight'] as const).map((type) => (
+          <div
+            key={type}
+            className="cgw-bubble-swatches"
+            role="group"
+            aria-label={type === 'textColour' ? s.textColour : s.highlight}
+          >
+            <PanelButton label={s.defaultColour} onPress={() => setColour(type, null)}>
+              <span className="cgw-swatch" data-default="" />
+            </PanelButton>
+            {COLOUR_TOKENS.map((token) => (
+              <PanelButton
+                key={token}
+                label={s[`colour_${token}`] ?? token}
+                active={editor.isActive(type, { token })}
+                onPress={() => setColour(type, token)}
+              >
+                <span
+                  className={`cgw-swatch cgw-${type === 'textColour' ? 'colour' : 'highlight'}`}
+                  data-colour={type === 'textColour' ? token : undefined}
+                  data-highlight={type === 'highlight' ? token : undefined}
+                >
+                  ●
+                </span>
+              </PanelButton>
+            ))}
+          </div>
+        ))}
+      </div>
+    ),
+    turnInto: () => (
+      <div className="cgw-bubble-menu" role="menu">
+        {BLOCK_ACTIONS.filter((action) => action.turnInto).map((action) => (
+          <button
+            key={action.name}
+            type="button"
+            role="menuitem"
+            className="cgw-bubble-menu-item"
+            onClick={() => {
+              void action.apply(editor, host);
+              setPanel(null);
+            }}
+          >
+            <span className="cgw-bubble-menu-icon" aria-hidden="true">
+              <CgIcon name={action.glyph} />
+            </span>
+            {host.blockName?.(action.name) ?? action.name}
+          </button>
+        ))}
+      </div>
+    ),
+  };
+
+  return (
+    <CgSelectionToolbar
+      ref={surface}
+      className="cgw-bubble"
+      label={s.formatting}
+      rect={rect}
+      items={items}
+      autoCollapseText={false}
+      panel={panel && !snap.commentOnly ? panels[panel]() : undefined}
+      onEscape={() => {
+        setPanel(null);
+        editor.commands.focus();
+      }}
+    />
   );
 }

@@ -1,5 +1,6 @@
 // What the slash menu, the block menu and the palette can do to a block. The shell registers each
 // one as a command with labels from its catalogues; the editor only knows how to apply it.
+import type { CgIconName } from '@cashgear/ui';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
@@ -37,8 +38,11 @@ export type BlockActionName =
 
 export interface BlockAction {
   name: BlockActionName;
-  /** A glyph for the menu until Track U8's block icons land in CgIcon. */
-  glyph: string;
+  /**
+   * Its icon in the menus: one of `CgIcon`'s block icons (Track U8). The name stays `glyph`, which
+   * the shell's command registry reads (`packages/shell/src/page/blockCommands.ts`).
+   */
+  glyph: CgIconName;
   /** Text kinds and code can be a "turn into" target; the rest only insert. */
   turnInto: boolean;
   /** Whether the host gives what the action needs (absent: always); the shell's `when` reads it. */
@@ -122,24 +126,39 @@ function emptyTable(editor: Editor, rows = 3, cols = 3): PMNode {
 }
 
 export const BLOCK_ACTIONS: readonly BlockAction[] = [
-  { name: 'paragraph', glyph: '¶', turnInto: true, apply: textKind('paragraph') },
-  { name: 'heading1', glyph: 'H1', turnInto: true, apply: textKind('heading', { level: 1 }) },
-  { name: 'heading2', glyph: 'H2', turnInto: true, apply: textKind('heading', { level: 2 }) },
-  { name: 'heading3', glyph: 'H3', turnInto: true, apply: textKind('heading', { level: 3 }) },
-  { name: 'bulletList', glyph: '•', turnInto: true, apply: textKind('bulletItem') },
-  { name: 'numberedList', glyph: '1.', turnInto: true, apply: textKind('numberedItem') },
-  { name: 'todo', glyph: '☐', turnInto: true, apply: textKind('checkItem') },
-  { name: 'toggle', glyph: '▸', turnInto: true, apply: textKind('toggle') },
-  { name: 'quote', glyph: '❝', turnInto: true, apply: textKind('quote') },
+  { name: 'paragraph', glyph: 'paragraph', turnInto: true, apply: textKind('paragraph') },
+  {
+    name: 'heading1',
+    glyph: 'heading-1',
+    turnInto: true,
+    apply: textKind('heading', { level: 1 }),
+  },
+  {
+    name: 'heading2',
+    glyph: 'heading-2',
+    turnInto: true,
+    apply: textKind('heading', { level: 2 }),
+  },
+  {
+    name: 'heading3',
+    glyph: 'heading-3',
+    turnInto: true,
+    apply: textKind('heading', { level: 3 }),
+  },
+  { name: 'bulletList', glyph: 'list-bullet', turnInto: true, apply: textKind('bulletItem') },
+  { name: 'numberedList', glyph: 'list-number', turnInto: true, apply: textKind('numberedItem') },
+  { name: 'todo', glyph: 'todo', turnInto: true, apply: textKind('checkItem') },
+  { name: 'toggle', glyph: 'toggle', turnInto: true, apply: textKind('toggle') },
+  { name: 'quote', glyph: 'quote', turnInto: true, apply: textKind('quote') },
   {
     name: 'callout',
-    glyph: '💡',
+    glyph: 'callout',
     turnInto: true,
     apply: textKind('callout', { icon: '💡', tone: 'info' }),
   },
   {
     name: 'code',
-    glyph: '</>',
+    glyph: 'code',
     turnInto: true,
     apply: (editor) => {
       const block = currentBlock(editor.state);
@@ -154,19 +173,19 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   },
   {
     name: 'divider',
-    glyph: '—',
+    glyph: 'divider',
     turnInto: false,
     apply: (editor) => insertBody(editor, editor.schema.nodes.divider.create(), 'after'),
   },
   {
     name: 'table',
-    glyph: '▦',
+    glyph: 'table',
     turnInto: false,
     apply: (editor) => insertBody(editor, emptyTable(editor)),
   },
   {
     name: 'image',
-    glyph: '🖼',
+    glyph: 'image',
     turnInto: false,
     apply: async (editor, host) => {
       const files =
@@ -176,7 +195,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   },
   {
     name: 'file',
-    glyph: '📎',
+    glyph: 'file',
     turnInto: false,
     apply: async (editor, host) => {
       const files = (await host.assets?.pick([])) ?? [];
@@ -185,14 +204,14 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   },
   {
     name: 'bookmark',
-    glyph: '🔖',
+    glyph: 'bookmark',
     turnInto: false,
     apply: (editor) =>
       insertBody(editor, editor.schema.nodes.bookmark.create({ url: null }), 'node'),
   },
   {
     name: 'childPage',
-    glyph: '📄',
+    glyph: 'page',
     turnInto: false,
     apply: async (editor, host) => {
       const pageId = await host.pages?.create();
@@ -201,7 +220,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   },
   {
     name: 'pageLink',
-    glyph: '↗',
+    glyph: 'page-link',
     turnInto: false,
     apply: (editor) => {
       // Opens the page picker at the caret (mention.ts).
@@ -217,7 +236,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   {
     // Schema version 2: the page's headings, as links (toc.ts).
     name: 'tableOfContents',
-    glyph: '☰',
+    glyph: 'toc',
     turnInto: false,
     apply: (editor) => insertBody(editor, editor.schema.nodes.tableOfContents.create(), 'after'),
   },
@@ -225,7 +244,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
     // Schema version 3: a new inline database under this page, made by the host with its first
     // view, then shown here (nodeviews/database.ts).
     name: 'database',
-    glyph: '▤',
+    glyph: 'database',
     turnInto: false,
     available: (host) => !!host.databases?.create,
     apply: async (editor, host) => {
@@ -236,7 +255,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   {
     // Schema version 3: another view of a database that exists, picked by the host.
     name: 'linkedView',
-    glyph: '⧉',
+    glyph: 'linked-view',
     turnInto: false,
     available: (host) => !!host.databases?.pick,
     apply: async (editor, host) => {
@@ -248,7 +267,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
     // Schema version 4: a new workbook of this workspace, made by the host with no version (Sheet
     // makes the first), then shown here (nodeviews/sheet.ts).
     name: 'workbook',
-    glyph: '⊞',
+    glyph: 'workbook',
     turnInto: false,
     available: (host) => !!host.workbooks?.create,
     apply: async (editor, host) => {
@@ -259,7 +278,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
   {
     // Schema version 4: a workbook that exists, picked by the host among those the person reads.
     name: 'existingWorkbook',
-    glyph: '⊟',
+    glyph: 'workbook',
     turnInto: false,
     available: (host) => !!host.workbooks?.pick,
     apply: async (editor, host) => {
@@ -271,7 +290,7 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
     // Schema version 4: an ERP view with nothing chosen yet; its link and connector are chosen
     // in the view itself (nodeviews/erp.ts).
     name: 'erpData',
-    glyph: '⇄',
+    glyph: 'sync',
     turnInto: false,
     available: (host) => !!host.erp?.mount,
     apply: (editor) => insertBody(editor, editor.schema.nodes.erpView.create(), 'after'),
