@@ -3,7 +3,7 @@
 // server stack (scripts/server-stack.mjs --e2e) for the synced tests.
 //
 // - 1,000 cells pasted from Excel-shaped and from Sheet-shaped TSV (100 rows of 10 columns: 3 rows
-//   there, 97 added), the clipboard given by `page.evaluate` (a `ClipboardEvent` with its own
+//   made first, 97 added), the clipboard given by `page.evaluate` (a `ClipboardEvent` with its own
 //   `DataTransfer`, on the table's grid as the browser sends it). Excel's cells are written as it
 //   shows them in the browser's own locale (thousands, a currency, an accounting negative, the
 //   short date) and a member by email; each value is read by the paste's reading and the
@@ -28,7 +28,9 @@ import {
   fullPage,
   grid,
   newDatabase,
+  newRow,
   otherDevice,
+  rowOf,
   showView,
   signedInWorkspace,
   signers,
@@ -218,21 +220,40 @@ async function firstCell(scope: Locator) {
   await expect(g).toHaveAttribute('aria-activedescendant', /-c0-0$/);
 }
 
-/** Milliseconds from `start` (the page's clock) until the window's rows show the paste. */
-async function shownAfter(page: Page, scope: Locator, start: number, prefix: string) {
-  await expect(scope.locator('.cgw-db-cell-notice')).toBeVisible({ timeout: 30000 });
+/**
+ * A paste dispatched on the grid and timed in the page alone (no round trip to the test in
+ * between): milliseconds from the event until every row in the window shows a title starting
+ * with `prefix` and the paste's notice says what it did. Its epoch start, for the server's budget.
+ */
+async function pasteTimed(scope: Locator, text: string, prefix: string) {
   return grid(scope).evaluate(
-    (el, [from, title]) =>
-      new Promise<number>((resolve) => {
+    (el, [plain, title]) =>
+      new Promise<{ shown: number; epoch: number }>((resolve, reject) => {
+        const data = new DataTransfer();
+        data.setData('text/plain', plain);
+        (el as HTMLElement).focus();
+        const start = performance.now();
+        el.dispatchEvent(
+          new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+        );
         const check = () => {
           const titles = [...el.querySelectorAll('.cgw-tbody [role="row"] .cgw-title-text')];
-          if (titles.length && titles.every((t) => t.textContent?.startsWith(title)))
-            return resolve(performance.now() - from);
+          const notice = el.closest('.cgw-db')?.querySelector('.cgw-db-cell-notice');
+          if (
+            notice?.textContent?.startsWith('Pasted:') &&
+            titles.length &&
+            titles.every((t) => t.textContent?.startsWith(title))
+          )
+            return resolve({
+              shown: performance.now() - start,
+              epoch: performance.timeOrigin + start,
+            });
+          if (performance.now() - start > 60000) return reject(new Error('The paste did not show'));
           requestAnimationFrame(check);
         };
         check();
       }),
-    [start, prefix] as const,
+    [text, prefix] as const,
   );
 }
 
@@ -286,6 +307,10 @@ test('1,000 cells pasted from Excel and from Sheet: converted, on the server and
   const databaseId = await newDatabase(page, 'Empty database', { title: 'Pasted' });
   const db = fullPage(page);
   for (const [type, name] of COLUMNS) await addProperty(page, type, name);
+  // A database made from the sidebar starts with no rows: three, so the paste both changes rows
+  // (and Undo gives their titles back) and adds the rest.
+  const BEFORE = ['First', 'Second', 'Third'];
+  for (const title of BEFORE) await newRow(page, title);
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   const api = await apiSession(account);
   const other = await otherDevice(
@@ -308,20 +333,27 @@ test('1,000 cells pasted from Excel and from Sheet: converted, on the server and
     ] as const) {
       const lines = Array.from({ length: ROWS }, (_, i) => make(i, device));
       await firstCell(db);
-      const start = await paste(db, tsv(lines));
-      const shown = await shownAfter(page, db, start, program);
+      const { shown, epoch } = await pasteTimed(db, tsv(lines), `${program} `);
       const notice = db.locator('.cgw-db-cell-notice');
       await expect(notice).toContainText('Rows added: 97.');
       await expect(notice).toContainText(
         `Values their property cannot read, left as they were: ${refusedIn(lines)}.`,
       );
       await expect(db.locator('.cgw-table-foot')).toHaveText(`Rows: ${ROWS}`);
-      // The server holds every converted value.
-      const sent = Date.now();
+      // The server holds every converted value: from the paste event (the page's clock, in epoch
+      // milliseconds) to the first answer that holds them all.
+      let held = 0;
       await expect
-        .poll(() => serverHolds(api, databaseId, lines), { timeout: 60000, intervals: [200] })
+        .poll(
+          async () => {
+            const done = await serverHolds(api, databaseId, lines);
+            if (done) held = Date.now();
+            return done;
+          },
+          { timeout: 60000, intervals: [200] },
+        )
         .toBe(true);
-      const server = Date.now() - sent + shown;
+      const server = Math.round(held - epoch);
       testInfo.annotations.push({
         type: 'budget',
         description: `${program}: 1,000 cells shown in ${Math.round(shown)} ms (≤ 500), on the server in about ${server} ms (≤ 5000)`,
@@ -336,23 +368,27 @@ test('1,000 cells pasted from Excel and from Sheet: converted, on the server and
           .first(),
       ).toBeVisible();
 
-      // Undo: the three rows have their old values (none) and the rows added go to the trash.
+      // Undo: the three rows have their titles back and no values; the rows added go to the trash.
       await notice.getByRole('button', { name: 'Undo' }).click();
       await expect(notice).toContainText('the rows added are in the trash');
       await expect(db.locator('.cgw-table-foot')).toHaveText('Rows: 3');
       await expect(there.locator('.cgw-table-foot')).toHaveText('Rows: 3', { timeout: 30000 });
+      for (const title of BEFORE) await expect(rowOf(there, title)).toBeVisible();
       await expect
         .poll(
           async () => {
             const { rows } = await api.get(`/api/v1/databases/${databaseId}/rows?limit=500`);
-            return rows.filter(
-              (r: { trashedAt: string | null; title: string; values: object }) =>
-                !r.trashedAt && r.title === '' && Object.keys(r.values).length === 0,
-            ).length;
+            return rows
+              .filter(
+                (r: { trashedAt: string | null; values: object }) =>
+                  !r.trashedAt && Object.keys(r.values).length === 0,
+              )
+              .map((r: { title: string }) => r.title)
+              .sort();
           },
           { timeout: 60000, intervals: [300] },
         )
-        .toBe(3);
+        .toEqual([...BEFORE].sort());
     }
   } finally {
     await api.dispose();
@@ -420,7 +456,7 @@ test('in Arabic and dark: a selection right to left, a paste and its notice, and
   await page.getByLabel('اسم مساحة العمل').fill('خلايا');
   await page.keyboard.press('Enter');
   await expect(editor(page)).toBeVisible();
-  // The Tasks template's table ("All tasks": the title, Status, Assignee, Due, Priority; 3 rows).
+  // The Tasks template's table ("All tasks": the title, Status, Assignee, Due, Priority).
   await newDatabase(page, 'المهام', { language: 'ar' });
   const db = fullPage(page);
   await showView(db, 'كل المهام');
@@ -441,10 +477,19 @@ test('in Arabic and dark: a selection right to left, a paste and its notice, and
   );
   await expect(g).toHaveAttribute('aria-multiselectable', 'true');
   await g.press('Escape');
+  // One line more than the table has rows: the last one is added. Counts are written as the
+  // interface's locale writes numbers (Chrome's `ar` writes Latin digits).
+  const foot = (await db.locator('.cgw-table-foot').innerText()).replace(/[٠-٩]/g, (d) =>
+    String(d.charCodeAt(0) - 0x660),
+  );
+  const rows = Number(foot.match(/(\d+)/)![1]);
+  expect(rows).toBeGreaterThan(0);
+  const one = await page.evaluate(() => (1).toLocaleString('ar'));
   await firstCell(db);
-  await paste(db, 'الأول\r\nالثاني\r\nالثالث\r\nالرابع\r\n');
+  await paste(db, Array.from({ length: rows + 1 }, (_, i) => `السطر ${i + 1}\r\n`).join(''));
   const notice = db.locator('.cgw-db-cell-notice');
-  await expect(notice).toContainText('الصفوف المضافة: ١');
+  await expect(notice).toContainText(`الصفوف المضافة: ${one}`);
+  await expect(db.locator('.cgw-table-foot')).toContainText(String(rows + 1));
   await expect(notice.getByRole('button', { name: 'تراجع' })).toBeVisible();
   await g.press('Shift+ArrowDown');
   const found = await new AxeBuilder({ page })
