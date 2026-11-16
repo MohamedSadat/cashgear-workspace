@@ -110,6 +110,11 @@ test('RTL calendar: the week starts on Saturday on the right, and a row dragged 
   const iso = new Date(toDay * 86_400_000).toISOString().slice(0, 10);
   const cell = calendar.locator(`[data-cg-month-day="${toDay}"]`);
   await expect(cell).toBeVisible();
+  // The mouse goes where the boxes are, and a box below the window's fold takes no press: the
+  // page scrolls the week into view first (the desktop's window is smaller than the browser's on a
+  // CI runner's screen, and the month is taller than the view's own grid was).
+  await cell.scrollIntoViewIfNeeded();
+  await item.scrollIntoViewIfNeeded();
   const target = (await cell.boundingBox())!;
   await drag(page, item, { x: target.x + target.width / 2, y: target.y + target.height / 2 });
   await expect.poll(() => onCalendarDay(calendar, title, iso)).toBe(true);
