@@ -10,6 +10,11 @@
 // property (and a `page.move` when its place there needs a new order key); within a column: a
 // `page.move` with `host.rowOrderKey`. With a sort, cards keep the sort's order: a move only
 // changes the column. Left and right are mirrored in RTL, where columns run right to left.
+//
+// Columns move too (Phase 8): a drag of a column's header (its handle, its name) or its handle by
+// the keys (Space picks it up, the arrows move it, Space drops it, Escape cancels), spoken through
+// the same live region. The order is the view's (`GroupRule.order`, one `view.upsert`), so it
+// reaches other devices as the view's settings do and leaves the property's options as they are.
 import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
@@ -37,7 +42,7 @@ import {
   shownProperties,
   uniqueName,
 } from '../../model/properties';
-import { withGroup, withGroupHidden } from '../../model/viewConfig';
+import { withGroup, withGroupHidden, withGroupOrder } from '../../model/viewConfig';
 import { newPropertyDef } from '../../properties/defs';
 import type { ListLayout } from '../../table/windowing';
 import { GroupLabel, groupText } from '../GroupLabel';
@@ -51,13 +56,16 @@ import {
   DRAFT_HEIGHT,
   boardKey,
   cardsIn,
+  columnDropIndex,
   columnLayout,
   dropIndex,
   moveDrop,
   moveFocus,
   movableGroup,
+  movedOrder,
   movedGroupValue,
   needsMove,
+  orderedGroups,
   placeAt,
   targetIndex,
   type BoardPos,
@@ -108,16 +116,17 @@ export function BoardView({
   const crossColumns = editable && movableGroup(groupDef);
   const draggable = editable && (crossColumns || !sorted);
 
+  const order = rule?.order;
   const columns = useMemo<Column[]>(
     () =>
-      (snapshot.groups ?? []).map((g) => ({
+      orderedGroups(snapshot.groups ?? [], order).map((g) => ({
         key: g.key,
         count: g.count,
         rows: g.rows,
         complete: g.complete,
         layout: columnLayout(g.rows, shown),
       })),
-    [snapshot.groups, shown],
+    [snapshot.groups, shown, order],
   );
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
@@ -375,6 +384,132 @@ export function BoardView({
     });
   };
 
+  // ---- Moving a column ------------------------------------------------------------------------------
+  /** Writes the columns' order with `key` moved to `index` among the others. */
+  const commitColumn = (key: string, index: number) => {
+    const keys = columnsRef.current.map((c) => c.key);
+    const next = movedOrder(keys, key, index);
+    if (next.every((k, i) => k === keys[i])) {
+      live.current?.say(t('card.cancelled'));
+      return;
+    }
+    void actions.updateView(view, withGroupOrder(view.config, next));
+    live.current?.say(
+      t('board.columnDropped', {
+        name: groupText(groupDef, rule!, key, env),
+        index: next.indexOf(key) + 1,
+      }),
+    );
+  };
+  /** Marks where a column would land: before the column at an insertion index, or after the last. */
+  const markColumnDrop = (index: number | null) => {
+    for (const el of scroller.current?.querySelectorAll('[data-column-drop]') ?? [])
+      el.removeAttribute('data-column-drop');
+    if (index === null) return;
+    const sections = [
+      ...(scroller.current?.querySelectorAll<HTMLElement>('.cgw-board-column[data-group]') ?? []),
+    ];
+    const target = sections[Math.min(index, sections.length - 1)];
+    target?.setAttribute('data-column-drop', index >= sections.length ? 'after' : 'before');
+  };
+  useEffect(() => () => markColumnDrop(null), []);
+
+  /** A column picked up by the keys: where it came from and where it would land. */
+  const pickedColumn = useRef<{ key: string; from: number; index: number } | null>(null);
+  const endColumnPick = (commit: boolean) => {
+    const p = pickedColumn.current;
+    pickedColumn.current = null;
+    markColumnDrop(null);
+    if (!p) return;
+    document.getElementById(`${idPrefix}-col-${p.key}`)?.removeAttribute('data-dragging');
+    if (!commit || p.index === p.from) {
+      live.current?.say(t('card.cancelled'));
+      return;
+    }
+    commitColumn(p.key, p.index);
+  };
+  const onGripKeyDown = (event: KeyboardEvent<HTMLButtonElement>, key: string) => {
+    const p = pickedColumn.current;
+    const count = columns.length;
+    const name = rule ? groupText(groupDef, rule, key, env) : key;
+    if (!p) {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopPropagation();
+      const from = columns.findIndex((c) => c.key === key);
+      if (from < 0) return;
+      pickedColumn.current = { key, from, index: from };
+      document.getElementById(`${idPrefix}-col-${key}`)?.setAttribute('data-dragging', '');
+      live.current?.say(t('board.columnPickedUp', { name }));
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Escape' || event.key === 'Tab') return endColumnPick(false);
+    if (event.key === ' ' || event.key === 'Enter') return endColumnPick(true);
+    const rtlNow = getComputedStyle(event.currentTarget).direction === 'rtl';
+    const move = boardKey(event.key, rtlNow);
+    const index =
+      move === 'next'
+        ? p.index + 1
+        : move === 'previous'
+          ? p.index - 1
+          : move === 'first'
+            ? 0
+            : move === 'last'
+              ? count - 1
+              : p.index;
+    if (index < 0 || index >= count || index === p.index) return;
+    p.index = index;
+    // Shown as an insertion among every column: after itself when it goes later.
+    markColumnDrop(index > p.from ? index + 1 : index);
+    live.current?.say(t('board.columnPosition', { name, index: index + 1, count }));
+  };
+
+  const onHeadPointerDown = (event: PointerEvent<HTMLElement>, key: string) => {
+    if (event.button !== 0 || !editable || pickedColumn.current) return;
+    const head = event.currentTarget;
+    const target = event.target as HTMLElement;
+    if (!target.closest('.cgw-db-column-grip') && !startsDrag(event.target, head)) return;
+    event.stopPropagation();
+    const el = scroller.current;
+    const from = columnsRef.current.findIndex((c) => c.key === key);
+    if (from < 0) return;
+    let boxes: { left: number; right: number }[] = [];
+    let startLeft = 0;
+    let drop: number | null = null;
+    const rtlNow = getComputedStyle(head).direction === 'rtl';
+    stopDrag.current?.();
+    stopDrag.current = trackDrag(event.nativeEvent, head, el, {
+      onStart() {
+        startLeft = el?.scrollLeft ?? 0;
+        boxes = columnsRef.current.map((c) => {
+          const box = document.getElementById(`${idPrefix}-col-${c.key}`)?.getBoundingClientRect();
+          return { left: box?.left ?? 0, right: box?.right ?? 0 };
+        });
+      },
+      onMove(x) {
+        const dx = (el?.scrollLeft ?? 0) - startLeft;
+        const at = columnDropIndex(
+          boxes.map((b) => ({ left: b.left - dx, right: b.right - dx })),
+          x,
+          rtlNow,
+        );
+        drop = targetIndex(true, from, at);
+        markColumnDrop(drop === null ? null : at);
+      },
+      onDrop() {
+        markColumnDrop(null);
+        stopDrag.current = null;
+        if (drop !== null) commitColumn(key, drop);
+      },
+      onCancel() {
+        markColumnDrop(null);
+        stopDrag.current = null;
+      },
+    });
+  };
+
   // ---- Keyboard ------------------------------------------------------------------------------------
   const othersCounts = (row: RowRecord) =>
     columns.map((c) => (collapsed.has(c.key) ? 0 : c.rows.filter((r) => r.id !== row.id).length));
@@ -611,7 +746,23 @@ export function BoardView({
                 data-group={column.key}
                 aria-label={`${label}, ${t('board.countLabel', { count: column.count })}`}
               >
-                <header className="cgw-board-head">
+                <header
+                  className="cgw-board-head"
+                  onPointerDown={(event) => onHeadPointerDown(event, column.key)}
+                >
+                  {editable ? (
+                    <button
+                      type="button"
+                      className="cgw-icon-button cgw-db-column-grip"
+                      aria-label={t('board.moveColumn', { name: label })}
+                      aria-description={t('board.moveColumnHint')}
+                      title={t('board.moveColumn', { name: label })}
+                      onKeyDown={(event) => onGripKeyDown(event, column.key)}
+                      onBlur={() => pickedColumn.current && endColumnPick(false)}
+                    >
+                      <span aria-hidden="true">⋮⋮</span>
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="cgw-icon-button cgw-board-toggle"

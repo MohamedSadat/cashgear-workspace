@@ -1,6 +1,7 @@
 // One item of the table: a row of cells, a group header, "load more" or "New". Memoised: while
 // the table scrolls only items that come into the window are drawn, and an item is drawn again
-// only when its row, the columns, or the active or edited cell in it change.
+// only when its row, the columns, the active or edited cell in it, or the selected columns of it
+// change. A row's title cell starts with its handle, which selects the whole row (Phase 8).
 import { memo, useState, type CSSProperties, type ReactNode } from 'react';
 import { renderCell } from '../cells/CellDisplay';
 import type { CellEnv } from '../cells/env';
@@ -21,6 +22,16 @@ export interface EditingCell {
   seed: string | null;
 }
 
+/** The columns of a row the selection covers (one object per selection, shared by its rows). */
+export interface SelectedCols {
+  left: number;
+  right: number;
+  /** The selection is of whole rows: the row's handle shows it. */
+  whole: boolean;
+  /** More than one cell: the cells are tinted (a single cell is only the active one). */
+  range: boolean;
+}
+
 export interface TableRowProps {
   item: TableItem;
   index: number;
@@ -34,6 +45,8 @@ export interface TableRowProps {
   /** Columns drawn besides the title (the horizontal window); others are one spacer. */
   cols: Range;
   editing: EditingCell | null;
+  /** The columns the selection covers when this item is in it. */
+  selected: SelectedCols | null;
   wrap: boolean;
   group: { rule: GroupRule; def: PropertyDef | undefined } | null;
   onEditDone(end: EditEnd): void;
@@ -197,12 +210,15 @@ function TableRowView(props: TableRowProps) {
   }
 
   const row = item.row;
+  const sel = props.selected;
+  const inSel = (c: number) => !!sel && c >= sel.left && c <= sel.right;
   return (
     <div
       role="row"
       id={itemDomId(gridId, index)}
       aria-rowindex={rowIndex}
-      className={`cgw-trow${wrap ? ' is-wrapped' : ''}`}
+      aria-selected={sel?.whole || undefined}
+      className={`cgw-trow${wrap ? ' is-wrapped' : ''}${sel?.whole ? ' is-row-selected' : ''}`}
       style={style}
       data-item={index}
     >
@@ -232,13 +248,21 @@ function TableRowView(props: TableRowProps) {
         }
         const className = `cgw-tcell cgw-type-${def.type}${col === 0 ? ' cgw-tcell-title' : ''}${
           activeCol === col ? ' is-active' : ''
-        }`;
+        }${sel?.range && inSel(col) ? ' is-selected' : ''}`;
         const cellStyle: CSSProperties = { inlineSize: widthVar(col) };
         const id = cellId(gridId, index, col);
         let content = renderCell(def, row, env);
         if (def.type === 'title') {
           content = (
             <>
+              <button
+                type="button"
+                className="cgw-db-row-select"
+                tabIndex={-1}
+                aria-label={env.t('cells.selectRow', { title: row.title || env.t('untitled') })}
+              >
+                <span aria-hidden="true">⋮⋮</span>
+              </button>
               <span className="cgw-title-text">
                 {row.icon ? (
                   <span className="cgw-row-icon" aria-hidden="true">
@@ -286,7 +310,7 @@ function TableRowView(props: TableRowProps) {
             id={id}
             role="gridcell"
             aria-colindex={col + 1}
-            aria-selected={activeCol === col || undefined}
+            aria-selected={inSel(col) || activeCol === col}
             className={className}
             style={cellStyle}
             data-col={col}

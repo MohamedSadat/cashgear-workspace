@@ -275,6 +275,11 @@ export interface GroupRule {
   hideEmpty?: boolean;
   /** Group keys left out of the view. */
   hidden?: string[];
+  /**
+   * A board's columns in the order a person dragged them into, by group key (Phase 8): keys named
+   * here first, then the rest in the group's own order. Only the board reads it; queries ignore it.
+   */
+  order?: string[];
 }
 
 /** What a query is evaluated against that the rows do not hold. */

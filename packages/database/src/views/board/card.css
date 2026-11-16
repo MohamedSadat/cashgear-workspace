@@ -118,6 +118,13 @@ body > .cgw-drag-ghost {
   will-change: transform;
 }
 
+/* Between two gallery cards (Phase 8): a bar down the gap, placed by logical offsets. */
+.cgw-db-drop-indicator[data-mode='tile'] {
+  inset-inline-end: auto;
+  inline-size: 3px;
+  border-radius: 2px;
+}
+
 .cgw-db-drop-indicator[data-mode='column'] {
   block-size: 100%;
   min-block-size: 40px;

@@ -2,7 +2,8 @@
 // the property's menu when clicked, reorders the columns when dragged, and has a resize handle at
 // its inline end. Width changes during a drag are written to the grid's CSS variables directly
 // (nothing React-rendered changes while the pointer moves); the width is written to the view once,
-// when the drag ends. The "+" at the end adds a property.
+// when the drag ends. The "+" at the end adds a property. Shift and a click selects the whole
+// column (from the active cell's column), as a row's handle selects the whole row.
 import { memo, useRef, type PointerEvent } from 'react';
 import type { PropertyDef } from '../core';
 import type { DbT } from '../i18n';
@@ -19,6 +20,10 @@ export interface TableHeaderProps {
   editable: boolean;
   rtl: boolean;
   activeCol: number | null;
+  /** The columns a selection of whole columns covers. */
+  selectedCols: { left: number; right: number } | null;
+  /** Selects whole columns, from the active cell's column to this one. */
+  selectColumns(col: number): void;
   /** Sets a column's width on the grid while it is dragged. */
   previewWidth(col: number, width: number): void;
   commitWidth(col: number, width: number): void;
@@ -123,6 +128,7 @@ function TableHeaderView(props: TableHeaderProps) {
     }
     clearDrop();
     if (!d.moved) {
+      if (event.shiftKey) return props.selectColumns(d.col);
       const cell = headRef.current?.querySelector<HTMLElement>(`[data-head-col="${d.col}"]`);
       if (cell) props.openMenu(d.col, cell);
       return;
@@ -147,6 +153,8 @@ function TableHeaderView(props: TableHeaderProps) {
     >
       {columns.map((def, col) => {
         const sort = props.sortGlyph(def.id);
+        const selected =
+          !!props.selectedCols && col >= props.selectedCols.left && col <= props.selectedCols.right;
         return (
           <div
             key={def.id}
@@ -156,8 +164,11 @@ function TableHeaderView(props: TableHeaderProps) {
             aria-sort={sort === '↑' ? 'ascending' : sort === '↓' ? 'descending' : undefined}
             aria-label={t('property.header', { name: def.name, type: t(`type.${def.type}`) })}
             aria-haspopup="dialog"
+            aria-selected={props.selectedCols ? selected : undefined}
             data-head-col={col}
-            className={`cgw-th${col === 0 ? ' cgw-th-title' : ''}${activeCol === col ? ' is-active' : ''}`}
+            className={`cgw-th${col === 0 ? ' cgw-th-title' : ''}${activeCol === col ? ' is-active' : ''}${
+              selected ? ' is-selected' : ''
+            }`}
             style={{ inlineSize: widthVar(col) }}
             onPointerDown={onCellDown(col)}
           >

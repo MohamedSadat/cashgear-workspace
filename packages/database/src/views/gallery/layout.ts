@@ -1,10 +1,11 @@
 // The gallery's arithmetic: how many cards fit in a row at the view's card size, each grid row's
 // height (its tallest card: the picture, the title and the lines with values), the picture a card
-// shows, and keyboard moves through the grid (left and right mirrored in RTL). Pure.
+// shows, keyboard moves through the grid (left and right mirrored in RTL), and where a dragged card
+// lands and its indicator stands (Phase 8). Pure.
 import type { Id, RowRecord } from '@cgw/workspace';
 import type { PropertyDef, ViewConfig } from '../../core';
 import type { AssetInfo } from '../../host';
-import { layoutOf, type ListLayout } from '../../table/windowing';
+import { indexAt, layoutOf, type ListLayout } from '../../table/windowing';
 import { cardHeight } from '../board/layout';
 
 export type CardSize = NonNullable<ViewConfig['cardSize']>;
@@ -74,6 +75,48 @@ export function coverAsset(
     if (type === undefined || type.startsWith('image/')) return id;
   }
   return null;
+}
+
+// ---- Moving a card (Phase 8) ----------------------------------------------------------------
+
+/**
+ * Where a card dropped at a point goes: an insertion index among `count` cards (the dragged one
+ * included), from the point's distance `across` the grid from its inline start and `down` from its
+ * top. The second half of a card is after it.
+ */
+export function galleryDropIndex(
+  layout: ListLayout,
+  count: number,
+  cols: number,
+  width: number,
+  across: number,
+  down: number,
+): number {
+  if (count === 0) return 0;
+  const row = indexAt(layout, Math.max(0, down));
+  const step = width + GALLERY_GAP;
+  const col = Math.max(0, Math.min(cols - 1, Math.floor(Math.max(0, across) / step)));
+  const within = across - col * step;
+  const index = row * cols + col + (within > width / 2 ? 1 : 0);
+  return Math.max(0, Math.min(count, index));
+}
+
+/**
+ * Where the drop indicator stands for an insertion index: the grid row and the inline offset of
+ * the gap before that card (after the last card, the gap after it).
+ */
+export function galleryDropAt(
+  index: number,
+  count: number,
+  cols: number,
+  width: number,
+): { row: number; inline: number } {
+  const step = width + GALLERY_GAP;
+  if (index >= count && count > 0) {
+    const last = count - 1;
+    return { row: Math.floor(last / cols), inline: (last % cols) * step + width + GALLERY_GAP / 2 };
+  }
+  return { row: Math.floor(index / cols), inline: (index % cols) * step - GALLERY_GAP / 2 };
 }
 
 /** The tile a key moves to in a grid of `count` tiles, `cols` to a row; null when it stays. */

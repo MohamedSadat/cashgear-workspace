@@ -103,6 +103,9 @@ export function localToday(now = new Date()): string {
 }
 
 const PEOPLE_PREF = (workspaceId: Id) => `database/people/${workspaceId}`;
+/** Rows a large batch's titles are indexed for at most, and the pause between two of them. */
+const INDEX_QUEUE_LIMIT = 20_000;
+const INDEX_PAUSE_MS = 20;
 
 /** The same items in the same order (each read returns the same array while they are). */
 function sameItems<T>(a: readonly T[] | undefined, b: readonly T[]): a is T[] {
@@ -210,6 +213,8 @@ export class ShellDatabaseHost implements DatabaseHost {
   }
 
   dispose() {
+    this.disposed = true;
+    this.indexQueue.clear();
     for (const off of [...this.cleanups, ...this.offSync]) off();
     for (const source of [...this.sources]) source.close();
     this.listeners.clear();
@@ -576,6 +581,40 @@ export class ShellDatabaseHost implements DatabaseHost {
 
   // ---- Changes ---------------------------------------------------------------------------------
 
+  private disposed = false;
+  /** Rows whose titles a large batch wrote (a paste, an import), still to be indexed. */
+  private readonly indexQueue = new Set<Id>();
+  private indexing = false;
+
+  /**
+   * Indexes the titles of a large batch in the background, one row at a time with a pause between
+   * (each opens the row's document to read its body), so a paste of a thousand rows neither waits
+   * for it nor leaves its rows out of search.
+   */
+  private indexLater(ids: readonly Id[]) {
+    for (const id of ids) if (this.indexQueue.size < INDEX_QUEUE_LIMIT) this.indexQueue.add(id);
+    if (this.indexing) return;
+    this.indexing = true;
+    const next = () => {
+      const [id] = this.indexQueue;
+      if (id === undefined || this.disposed) {
+        this.indexing = false;
+        return;
+      }
+      this.indexQueue.delete(id);
+      void this.session
+        .indexPage(id)
+        .catch((error: unknown) => console.warn('Indexing failed:', error))
+        .finally(() => setTimeout(next, INDEX_PAUSE_MS));
+    };
+    setTimeout(next, 300);
+  }
+
+  /**
+   * Applies operations through the session, as one batch: a paste's `row.update`s, `page.update`s
+   * and new rows (Phase 8) are planned and written together, so they show and are taken back
+   * together.
+   */
   async apply(ops: Operation[]): Promise<void> {
     try {
       await this.session.apply(ops);
@@ -594,6 +633,7 @@ export class ShellDatabaseHost implements DatabaseHost {
         (op.type === 'page.create' && op.payload.kind === 'row' && op.payload.title),
     );
     if (titled.length <= 50) for (const op of titled) this.session.scheduleIndex(op.entityId, 300);
+    else this.indexLater(titled.map((op) => op.entityId));
     // A row made from a row template starts with the template's body.
     for (const op of ops)
       if (op.type === 'page.create' && op.payload.kind === 'row' && op.payload.templateOfPageId)

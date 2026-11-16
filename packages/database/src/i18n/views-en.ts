@@ -36,6 +36,12 @@ export const viewsEn = {
     addStatus: 'Add a Status property',
     statusName: 'Status',
     sorted: 'Sorted: cards keep the sort’s order within a column.',
+    moveColumn: 'Move the column {{name}}',
+    moveColumnHint: 'Space picks the column up; the arrow keys then move it.',
+    columnPickedUp:
+      'Picked up the column {{name}}. The arrow keys move it, Space drops it, Escape cancels.',
+    columnPosition: '{{name}}, position {{index}} of {{count}}',
+    columnDropped: 'Moved the column {{name}} to position {{index}}.',
   },
   list: {
     label: '{{name}}: list',
@@ -82,6 +88,9 @@ export const viewsEn = {
     loadMore: 'Load more',
     empty: 'No rows yet.',
     noMatch: 'No rows match.',
+    position: 'Position {{index}} of {{count}}',
+    dropped: 'Moved {{title}} to position {{index}}.',
+    sorted: 'Sorted: cards keep the sort’s order, so they are not moved by hand.',
   },
   layout: {
     button: 'Layout',

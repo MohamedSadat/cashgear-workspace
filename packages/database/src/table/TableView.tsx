@@ -4,6 +4,13 @@
 // Home, End, PageUp, PageDown, Tab; Enter or F2 edits, typing starts an edit, Escape cancels,
 // Delete clears, Ctrl+Enter opens the row, Shift+F10 its menu. On a header: Enter opens the
 // property's menu, Alt+arrows resize, Alt+Shift+arrows move the column.
+//
+// Cells are selected (Phase 8, M8.3) by Shift and the arrows (and Home, End, PageUp, PageDown),
+// Shift and a click, a drag of the pointer (scrolling at the edges), whole rows by Shift+Space or a
+// row's handle, whole columns by Ctrl+Space or Shift and a click on a header, everything by Ctrl+A;
+// Escape lets go. The selection is the table's state (selection.ts), so the virtual window
+// scrolls under it. Ctrl+C copies it (TSV and HTML), Ctrl+V pastes into it, Delete clears it, each
+// one batch of operations; the notice after a paste or a clear offers Undo (also Ctrl+Z here).
 import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
@@ -14,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
@@ -39,11 +47,27 @@ import { newPropertyDef } from '../properties/defs';
 import { NewPropertySetup, SET_UP_FIRST } from '../properties/NewPropertySetup';
 import { PropertyMenu, type PropertyPanel } from '../properties/PropertyMenu';
 import { TypePicker } from '../properties/TypePicker';
+import { edgeStep } from '../views/board/drag';
+import { Live, type LiveHandle } from '../views/board/shared';
 import type { ViewProps } from '../views/types';
+import { CellNotice } from './CellNotice';
 import { buildItems, HEADER_HEIGHT, indexOfRow, itemHeight, type TableItem } from './items';
 import { navigate, startsTyping, type GridPos } from './navigation';
+import {
+  cellAtPoint,
+  extended,
+  extendsSelection,
+  extendTo,
+  isRange,
+  rectContains,
+  rowItemsIn,
+  selectionRect,
+  wholeOf,
+  type TableSelection,
+} from './selection';
 import { TableHeader } from './TableHeader';
-import { cellId, TableRow, type EditingCell } from './TableRow';
+import { cellId, TableRow, type EditingCell, type SelectedCols } from './TableRow';
+import { useCellCommands } from './useCells';
 import {
   columnRange,
   layoutOf,
@@ -85,7 +109,7 @@ export function TableView({
   requestFilter,
 }: ViewProps) {
   const { host, actions, editable } = useDatabaseContext();
-  const { t, rtl } = useDbT();
+  const { t, rtl, locale } = useDbT();
   const env = useCellEnv(host, actions, editable);
   const gridId = useId().replace(/:/g, '');
   const grid = useRef<HTMLDivElement>(null);
@@ -156,6 +180,39 @@ export function TableView({
   const editingItem = editing ? indexOfRow(items, editing.rowId, editing.group) : -1;
   const editingCol = editing ? columns.findIndex((c) => c.id === editing.propertyId) : -1;
 
+  // ---- The selection ------------------------------------------------------------------------
+  const [selection, setSelection] = useState<TableSelection | null>(null);
+  const live = useRef<LiveHandle>(null);
+  const activePos: GridPos = { item: activeItem, col: activeCol };
+  const rect =
+    items.length && (activeItem >= 0 || selection)
+      ? selectionRect(selection, activePos, { count: items.length, cols: columns.length })
+      : null;
+  const ranged = !!rect && !!selection && isRange(rect);
+  const whole = selection?.mode === 'rows' || selection?.mode === 'all';
+  const selLeft = rect?.left ?? -1;
+  const selRight = rect?.right ?? -1;
+  const selCols = useMemo<SelectedCols | null>(
+    () => (selLeft >= 0 ? { left: selLeft, right: selRight, whole, range: ranged } : null),
+    [selLeft, selRight, whole, ranged],
+  );
+  const headerCols =
+    rect && (selection?.mode === 'columns' || selection?.mode === 'all')
+      ? { left: rect.left, right: rect.right }
+      : null;
+  const isRowAt = (i: number) => items[i]?.kind === 'row';
+  /** Says the selection's size through the live region. */
+  const sayRect = (next: TableSelection | null, at: GridPos) => {
+    if (!next) return;
+    const r = selectionRect(next, at, { count: items.length, cols: columns.length });
+    live.current?.say(
+      t('cells.selected', {
+        rows: rowItemsIn(r, isRowAt).length.toLocaleString(locale),
+        columns: (r.right - r.left + 1).toLocaleString(locale),
+      }),
+    );
+  };
+
   const focusGrid = () => grid.current?.focus({ preventScroll: true });
 
   const reveal = useCallback(
@@ -182,6 +239,7 @@ export function TableView({
   const startEdit = (item: number, col: number, seed: string | null = null) => {
     const entry = items[item];
     if (!entry || entry.kind !== 'row' || !editable) return;
+    setSelection(null);
     const def = columns[col];
     if (!def || !isEditableType(def.type)) return;
     const kind = editKind(def.type);
@@ -293,6 +351,21 @@ export function TableView({
     [columns],
   );
   const addProperty = useCallback((anchor: HTMLElement) => setAdding(anchor), []);
+  /** Shift and a click on a header: whole columns, from the selection's start to this one. */
+  const selectRef = useRef<(col: number) => void>(() => undefined);
+  selectRef.current = (col: number) => {
+    if (!items.length) return;
+    const at = { item: Math.max(0, activeItem), col };
+    const next: TableSelection = {
+      anchor: selection?.anchor ?? { item: at.item, col: activeCol },
+      mode: selection?.mode === 'rows' || selection?.mode === 'all' ? 'all' : 'columns',
+    };
+    setSelection(next);
+    setActive(at);
+    focusGrid();
+    sayRect(next, at);
+  };
+  const selectColumns = useCallback((col: number) => selectRef.current(col), []);
   const sortGlyph = useCallback(
     (id: string) => {
       const rule = config.sorts.find((s) => s.propertyId === id);
@@ -367,6 +440,58 @@ export function TableView({
     [t, host, actions, editable],
   );
 
+  // ---- Copy, paste, clear ---------------------------------------------------------------------
+  const cells = useCellCommands({
+    host,
+    database,
+    view,
+    snapshot,
+    items,
+    columns,
+    editable,
+    env,
+    t,
+    locale,
+    rect,
+    ranged,
+    select: (anchor, at) => {
+      setSelection({ anchor, mode: 'cells' });
+      setActive(at);
+    },
+    say: (text) => live.current?.say(text),
+  });
+  const onCopy = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (event.target !== grid.current || editing) return;
+    const made = cells.copy();
+    if (!made) return;
+    event.preventDefault();
+    event.clipboardData.setData('text/plain', made.text);
+    event.clipboardData.setData('text/html', made.html);
+  };
+  const onPaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (event.target !== grid.current || editing) return;
+    event.preventDefault();
+    void cells.paste(
+      event.clipboardData.getData('text/plain'),
+      event.clipboardData.getData('text/html'),
+    );
+  };
+  // With nothing selected in the document, a browser offers Copy and Paste on a focused element
+  // only when its `beforecopy` and `beforepaste` are cancelled (React has no handler for them).
+  useEffect(() => {
+    const el = grid.current;
+    if (!el) return;
+    const allow = (event: Event) => {
+      if (event.target === el) event.preventDefault();
+    };
+    el.addEventListener('beforecopy', allow);
+    el.addEventListener('beforepaste', allow);
+    return () => {
+      el.removeEventListener('beforecopy', allow);
+      el.removeEventListener('beforepaste', allow);
+    };
+  }, []);
+
   // ---- Keyboard --------------------------------------------------------------------------------
   const shape = useMemo(
     () => ({
@@ -386,9 +511,51 @@ export function TableView({
     const pos = { item: activeItem, col: activeCol };
     const entry = items[pos.item];
     const mod = event.ctrlKey || event.metaKey;
+    const code = event.nativeEvent.code;
     // The direction the grid is drawn in: the nearest `dir`, as every CashGear control reads it.
     const dir = grid.current?.closest('[dir]')?.getAttribute('dir');
     const dirRtl = dir ? dir.toLowerCase() === 'rtl' : rtl;
+
+    // The selection: extend it, whole rows or columns, everything, let go; Undo of a paste.
+    if (event.key === 'Escape' && selection) {
+      event.preventDefault();
+      setSelection(null);
+      return;
+    }
+    if (mod && !event.altKey && !event.shiftKey && code === 'KeyZ' && cells.undo()) {
+      event.preventDefault();
+      return;
+    }
+    if (mod && !event.altKey && !event.shiftKey && code === 'KeyA' && items.length) {
+      event.preventDefault();
+      const next: TableSelection = { anchor: { item: 0, col: 0 }, mode: 'all' };
+      const at = { item: Math.max(0, pos.item), col: pos.col };
+      setSelection(next);
+      if (pos.item < 0) setActive(at);
+      sayRect(next, at);
+      return;
+    }
+    if (code === 'Space' && !event.altKey && event.shiftKey !== mod && items.length) {
+      if (event.shiftKey && pos.item < 0) return;
+      event.preventDefault();
+      const at = { item: Math.max(0, pos.item), col: pos.col };
+      const next = wholeOf(selection, at, event.shiftKey ? 'rows' : 'columns');
+      setSelection(next);
+      if (pos.item < 0) setActive(at);
+      sayRect(next, at);
+      return;
+    }
+    if (extendsSelection(event) && items.length) {
+      const next = extendTo(pos, event, { ...shape, rtl: dirRtl });
+      if (next) {
+        event.preventDefault();
+        const made = extended(selection, pos);
+        setSelection(made);
+        moveTo(next);
+        sayRect(made, next);
+      }
+      return;
+    }
 
     if (pos.item === -1) {
       const def = columns[pos.col];
@@ -451,6 +618,11 @@ export function TableView({
         startEdit(pos.item, pos.col);
         return;
       }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && ranged) {
+        event.preventDefault();
+        void cells.clear();
+        return;
+      }
       if (
         (event.key === 'Delete' || event.key === 'Backspace') &&
         def &&
@@ -476,6 +648,7 @@ export function TableView({
 
     const next = navigate(pos, event, { ...shape, rtl: dirRtl });
     if (next === null) return;
+    setSelection(null);
     if (next === 'leave') return; // Tab leaves the grid as the browser moves focus.
     event.preventDefault();
     moveTo(next);
@@ -489,20 +662,132 @@ export function TableView({
     if (!el || !rowEl) return null;
     return { item: Number(rowEl.dataset.item), col: Number(el.dataset.col) };
   };
+  /** The cell under a point of the window, for a drag that leaves the cells. */
+  const cellAtClient = (x: number, y: number): GridPos | null => {
+    const el = grid.current;
+    if (!el) return null;
+    const box = el.getBoundingClientRect();
+    const dirRtl = getComputedStyle(el).direction === 'rtl';
+    return cellAtPoint(
+      layout.offsets,
+      items.length,
+      widths,
+      el.scrollTop,
+      el.scrollLeft,
+      dirRtl ? box.right - x : x - box.left,
+      y - box.top - HEADER_HEIGHT,
+    );
+  };
+  const stopDrag = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopDrag.current?.(), []);
+  /**
+   * A drag from a cell (or a row's handle) selects from it to the cell under the pointer, the
+   * window scrolling near the grid's edges. Listened for on the window until the button is up.
+   */
+  const dragSelect = (start: GridPos, mode: 'cells' | 'rows') => {
+    stopDrag.current?.();
+    let x = 0;
+    let y = 0;
+    let frame = 0;
+    let last = start;
+    const to = (found: GridPos | null) => {
+      let at = found;
+      if (!at || (at.item === last.item && at.col === last.col)) return;
+      if (items[at.item]?.kind !== 'row' && at.item !== start.item) {
+        // Group headers and "New" are passed over: the nearest row towards the start.
+        const step = at.item > start.item ? -1 : 1;
+        let i = at.item;
+        while (i !== start.item && items[i]?.kind !== 'row') i += step;
+        at = { item: i, col: at.col };
+      }
+      last = at;
+      if (pressed.current) pressed.current.wasActive = false;
+      setSelection({ anchor: mode === 'rows' ? { item: start.item, col: 0 } : start, mode });
+      setActive(mode === 'rows' ? { item: at.item, col: activeCol } : at);
+    };
+    const tick = () => {
+      frame = 0;
+      const el = grid.current;
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      // Nothing laid out (jsdom): nothing to scroll.
+      if (!box.width || !box.height) return;
+      const dy = edgeStep(y, box.top + HEADER_HEIGHT, box.bottom);
+      const dx = mode === 'cells' ? edgeStep(x, box.left, box.right) : 0;
+      if (dx || dy) {
+        el.scrollBy?.(dx, dy);
+        to(cellAtClient(x, y));
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    const onMove = (move: globalThis.MouseEvent) => {
+      // The button came up outside the window: the drag is over.
+      if ((move.buttons & 1) === 0) return onUp();
+      x = move.clientX;
+      y = move.clientY;
+      const target = move.target as HTMLElement | null;
+      const inside = target?.closest?.('[role="grid"]') === grid.current;
+      to(inside ? cellAt(target) : cellAtClient(x, y));
+      if (!frame) frame = requestAnimationFrame(tick);
+    };
+    const finish = () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('mouseup', onUp, true);
+      stopDrag.current = null;
+    };
+    const onUp = () => {
+      finish();
+      if (last.item !== start.item || last.col !== start.col || mode === 'rows')
+        sayRect({ anchor: start, mode }, last);
+    };
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+    stopDrag.current = finish;
+  };
   const onMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest('.cgw-inline-editor, .cgw-thead')) return;
     const at = cellAt(target);
     if (!at) return;
+    const handle = !!target.closest('.cgw-db-row-select');
     pressed.current = {
       ...at,
       wasActive:
-        at.item === activeItem && at.col === activeCol && document.activeElement === grid.current,
+        !handle &&
+        !event.shiftKey &&
+        !selection &&
+        at.item === activeItem &&
+        at.col === activeCol &&
+        document.activeElement === grid.current,
     };
     if (editing) return;
     event.preventDefault();
-    setActive(at);
     focusGrid();
+    const isRow = items[at.item]?.kind === 'row';
+    if (handle && isRow) {
+      // A row's handle: the whole row, or with Shift whole rows from the selection's start.
+      const anchor =
+        event.shiftKey && selection
+          ? { item: selection.anchor.item, col: 0 }
+          : event.shiftKey
+            ? { item: Math.max(0, activeItem), col: 0 }
+            : { item: at.item, col: 0 };
+      setSelection({ anchor, mode: 'rows' });
+      setActive({ item: at.item, col: activeCol });
+      if (event.button === 0) dragSelect(anchor, 'rows');
+      return;
+    }
+    if (event.shiftKey && isRow && activeItem >= 0) {
+      setSelection(extended(selection, activePos));
+      setActive(at);
+      return;
+    }
+    // A right click inside the selection keeps it (the row menu opens on it).
+    if (!(rect && selection && event.button !== 0 && rectContains(rect, at.item, at.col)))
+      setSelection(null);
+    setActive(at);
+    if (event.button === 0 && isRow) dragSelect(at, 'cells');
   };
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     const at = cellAt(event.target);
@@ -520,6 +805,7 @@ export function TableView({
     const entry = at ? items[at.item] : null;
     if (!at || entry?.kind !== 'row') return;
     event.preventDefault();
+    if (!rect || !rectContains(rect, at.item, at.col)) setSelection(null);
     setActive(at);
     void rowMenu.current?.showFromEvent(event as MouseEvent<HTMLElement>, entry.row);
   };
@@ -564,6 +850,7 @@ export function TableView({
         aria-rowcount={snapshot.complete ? items.length + 1 : -1}
         aria-colcount={columns.length}
         aria-readonly={!editable || undefined}
+        aria-multiselectable="true"
         aria-activedescendant={activeDescendant}
         aria-busy={snapshot.loading || undefined}
         className="cgw-grid"
@@ -574,6 +861,8 @@ export function TableView({
         onClick={onClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
+        onCopy={onCopy}
+        onPaste={onPaste}
       >
         <TableHeader
           gridId={gridId}
@@ -583,6 +872,8 @@ export function TableView({
           editable={editable}
           rtl={rtl}
           activeCol={activeItem === -1 ? activeCol : null}
+          selectedCols={headerCols}
+          selectColumns={selectColumns}
           previewWidth={previewWidth}
           commitWidth={commitWidth}
           moveColumn={moveColumn}
@@ -611,6 +902,9 @@ export function TableView({
                 activeCol={isActive ? activeCol : null}
                 cols={cols}
                 editing={edit}
+                selected={
+                  rect && i >= rect.top && i <= rect.bottom && item.kind === 'row' ? selCols : null
+                }
                 wrap={wrap}
                 group={group}
                 onEditDone={onEditDone}
@@ -630,6 +924,8 @@ export function TableView({
           </div>
         ) : null}
       </div>
+      {cells.notice ? <CellNotice notice={cells.notice} t={t} onClose={cells.closeNotice} /> : null}
+      <Live ref={live} />
       <div className="cgw-table-foot" role="status">
         {snapshot.loading && !snapshot.rows.length
           ? t('table.loadingRows')

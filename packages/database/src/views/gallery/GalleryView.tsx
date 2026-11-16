@@ -3,6 +3,12 @@
 // view's shown properties; small, medium or large cards, as many to a row as fit. Grid rows are
 // virtualised (only those in the window are drawn). One card is in the tab order; the arrows
 // move through the grid (mirrored in RTL), Enter opens a card. "New" types a title in place.
+//
+// Cards move (Phase 8) as the board's do: a drag by the pointer (a copy follows it, one indicator
+// shows where it lands) or by the keys (Space picks a card up, the arrows move it through the grid,
+// Space or Enter drops it, Escape cancels), spoken through a live region. The order is the rows'
+// own (their order keys, one `page.move`), as a board's within a column and every view without a
+// sort; a view with a sort keeps the sort's order, so its cards do not move by hand.
 import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
 import type { Id, RowRecord } from '@cgw/workspace';
 import {
@@ -17,8 +23,12 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
 } from 'react';
 import { InlineEditor } from '../../cells/InlineEditor';
+import { startsDrag, trackDrag } from '../board/drag';
+import { needsMove, placeAt, targetIndex } from '../board/layout';
+import { Live, type LiveHandle } from '../board/shared';
 import { useCellEnv } from '../../cells/env';
 import { TITLE_PROPERTY } from '../../core';
 import { useDatabaseContext } from '../../context';
@@ -36,6 +46,8 @@ import {
   cardWidth,
   coverAsset,
   galleryColumns,
+  galleryDropAt,
+  galleryDropIndex,
   galleryLayout,
   galleryMove,
   hasCover,
@@ -54,8 +66,10 @@ export function GalleryView({
   newRowRequest,
 }: ViewProps) {
   const { host, actions, editable } = useDatabaseContext();
-  const { t } = useDbT();
+  const { t, locale } = useDbT();
   const env = useCellEnv(host, actions, editable);
+  const sorted = view.config.sorts.length > 0;
+  const draggable = editable && !sorted;
   const idPrefix = `g${useId().replace(/[^A-Za-z0-9]/g, '')}`;
   const config = view.config;
   const size = sizeOf(config);
@@ -139,12 +153,150 @@ export function GalleryView({
     const id = (target as HTMLElement | null)?.closest?.<HTMLElement>('[data-card]')?.dataset.card;
     return id ? rows.findIndex((r) => r.id === id) : -1;
   };
+  // ---- Moving a card ---------------------------------------------------------------------------
+  const live = useRef<LiveHandle>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  const indicator = useRef<HTMLDivElement | null>(null);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const geometry = useRef({ layout, cols, width });
+  geometry.current = { layout, cols, width };
+  /** The indicator before the card at an insertion index (after the last card at the end). */
+  const showIndicator = (index: number) => {
+    const body = grid.current;
+    if (!body) return;
+    let el = indicator.current;
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'cgw-db-drop-indicator';
+      el.dataset.mode = 'tile';
+      el.setAttribute('aria-hidden', 'true');
+      indicator.current = el;
+    }
+    const g = geometry.current;
+    const at = galleryDropAt(index, rowsRef.current.length, g.cols, g.width);
+    const top = g.layout.offsets[at.row] ?? 0;
+    const bottom = g.layout.offsets[at.row + 1] ?? top;
+    el.style.insetInlineStart = `${at.inline - 1}px`;
+    el.style.insetBlockStart = `${top}px`;
+    el.style.blockSize = `${Math.max(20, bottom - top - GALLERY_GAP)}px`;
+    if (el.parentElement !== body) body.append(el);
+  };
+  const hideIndicator = () => indicator.current?.remove();
+  useEffect(() => hideIndicator, []);
+
+  /** Moves a card to `index` among the other cards; tells the person where it went. */
+  const commitMove = (row: RowRecord, index: number | null) => {
+    const list = rowsRef.current;
+    const others = list.filter((r) => r.id !== row.id);
+    if (index === null || !needsMove(row, others, index)) {
+      live.current?.say(t('card.cancelled'));
+      return;
+    }
+    void actions.moveRow(row, placeAt(others, index));
+    live.current?.say(
+      t('gallery.dropped', {
+        title: row.title || t('untitled'),
+        index: (index + 1).toLocaleString(locale),
+      }),
+    );
+  };
+
+  const stopDrag = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopDrag.current?.(), []);
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !draggable || picked.current) return;
+    const card = (event.target as HTMLElement).closest<HTMLElement>('[data-card]');
+    if (!card || !startsDrag(event.target, card)) return;
+    const row = rowsRef.current.find((r) => r.id === card.dataset.card);
+    const body = grid.current;
+    if (!row || !body) return;
+    const from = rowsRef.current.indexOf(row);
+    let drop: number | null = null;
+    stopDrag.current?.();
+    stopDrag.current = trackDrag(event.nativeEvent, card, scroller.current, {
+      onStart() {},
+      onMove(x, y) {
+        const box = body.getBoundingClientRect();
+        const rtlNow = getComputedStyle(body).direction === 'rtl';
+        const g = geometry.current;
+        const at = galleryDropIndex(
+          g.layout,
+          rowsRef.current.length,
+          g.cols,
+          g.width,
+          rtlNow ? box.right - x : x - box.left,
+          y - box.top,
+        );
+        drop = targetIndex(true, from, at);
+        if (drop === null) hideIndicator();
+        else showIndicator(at);
+      },
+      onDrop() {
+        hideIndicator();
+        stopDrag.current = null;
+        commitMove(row, drop);
+      },
+      onCancel() {
+        hideIndicator();
+        stopDrag.current = null;
+      },
+    });
+  };
+
+  /** A card picked up by the keys: where it came from and where it would land. */
+  const picked = useRef<{ row: RowRecord; from: number; index: number } | null>(null);
+  const endPick = (commit: boolean) => {
+    const p = picked.current;
+    picked.current = null;
+    hideIndicator();
+    if (!p) return;
+    document.getElementById(cardDomId(idPrefix, p.row.id))?.removeAttribute('data-dragging');
+    if (!commit || p.index === p.from) {
+      live.current?.say(t('card.cancelled'));
+      return;
+    }
+    commitMove(p.row, p.index);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (!target.matches('[data-card]')) return;
     const index = indexOf(target);
     const row = rows[index];
     if (!row) return;
+    const p = picked.current;
+    if (p) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape' || event.key === 'Tab') return endPick(false);
+      if (event.key === ' ' || event.key === 'Enter') return endPick(true);
+      const next = galleryMove(
+        p.index,
+        rows.length,
+        cols,
+        event.key,
+        getComputedStyle(target).direction === 'rtl',
+      );
+      if (next === null || next === p.index) return;
+      p.index = next;
+      // Shown as an insertion among every card: after itself when it goes later.
+      showIndicator(next > p.from ? next + 1 : next);
+      live.current?.say(
+        t('gallery.position', {
+          index: (next + 1).toLocaleString(locale),
+          count: rows.length.toLocaleString(locale),
+        }),
+      );
+      return;
+    }
+    if (event.key === ' ' && draggable) {
+      event.preventDefault();
+      picked.current = { row, from: index, index };
+      target.setAttribute('data-dragging', '');
+      live.current?.say(t('card.pickedUp', { title: row.title || t('untitled') }));
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
       host.openRow(row.id);
@@ -176,6 +328,10 @@ export function GalleryView({
   const onFocus = (event: FocusEvent<HTMLDivElement>) => {
     const index = indexOf(event.target);
     if (index >= 0 && index !== active) setActive(index);
+  };
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (picked.current && !scroller.current?.contains(event.relatedTarget as Node | null))
+      endPick(false);
   };
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -227,6 +383,9 @@ export function GalleryView({
 
   return (
     <div className={`cgw-gallery${embedded ? ' is-embedded' : ''}`} data-size={size}>
+      {sorted && editable && rows.length > 1 ? (
+        <p className="cgw-board-note">{t('gallery.sorted')}</p>
+      ) : null}
       <div
         ref={scroller}
         className="cgw-gallery-scroll"
@@ -234,12 +393,14 @@ export function GalleryView({
         aria-label={t('gallery.label', { name })}
         aria-busy={snapshot.loading || undefined}
         onScroll={measure}
+        onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
         onFocus={onFocus}
+        onBlur={onBlur}
         onClick={onClick}
         onContextMenu={onContextMenu}
       >
-        <div className="cgw-gallery-grid" style={{ blockSize: layout.total }}>
+        <div ref={grid} className="cgw-gallery-grid" style={{ blockSize: layout.total }}>
           {tiles.map((i) => {
             const r = Math.floor(i / cols);
             const c = i % cols;
@@ -292,7 +453,7 @@ export function GalleryView({
                 shown={shown}
                 env={env}
                 active={i === activeIndex}
-                draggable={false}
+                draggable={draggable}
                 style={style}
                 cover={
                   cover ? (
@@ -321,6 +482,7 @@ export function GalleryView({
           ? t('rowCount', { count: snapshot.total })
           : t('rowsShown', { shown: rows.length, total: snapshot.total })}
       </div>
+      <Live ref={live} />
       <CgContextMenu<RowRecord> items={cardItems} actionsRef={cardMenu} ariaLabel={t('row.menu')} />
     </div>
   );

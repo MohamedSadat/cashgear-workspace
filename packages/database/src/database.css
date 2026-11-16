@@ -532,6 +532,78 @@
   box-shadow: inset 0 0 0 2px var(--cgw-db-active);
 }
 
+/* A selection of cells (Phase 8): opaque mixes, so the sticky title column still covers the
+   cells scrolled under it. */
+.cgw-tcell.is-selected,
+.cgw-th.is-selected {
+  background-color: color-mix(in srgb, var(--cg-surface) 88%, var(--cg-accent));
+}
+
+.cgw-th.is-selected {
+  color: var(--cg-text);
+}
+
+.cgw-grid:focus .cgw-tcell.is-selected:not(.is-active) {
+  background-color: color-mix(in srgb, var(--cg-surface) 84%, var(--cg-accent));
+}
+
+/* The row's handle, at the start of its title cell: it selects the whole row. */
+.cgw-tcell-title {
+  padding-inline-start: 0;
+}
+
+.cgw-tcell-title.is-editing {
+  padding-inline-start: 28px;
+}
+
+.cgw-db-row-select {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cg-radius-sm, 3px);
+  background: none;
+  color: var(--cg-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: -2px;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.cgw-trow:hover .cgw-db-row-select,
+.cgw-tcell.is-active .cgw-db-row-select,
+.cgw-trow.is-row-selected .cgw-db-row-select {
+  visibility: visible;
+}
+
+.cgw-db-row-select:hover {
+  background: var(--cgw-db-row-hover);
+  color: var(--cg-text);
+}
+
+.cgw-trow.is-row-selected .cgw-db-row-select {
+  color: var(--cg-accent);
+}
+
+/* The notice after a paste or a clear, with its Undo. */
+.cgw-db-cell-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px);
+  margin-inline: var(--cg-space-2, 8px);
+}
+
+.cgw-db-cell-notice-text {
+  flex: 1 1 16rem;
+}
+
 .cgw-tcell.cgw-type-number,
 .cgw-tcell.cgw-type-formula,
 .cgw-tcell.cgw-type-rollup {
@@ -1326,5 +1398,11 @@ textarea.cgw-inline-editor {
   .cgw-tcell.is-active,
   .cgw-th.is-active {
     outline: 2px solid Highlight;
+  }
+
+  .cgw-tcell.is-selected,
+  .cgw-th.is-selected {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
   }
 }

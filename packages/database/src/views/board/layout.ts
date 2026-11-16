@@ -1,7 +1,9 @@
 // The board's arithmetic, pure and tested on its own: a card's height (its title and a line for
 // each shown property that has a value), a column's layout and the cards inside a scrolled window,
 // where a dragged card lands, which neighbours a drop is between and whether it needs a new order
-// key, the value a card takes in another column, and keyboard moves between cards and columns.
+// key, the value a card takes in another column, and keyboard moves between cards and columns;
+// and the columns' own order (Phase 8): the view's order over the group's, a column's move, and
+// where a dragged column lands.
 import type { RowRecord } from '@cgw/workspace';
 import type { DateValue, GroupRule, PropertyDef, Value } from '../../core';
 import type { RowPlace } from '../../host';
@@ -214,6 +216,47 @@ export function moveDrop(counts: readonly number[], pos: BoardPos, key: BoardKey
       return { col, index: Math.min(pos.index, counts[col]) };
     }
   }
+}
+
+// ---- Column order (Phase 8) ----------------------------------------------------------------
+
+/**
+ * Groups in the board's order: the keys `order` names first, in its order, then the rest in the
+ * order they came (the group's own: options by position, dates by time).
+ */
+export function orderedGroups<T extends { key: string }>(
+  groups: readonly T[],
+  order: readonly string[] | undefined,
+): T[] {
+  if (!order?.length) return groups as T[];
+  const rank = new Map(order.map((key, i) => [key, i]));
+  const named = groups.filter((g) => rank.has(g.key));
+  named.sort((a, b) => rank.get(a.key)! - rank.get(b.key)!);
+  return [...named, ...groups.filter((g) => !rank.has(g.key))];
+}
+
+/** The keys with `key` moved to `index` among the others. */
+export function movedOrder(keys: readonly string[], key: string, index: number): string[] {
+  const others = keys.filter((k) => k !== key);
+  others.splice(Math.max(0, Math.min(others.length, index)), 0, key);
+  return others;
+}
+
+/**
+ * Where a column dropped at `x` (the window's) goes: an insertion index among every column, the
+ * dragged one included, by the columns' middles in the reading direction (right to left in RTL).
+ */
+export function columnDropIndex(
+  boxes: readonly { left: number; right: number }[],
+  x: number,
+  rtl: boolean,
+): number {
+  let index = 0;
+  for (const box of boxes) {
+    const middle = (box.left + box.right) / 2;
+    if (rtl ? x < middle : x > middle) index++;
+  }
+  return index;
 }
 
 /** The arrow keys as board moves: left and right swap in RTL, where the next column is on the left. */

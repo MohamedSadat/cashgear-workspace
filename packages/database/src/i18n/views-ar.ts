@@ -39,6 +39,11 @@ export const viewsAr: Strings<typeof viewsEn> = {
     addStatus: 'أضف خاصية حالة',
     statusName: 'الحالة',
     sorted: 'مرتبة: تبقى البطاقات داخل العمود بترتيب الفرز.',
+    moveColumn: 'انقل العمود {{name}}',
+    moveColumnHint: 'المسافة ترفع العمود، ثم تنقله مفاتيح الأسهم.',
+    columnPickedUp: 'رُفع العمود {{name}}. تنقله مفاتيح الأسهم، وتضعه المسافة، ويلغي Escape النقل.',
+    columnPosition: '{{name}}، الموضع {{index}} من {{count}}',
+    columnDropped: 'نُقل العمود {{name}} إلى الموضع {{index}}.',
   },
   list: {
     label: '{{name}}: قائمة',
@@ -85,6 +90,9 @@ export const viewsAr: Strings<typeof viewsEn> = {
     loadMore: 'حمّل المزيد',
     empty: 'لا صفوف بعد.',
     noMatch: 'لا صفوف مطابقة.',
+    position: 'الموضع {{index}} من {{count}}',
+    dropped: 'نُقلت {{title}} إلى الموضع {{index}}.',
+    sorted: 'مرتبة: تبقى البطاقات بترتيب الفرز، فلا تُنقل باليد.',
   },
   layout: {
     button: 'التخطيط',

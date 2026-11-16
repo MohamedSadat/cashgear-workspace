@@ -100,6 +100,16 @@ export function withGroup(config: ViewConfig, group: GroupRule | null): ViewConf
   return { ...config, group };
 }
 
+/**
+ * A board's columns in a new order (`GroupRule.order`): the keys shown, in their new order, then
+ * any the old order named that are not shown now (hidden groups keep their place for later).
+ */
+export function withGroupOrder(config: ViewConfig, keys: readonly string[]): ViewConfig {
+  if (!config.group) return config;
+  const rest = (config.group.order ?? []).filter((k) => !keys.includes(k));
+  return { ...config, group: { ...config.group, order: [...keys, ...rest] } };
+}
+
 /** Shows or hides one group of the view's grouping. */
 export function withGroupHidden(config: ViewConfig, key: string, hidden: boolean): ViewConfig {
   if (!config.group) return config;
