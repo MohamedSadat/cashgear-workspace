@@ -217,8 +217,9 @@ Added as they are found, grouped by phase.
   frames after a structural change (`StableTyping`).
 - `useSyncExternalStore` with an inline `subscribe` resubscribes every render; keep it stable when
   the subscription holds state (the bubble toolbar's focus).
-- Playwright's `dragTo` does not drive the block handle's HTML5 drag; use `page.mouse` down, move
-  in steps, up.
+- Drive the block handle with `page.mouse` down, move in steps, up: from Phase 8 it is a pointer
+  drag (`cgTrackDrag`), not HTML5 drag, and its button sits inside an `aria-hidden` element, so
+  select it by `.cgw-handle`.
 - Every React commit while the editor has focus reads the editor's selection offsets, which walks
   its DOM: about 14 ms at 5,000 blocks. Nothing React-rendered may change per keystroke (the
   bubble toolbar's snapshot is constant while hidden; the save status sets its own text).

@@ -1148,6 +1148,19 @@ The server (M8.1, M8.5):
 | The mail's words and headers | The inbox's sentences, the name and title in `<bdi>`, `lang` and `dir` on the HTML, a plain-text part, `Auto-Submitted: auto-generated` | As the inbox reads; no auto-replies (RFC 3834) |
 | The mail settings in the client | A section after the account's in Settings, signed in only; each choice saved at once; a failed write puts the saved one back | As the other settings |
 
+The library's components (M8.2):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The pin | `@cashgear/ui` moved from `ef1277e` (Phase 0) to each Track U commit as it landed, in every package that names it, with `pnpm-workspace.yaml`'s build allowance | One version of the library everywhere; Sheet keeps its own pin |
+| What the library lacks for a stand-in | The stand-in stays for that case, and the gap goes to Track U's session; never a change to the library from here | The hard limit: other repos change only as their track |
+| The option picker | Kept the app's own: `CgOptionPicker` matches names with its own folding and takes no matcher, which would drop Workspace's Arabic search rule (`normaliseText`) | Search must agree on the device and the server; a `normalize` or `filter` prop is asked of Track U |
+| The import's folder picker and section select | Kept: `CgFilePicker` has no folder mode, and the library has no single-choice select | Asked of Track U |
+| Two library defects found by the swaps | `CgCommandMenu`'s detail and shortcut on the active option (4.36:1) and `CgMentionArea.getValue()`'s empty lines: a local override and the composer reading its own area | Asked of Track U; the shell's workarounds go when it lands |
+| The block handle's drag | A pointer drag (`cgTrackDrag`) instead of HTML5 drag; the one handle stays ProseMirror's | The library's helper is pointer-based, as the board's has been since Phase 4; touch works the same |
+| The comments drawer's size | `min(20rem, 85vw)` | `CgDrawer` now takes `min()`; unchanged at 390 px and wider |
+| Two live regions in a database view | The table's row count (`role="status"`) and `CgLiveAnnouncer` side by side; specs find the count by its footer | Each says something different; the announcer speaks moves and pastes |
+
 Bulk cell editing (M8.3):
 
 | Choice | Default | Reason |
