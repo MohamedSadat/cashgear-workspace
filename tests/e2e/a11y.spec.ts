@@ -206,11 +206,12 @@ test.describe('accessibility', () => {
     );
     expect(unnamed).toEqual([]);
     // The tree says what each row is: sections at level 1, their pages at level 2, which one is
-    // open, and how many there are.
+    // open (the selected row: the library's tree view marks no row `aria-current`), and how many
+    // there are.
     const row = page.getByRole('treeitem', { name: /Getting started/ });
     await expect(row).toHaveAttribute('aria-level', '2');
     await expect(row).toHaveAttribute('aria-setsize', '2');
-    await expect(row).toHaveAttribute('aria-current', 'page');
+    await expect(row).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('tree', { name: 'Pages' })).toMatchAriaSnapshot(`
       - tree "Pages":
         - treeitem "Workspace Add a database in Workspace Add a page in Workspace" [level=1]

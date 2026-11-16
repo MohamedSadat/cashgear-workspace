@@ -1,7 +1,7 @@
 import { Mirror, MemoryStore } from '@cgw/workspace';
 import { seedTree } from '@cgw/workspace/testing';
 import { describe, expect, it } from 'vitest';
-import { dropTarget, dropZone, treeRows } from './tree';
+import { treeNodes, treeRows } from './tree';
 
 async function seeded() {
   const store = new MemoryStore();
@@ -27,26 +27,30 @@ describe('sidebar tree', () => {
     void d;
   });
 
-  it('reads a drop as before, inside or after a row, and refuses a cycle', async () => {
-    const { mirror, ws, a, b, c, d } = await seeded();
-    expect(dropZone(2, 28)).toBe('before');
-    expect(dropZone(14, 28)).toBe('inside');
-    expect(dropZone(26, 28)).toBe('after');
-    const rows = treeRows(mirror, ws.id, new Set([a.id, b.id]));
-    const rowOf = (id: string) => rows.find((r) => r.kind === 'page' && r.page.id === id)!;
-    // Alpha into its own grandchild Delta: refused.
-    expect(dropTarget(mirror, a.id, rowOf(d.id), 'inside')).toBeNull();
-    expect(dropTarget(mirror, a.id, rowOf(a.id), 'after')).toBeNull();
-    // Delta inside Gamma, and after Gamma at the top.
-    expect(dropTarget(mirror, d.id, rowOf(c.id), 'inside')).toMatchObject({ parentPageId: c.id });
-    expect(dropTarget(mirror, d.id, rowOf(c.id), 'after')).toMatchObject({
-      parentPageId: null,
-      after: c.id,
+  it('gives the tree view its nodes: sections on top, pages under them, closed pages lazy', async () => {
+    const { mirror, ws, section, a, b, c } = await seeded();
+    const nodes = treeNodes(treeRows(mirror, ws.id, new Set([a.id])), {
+      untitled: 'Untitled',
+      unavailable: (id) => id === c.id,
+      editable: () => true,
     });
-    // Before Alpha: first among the top pages.
-    expect(dropTarget(mirror, c.id, rowOf(a.id), 'before')).toMatchObject({
-      parentPageId: null,
-      after: null,
+    expect(nodes).toHaveLength(1);
+    const [top] = nodes;
+    expect(top).toMatchObject({
+      key: `section:${section.id}`,
+      text: 'Pages',
+      allowSelection: false,
+      allowDrag: false,
+      allowRename: false,
     });
+    const [alpha, gamma] = top.children!;
+    expect(alpha).toMatchObject({ key: a.id, text: 'Alpha', renameText: 'Alpha', allowDrag: true });
+    // Alpha is open: its child listed. Beta is closed and has a child: lazy, not listed.
+    expect(alpha.children!.map((n) => n.key)).toEqual([b.id]);
+    expect(alpha.children![0]).toMatchObject({ hasChildren: true });
+    expect(alpha.children![0].children).toBeUndefined();
+    // Gamma is not on this device while offline: marked.
+    expect(gamma).toMatchObject({ key: c.id, className: 'is-unavailable' });
+    expect(gamma.hasChildren).toBeUndefined();
   });
 });

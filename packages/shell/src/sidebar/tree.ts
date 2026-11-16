@@ -1,5 +1,7 @@
 // The sidebar's rows, drawn from the mirror (DATA_MODEL.md, "Large workspaces"): only expanded
-// pages' children are listed, so a 10,000-page workspace costs what is on screen.
+// pages' children are listed, so a 10,000-page workspace costs what is on screen. The page tree
+// (`PageTree`, the library's tree view) is built from them.
+import type { CgTreeViewNodeDescriptor } from '@cashgear/ui';
 import type { Id, Mirror, PageRecord, SectionRecord } from '@cgw/workspace';
 
 export type TreeRow =
@@ -45,6 +47,76 @@ export function treeRows(mirror: Mirror, workspaceId: Id, expanded: ReadonlySet<
   return rows;
 }
 
+/** A section's key in the tree view (a page's is its id). */
+export const SECTION = 'section:';
+
+/** What a node of the tree view stands for. */
+export type TreeItem =
+  | { kind: 'section'; section: SectionRecord }
+  | { kind: 'page'; page: PageRecord; unavailable: boolean };
+
+type Node = CgTreeViewNodeDescriptor<TreeItem>;
+
+/**
+ * The tree's nodes from the rows the sidebar shows: each section with its top pages, and each
+ * expanded page with its children. A page with children not listed is `hasChildren`.
+ */
+export function treeNodes(
+  rows: TreeRow[],
+  {
+    untitled,
+    unavailable,
+    editable,
+  }: {
+    untitled: string;
+    /** Offline, and this device does not hold the page. */
+    unavailable: (pageId: Id) => boolean;
+    /** The account may change the page (rename, move). */
+    editable: (page: PageRecord) => boolean;
+  },
+): Node[] {
+  const roots: Node[] = [];
+  // The children list at each depth: 0 is the section's, 1 its first pages', and so on.
+  const lists: Node[][] = [];
+  for (const row of rows) {
+    if (row.kind === 'section') {
+      const children: Node[] = [];
+      roots.push({
+        key: `${SECTION}${row.section.id}`,
+        text: row.section.name,
+        item: { kind: 'section', section: row.section },
+        children,
+        allowSelection: false,
+        allowDrag: false,
+        allowRename: false,
+        className: 'cgw-tree-section',
+      });
+      lists.length = 0;
+      lists.push(children);
+      continue;
+    }
+    const { page } = row;
+    const mayEdit = editable(page);
+    const away = unavailable(page.id);
+    const children: Node[] | undefined = row.expanded ? [] : undefined;
+    lists[row.depth]?.push({
+      key: page.id,
+      text: page.title || untitled,
+      renameText: page.title,
+      item: { kind: 'page', page, unavailable: away },
+      ...(children ? { children } : {}),
+      ...(row.hasChildren ? { hasChildren: true } : {}),
+      // The account may only view it: no rename, drag or move.
+      allowDrag: mayEdit,
+      allowRename: mayEdit,
+      ...(away ? { className: 'is-unavailable' } : {}),
+    });
+    lists.length = row.depth + 1;
+    if (children) lists.push(children);
+  }
+  return roots;
+}
+
 /** Where the tree keeps which pages are expanded, per device and workspace (the local store). */
 export const expandedKey = (workspaceId: Id) => `tree/expanded/${workspaceId}`;
 
@@ -79,37 +151,4 @@ export async function expandInTree(
   const held = (await store.getPref<Id[]>(key)) ?? [];
   const ids = [pageId, ...mirror.ancestors(pageId).map((a) => a.id)];
   await store.setPref(key, [...new Set([...held, ...ids])]);
-}
-
-/** Where a drop lands, from the pointer's place in a row: above, inside, or below it. */
-export type DropZone = 'before' | 'inside' | 'after';
-
-export function dropZone(offsetY: number, height: number): DropZone {
-  if (offsetY < height * 0.28) return 'before';
-  if (offsetY > height * 0.72) return 'after';
-  return 'inside';
-}
-
-/** What a drop of `pageId` on a row means as a move; null when it would make a cycle. */
-export function dropTarget(
-  mirror: Mirror,
-  pageId: Id,
-  row: TreeRow,
-  zone: DropZone,
-): { sectionId: Id; parentPageId: Id | null; after: Id | null | undefined } | null {
-  if (row.kind === 'section') return { sectionId: row.section.id, parentPageId: null, after: null };
-  const target = row.page;
-  if (target.id === pageId) return null;
-  if (mirror.ancestors(target.id).some((a) => a.id === pageId)) return null;
-  if (zone === 'inside')
-    return { sectionId: target.sectionId, parentPageId: target.id, after: undefined };
-  const siblings = target.parentPageId
-    ? mirror.childrenOf(target.parentPageId)
-    : mirror.topPages(target.sectionId);
-  const others = siblings.filter((p) => p.id !== pageId);
-  const after =
-    zone === 'after'
-      ? target.id
-      : (others[others.findIndex((p) => p.id === target.id) - 1]?.id ?? null);
-  return { sectionId: target.sectionId, parentPageId: target.parentPageId, after };
 }

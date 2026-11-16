@@ -61,6 +61,9 @@ export const ar: Catalogue = {
     addSubpage: 'إضافة صفحة بداخلها',
     pages: 'الصفحات',
     pageMenu: 'إجراءات الصفحة',
+    // Phase 8 (Track U4): moving a page in the tree by keys, and what is said after a move.
+    moveInstructions: 'اسحب الصفحة، أو اضغط {{keys}} مع أحد مفاتيح الأسهم، لنقلها',
+    moved: 'نُقلت «{{title}}» إلى {{place}}',
     rename: 'إعادة التسمية',
     favourite: 'إضافة إلى المفضلة',
     unfavourite: 'إزالة من المفضلة',

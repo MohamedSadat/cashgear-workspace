@@ -43,7 +43,7 @@ const folderPicker = {
 /**
  * The sections a new page may go at the top of, by the sidebar's own rule for its "Add a page in"
  * control: the section rows its tree draws (`treeRows`), each of which offers it (`PageTree`'s
- * `mayHold(null)` holds for every one). The server still decides.
+ * `mayHold` holds at every section's top). The server still decides.
  */
 export function sectionsForNewPages(session: WorkspaceSession): SectionRecord[] {
   const workspaceId = session.workspaceId;

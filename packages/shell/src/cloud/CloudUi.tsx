@@ -142,16 +142,20 @@ export function AccountButton({ cloud }: { cloud: Cloud }) {
       </button>
     );
   return (
-    <button
-      type="button"
-      className="cgw-button cgw-account-button"
-      aria-label={t('cloud.accountMenu', { name: account.displayName })}
-      onClick={() => navigate({ kind: 'settings' })}
-    >
-      {/* The person's own colour, as others see them on a page (Track U7). */}
+    <div className="cgw-account">
+      {/* The person's own colour, as others see them on a page (Track U7). Beside the button,
+          not in it: its initials are visible text, and a button's name must hold its visible text
+          (Axe's label-content-name-mismatch counts it even with aria-hidden). */}
       <CgAvatar name={account.displayName} {...avatarColours(account.id)} decorative />
-      {account.displayName}
-    </button>
+      <button
+        type="button"
+        className="cgw-button cgw-account-button"
+        aria-label={t('cloud.accountMenu', { name: account.displayName })}
+        onClick={() => navigate({ kind: 'settings' })}
+      >
+        {account.displayName}
+      </button>
+    </div>
   );
 }
 

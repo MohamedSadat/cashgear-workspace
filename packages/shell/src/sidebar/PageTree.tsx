@@ -1,16 +1,23 @@
-// The page tree: a stand-in for Track U4's CgTreeView with drag and drop, inline rename,
-// virtualisation and lazy children, behind the props that component will take. Rows come from the
-// mirror; only the rows on screen are in the DOM.
-import type { Id } from '@cgw/workspace';
+// The page tree: the library's tree view (Track U4) over the mirror. Sections are its top rows,
+// their pages below; only expanded pages' children are listed (`treeRows`), and only the rows on
+// screen are drawn (`virtualize`), so a 10,000-page workspace costs what is on screen. Moving,
+// renaming and expanding are the session's: the tree reports them, the mirror redraws it.
+import {
+  CgTreeView,
+  type CgTreeViewActions,
+  type CgTreeViewDropCandidate,
+  type CgTreeViewMoveDetails,
+  type CgTreeViewNodeRenderContext,
+} from '@cashgear/ui';
+import type { Id, PageRecord } from '@cgw/workspace';
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type DragEvent,
   type KeyboardEvent,
+  type MouseEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud, useOfflineMarks } from '../cloud/CloudUi';
@@ -21,19 +28,11 @@ import { pageGlyph } from '../database/make';
 import { navigate } from '../route';
 import { canEditPage, type WorkspaceSession } from '../session';
 import { PointMenu, RowMenu } from './RowMenu';
-import {
-  dropTarget,
-  dropZone,
-  expandedKey,
-  onExpandRequest,
-  treeRows,
-  type DropZone,
-  type TreeRow,
-} from './tree';
+import { SECTION, expandedKey, onExpandRequest, treeNodes, treeRows, type TreeItem } from './tree';
 
-export const ROW_HEIGHT = 28;
+/** One row's height: the virtual window's arithmetic, and the Phase 1 budget's. */
+const ROW_HEIGHT = 28;
 const OVERSCAN = 8;
-const DRAG_TYPE = 'application/x-cgw-page';
 
 export interface PageTreeProps {
   session: WorkspaceSession;
@@ -82,16 +81,27 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     workspaceId,
   );
   const revision = session.mirror.getRevision();
-  const rows = useMemo(
-    () => treeRows(session.mirror, workspaceId, expanded),
+  const untitled = t('page.untitled');
+  const nodes = useMemo(
+    () =>
+      treeNodes(treeRows(session.mirror, workspaceId, expanded), {
+        untitled,
+        unavailable: (pageId) => !!marks && !marks.has(pageId),
+        editable: canEditPage,
+      }),
     // The mirror changes in place; its revision says when.
+    [session, workspaceId, expanded, revision, untitled, marks],
+  );
+  // Sections always show their pages.
+  const expandedKeys = useMemo(
+    () =>
+      new Set<string>([
+        ...expanded,
+        ...session.mirror.sectionsOf(workspaceId).map((s) => `${SECTION}${s.id}`),
+      ]),
     [session, workspaceId, expanded, revision],
   );
-  const scroller = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ top: 0, height: 600 });
-  const [focusKey, setFocusKey] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<Id | null>(null);
-  const [drop, setDrop] = useState<{ key: string; zone: DropZone } | null>(null);
+  const actions = useRef<CgTreeViewActions>(null);
   const [menu, setMenu] = useState<{ pageId: Id; x: number; y: number } | null>(null);
   const [databaseMenu, setDatabaseMenu] = useState<{
     sectionId: Id;
@@ -99,7 +109,6 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     x: number;
     y: number;
   } | null>(null);
-  const dragging = useRef<Id | null>(null);
 
   // Open the ancestors of the page on screen, so it shows in the tree.
   useEffect(() => {
@@ -122,39 +131,6 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
       }),
     [session, workspaceId, updateExpanded],
   );
-
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const measure = () => setViewport({ top: el.scrollTop, height: el.clientHeight });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const first = Math.max(0, Math.floor(viewport.top / ROW_HEIGHT) - OVERSCAN);
-  const last = Math.min(
-    rows.length,
-    Math.ceil((viewport.top + viewport.height) / ROW_HEIGHT) + OVERSCAN,
-  );
-  const focusIndex = Math.max(
-    0,
-    rows.findIndex((r) => r.key === (focusKey ?? activePageId)),
-  );
-
-  const focusRow = (index: number) => {
-    const row = rows[Math.max(0, Math.min(rows.length - 1, index))];
-    if (!row) return;
-    setFocusKey(row.key);
-    const el = scroller.current;
-    const top = rows.indexOf(row) * ROW_HEIGHT;
-    if (el && (top < el.scrollTop || top + ROW_HEIGHT > el.scrollTop + el.clientHeight))
-      el.scrollTop = top - el.clientHeight / 2;
-    requestAnimationFrame(() =>
-      scroller.current?.querySelector<HTMLElement>(`[data-key="${row.key}"]`)?.focus(),
-    );
-  };
 
   const toggle = (id: Id, open?: boolean) =>
     updateExpanded((set) => {
@@ -190,294 +166,278 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     navigate({ kind: 'page', pageId: made.databaseId });
   };
 
-  const onKeyDown = (event: KeyboardEvent, row: TreeRow, index: number) => {
-    if (renaming) return;
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        focusRow(index + 1);
-        return;
-      case 'ArrowUp':
-        event.preventDefault();
-        focusRow(index - 1);
-        return;
-      case 'Home':
-        event.preventDefault();
-        focusRow(0);
-        return;
-      case 'End':
-        event.preventDefault();
-        focusRow(rows.length - 1);
-        return;
-    }
-    if (row.kind !== 'page') return;
-    const rtl = document.documentElement.dir === 'rtl';
-    const forward = rtl ? 'ArrowLeft' : 'ArrowRight';
-    const back = rtl ? 'ArrowRight' : 'ArrowLeft';
-    if (event.key === forward) {
-      event.preventDefault();
-      if (row.hasChildren && !row.expanded) toggle(row.page.id, true);
-      else if (row.expanded) focusRow(index + 1);
-    } else if (event.key === back) {
-      event.preventDefault();
-      if (row.expanded) toggle(row.page.id, false);
-      else if (row.page.parentPageId)
-        focusRow(rows.findIndex((r) => r.key === row.page.parentPageId));
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      navigate({ kind: 'page', pageId: row.page.id });
-    } else if (event.key === 'F2') {
-      event.preventDefault();
-      if (canEditPage(row.page)) setRenaming(row.page.id);
-    } else if (event.key === 'Delete') {
-      event.preventDefault();
-      if (canEditPage(row.page)) void session.trashPage(row.page.id).catch(onError);
-    } else if (
-      canEditPage(row.page) &&
-      event.altKey &&
-      event.shiftKey &&
-      (event.key === 'ArrowUp' || event.key === 'ArrowDown')
-    ) {
-      event.preventDefault();
-      const siblings = session.siblingsOf(row.page.sectionId, row.page.parentPageId);
-      const at = siblings.findIndex((p) => p.id === row.page.id);
-      const target = event.key === 'ArrowUp' ? at - 2 : at + 1;
-      if (target < -1 || target >= siblings.length) return;
-      void session
-        .movePage(row.page.id, {
-          sectionId: row.page.sectionId,
-          parentPageId: row.page.parentPageId,
-          after: target < 0 ? null : siblings[target].id,
-        })
-        .catch(onError);
-    } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-      event.preventDefault();
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      setMenu({ pageId: row.page.id, x: rect.left + 24, y: rect.bottom });
-    }
-  };
-
   /**
    * A page goes inside another only if the account may edit that one (the server checks again),
-   * and never inside a database (only its rows sit under it).
+   * and never inside a database (only its rows sit under it); at a section's top always. Never
+   * beside a section: the top level is the sections'.
    */
-  const mayHold = (parentPageId: Id | null) => {
-    if (!parentPageId) return true;
-    const parent = session.mirror.pages.get(parentPageId);
+  const mayHold = (parentKey: string | null) => {
+    if (parentKey === null) return false;
+    if (parentKey.startsWith(SECTION)) return true;
+    const parent = session.mirror.pages.get(parentKey);
     return canEditPage(parent) && parent?.kind !== 'database';
   };
 
-  const onDragOver = (event: DragEvent, row: TreeRow) => {
-    if (!dragging.current) return;
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const zone =
-      row.kind === 'section' ? 'inside' : dropZone(event.clientY - rect.top, rect.height);
-    const target = dropTarget(session.mirror, dragging.current, row, zone);
-    if (!target || !mayHold(target.parentPageId)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    if (drop?.key !== row.key || drop.zone !== zone) setDrop({ key: row.key, zone });
+  const canDrop = (candidate: CgTreeViewDropCandidate<TreeItem>) =>
+    candidate.item?.kind === 'page' && mayHold(candidate.parentKey);
+
+  /** The move the tree asked for, as the session's: its section, parent and the page it follows. */
+  const onNodeMove = (details: CgTreeViewMoveDetails<TreeItem>) => {
+    const page = session.mirror.pages.get(details.key);
+    const parentKey = details.parentKey;
+    if (!page || !parentKey || !mayHold(parentKey)) return;
+    const inside = details.position === 'inside';
+    const target = parentKey.startsWith(SECTION)
+      ? {
+          sectionId: parentKey.slice(SECTION.length),
+          parentPageId: null,
+          // Dropped on a section: first in it.
+          after: inside ? null : details.previousKey,
+        }
+      : {
+          sectionId: session.mirror.pages.get(parentKey)!.sectionId,
+          parentPageId: parentKey,
+          // Inside a page: where the session puts a page it is given (its children may not be
+          // listed while it is closed).
+          after: inside ? undefined : details.previousKey,
+        };
+    if (target.parentPageId) toggle(target.parentPageId, true);
+    void session.movePage(page.id, target).catch(onError);
   };
 
-  const onDrop = (event: DragEvent, row: TreeRow) => {
-    const pageId = dragging.current;
-    if (!pageId || !drop) return;
+  /** Where a moved page went, for the announcement: its parent's title, or its section's name. */
+  const placeOf = (parentKey: string | null) => {
+    if (!parentKey) return '';
+    if (parentKey.startsWith(SECTION))
+      return session.mirror.sections.get(parentKey.slice(SECTION.length))?.name ?? '';
+    return session.mirror.pages.get(parentKey)?.title || untitled;
+  };
+
+  /** The page a row draws, read from its content (the row is the library's). */
+  const pageOfRow = (row: Element | null): PageRecord | undefined => {
+    const id = row?.querySelector<HTMLElement>('[data-page-id]')?.dataset.pageId;
+    return id ? session.mirror.pages.get(id) : undefined;
+  };
+
+  // Keys the tree leaves to the app: Delete trashes a page, the menu key opens its actions.
+  const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    const row = event.target as HTMLElement;
+    if (row.getAttribute('role') !== 'treeitem') return;
+    // Track U (phase-8 swaps): the tree stops every key at its rows, so the app's shortcuts
+    // (Ctrl+K, Ctrl+\, Ctrl+,) would not reach the window while a row has focus: handed on.
+    if ((event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+      const copy = new window.KeyboardEvent('keydown', {
+        key: event.key,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        bubbles: true,
+        cancelable: true,
+      });
+      window.dispatchEvent(copy);
+      if (copy.defaultPrevented) event.preventDefault();
+      return;
+    }
+    const page = pageOfRow(row);
+    if (!page) return;
+    const plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    if (event.key === 'Delete' && plain) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (canEditPage(page)) void session.trashPage(page.id).catch(onError);
+    } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = row.getBoundingClientRect();
+      setMenu({ pageId: page.id, x: rect.left + 24, y: rect.bottom });
+    }
+  };
+
+  const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    const page = pageOfRow((event.target as HTMLElement).closest('[role="treeitem"]'));
+    if (!page) return;
     event.preventDefault();
-    const target = dropTarget(session.mirror, pageId, row, drop.zone);
-    setDrop(null);
-    dragging.current = null;
-    if (!target || !mayHold(target.parentPageId)) return;
-    if (target.parentPageId) toggle(target.parentPageId, true);
-    void session.movePage(pageId, target).catch(onError);
+    setMenu({ pageId: page.id, x: event.clientX, y: event.clientY });
+  };
+
+  const content = (context: CgTreeViewNodeRenderContext<TreeItem>) => {
+    const item = context.item;
+    if (!item) return null;
+    if (item.kind === 'section')
+      return (
+        <span className="cgw-tree-section-name" data-section-id={item.section.id}>
+          {item.section.name}
+        </span>
+      );
+    const { page, unavailable } = item;
+    return (
+      <span
+        className="cgw-tree-item"
+        data-page-id={page.id}
+        title={unavailable ? t('offline.notAvailable') : undefined}
+      >
+        <span className="cgw-tree-icon" aria-hidden="true">
+          {pageGlyph(page)}
+        </span>
+        {/* A row that opens is named by its toggle (the title, below): the title is not said
+            twice. */}
+        <span
+          className="cgw-tree-title"
+          dir="auto"
+          {...(context.hasChildren ? { 'aria-hidden': true } : {})}
+        >
+          {page.title || untitled}
+        </span>
+        {unavailable && <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>}
+        {people && <SidePresence collab={collab} pageId={page.id} people={people} />}
+      </span>
+    );
+  };
+
+  const rowActions = (context: CgTreeViewNodeRenderContext<TreeItem>) => {
+    const item = context.item;
+    if (!item) return null;
+    if (item.kind === 'section') {
+      const { section } = item;
+      return (
+        <>
+          <button
+            type="button"
+            className="cgw-tree-action"
+            tabIndex={-1}
+            aria-label={t('databases.newDatabaseIn', { name: section.name })}
+            title={t('databases.newDatabaseIn', { name: section.name })}
+            data-action="new-database"
+            aria-haspopup="menu"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setDatabaseMenu({
+                sectionId: section.id,
+                name: section.name,
+                x: rect.left,
+                y: rect.bottom,
+              });
+            }}
+          >
+            <span aria-hidden="true">{pageGlyph({ icon: null, kind: 'database' })}</span>
+          </button>
+          <button
+            type="button"
+            className="cgw-tree-action"
+            tabIndex={-1}
+            aria-label={t('workspace.addPageIn', { name: section.name })}
+            title={t('workspace.addPageIn', { name: section.name })}
+            onClick={() => void addPage(section.id, null)}
+          >
+            +
+          </button>
+        </>
+      );
+    }
+    const { page } = item;
+    return (
+      <>
+        <button
+          type="button"
+          className="cgw-tree-action"
+          tabIndex={-1}
+          aria-label={t('workspace.pageMenu')}
+          title={t('workspace.pageMenu')}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setMenu({ pageId: page.id, x: rect.left, y: rect.bottom });
+          }}
+        >
+          ⋯
+        </button>
+        {canEditPage(page) && page.kind !== 'database' && (
+          <button
+            type="button"
+            className="cgw-tree-action"
+            tabIndex={-1}
+            aria-label={t('workspace.addSubpage')}
+            title={t('workspace.addSubpage')}
+            onClick={() => void addPage(page.sectionId, page.id)}
+          >
+            +
+          </button>
+        )}
+      </>
+    );
   };
 
   return (
-    <div
-      ref={scroller}
-      className="cgw-tree"
-      role="tree"
-      aria-label={t('workspace.pages')}
-      onScroll={(event) => {
-        const el = event.currentTarget;
-        setViewport({ top: el.scrollTop, height: el.clientHeight });
-      }}
-    >
-      <div style={{ height: rows.length * ROW_HEIGHT, position: 'relative' }}>
-        {rows.slice(first, last).map((row, offset) => {
-          const index = first + offset;
-          const style = { top: index * ROW_HEIGHT, height: ROW_HEIGHT };
-          const focused = index === focusIndex;
-          const dropClass = drop?.key === row.key ? ` is-drop-${drop.zone}` : '';
-          if (row.kind === 'section')
-            return (
-              <div
-                key={row.key}
-                data-key={row.key}
-                className={`cgw-tree-section${dropClass}`}
-                style={style}
-                role="treeitem"
-                aria-level={1}
-                aria-selected={false}
-                tabIndex={focused ? 0 : -1}
-                onKeyDown={(event) => onKeyDown(event, row, index)}
-                onDragOver={(event) => onDragOver(event, row)}
-                onDragLeave={() => setDrop(null)}
-                onDrop={(event) => onDrop(event, row)}
-              >
-                <span className="cgw-tree-section-name">{row.section.name}</span>
-                <button
-                  type="button"
-                  className="cgw-tree-action"
-                  tabIndex={-1}
-                  aria-label={t('databases.newDatabaseIn', { name: row.section.name })}
-                  title={t('databases.newDatabaseIn', { name: row.section.name })}
-                  data-action="new-database"
-                  aria-haspopup="menu"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setDatabaseMenu({
-                      sectionId: row.section.id,
-                      name: row.section.name,
-                      x: rect.left,
-                      y: rect.bottom,
-                    });
-                  }}
-                >
-                  <span aria-hidden="true">{pageGlyph({ icon: null, kind: 'database' })}</span>
-                </button>
-                <button
-                  type="button"
-                  className="cgw-tree-action"
-                  tabIndex={-1}
-                  aria-label={t('workspace.addPageIn', { name: row.section.name })}
-                  title={t('workspace.addPageIn', { name: row.section.name })}
-                  onClick={() => void addPage(row.section.id, null)}
-                >
-                  +
-                </button>
-              </div>
-            );
-          const { page } = row;
-          const active = page.id === activePageId;
-          const unavailable = !!marks && !marks.has(page.id);
-          // The account may only view it: no rename, drag, trash or page inside it.
-          const editable = canEditPage(page);
-          return (
-            <div
-              key={row.key}
-              data-key={row.key}
-              className={`cgw-tree-row${active ? ' is-active' : ''}${unavailable ? ' is-unavailable' : ''}${dropClass}`}
-              title={unavailable ? t('offline.notAvailable') : undefined}
-              style={{ ...style, paddingInlineStart: 8 + row.depth * 16 }}
-              role="treeitem"
-              aria-level={row.depth + 2}
-              aria-setsize={row.siblings}
-              aria-posinset={row.index + 1}
-              aria-expanded={row.hasChildren ? row.expanded : undefined}
-              aria-selected={active}
-              aria-current={active ? 'page' : undefined}
-              tabIndex={focused ? 0 : -1}
-              draggable={editable && renaming !== page.id}
-              onKeyDown={(event) => onKeyDown(event, row, index)}
-              onClick={() => navigate({ kind: 'page', pageId: page.id })}
-              onDoubleClick={() => editable && setRenaming(page.id)}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                setMenu({ pageId: page.id, x: event.clientX, y: event.clientY });
-              }}
-              onFocus={() => setFocusKey(row.key)}
-              onDragStart={(event) => {
-                dragging.current = page.id;
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData(DRAG_TYPE, page.id);
-                event.dataTransfer.setData('text/plain', page.title);
-              }}
-              onDragEnd={() => {
-                dragging.current = null;
-                setDrop(null);
-              }}
-              onDragOver={(event) => onDragOver(event, row)}
-              onDragLeave={() => setDrop(null)}
-              onDrop={(event) => onDrop(event, row)}
-            >
-              <button
-                type="button"
-                className="cgw-tree-twisty"
-                tabIndex={-1}
-                aria-hidden="true"
-                data-open={row.expanded}
-                style={{ visibility: row.hasChildren ? 'visible' : 'hidden' }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  toggle(page.id);
-                }}
-              />
-              <span className="cgw-tree-icon" aria-hidden="true">
-                {pageGlyph(page)}
-              </span>
-              {renaming === page.id ? (
-                <RenameField
-                  initial={page.title}
-                  label={t('page.title')}
-                  onDone={(title) => {
-                    setRenaming(null);
-                    if (title !== null && title !== page.title)
-                      void session.updatePage(page.id, { title }).catch(onError);
-                    focusRow(index);
-                  }}
-                />
-              ) : (
-                <span className="cgw-tree-title" dir="auto">
-                  {page.title || t('page.untitled')}
-                </span>
-              )}
-              {unavailable && (
-                <span className="cgw-visually-hidden">{t('offline.notAvailable')}</span>
-              )}
-              {people && <SidePresence collab={collab} pageId={page.id} people={people} />}
-              <span className="cgw-tree-actions">
-                <button
-                  type="button"
-                  className="cgw-tree-action"
-                  tabIndex={-1}
-                  aria-label={t('workspace.pageMenu')}
-                  title={t('workspace.pageMenu')}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setMenu({ pageId: page.id, x: rect.left, y: rect.bottom });
-                  }}
-                >
-                  ⋯
-                </button>
-                {editable && page.kind !== 'database' && (
-                  <button
-                    type="button"
-                    className="cgw-tree-action"
-                    tabIndex={-1}
-                    aria-label={t('workspace.addSubpage')}
-                    title={t('workspace.addSubpage')}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void addPage(page.sectionId, page.id);
-                    }}
-                  >
-                    +
-                  </button>
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+    <>
+      <CgTreeView<TreeItem>
+        className="cgw-tree"
+        aria-label={t('workspace.pages')}
+        nodes={nodes}
+        size="small"
+        virtualize
+        rowHeight={ROW_HEIGHT}
+        overscan={OVERSCAN}
+        // Right to left, ArrowLeft opens a row, as the reading direction goes.
+        arrowKeys="logical"
+        // The page on screen is the selected row; choosing a row opens its page, and the
+        // selection follows the route.
+        selectedKey={activePageId}
+        beforeSelectionChange={() => false}
+        onNodeActivate={(details) => {
+          const item = details.node?.item;
+          if (item?.kind === 'page') navigate({ kind: 'page', pageId: item.page.id });
+        }}
+        expandedKeys={expandedKeys}
+        // A section stays open.
+        beforeCollapse={(details) => !details.key?.startsWith(SECTION)}
+        onExpandedKeysChange={(_keys, details) => {
+          // The tree's own corrections (a page not listed) leave what this device keeps alone.
+          if (details.source === 'collection' || !details.key) return;
+          if (details.key.startsWith(SECTION)) return;
+          toggle(details.key, details.expanded);
+        }}
+        // Track U (phase-8 swaps): the library names a row's toggle and that name joins the
+        // row's; the toggle is named by the title alone, which the row's text then leaves out.
+        labels={{ expand: '{0}', collapse: '{0}' }}
+        // A workspace always has sections; without any, an empty tree (no English of its own).
+        renderEmpty={() => <></>}
+        nodeRenderer={content}
+        renderActions={rowActions}
+        onNodeRename={({ key, text }) => {
+          const page = session.mirror.pages.get(key);
+          const title = text.trim();
+          if (page && title !== page.title) void session.updatePage(key, { title }).catch(onError);
+        }}
+        renameLabel={t('page.title')}
+        onNodeMove={onNodeMove}
+        canDrop={canDrop}
+        moveLabels={{
+          instructions: t('workspace.moveInstructions', { keys: 'Alt+Shift' }),
+          moved: (details) =>
+            t('workspace.moved', {
+              title: session.mirror.pages.get(details.key)?.title || untitled,
+              place: placeOf(details.parentKey),
+            }),
+        }}
+        actionsRef={actions}
+        onKeyDownCapture={onKeyDownCapture}
+        onContextMenu={onContextMenu}
+      />
       {menu && (
         <RowMenu
           session={session}
           pageId={menu.pageId}
           x={menu.x}
           y={menu.y}
-          onRename={() => setRenaming(menu.pageId)}
+          onRename={() => {
+            try {
+              void actions.current?.startRename(menu.pageId).catch(onError);
+            } catch (error) {
+              // The row is not drawn (scrolled away and closed meanwhile).
+              onError(error);
+            }
+          }}
           onAddInside={() => {
             const page = session.mirror.pages.get(menu.pageId);
             if (page) void addPage(page.sectionId, page.id);
@@ -508,42 +468,6 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
           ]}
         />
       )}
-    </div>
-  );
-}
-
-function RenameField({
-  initial,
-  label,
-  onDone,
-}: {
-  initial: string;
-  label: string;
-  onDone: (title: string | null) => void;
-}) {
-  const [value, setValue] = useState(initial);
-  const done = useRef(false);
-  const finish = (title: string | null) => {
-    if (done.current) return;
-    done.current = true;
-    onDone(title);
-  };
-  return (
-    <input
-      className="cgw-tree-rename"
-      aria-label={label}
-      dir="auto"
-      autoFocus
-      value={value}
-      onFocus={(event) => event.currentTarget.select()}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => setValue(event.target.value)}
-      onBlur={() => finish(value.trim())}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.key === 'Enter') finish(value.trim());
-        if (event.key === 'Escape') finish(null);
-      }}
-    />
+    </>
   );
 }

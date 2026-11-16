@@ -255,7 +255,19 @@ body {
 }
 
 /* The account's avatar before its name, and each member's in Settings (Track U7). */
-.cgw-account-button > [data-cg-avatar],
+.cgw-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.cgw-account > .cgw-account-button {
+  flex: 1;
+  min-inline-size: 0;
+}
+
 .cgw-member > [data-cg-avatar] {
   margin-inline-end: 8px;
 }
@@ -340,14 +352,14 @@ body {
 }
 
 /* Phase 3: offline and recovered pages */
-.cgw-tree-row.is-unavailable .cgw-tree-title,
+.cgw-tree [role='treeitem'].is-unavailable .cgw-tree-title,
 .cgw-side-link.is-unavailable .cgw-tree-title {
   color: var(--cg-text-secondary);
   font-style: italic;
 }
 
 /* On the selected row's background the secondary colour is too faint; the italic still says it. */
-.cgw-tree-row.is-unavailable.is-active .cgw-tree-title {
+.cgw-tree [role='treeitem'].is-unavailable[aria-selected='true'] .cgw-tree-title {
   color: inherit;
 }
 

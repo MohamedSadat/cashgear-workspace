@@ -67,6 +67,9 @@ export const en = {
     addSubpage: 'Add a page inside',
     pages: 'Pages',
     pageMenu: 'Page actions',
+    // Phase 8 (Track U4): moving a page in the tree by keys, and what is said after a move.
+    moveInstructions: 'Drag, or press {{keys}} with an arrow key, to move',
+    moved: '{{title}} moved to {{place}}',
     rename: 'Rename',
     favourite: 'Add to favourites',
     unfavourite: 'Remove from favourites',

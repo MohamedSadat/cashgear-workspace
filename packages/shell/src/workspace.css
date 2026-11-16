@@ -1,4 +1,4 @@
-/* Sidebar: switcher, links, the tree (Track U4 stand-in), tools */
+/* Sidebar: switcher, links, the tree (the library's, Track U4), tools */
 .cgw-workspace-switcher,
 .cgw-side-button,
 .cgw-side-link {
@@ -75,31 +75,22 @@
   flex-direction: column;
 }
 
+/* The page tree: the library's tree view (Track U4, `PageTree.tsx`), its rows drawn as the
+   window scrolls; the tree fills what the sidebar leaves it. */
 .cgw-tree {
-  position: relative;
   flex: 1;
   min-block-size: 200px;
-  overflow-y: auto;
-  outline: none;
 }
 
-.cgw-tree-row,
-.cgw-tree-section {
-  position: absolute;
-  inset-inline: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  box-sizing: border-box;
-  padding-inline-end: 4px;
-  border-radius: 5px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.cgw-tree-section {
-  padding-inline-start: 0;
+/* A section is a heading: it does not fold, and a press on it opens nothing. */
+.cgw-tree-section > [data-cg-tree-row] {
   cursor: default;
+}
+
+/* Track U (phase-8 swaps): the library has no row that never folds. A section's toggle is not
+   drawn (the tree keeps it open, `beforeCollapse`). */
+.cgw-tree-section > [data-cg-tree-row] > button:first-child {
+  display: none;
 }
 
 .cgw-tree-section-name {
@@ -107,58 +98,19 @@
   padding-block: 0;
 }
 
-.cgw-tree-row:hover,
-.cgw-tree-row.is-active {
-  background: color-mix(in srgb, var(--cg-text) 8%, transparent);
-}
-
-.cgw-tree-row.is-active {
+/* Track U (phase-8 swaps): the library draws the selected row's text in the accent on its tint,
+   4.09:1 in the light theme; the theme's text there, bold as the open page was. */
+.cgw-tree [role='treeitem'][aria-selected='true'] > [data-cg-tree-row] {
+  color: var(--cg-text);
   font-weight: 600;
 }
 
-.cgw-tree-row:focus-visible,
-.cgw-tree-section:focus-visible {
-  outline: 2px solid var(--cg-accent);
-  outline-offset: -2px;
-}
-
-.cgw-tree-row.is-drop-inside {
-  background: color-mix(in srgb, var(--cg-accent) 18%, transparent);
-}
-
-.cgw-tree-row.is-drop-before,
-.cgw-tree-section.is-drop-inside {
-  box-shadow: inset 0 2px 0 var(--cg-accent);
-}
-
-.cgw-tree-row.is-drop-after {
-  box-shadow: inset 0 -2px 0 var(--cg-accent);
-}
-
-.cgw-tree-twisty {
-  flex: none;
-  inline-size: 18px;
-  block-size: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--cg-text-secondary);
-  cursor: pointer;
-}
-
-.cgw-tree-twisty::before {
-  content: '▸';
-  display: inline-block;
-  transition: transform 0.12s;
-}
-
-[dir='rtl'] .cgw-tree-twisty::before {
-  transform: scaleX(-1);
-}
-
-.cgw-tree-twisty[data-open='true']::before {
-  transform: rotate(90deg);
+/* A page's row: icon, title, the offline mark, who has it open. */
+.cgw-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
 }
 
 .cgw-tree-icon {
@@ -173,14 +125,19 @@
   white-space: nowrap;
 }
 
-.cgw-tree-actions {
+/* Track U (phase-8 swaps): the library's row buttons are only transparent until hover, so their
+   names joined every row's name. They are drawn on hover and focus only, as the rows' names
+   assume; a section's always. */
+.cgw-tree [data-cg-tree-actions] {
   display: none;
   gap: 2px;
 }
 
-.cgw-tree-row:hover .cgw-tree-actions,
-.cgw-tree-row:focus-within .cgw-tree-actions {
-  display: flex;
+.cgw-tree [role='treeitem']:hover [data-cg-tree-actions],
+.cgw-tree [role='treeitem']:focus-within [data-cg-tree-actions],
+.cgw-tree .cgw-tree-section [data-cg-tree-actions] {
+  display: inline-flex;
+  opacity: 1;
 }
 
 .cgw-tree-action {
@@ -197,17 +154,6 @@
 
 .cgw-tree-action:hover {
   background: color-mix(in srgb, var(--cg-text) 12%, transparent);
-}
-
-.cgw-tree-rename {
-  flex: 1;
-  min-inline-size: 0;
-  padding: 1px 4px;
-  border: 1px solid var(--cg-accent);
-  border-radius: 4px;
-  background: var(--cg-surface);
-  color: inherit;
-  font: inherit;
 }
 
 .cgw-sidebar-tools {

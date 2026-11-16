@@ -271,21 +271,25 @@ const bench = {
     return performance.now() - started;
   },
   /**
-   * Ms from a click on a row's twisty to the row opened or closed and painted. Rows are found by
-   * page id; the tree is virtualised, so only rows on screen are there.
+   * Ms from a click on a row's toggle to the row opened or closed and painted. Rows are found by
+   * the page id their content carries; the tree is virtualised, so only rows on screen are there.
+   * The toggle is the row's first button (the library's tree view; named by the page's title).
    */
   async expand(pageId: Id, open = true) {
-    const row = document.querySelector<HTMLElement>(`[role="treeitem"][data-key="${pageId}"]`);
-    const twisty = row?.querySelector<HTMLElement>('.cgw-tree-twisty');
-    if (!row || !twisty) throw new Error('No row ' + pageId);
+    const rowOf = () =>
+      document
+        .querySelector(`[data-page-id="${pageId}"]`)
+        ?.closest<HTMLElement>('[role="treeitem"]');
+    const row = rowOf();
+    const toggle = row?.querySelector<HTMLElement>('button');
+    if (!row || !toggle) throw new Error('No row ' + pageId);
     if ((row.getAttribute('aria-expanded') === 'true') === open)
       return { elapsed: 0, changed: false };
     const started = performance.now();
-    twisty.click();
+    toggle.click();
     await afterPaint();
     const elapsed = performance.now() - started;
-    const now = document.querySelector(`[role="treeitem"][data-key="${pageId}"]`);
-    return { elapsed, changed: (now?.getAttribute('aria-expanded') === 'true') === open };
+    return { elapsed, changed: (rowOf()?.getAttribute('aria-expanded') === 'true') === open };
   },
 };
 
