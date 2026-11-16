@@ -49,6 +49,7 @@ import {
   type WorkspaceRecord,
 } from '@cgw/workspace';
 import { done, getAll, getAllKeys, openDatabase, request } from './idb';
+import type { Forget, Journal, JournalOpen, JournalState, JournalUpdate } from './journal/client';
 import type { SearchIndex } from './searchIndex';
 
 export const DATABASE = 'cgw-workspace';
@@ -252,13 +253,63 @@ const newer = (version?: number) =>
     `This store was written by a newer version${version ? ` (${version})` : ''}; update the app.`,
   );
 
+/** How long the journal may take to open before the store goes on without it this session. */
+const JOURNAL_OPEN_MS = 3000;
+/** Updates waiting for their page to come back from the server are kept this long. */
+const WAITING_MS = 30 * 24 * 60 * 60 * 1000;
+/** What the journal's recovery reads and writes back. */
+const RECOVERY_STORES: StoreName[] = [
+  S.workspaces,
+  S.pages,
+  S.rows,
+  S.docLogs,
+  S.docUpdates,
+  S.unsentPages,
+];
+
+/** What the journal's recovery did (`performance.mark('cgw-journal')` carries it too). */
+export interface JournalReport {
+  state: JournalState['state'];
+  reason?: string;
+  /**
+   * Updates read from the journal's files, and of those: written back as unsent (the store had
+   * lost them), waiting for their page (not in the store: written back once the server sends
+   * it), and forgotten (the store holds them acknowledged, or a compaction, repair, set-aside or
+   * removal took them).
+   */
+  read: number;
+  restored: number;
+  waiting: number;
+  forgotten: number;
+  /** Written back later, to pages that came back from the server. */
+  restoredLater: number;
+  files?: JournalOpen['files'];
+  ms: number;
+}
+
 export class IndexedDbStore implements LocalStore {
   readonly kind = 'indexeddb' as const;
+  /** Updates of pages not in the store, from the journal: written back when the page comes. */
+  private readonly waiting = new Map<Id, JournalUpdate[]>();
+  /** Forgets that wait for their transaction to commit (`forgetAfter`). */
+  private readonly forgets = new WeakMap<IDBTransaction, Required<Forget>>();
+  private recovery: JournalReport | null = null;
 
   private constructor(
     private readonly db: IDBDatabase,
     private readonly index: SearchIndex | null,
+    private journal: Journal | null,
   ) {}
+
+  /** The journal's state now: `off` when there is none (Node, an older browser, a failure). */
+  get journalState(): JournalState {
+    return this.journal?.state ?? { state: 'off', reason: this.recovery?.reason ?? 'none' };
+  }
+
+  /** What the journal's recovery did when the store opened. */
+  get journalReport(): JournalReport | null {
+    return this.recovery;
+  }
 
   /**
    * Opens the store. With a search index (the browser's worker), text search runs in memory in
@@ -267,17 +318,21 @@ export class IndexedDbStore implements LocalStore {
   static async open(
     factory: IDBFactory = indexedDB,
     name = DATABASE,
-    options: { index?: SearchIndex } = {},
+    options: { index?: SearchIndex; journal?: Journal } = {},
   ): Promise<IndexedDbStore> {
+    // The journal's files are opened and read while IndexedDB opens.
+    const journal = options.journal ?? null;
+    const opening = journal ? withTimeout(journal.open(), JOURNAL_OPEN_MS) : null;
     let db: IDBDatabase;
     try {
       db = await openDatabase(factory, name, STORE_SCHEMA_VERSION, upgrade);
     } catch (error) {
+      journal?.close();
       // The database itself is at a later version than this build knows.
       if ((error as { name?: string } | null)?.name === 'VersionError') throw newer();
       throw error;
     }
-    const store = new IndexedDbStore(db, options.index ?? null);
+    const store = new IndexedDbStore(db, options.index ?? null, journal);
     const tx = db.transaction(S.meta, 'readwrite');
     const version = await request(tx.objectStore(S.meta).get('schemaVersion'));
     if (typeof version === 'number' && version > STORE_SCHEMA_VERSION) {
@@ -286,6 +341,7 @@ export class IndexedDbStore implements LocalStore {
     }
     tx.objectStore(S.meta).put(STORE_SCHEMA_VERSION, 'schemaVersion');
     await done(tx);
+    if (opening) await store.recover(opening);
     // The index loads in the background; searches wait for it.
     void options.index?.load(name).catch((error: unknown) => console.warn('Search index:', error));
     return store;
@@ -295,12 +351,25 @@ export class IndexedDbStore implements LocalStore {
     return this.db.transaction(names, mode);
   }
 
+  /**
+   * A write of what this device made and the server may not hold yet: a page's own updates, the
+   * session's operations, an asset's bytes, a log a repair replaced. "Saved" waits for these, so
+   * each is flushed to disk before it completes (strict durability; Chrome's default, relaxed,
+   * completes once the operating system has the bytes, which an OS crash or a power cut loses).
+   * DECISIONS.md, 2026-11-16: Phase 8. What comes from the server stays relaxed: it can be
+   * fetched again.
+   */
+  private ownWrite(names: StoreName[]) {
+    return this.db.transaction(names, 'readwrite', { durability: 'strict' });
+  }
+
   /** A read-write transaction that commits what `body` wrote, or nothing if it throws. */
   private async transact<T>(
     names: StoreName[],
     body: (tx: IDBTransaction) => Promise<T>,
+    durability: 'own' | 'remote' = 'remote',
   ): Promise<T> {
-    const tx = this.tx(names, 'readwrite');
+    const tx = durability === 'own' ? this.ownWrite(names) : this.tx(names, 'readwrite');
     const committed = done(tx);
     let result: T;
     try {
@@ -315,7 +384,191 @@ export class IndexedDbStore implements LocalStore {
       throw error;
     }
     await committed;
+    this.flushForget(tx);
     return result;
+  }
+
+  /** Updates the journal no longer needs once `tx` commits (`flushForget`, `transact`). */
+  private forgetAfter(tx: IDBTransaction, what: Forget) {
+    if (!this.journal) return;
+    let pending = this.forgets.get(tx);
+    if (!pending) this.forgets.set(tx, (pending = { ids: [], pages: [], upTo: [] }));
+    pending.ids.push(...(what.ids ?? []));
+    pending.pages.push(...(what.pages ?? []));
+    pending.upTo.push(...(what.upTo ?? []));
+  }
+
+  private flushForget(tx: IDBTransaction) {
+    const pending = this.forgets.get(tx);
+    if (!pending) return;
+    this.forgets.delete(tx);
+    this.journal?.forget(pending);
+  }
+
+  // The journal (Phase 8) ----------------------------------------------------------------------
+
+  /**
+   * What the journal holds that the store does not, each update by its id against its page's
+   * log. Its row is there: acknowledged (forgotten) or still unsent (kept). No row, and its local
+   * sequence at or past the log's next one: the store never kept that write (Chrome lost a
+   * transaction it reported complete), so it goes back in as unsent, at its sequence. No row and
+   * a sequence below the next one: a compaction, repair, set-aside or removal took it
+   * (forgotten). The page itself missing (Chrome deleted the store): it waits until the page comes
+   * back from the server (`restoreWaiting`), at most `WAITING_MS`. Then the files of tabs that are
+   * gone move into this tab's.
+   */
+  private async recover(opening: Promise<JournalOpen | null | 'timeout'>): Promise<void> {
+    const begun = performance.now();
+    const opened = await opening;
+    const journal = this.journal!;
+    if (opened === 'timeout' || !opened) {
+      const reason =
+        opened === 'timeout'
+          ? 'slow to open'
+          : journal.state.state === 'off'
+            ? journal.state.reason
+            : 'did not open';
+      journal.close();
+      this.journal = null;
+      this.recovery = { ...emptyReport(), state: 'off', reason, ms: performance.now() - begun };
+      mark(this.recovery);
+      return;
+    }
+    const byPage = new Map<Id, JournalUpdate[]>();
+    for (const entry of opened.entries) {
+      const list = byPage.get(entry.pageId);
+      if (list) list.push(entry);
+      else byPage.set(entry.pageId, [entry]);
+    }
+    const keep: string[] = [];
+    const forget: string[] = [];
+    let restored = 0;
+    let waiting = 0;
+    const now = Date.now();
+    if (byPage.size)
+      await this.transact(
+        RECOVERY_STORES,
+        async (tx) => {
+          for (const [pageId, entries] of byPage) {
+            if (!(await this.pageOrRow(tx, pageId))) {
+              for (const entry of entries)
+                if (now - entry.at > WAITING_MS) forget.push(entry.updateId);
+                else {
+                  keep.push(entry.updateId);
+                  waiting++;
+                  this.waitFor(entry);
+                }
+              continue;
+            }
+            const back = await this.writeBack(tx, pageId, entries, 'atSequence');
+            restored += back.restored.length;
+            keep.push(...back.restored, ...back.unsent);
+            forget.push(...back.done);
+          }
+        },
+        'own',
+      );
+    if (forget.length) journal.forget({ ids: forget });
+    await journal.adopt(keep);
+    this.recovery = {
+      state: journal.state.state,
+      read: opened.entries.length,
+      restored,
+      waiting,
+      forgotten: forget.length,
+      restoredLater: 0,
+      files: opened.files,
+      ms: performance.now() - begun,
+    };
+    mark(this.recovery);
+    if (restored)
+      console.info(`The journal gave back ${restored} saved update(s) the store had lost.`);
+  }
+
+  private waitFor(entry: JournalUpdate) {
+    const list = this.waiting.get(entry.pageId);
+    if (list) list.push(entry);
+    else this.waiting.set(entry.pageId, [entry]);
+  }
+
+  /**
+   * Writes journalled updates the page's log lacks back into it, unsent. `atSequence`: where the
+   * store lost them (each at its own local sequence, when that is at or past the log's next
+   * one); `appended`: a page that came back from the server after the store was deleted (each
+   * after what its log holds now). An update whose id the log holds is never written twice.
+   */
+  private async writeBack(
+    tx: IDBTransaction,
+    pageId: Id,
+    entries: JournalUpdate[],
+    how: 'atSequence' | 'appended',
+  ): Promise<{ restored: string[]; unsent: string[]; done: string[] }> {
+    const logs = tx.objectStore(S.docLogs);
+    const updates = tx.objectStore(S.docUpdates);
+    const [found, rows] = await Promise.all([
+      request(logs.get(pageId)) as Promise<DocLog | undefined>,
+      getAll<UpdateRow>(updates, pageRange(pageId)),
+    ]);
+    const log: DocLog = found ?? { pageId, nextSeq: 1, snapshot: null, snapshotCovers: 0 };
+    const held = new Map(rows.map((row) => [row.updateId, row.seq]));
+    const taken = new Set(rows.map((row) => row.localSeq));
+    const firstFree = log.nextSeq;
+    const out = { restored: [] as string[], unsent: [] as string[], done: [] as string[] };
+    const ordered = [...entries].sort((a, b) => a.localSeq - b.localSeq || a.at - b.at);
+    for (const entry of ordered) {
+      if (held.has(entry.updateId)) {
+        (held.get(entry.updateId) === null ? out.unsent : out.done).push(entry.updateId);
+        continue;
+      }
+      if (how === 'atSequence' && entry.localSeq < firstFree) {
+        out.done.push(entry.updateId);
+        continue;
+      }
+      const localSeq =
+        how === 'atSequence' && !taken.has(entry.localSeq) ? entry.localSeq : log.nextSeq;
+      updates.put({
+        pageId,
+        localSeq,
+        updateId: entry.updateId,
+        data: entry.data,
+        seq: null,
+      } satisfies UpdateRow);
+      taken.add(localSeq);
+      held.set(entry.updateId, null);
+      log.nextSeq = Math.max(log.nextSeq, localSeq + 1);
+      out.restored.push(entry.updateId);
+    }
+    if (out.restored.length) {
+      logs.put(log);
+      tx.objectStore(S.unsentPages).put({ pageId });
+    }
+    return out;
+  }
+
+  /** Pages that came back from the server: their waiting updates go back into their logs. */
+  private async restoreWaiting(): Promise<void> {
+    if (!this.waiting.size || !this.journal) return;
+    let restored = 0;
+    const done: string[] = [];
+    await this.transact(
+      RECOVERY_STORES,
+      async (tx) => {
+        for (const [pageId, entries] of [...this.waiting]) {
+          if (!(await this.pageOrRow(tx, pageId))) continue;
+          this.waiting.delete(pageId);
+          const back = await this.writeBack(tx, pageId, entries, 'appended');
+          restored += back.restored.length;
+          done.push(...back.done);
+        }
+      },
+      'own',
+    );
+    if (done.length) this.journal.forget({ ids: done });
+    if (!restored) return;
+    this.recovery = { ...(this.recovery ?? emptyReport()) };
+    this.recovery.restoredLater += restored;
+    mark(this.recovery);
+    console.info(`The journal gave back ${restored} saved update(s) to pages that came back.`);
   }
 
   // Documents ----------------------------------------------------------------------------------
@@ -334,7 +587,7 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async appendDocUpdates(pageId: Id, updates: LocalUpdate[]): Promise<number[]> {
-    const tx = this.tx([S.docLogs, S.docUpdates, S.unsentPages], 'readwrite');
+    const tx = this.ownWrite([S.docLogs, S.docUpdates, S.unsentPages]);
     const logs = tx.objectStore(S.docLogs);
     const log: DocLog = ((await request(logs.get(pageId))) as DocLog | undefined) ?? {
       pageId,
@@ -343,20 +596,32 @@ export class IndexedDbStore implements LocalStore {
       snapshotCovers: 0,
     };
     const seqs: number[] = [];
+    const journalled: Omit<JournalUpdate, 'at'>[] = [];
     for (const update of updates) {
       const localSeq = log.nextSeq++;
       seqs.push(localSeq);
+      const data = own(update.data);
       tx.objectStore(S.docUpdates).put({
         pageId,
         localSeq,
         updateId: update.updateId,
-        data: own(update.data),
+        data,
         seq: null,
       } satisfies UpdateRow);
+      journalled.push({ pageId, updateId: update.updateId, localSeq, data });
     }
     logs.put(log);
     if (updates.length) tx.objectStore(S.unsentPages).put({ pageId });
-    await done(tx);
+    // The journal is written beside IndexedDB's commit; the save is done when both are.
+    const journalling = this.journal?.append(journalled);
+    try {
+      await done(tx);
+    } catch (error) {
+      // Not saved after all (the document tries again under a new id): the journal lets it go.
+      this.journal?.forget({ ids: journalled.map((u) => u.updateId) });
+      throw error;
+    }
+    await journalling;
     return seqs;
   }
 
@@ -385,6 +650,9 @@ export class IndexedDbStore implements LocalStore {
     } else updates.delete(covered);
     logs.put(log);
     await done(tx);
+    // A local-only page's snapshot holds what it covers: the journal no longer needs it. (A synced
+    // page's covered rows that go are acknowledged ones, forgotten when they were acknowledged.)
+    if (!keepUnsent) this.journal?.forget({ upTo: [[pageId, coversLocalUpTo]] });
   }
 
   /** A page, a database's page, or a row; the transaction includes `pages` and `rows`. */
@@ -414,14 +682,18 @@ export class IndexedDbStore implements LocalStore {
 
   async quarantineUpdates(pageId: Id, localSeqs: number[], reason: string): Promise<void> {
     const tx = this.tx([S.docUpdates, S.corrupt], 'readwrite');
+    const moved: string[] = [];
     for (const localSeq of localSeqs) {
       const row = (await request(tx.objectStore(S.docUpdates).get([pageId, localSeq]))) as
         UpdateRow | undefined;
       if (!row) continue;
       tx.objectStore(S.corrupt).add({ ...row, reason, at: new Date().toISOString() });
       tx.objectStore(S.docUpdates).delete([pageId, localSeq]);
+      moved.push(row.updateId);
     }
     await done(tx);
+    // In the corrupt area now, which the journal has no part in.
+    this.journal?.forget({ ids: moved });
   }
 
   async docLogLength(pageId: Id): Promise<number> {
@@ -477,14 +749,18 @@ export class IndexedDbStore implements LocalStore {
     const updates = tx.objectStore(S.docUpdates);
     const rows = await getAll<UpdateRow>(updates, pageRange(pageId));
     const bySeq = new Map(acks.map((a) => [a.updateId, a.seq]));
+    const acked: string[] = [];
     for (const row of rows) {
       const seq = bySeq.get(row.updateId);
       if (seq === undefined) continue;
       row.seq = seq;
       updates.put(row);
+      acked.push(row.updateId);
     }
     this.forgetIfSent(tx, pageId, rows);
     await done(tx);
+    // The server holds them: the journal no longer needs them.
+    this.journal?.forget({ ids: acked });
   }
 
   async applyRemoteDocUpdates(pageId: Id, pull: RemoteDocPull): Promise<StoredUpdate[]> {
@@ -502,9 +778,11 @@ export class IndexedDbStore implements LocalStore {
     for (const row of rows) if (!byId.has(row.updateId)) byId.set(row.updateId, row);
     const seqs = new Set(rows.map((row) => row.seq));
     const added: StoredUpdate[] = [];
+    const acked: string[] = [];
     for (const remote of pull.updates) {
       const mine = remote.updateId ? byId.get(remote.updateId) : undefined;
       if (mine) {
+        acked.push(mine.updateId);
         // An update this device pushed: the pull acknowledges it.
         if (mine.seq === null) {
           mine.seq = remote.seq;
@@ -536,6 +814,8 @@ export class IndexedDbStore implements LocalStore {
     } satisfies DocCursorRow);
     this.forgetIfSent(tx, pageId, rows);
     await done(tx);
+    // This device's own updates the server sent back: it holds them.
+    this.journal?.forget({ ids: acked });
     return added;
   }
 
@@ -559,7 +839,7 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async replaceDoc(pageId: Id, update: LocalUpdate, upTo?: number): Promise<void> {
-    const tx = this.tx([S.docLogs, S.docUpdates, S.docCursors, S.unsentPages], 'readwrite');
+    const tx = this.ownWrite([S.docLogs, S.docUpdates, S.docCursors, S.unsentPages]);
     const logs = tx.objectStore(S.docLogs);
     const found = (await request(logs.get(pageId))) as DocLog | undefined;
     if (upTo !== undefined && (found?.snapshotCovers ?? 0) > upTo) {
@@ -577,17 +857,25 @@ export class IndexedDbStore implements LocalStore {
     updates.delete(
       upTo === undefined ? pageRange(pageId) : IDBKeyRange.bound([pageId, 0], [pageId, upTo]),
     );
+    const localSeq = upTo === undefined ? log.nextSeq++ : upTo;
+    const data = own(update.data);
     updates.put({
       pageId,
-      localSeq: upTo === undefined ? log.nextSeq++ : upTo,
+      localSeq,
       updateId: update.updateId,
-      data: own(update.data),
+      data,
       seq: null,
     } satisfies UpdateRow);
     logs.put(log);
     tx.objectStore(S.docCursors).delete(pageId);
     tx.objectStore(S.unsentPages).put({ pageId });
+    // The merged update is this device's to push: journalled as a save is. (The ones it replaced
+    // are forgotten at the next start: no row, below the log's next sequence.)
+    const journalling = this.journal?.append([
+      { pageId, updateId: update.updateId, localSeq, data },
+    ]);
     await done(tx);
+    await journalling;
   }
 
   // History ------------------------------------------------------------------------------------
@@ -633,12 +921,17 @@ export class IndexedDbStore implements LocalStore {
   }
 
   async applyLocalOps(ops: Operation[]): Promise<void> {
-    const deleted = await this.transact(PLAN_STORES, async (tx) => {
-      const plan = await planOps(ops, this.reader(tx));
-      await this.writePlan(tx, plan);
-      return [...plan.deletePages, ...plan.deleteRows];
-    });
+    const deleted = await this.transact(
+      PLAN_STORES,
+      async (tx) => {
+        const plan = await planOps(ops, this.reader(tx));
+        await this.writePlan(tx, plan);
+        return [...plan.deletePages, ...plan.deleteRows];
+      },
+      'own',
+    );
     this.index?.remove(deleted);
+    await this.restoreWaiting();
   }
 
   /**
@@ -712,6 +1005,9 @@ export class IndexedDbStore implements LocalStore {
    * and repair state. What was set aside from it stays.
    */
   private async dropPageData(tx: IDBTransaction, pageId: Id) {
+    // Gone for good (what it had unsent was set aside first, where the server said so).
+    this.forgetAfter(tx, { pages: [pageId] });
+    this.waiting.delete(pageId);
     for (const name of [
       S.pages,
       S.rows,
@@ -830,6 +1126,7 @@ export class IndexedDbStore implements LocalStore {
       return [...plan.deletePages, ...plan.deleteRows];
     });
     this.index?.remove(deleted);
+    await this.restoreWaiting();
   }
 
   async applyRemote(batch: RemoteBatch): Promise<void> {
@@ -839,6 +1136,7 @@ export class IndexedDbStore implements LocalStore {
       return [...plan.deletePages, ...plan.deleteRows];
     });
     this.index?.remove(deleted);
+    await this.restoreWaiting();
   }
 
   async syncCursor(workspaceId: Id): Promise<number | null> {
@@ -994,7 +1292,7 @@ export class IndexedDbStore implements LocalStore {
   // Assets -------------------------------------------------------------------------------------
 
   async putAsset(asset: AssetRecord, bytes: Uint8Array): Promise<void> {
-    const tx = this.tx([S.assets, S.assetBytes], 'readwrite');
+    const tx = this.ownWrite([S.assets, S.assetBytes]);
     tx.objectStore(S.assets).put(asset);
     tx.objectStore(S.assetBytes).put(own(bytes), asset.id);
     await done(tx);
@@ -1177,6 +1475,10 @@ export class IndexedDbStore implements LocalStore {
     for (const row of rows)
       if (row.seq === null) tx.objectStore(S.docUpdates).delete([pageId, row.localSeq]);
     tx.objectStore(S.unsentPages).delete(pageId);
+    // In the quarantine now (a recovered page to be): the journal lets them go.
+    this.forgetAfter(tx, {
+      ids: rows.filter((row) => row.seq === null).map((row) => row.updateId),
+    });
     return entry;
   }
 
@@ -1296,6 +1598,7 @@ export class IndexedDbStore implements LocalStore {
 
   async close(): Promise<void> {
     this.index?.close();
+    this.journal?.close();
     this.db.close();
   }
 
@@ -1307,5 +1610,25 @@ export class IndexedDbStore implements LocalStore {
     } catch {
       return false;
     }
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'> {
+  return Promise.race([
+    promise,
+    new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), ms)),
+  ]);
+}
+
+function emptyReport(): JournalReport {
+  return { state: 'on', read: 0, restored: 0, waiting: 0, forgotten: 0, restoredLater: 0, ms: 0 };
+}
+
+/** The recovery's report as a performance mark (`cgw-journal`), which tests and benches read. */
+function mark(detail: JournalReport) {
+  try {
+    performance.mark('cgw-journal', { detail });
+  } catch {
+    // No user timing here.
   }
 }

@@ -1,5 +1,5 @@
 import type { WorkspacePlatform } from '@cgw/shell';
-import { DATABASE, IndexedDbStore, workerIndex } from '@cgw/store-web';
+import { DATABASE, IndexedDbStore, workerIndex, workerJournal } from '@cgw/store-web';
 import { erpFor } from './erp';
 import { sheetOriginFor } from './sheet';
 
@@ -19,8 +19,11 @@ export const webPlatform: WorkspacePlatform = {
   openExternal: async (url) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   },
-  // Text search runs in a worker, from an index built out of the store (D25).
-  openStore: () => IndexedDbStore.open(indexedDB, DATABASE, { index: workerIndex() }),
+  // Text search runs in a worker, from an index built out of the store (D25). Unsent document
+  // updates are also journalled in the Origin Private File System (Phase 8): what Chrome's
+  // IndexedDB loses after a crash comes back from there.
+  openStore: () =>
+    IndexedDbStore.open(indexedDB, DATABASE, { index: workerIndex(), journal: workerJournal() }),
   // The browser may evict this origin's data unless it agrees to keep it (SYNC_DESIGN.md).
   requestPersistence: () => IndexedDbStore.persist(),
   saveFile: async (name, bytes, type) => {

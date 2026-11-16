@@ -33,11 +33,29 @@
 // kill the store is read (IndexedDB from the reopened page, SQLite through cgw-store-cli before
 // the app starts again) to tell a compaction rolled back from one committed. The app compacts a
 // page's log after 200 saved updates; `cgw-test:compactAfter` in localStorage (--compact-after,
-// default 8) asks for it sooner, where the build reads that test-only setting. With
-// --until-compaction every run saves word by word until a compaction starts and is killed in it
-// (bench/results/kill-compaction-{web,desktop}.json).
+// default 8) asks for it sooner, where the build reads that test-only setting (no build has: the
+// app compacts at 200). With --until-compaction every run saves word by word until a compaction
+// starts and is killed in it (bench/results/kill-compaction-{web,desktop}.json).
+//
+// What a failure says (Phase 8): in the browser, every write to a page's log the page saw
+// complete before the kill (its local sequences, and the save status's changes with the text
+// then shown), so a loss is either Chrome dropping completed transactions (`missingCompleted`:
+// sequences that completed and are not in the store) or "Saved" shown before the write that held
+// the text; and what Chrome logged about the reopened IndexedDB (`leveldbDrops`: a torn LevelDB
+// log record, a store found corrupt and deleted). `leveldb` counts the starts that logged any.
+// `journal` (the web): what the store's journal did at each start (updates it wrote back because
+// IndexedDB had lost them, ones waiting for their page), and a failure lists its files.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -256,12 +274,55 @@ function probe() {
       /* no binding yet */
     }
   };
+  // The save status as it changes, with the text then shown (Phase 8: what "Saved" waited for).
+  const watchStatus = () => {
+    let last = null;
+    new MutationObserver(() => {
+      const state =
+        document.querySelector('[data-testid="save-status"]')?.getAttribute('data-state') ?? null;
+      if (state === last) return;
+      last = state;
+      const text = document.querySelector('.cgw-editor [data-block] > .cgw-body')?.textContent;
+      tell({ kind: 'state', state, length: text?.length ?? null, at: Date.now() });
+    }).observe(document, { subtree: true, childList: true, attributes: true });
+  };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', watchStatus);
+  else watchStatus();
   if (typeof IDBDatabase !== 'undefined') {
     const transaction = IDBDatabase.prototype.transaction;
     IDBDatabase.prototype.transaction = function (names, mode, ...rest) {
       const tx = transaction.call(this, names, mode, ...rest);
       const list = (typeof names === 'string' ? [names] : [...names]).sort().join(',');
-      if (mode === 'readwrite' && list === 'docLogs,docUpdates,pages,workspaces') {
+      // Every write to a page's log: the local sequences it puts and when it completed, as the
+      // page saw it (the durability the page asked for too), told to Node at once, so a kill
+      // after it is known to have come after a completed transaction.
+      if (mode === 'readwrite' && list.split(',').includes('docUpdates')) {
+        const seqs = [];
+        const begun = Date.now();
+        const durability = tx.durability ?? null;
+        const objectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (name) => {
+          const store = objectStore(name);
+          if (name === 'docUpdates' && !store.cgwSeqs) {
+            const put = store.put.bind(store);
+            store.put = (value, ...more) => {
+              if (typeof value?.localSeq === 'number') seqs.push(value.localSeq);
+              return put(value, ...more);
+            };
+            store.cgwSeqs = true;
+          }
+          return store;
+        };
+        tx.addEventListener('complete', () =>
+          tell({ kind: 'tx', stores: list, seqs, durability, begun, at: Date.now() }),
+        );
+      }
+      // compactDoc's stores (`rows` since Phase 4; without it the probe saw no compaction).
+      if (
+        mode === 'readwrite' &&
+        (list === 'docLogs,docUpdates,pages,rows,workspaces' ||
+          list === 'docLogs,docUpdates,pages,workspaces')
+      ) {
         state.compactions++;
         state.compacting++;
         const hold = state.hold;
@@ -355,6 +416,9 @@ async function launch({ blocked = false } = {}) {
         '--no-default-browser-check',
         '--disable-features=Translate',
         '--window-size=1200,800',
+        // Chrome's own log (chrome_debug.log in the profile, `leveldbDrops`).
+        '--enable-logging',
+        '--v=0',
         'about:blank',
       ],
       { stdio: 'ignore', detached: process.platform !== 'win32' },
@@ -396,8 +460,13 @@ async function launch({ blocked = false } = {}) {
     if (on) await page.evaluate(() => window.dispatchEvent(new Event('offline'))).catch(() => {});
   };
   if (blocked) await block(true);
-  const app = { child, browser, page, block, events: [], inflight: new Map() };
-  await page.exposeBinding('__cgwProbe', (_source, event) => app.onProbe?.(event));
+  const app = { child, browser, page, block, events: [], inflight: new Map(), txs: [], states: [] };
+  await page.exposeBinding('__cgwProbe', (_source, event) => {
+    // The page's completed log writes and its save status, as Node heard them before any kill.
+    if (event?.kind === 'tx') app.txs.push({ ...event, heard: Date.now() });
+    else if (event?.kind === 'state') app.states.push(event);
+    app.onProbe?.(event);
+  });
   // The page's requests to the API, by kind, to say what a kill interrupted.
   const kind = (request) => {
     const url = request.url();
@@ -415,6 +484,35 @@ async function launch({ blocked = false } = {}) {
   });
   page.on('requestfinished', (r) => app.inflight.delete(r));
   page.on('requestfailed', (r) => app.inflight.delete(r));
+  // Live saves go through the hub (Phase 6), which the requests above do not show: its
+  // `PushUpdates` invocations sent and not yet answered (SignalR's JSON protocol, records split
+  // by U+001E; a completion is type 3 with the invocation's id). A socket opened before this
+  // listener (the desktop's, at its start) is not seen.
+  app.hubPushes = new Set();
+  page.on('websocket', (ws) => {
+    if (!ws.url().includes('/realtime')) return;
+    const records = (payload) =>
+      typeof payload === 'string' ? payload.split(String.fromCharCode(30)).filter(Boolean) : [];
+    ws.on('framesent', ({ payload }) => {
+      for (const record of records(payload))
+        if (record.includes('"target":"PushUpdates"'))
+          try {
+            app.hubPushes.add(JSON.parse(record).invocationId);
+          } catch {
+            /* not JSON */
+          }
+    });
+    ws.on('framereceived', ({ payload }) => {
+      for (const record of records(payload))
+        if (record.startsWith('{"type":3'))
+          try {
+            app.hubPushes.delete(JSON.parse(record).invocationId);
+          } catch {
+            /* not JSON */
+          }
+    });
+    ws.on('close', () => app.hubPushes.clear());
+  });
   if (target === 'desktop') {
     watchDesktopStore(page, app);
     // The desktop's sign-in commands (its token refresh), for a report if a kill signs it out.
@@ -542,6 +640,18 @@ const results = {
   savedChecks: 0,
   killsWhileSaving: 0,
   durableMs: [],
+  // The web: starts whose IndexedDB recovery dropped bytes (LevelDB's LOG), and what it said.
+  leveldb: { opensDropping: 0, drops: [] },
+  // The web: the journal's recovery at each start (the store's `cgw-journal` mark).
+  journal: {
+    starts: 0,
+    states: {},
+    offReasons: {},
+    read: 0,
+    restored: 0,
+    waiting: 0,
+    restoring: [],
+  },
   compaction: {
     seen: 0,
     killsDuring: 0,
@@ -554,7 +664,7 @@ const results = {
 };
 if (sync)
   Object.assign(results, {
-    killsWhile: { push: 0, pull: 0, feed: 0, ops: 0, other: 0, anyRequest: 0 },
+    killsWhile: { push: 0, hubPush: 0, pull: 0, feed: 0, ops: 0, other: 0, anyRequest: 0 },
     offlineRuns: 0,
     cutRuns: 0,
     killsOffline: 0,
@@ -735,9 +845,28 @@ async function prefixFailure(page, run, { saved, typed, reopened, judged = null,
         }))
         .catch((error) => String(error))
     : null;
+  // Log writes the page saw complete before the kill and the store does not hold now (past what
+  // its snapshot covers): Chrome lost a transaction it reported complete. None, with text lost:
+  // the text reported saved was never in a completed write.
+  let missingCompleted = null;
+  if (store && typeof store === 'object' && Array.isArray(before?.completedSeqs)) {
+    const held = new Set(store.localSeqs);
+    const covers = store.log?.snapshotCovers ?? 0;
+    missingCompleted = before.completedSeqs.filter((s) => s > covers && !held.has(s));
+    store.localSeqs = store.localSeqs.slice(-12);
+  }
+  const journal =
+    target === 'web'
+      ? {
+          atStart: await journalAtStart(page),
+          files: await page.evaluate(journalFiles).catch((error) => String(error)),
+        }
+      : null;
   return {
     run,
     error: lost ? 'lost text reported saved' : 'text that was never typed',
+    missingCompleted,
+    journal,
     store,
     server,
     lengths: { saved: saved.length, typed: typed.length, reopened: reopened.length },
@@ -768,9 +897,9 @@ function storeDump(id) {
     open.onsuccess = async () => {
       const db = open.result;
       const log = (await all(db, 'docLogs')).find((l) => l.pageId === id);
-      const updates = (await all(db, 'docUpdates'))
-        .filter((u) => u.pageId === id)
-        .map((u) => `${u.localSeq}:${u.seq ?? '-'}:${u.data?.byteLength}`);
+      const rows = (await all(db, 'docUpdates')).filter((u) => u.pageId === id);
+      const updates = rows.map((u) => `${u.localSeq}:${u.seq ?? '-'}:${u.data?.byteLength}`);
+      const localSeqs = rows.map((u) => u.localSeq);
       const quarantine = (await all(db, 'quarantine')).map((q) => ({
         reason: q.reason,
         status: q.status,
@@ -791,6 +920,7 @@ function storeDump(id) {
           : null,
         updates: updates.slice(-12),
         updateCount: updates.length,
+        localSeqs,
         quarantine,
         corrupt,
         cursor,
@@ -828,6 +958,61 @@ async function compactionOutcome(app, covers) {
     );
   if (typeof held !== 'number') return 'unknown';
   return held >= covers ? 'committed' : 'rolledBack';
+}
+
+/** The journal's recovery at this start (the store's `cgw-journal` mark), if the build has one. */
+async function journalAtStart(page) {
+  return page
+    .evaluate(() => performance.getEntriesByName('cgw-journal').at(-1)?.detail ?? null)
+    .catch(() => null);
+}
+
+/** The journal's files (the Origin Private File System's `cgw-journal`), for a failure's record. */
+function journalFiles() {
+  return (async () => {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle('cgw-journal');
+      const files = [];
+      for await (const [name, handle] of dir.entries()) {
+        try {
+          files.push({ name, size: (await handle.getFile()).size });
+        } catch (error) {
+          files.push({ name, error: String(error).slice(0, 80) });
+        }
+      }
+      return files;
+    } catch (error) {
+      return String(error).slice(0, 120);
+    }
+  })();
+}
+
+/**
+ * What Chrome said about this start's IndexedDB: its LevelDB's LOG and LOG.old (the last two
+ * opens' recovery: "dropping N bytes" when a log record does not read back), and Chrome's own log
+ * (`chrome_debug.log`, `--enable-logging`): "Failed to open LevelDB database …, Corruption: …"
+ * and "IndexedDB recovering from a corrupted (and deleted) database" when it threw the store
+ * away. A torn log record that a kill left (Phase 8, DECISIONS.md) shows here, or not at all when
+ * the next session's writes were swallowed as its unfinished payload.
+ */
+function leveldbDrops() {
+  const base = join(profile, 'chrome', 'Default', 'IndexedDB');
+  const lines = [];
+  for (const dir of existsSync(base) ? readdirSync(base) : [])
+    for (const file of ['LOG.old', 'LOG']) {
+      const path = join(base, dir, file);
+      if (!existsSync(path)) continue;
+      for (const line of readFileSync(path, 'utf8').split('\n'))
+        if (/dropping|corrupt|checksum|bad record|missing start/i.test(line))
+          lines.push(`${file}: ${line.trim()}`);
+    }
+  const chromeLog = join(profile, 'chrome', 'chrome_debug.log');
+  if (existsSync(chromeLog))
+    for (const line of readFileSync(chromeLog, 'utf8').split('\n'))
+      if (/indexed_db|leveldb/i.test(line) && /corrupt|failed to open/i.test(line))
+        lines.push(`chrome: ${line.trim().slice(0, 400)}`);
+  return lines;
 }
 
 /** The page's id, from the address of the open page. */
@@ -891,22 +1076,36 @@ try {
       killed = true;
       killedFor = why;
       kill(child);
+      const killedAt = Date.now();
       lastKill = {
         run,
         why: killedFor,
         // How long before the kill the last text was seen reported saved.
-        sinceSavedMs: Date.now() - savedAt,
+        sinceSavedMs: killedAt - savedAt,
         savedLength: saved.length,
-        killAt: Date.now() - app.launched,
+        killAt: killedAt - app.launched,
+        // Every log write the page saw complete before the kill (its local sequences), the last
+        // few in full with their times against the kill's, and the save status's last changes.
+        completedSeqs: app.txs.filter((t) => t.heard <= killedAt).flatMap((t) => t.seqs),
+        txs: app.txs.slice(-6).map((t) => ({
+          stores: t.stores,
+          seqs: t.seqs,
+          durability: t.durability,
+          begun: t.begun - killedAt,
+          at: t.at - killedAt,
+          heard: t.heard - killedAt,
+        })),
+        states: app.states.slice(-6).map((s) => ({ ...s, at: s.at - killedAt })),
         authCalls: app.authCalls,
         network,
-        kinds: [...new Set(app.inflight.values())],
+        kinds: [...new Set(app.inflight.values()), ...(app.hubPushes.size ? ['hubPush'] : [])],
         denied: app.denied,
         cookiesSet: app.cookiesSet,
         sessions: app.sessions,
       };
       if (sync) {
         const kinds = new Set(app.inflight.values());
+        if (app.hubPushes.size) kinds.add('hubPush');
         for (const k of kinds) results.killsWhile[k]++;
         if (kinds.size) results.killsWhile.anyRequest++;
         if (network !== 'online') results.killsOffline++;
@@ -957,11 +1156,32 @@ try {
       }
       const opened = await read(page);
       const reopened = opened.text ?? '';
+      // What Chrome's IndexedDB (LevelDB, its log reused from start to start) logged when this
+      // start recovered it: bytes it dropped are writes that do not read back.
+      const drops = target === 'web' ? leveldbDrops() : [];
+      if (drops.length) {
+        results.leveldb.opensDropping++;
+        results.leveldb.drops.push({ run, lines: drops.slice(0, 6) });
+      }
+      // What the store's journal (Phase 8) did at this start: updates it wrote back (Chrome had
+      // lost them), ones waiting for their page, its state.
+      const journal = target === 'web' ? await journalAtStart(page) : null;
+      if (journal) {
+        results.journal.starts++;
+        results.journal.states[journal.state] = (results.journal.states[journal.state] ?? 0) + 1;
+        if (journal.reason) results.journal.offReasons[journal.reason] = true;
+        results.journal.read += journal.read ?? 0;
+        results.journal.restored += journal.restored ?? 0;
+        results.journal.waiting += journal.waiting ?? 0;
+        if (journal.restored || journal.waiting)
+          results.journal.restoring.push({ run, ...journal, before: lastKill?.why });
+      }
       // What was reported saved is there, and nothing that was never typed.
       if (!reopened.startsWith(saved) || !typed.startsWith(reopened))
-        results.failures.push(
-          await prefixFailure(page, run, { saved, typed, reopened, judged, before: lastKill }),
-        );
+        results.failures.push({
+          ...(await prefixFailure(page, run, { saved, typed, reopened, judged, before: lastKill })),
+          leveldb: drops,
+        });
       saved = reopened;
       typed = reopened;
       if (sync) {
@@ -1097,6 +1317,9 @@ try {
           error: String(error).slice(0, 400),
           screen: screen.slice(0, 600).replace(/\s+/g, ' '),
           before: lastKill,
+          // A store Chrome found corrupt and deleted opens on the first-run screen, so the run
+          // fails here rather than on the text: what Chrome logged says so.
+          ...(target === 'web' ? { leveldb: leveldbDrops() } : {}),
         });
         killNow();
         if (results.failures.length > 5) break;
@@ -1117,7 +1340,7 @@ try {
         `${target}${sync ? ' sync' : ''}: ${run + 1} runs, ${results.failures.length} failures, ` +
           `${results.compaction.killsDuring} kills during compaction` +
           (sync
-            ? `, ${results.killsWhile.push} during a push, ${results.serverChecks} server checks`
+            ? `, ${results.killsWhile.push} during a push, ${results.killsWhile.hubPush} during a live push, ${results.serverChecks} server checks`
             : ''),
       );
     }
