@@ -59,6 +59,7 @@ import {
   waitFor,
 } from '../scripts/cloud-account.mjs';
 import { apiProcess, hasControl, restartApi } from '../scripts/stack-control.mjs';
+import { cpuBetween, cpuLine, stackCpu } from './cpu.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -525,6 +526,7 @@ async function keystrokes(page, members, errors) {
     frameP50: round(percentile(run.keys.frame, 0.5)),
     frameP95: round(percentile(run.keys.frame, 0.95)),
     relayWhileTypingP95: round(relayed.p95Ms),
+    cpu: run.cpu,
   };
 }
 
@@ -553,12 +555,15 @@ async function typeWhileOthersTypeFor(page, others) {
       window.__keys.wait.length = 0;
     });
     const carets = await page.locator('.cgw-page .cgw-presence-caret').count();
+    const before = stackCpu();
     await page.keyboard.type(
       ' the quick brown fox jumps over the lazy dog and keeps on typing while nineteen others type',
       { delay: 35 },
     );
     await sleep(500);
-    return { keys: await page.evaluate(() => window.__keys), carets };
+    // Phase 8: what each part of the stack spent meanwhile (bench/cpu.mjs), recorded only.
+    const cpu = cpuBetween(before, stackCpu());
+    return { keys: await page.evaluate(() => window.__keys), carets, cpu };
   } finally {
     stop.at = 0;
     await typing;
@@ -1028,11 +1033,13 @@ try {
       log(
         `  ${out.web.keys} keys (${out.web.carets} cursors drawn; the others typed ${out.web.othersKeys}, refused ${out.web.othersRefused}): work p50 ${out.web.workP50} ms, p95 ${out.web.workP95} ms (waiting for the thread p95 ${out.web.waitP95} ms), next frame p95 ${out.web.frameP95} ms`,
       );
+      log(`    meanwhile: ${cpuLine(out.web.cpu)}`);
       if (withDesktop) {
         out.desktop = await desktop(setup.owner, WORKSPACE, setup.pageId, members);
         log(
           `  ${out.desktop.keys} keys (${out.desktop.carets} cursors drawn): work p50 ${out.desktop.workP50} ms, p95 ${out.desktop.workP95} ms (waiting for the thread p95 ${out.desktop.waitP95} ms), next frame p95 ${out.desktop.frameP95} ms`,
         );
+        log(`    meanwhile: ${cpuLine(out.desktop.cpu)}`);
       }
     } finally {
       await Promise.all(setup.editors.map((e) => e.stop()));

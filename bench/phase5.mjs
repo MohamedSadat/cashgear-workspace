@@ -51,6 +51,7 @@ import {
   waitFor,
 } from '../scripts/cloud-account.mjs';
 import { XLSX_TYPE, writeXlsx } from '../tests/mocks/sheet/xlsx.mjs';
+import { ALL_PROCESSORS, cpuBetween, cpuLine, pin, stackCpu } from './cpu.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -114,6 +115,9 @@ function stopTree(child) {
     spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
   else child.kill('SIGTERM');
 }
+
+// What the stack spent while the keys were typed (Phase 8), and local pinning to processors.
+const AFFINITY = process.env.PHASE5_AFFINITY ?? null;
 
 async function freePort() {
   const listener = createServer();
@@ -403,20 +407,63 @@ async function tenEmbeds(page) {
   await page.keyboard.press('End');
   if (!(await page.evaluate(() => window.__watchEditor()))) throw new Error('No editor to watch');
   await sleep(500);
+  pin(AFFINITY);
+  const before = stackCpu();
+  const keys = await typeKeys(page, SENTENCE);
+  const cpu = cpuBetween(before, stackCpu());
+  const stillLive = await page.locator('.cgw-sheet[data-state="loaded"]').count();
+  // Phase 8, a control for the figures above: the same keys with the page off the hub (its
+  // ticket route blocked and the connection dropped, as the window's `offline` event does), so
+  // saves go in Phase 5's batches over HTTP; recorded, not budgeted. If the work per key halves
+  // here, what doubled it on CI is the live page: its pushes and the server's work for each.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.setBlockedURLs', { urls: ['*/api/v1/realtime*'] });
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('offline'));
+    window.dispatchEvent(new Event('online'));
+  });
+  await sleep(2000);
+  const offBefore = stackCpu();
+  const offHub = await typeKeys(page, SENTENCE);
+  const offCpu = cpuBetween(offBefore, stackCpu());
+  await cdp.send('Network.setBlockedURLs', { urls: [] });
+  await cdp.detach().catch(() => {});
+  pin(AFFINITY && ALL_PROCESSORS);
+  await sleep(3000);
+  return {
+    embeds: live,
+    liveAfter: stillLive,
+    ...keys,
+    cpu,
+    offHub: { ...offHub, cpu: offCpu },
+    ...(AFFINITY ? { affinity: AFFINITY } : {}),
+  };
+}
+
+/** The keys' control pass off the hub, and what each part of the stack spent in both. */
+function logControl(keys) {
+  log(`    live: ${cpuLine(keys.cpu)}`);
+  const off = keys.offHub;
+  log(
+    `    off the hub: work p50 ${off.workP50} ms, p95 ${off.workP95} ms (wait p95 ${off.waitP95} ms); next frame p95 ${off.frameP95} ms; ${cpuLine(off.cpu)}`,
+  );
+}
+
+/** What the keystroke figures type, a key every 35 ms: 64 keys. */
+const SENTENCE = ' the quick brown fox jumps over the lazy dog and keeps on typing';
+
+/** Types `text` a key every 35 ms; the keys' figures (window.__keys, `probes`). */
+async function typeKeys(page, text) {
   await page.evaluate(() => {
     window.__keys.frame.length = 0;
     window.__keys.work.length = 0;
     window.__keys.wait.length = 0;
   });
-  await page.keyboard.type(' the quick brown fox jumps over the lazy dog and keeps on typing', {
-    delay: 35,
-  });
+  await page.keyboard.type(text, { delay: 35 });
   await sleep(500);
   const keys = await page.evaluate(() => window.__keys);
-  const stillLive = await page.locator('.cgw-sheet[data-state="loaded"]').count();
   return {
-    embeds: live,
-    liveAfter: stillLive,
     keys: keys.frame.length,
     workP50: round(percentile(keys.work, 0.5)),
     workP95: round(percentile(keys.work, 0.95)),
@@ -508,6 +555,7 @@ async function web(account, api) {
     log(
       `  ${keys.embeds} live frames; ${keys.keys} keys: work p50 ${keys.workP50} ms, p95 ${keys.workP95} ms (waiting for the thread p50 ${keys.waitP50} ms, p95 ${keys.waitP95} ms); next frame p50 ${keys.frameP50} ms, p95 ${keys.frameP95} ms`,
     );
+    logControl(keys);
 
     log(`An ERP block's first page, ${RUNS} opens`);
     const erp = await erpFirstPage(page, erpPage, pages.ten);
@@ -668,6 +716,7 @@ async function desktop(account, api) {
     log(
       `  ${keys.embeds} live frames; ${keys.keys} keys: work p50 ${keys.workP50} ms, p95 ${keys.workP95} ms (waiting for the thread p50 ${keys.waitP50} ms, p95 ${keys.waitP95} ms); next frame p50 ${keys.frameP50} ms, p95 ${keys.frameP95} ms`,
     );
+    logControl(keys);
     // Signed out, so the test keychain name holds nothing.
     await page.evaluate(() => (location.hash = '#/settings'));
     await page
