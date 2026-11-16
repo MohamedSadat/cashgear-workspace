@@ -3,14 +3,16 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 7 are done (0.7.0: the local-first editor; accounts, sync, sharing, server
+Status: Phases 0 to 8 are done (0.8.0: the local-first editor; accounts, sync, sharing, server
 search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
 views; Sheet workbooks embedded in pages and read-only ERP blocks; real-time editing, presence,
-comments, mentions and the inbox; then editable ERP blocks for Vendors, chart and kanban plugin
-blocks, and optional AI on the workspace's own Anthropic key). Phases 8 to 10 are planned, chosen
-from "Later" on 2026-11-15: 8 hardening and moving in (reliability, Track U, bulk cell editing,
-import, email notifications), 9 publishing and views (a public site, the timeline, workbook gaps),
-10 editable Customers and Items, AI search by embeddings, third-party plugins. Phase 8 is next.
+comments, mentions and the inbox; editable ERP blocks for Vendors, chart and kanban plugin
+blocks, and optional AI on the workspace's own Anthropic key; then hardening and moving in: the
+journal against Chrome's own IndexedDB loss, the server's work per push more than halved, the
+library's components in place of the stand-ins (Track U), bulk cell editing, import from Notion,
+Markdown and Word, and email for mentions and replies). Phases 9 and 10 are planned, chosen from
+"Later" on 2026-11-15: 9 publishing and views (a public site, the timeline, workbook gaps), 10
+editable Customers and Items, AI search by embeddings, third-party plugins. Phase 9 is next.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.
 

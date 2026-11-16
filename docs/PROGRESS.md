@@ -17,8 +17,9 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 5: Cash Gear ecosystem | Done, 2026-11-14 (0.5.0; proven against the mocks in CI and against the real Sheet and ERP run locally; the deployed check, and pushing Track E, are yours) | `phase-5`, `v0.5.0` |
 | Phase 6: Collaboration | Done, 2026-11-15 (0.6.0; the 300 ms and 150 ms budgets are met on the reference machine, CI's shared runner holds wider ones; one node, Q17) | `phase-6`, `v0.6.0` |
 | Phase 7: Editable ERP blocks, plugins, AI | Done, 2026-11-15 (0.7.0; proven against the mocks in CI and against the real ERP run locally; pushing Track E6 and E7, and the live test against Anthropic, are yours) | `phase-7`, `v0.7.0` |
-| Phases 8 to 10 | Planned, 2026-11-15 ("Later" reviewed with you; `IMPLEMENTATION_PLAN.md`, `DECISIONS.md`) | |
-| Track U: `CashGear.React.UI` components | Not started | |
+| Phase 8: Hardening and moving in | Done, 2026-11-16 (0.8.0; Chrome's own IndexedDB loss answered by a journal; the Chromium report, drafted, is yours to file; one notice keeps its own component) | `phase-8`, `v0.8.0` |
+| Phases 9 and 10 | Planned, 2026-11-15 ("Later" reviewed with you; `IMPLEMENTATION_PLAN.md`, `DECISIONS.md`) | |
+| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `92d9f09` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), committed there and not pushed | |
 
@@ -176,22 +177,22 @@ Stand-ins waiting on Track U
 
 | Component | Stand-in in | Replaced |
 | --- | --- | --- |
-| U1 Command menu | `packages/editor/src/ui/SlashMenu.tsx` (slash and mention menus), `packages/shell/src/search/Palette.tsx` | |
-| U2 Selection toolbar | `packages/editor/src/ui/BubbleToolbar.tsx`, `TouchToolbar.tsx` | |
-| U3 Drag handle, drop indicator | `packages/editor/src/handle.ts`, `ui/BlockMenu.tsx` | |
-| U4 `CgTreeView` with drag, rename, virtualisation | `packages/shell/src/sidebar/PageTree.tsx` | |
-| U5 Breadcrumb | `packages/shell/src/page/PageHeader.tsx` (`Breadcrumbs`) | |
-| U6 Emoji picker and page icons | `packages/shell/src/page/PageHeader.tsx` (`EmojiPicker`) | |
-| U8 Block-type icons | glyphs in `packages/editor/src/actions.ts` | |
+| U1 Command menu | `packages/editor/src/ui/SlashMenu.tsx` (slash and mention menus), `packages/shell/src/search/Palette.tsx` | Phase 8: `CgCommandMenu` (`ea05ab7`, `57494d6`) |
+| U2 Selection toolbar | `packages/editor/src/ui/BubbleToolbar.tsx`, `TouchToolbar.tsx` | Phase 8: `CgSelectionToolbar`, floating and docked (`ea05ab7`) |
+| U3 Drag handle, drop indicator | `packages/editor/src/handle.ts`, `ui/BlockMenu.tsx` | Phase 8: `CgDragHandle`, `CgDropIndicator`, `cgTrackDrag` (`ea05ab7`); `BlockMenu.tsx` stays (none of U3's pieces is a menu) |
+| U4 `CgTreeView` with drag, rename, virtualisation | `packages/shell/src/sidebar/PageTree.tsx` | Phase 8: `CgTreeView` (`2ae0b1c`; its five gaps fixed in the library at `ab467b7` and their workarounds removed, `87d0e92`) |
+| U5 Breadcrumb | `packages/shell/src/page/PageHeader.tsx` (`Breadcrumbs`) | Phase 8: `CgBreadcrumb` (`57494d6`) |
+| U6 Emoji picker and page icons | `packages/shell/src/page/PageHeader.tsx` (`EmojiPicker`) | Phase 8: `CgEmojiPicker` with `cgPageIcons` (`57494d6`) |
+| U8 Block-type icons | glyphs in `packages/editor/src/actions.ts` | Phase 8: `CgIcon`'s block icons (`ea05ab7`) |
 
 Defects in `@cashgear/ui` worked around here, for Track U
 
 | Defect | Worked around in |
 | --- | --- |
-| `CgSplitter`'s pane scrolls as a whole, and its content box has no height to fill | `.cgw-pane` in `packages/shell/src/shell.css` |
-| `CgSplitter` names its separator with an English template ("Resize A and B") | `Frame.tsx` sets the name from the catalogue |
-| The primary button's white text on the dark theme's accent is 2.5:1 | `shell.css`: dark text there, as the library's own dialog actions use |
-| `CgDrawer` refuses a CSS `min()` size | `openSize="20rem"` |
+| `CgSplitter`'s pane scrolls as a whole, and its content box has no height to fill | `.cgw-pane` in `packages/shell/src/shell.css`. Phase 8: fixed in the library (`0ab6883`), the workaround removed (`57494d6`) |
+| `CgSplitter` names its separator with an English template ("Resize A and B") | `Frame.tsx` sets the name from the catalogue. Phase 8: `separatorAriaLabel` (`0ab6883`, `57494d6`) |
+| The primary button's white text on the dark theme's accent is 2.5:1 | `shell.css`: dark text there, as the library's own dialog actions use. Phase 8: fixed in the library (`0ab6883`), removed (`57494d6`) |
+| `CgDrawer` refuses a CSS `min()` size | `openSize="20rem"`. Phase 8: fixed (`0ab6883`); `min(20rem, 85vw)` (`57494d6`) |
 
 ## Phase 2: Cloud document platform
 
@@ -301,7 +302,7 @@ Stand-ins waiting on Track U
 
 | Component | Stand-in in | Replaced |
 | --- | --- | --- |
-| U7 Avatar and avatar stack | `packages/shell/src/cloud/CloudUi.tsx` (the account button shows the name; members are a list without pictures) | |
+| U7 Avatar and avatar stack | `packages/shell/src/cloud/CloudUi.tsx` (the account button shows the name; members are a list without pictures) | Phase 8: `CgAvatar` beside the account button and on members (`57494d6`; beside the button, not in it, `2ae0b1c`) |
 
 ## Phase 3: Offline
 
@@ -475,26 +476,26 @@ Stand-ins waiting on Track U
 
 | Component | Stand-in in | Replaced |
 | --- | --- | --- |
-| A tag box with creatable options and per-option actions (rename, recolour, regroup, reorder, delete), grouped and single choice | `packages/database/src/pickers/OptionPicker.tsx` | |
-| A tag box with caller-drawn chips and caller-supplied results | `packages/database/src/pickers/ListPicker.tsx` | |
-| A menu surface holding inputs and switches, with panels | `packages/database/src/properties/MenuList.tsx` | |
-| A sortable list (handle, arrows) | `packages/database/src/pickers/reorder.ts` | |
-| A text and number editor that keeps no React draft | plain inputs in `packages/database/src/cells/` | |
-| A pointer drag-and-drop helper with a drag copy and edge scrolling | `packages/database/src/views/board/drag.ts` | |
-| A live-region announcer | `Live` in `packages/database/src/views/board/shared.tsx` | |
-| A kanban board | `packages/database/src/views/board/` | |
-| A month calendar that takes zero-length items and inclusive ends, without its own editor (`CgScheduler` assessed) | `packages/database/src/views/calendar/` | |
-| A file picker that only gives the file | the import dialog's `<input type="file">` (`packages/database/src/csv/`) | |
+| A tag box with creatable options and per-option actions (rename, recolour, regroup, reorder, delete), grouped and single choice | `packages/database/src/pickers/OptionPicker.tsx` | Phase 8: `CgOptionPicker` with `normalize={normaliseText}` (library `ab467b7`; `5fde569`), so its search folds Arabic as the rest of the app does |
+| A tag box with caller-drawn chips and caller-supplied results | `packages/database/src/pickers/ListPicker.tsx` | Phase 8: `CgItemPicker` (`ac8a05d`) |
+| A menu surface holding inputs and switches, with panels | `packages/database/src/properties/MenuList.tsx` | Phase 8: `CgMenuPanel` (`ac8a05d`) |
+| A sortable list (handle, arrows) | `packages/database/src/pickers/reorder.ts` | Phase 8: `CgSortableList` (`ac8a05d`) |
+| A text and number editor that keeps no React draft | plain inputs in `packages/database/src/cells/` | Phase 8: `CgInlineTextEditor`, `CgInlineNumberEditor` (`ac8a05d`) |
+| A pointer drag-and-drop helper with a drag copy and edge scrolling | `packages/database/src/views/board/drag.ts` | Phase 8: `cgTrackDrag`, `CgDropIndicator` (`ac8a05d`) |
+| A live-region announcer | `Live` in `packages/database/src/views/board/shared.tsx` | Phase 8: `CgLiveAnnouncer` (`ac8a05d`) |
+| A kanban board | `packages/database/src/views/board/` | Phase 8: `CgKanbanBoard` with its column moves, footers, paging, draft card and column titles (library `f66cb07`; `5fde569`), the plugins' kanban too |
+| A month calendar that takes zero-length items and inclusive ends, without its own editor (`CgScheduler` assessed) | `packages/database/src/views/calendar/` | Phase 8: `CgMonthCalendar` with its handle, selected day and `startCreate` (library `ab467b7`; `5fde569`); the week cell's `weekItems` a description from `92d9f09` (`c3b00f0`) |
+| A file picker that only gives the file | the import dialog's `<input type="file">` (`packages/database/src/csv/`) | Phase 8: `CgFilePicker` (`ac8a05d`) |
 
 Defects in `@cashgear/ui` worked around here, for Track U
 
 | Defect | Worked around in |
 | --- | --- |
-| `CgTabs` with `reorderable` captures the pointer on the tab's wrapper, so a mouse click never selects a tab | `packages/database/src/DatabaseView.tsx` takes the wrapper's click |
-| `CgFlyout` drops an explicit `width` (its positioned overlay spreads `width: undefined` over it) | `packages/database/src/cells/CellFlyout.tsx` passes it in `style` |
-| `CgFlyout` mounted `open` is not reliably focused through `onAfterOpen` | `CellFlyout.tsx` focuses its first control a frame after mount |
-| `CgFlyout` with an element anchor watches the whole document while mounted, even closed | flyouts mounted only while open |
-| `CgButton appearance="soft"` with the neutral intent draws a nearly invisible label | `outline` or `ghost` instead |
+| `CgTabs` with `reorderable` captures the pointer on the tab's wrapper, so a mouse click never selects a tab | `packages/database/src/DatabaseView.tsx` takes the wrapper's click. Phase 8: fixed (`0ab6883`), removed (`ac8a05d`) |
+| `CgFlyout` drops an explicit `width` (its positioned overlay spreads `width: undefined` over it) | `packages/database/src/cells/CellFlyout.tsx` passes it in `style`. Phase 8: fixed (`0ab6883`), removed (`ac8a05d`) |
+| `CgFlyout` mounted `open` is not reliably focused through `onAfterOpen` | `CellFlyout.tsx` focuses its first control a frame after mount. Phase 8: `autoFocus` (`0ab6883`, `ac8a05d`) |
+| `CgFlyout` with an element anchor watches the whole document while mounted, even closed | flyouts mounted only while open. Phase 8: fixed (`0ab6883`); mounting only while open stays, harmless |
+| `CgButton appearance="soft"` with the neutral intent draws a nearly invisible label | `outline` or `ghost` instead. Phase 8: fixed (`0ab6883`) |
 
 ## Phase 5: Cash Gear ecosystem
 
@@ -589,8 +590,8 @@ Stand-ins and defects for Track U
 
 | Item | Where |
 | --- | --- |
-| `CgContextMenu` in the dark theme draws dark text on the dark surface (the colour variables it reads are never set by the app); the database views' menus too | the workbook block's own menu is fixed in `packages/shell/src/sheet`; the rest stand |
-| The share dialog's "restricted" check box uses `cgw-check`, the editor's to-do class, so its label may sit wrong where the editor's CSS is loaded | the workbook access dialog uses a class of its own |
+| `CgContextMenu` in the dark theme draws dark text on the dark surface (the colour variables it reads are never set by the app); the database views' menus too | the workbook block's own menu is fixed in `packages/shell/src/sheet`; the rest stand. Phase 8: fixed in the library (`0ab6883`), the sheet's token block removed (`57494d6`) |
+| The share dialog's "restricted" check box uses `cgw-check`, the editor's to-do class, so its label may sit wrong where the editor's CSS is loaded | the workbook access dialog uses a class of its own. Phase 8: `CgCheckBox` (`57494d6`) |
 
 ## Phase 6: Collaboration
 
@@ -793,8 +794,8 @@ Stand-ins for Track U
 
 | Item | Where |
 | --- | --- |
-| U7 avatar and avatar stack: initials on the person's presence colour, the name as its accessible name, three sizes, "+N" | `packages/shell/src/collab/Avatars.tsx` (`.cgw-face`) |
-| An editable area with a suggestion list (the comment composer's "@") | `packages/shell/src/collab/Composer.tsx` |
+| U7 avatar and avatar stack: initials on the person's presence colour, the name as its accessible name, three sizes, "+N" | `packages/shell/src/collab/Avatars.tsx` (`.cgw-face`). Phase 8: `CgAvatar`, `CgAvatarStack` (`57494d6`) |
+| An editable area with a suggestion list (the comment composer's "@") | `packages/shell/src/collab/Composer.tsx`. Phase 8: `CgMentionArea` (`57494d6`); the composer reads the area's own text until `getValue()` counts empty lines once (asked of Track U) |
 
 ## Phase 7: Editable ERP blocks, plugins, AI
 
@@ -959,19 +960,178 @@ Stand-ins and defects for Track U
 
 | Item | Where |
 | --- | --- |
-| `CgChart`'s "Chart data" toggle (a `summary`) is 20 px high, under WCAG 2.2's 24 px target | `packages/plugins/src/plugins.css` raises it inside a plugin block |
-| `CgButton appearance="soft" intent="primary"` reads 3.95:1 in the light theme (#1769ff on #e3edff) | the ERP block's pressed buttons use `outline` instead |
+| `CgChart`'s "Chart data" toggle (a `summary`) is 20 px high, under WCAG 2.2's 24 px target | `packages/plugins/src/plugins.css` raises it inside a plugin block. Phase 8: fixed (`0ab6883`), removed (`ac8a05d`) |
+| `CgButton appearance="soft" intent="primary"` reads 3.95:1 in the light theme (#1769ff on #e3edff) | the ERP block's pressed buttons use `outline` instead. Phase 8: fixed (`0ab6883`); `soft` again (`ac8a05d`) |
+
+## Phase 8: Hardening and moving in
+
+Done 2026-11-16. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43946747259 (commit `fc286e3`, all jobs green: 248 browser e2e cases passed and 6 skipped, the desktop app's 58 passed, every kill test 25 of 25, every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/43946747596 (green). Local
+results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge,
+WebView2, SQL Server LocalDB, Azurite) and the e2e server stack. Answers and defaults are in
+`DECISIONS.md` (2026-11-16: Phase 8, with your answer on Chrome's own loss); the design as built in
+`SYNC_DESIGN.md` (Local durability, What the server checks), `ARCHITECTURE.md`, `DATA_MODEL.md` and
+`INTEGRATIONS.md`; what changed for users in `CHANGELOG.md` (0.8.0).
+
+Milestones
+
+- [x] M8.1 Reliability. Commits `c3f7e60` (strict durability and the journal of unsent updates),
+      `0d3299e` (one document load a validation pass, a push in fewer round trips), `c655937` (the
+      hub's batch fails closed), `437756e` and `046e824` (what an access refusal undid; "Syncing"
+      from sign-in), `f20bee8` (each part's CPU in Phase 5's and 6's benches)
+- [x] M8.2 The library's components. Track U in a session of its own in `CashGear.React.UI`
+      (below); pins `97832ef` (`bffe090`), `96a7cbc` (`cc62c8b`), `054a7a7` (`5e70441`), `c3b00f0` (`92d9f09`);
+      swaps `ea05ab7`, `ac8a05d`, `57494d6`, `2ae0b1c`, `4953665`, `87d0e92`, `5fde569`, `c3b00f0`
+- [x] M8.3 Bulk cell editing. Commits `7d8b94a` (selection, copy, paste with Undo, clear; board
+      columns and gallery cards in an order of their own), `a143a4f` (its spec)
+- [x] M8.4 Import. Commits `1ce1a14` (Markdown, Notion and Word on the device), `ca098c5` (the
+      review's guards, the import's pages shown), `edd94c9` (attachments on another device),
+      `9719d96` (its spec)
+- [x] M8.5 Email notifications. Commits `4b9c252` (settings, unsubscribe, the queue, the worker's
+      jobs), `046e824` (the account's mail choice), `c655937` (filtered again when sent; no header
+      from a name or title), `cdb101c` (its spec)
+
+Notes
+
+- The work ran as four streams in one checkout to a written contract (reliability on the client,
+  the server and mail, bulk cell editing, import), then a proof run by the parent, after your
+  answers (decisions, 2026-11-16). Track U was started in its own session in `CashGear.React.UI`.
+- **The web loss after "Saved"** (CI run 43746282731) is Chrome's. Chrome 157's IndexedDB on
+  Windows is LevelDB with `reuse_logs` and paranoid checks, and writes each log record's header and
+  payload as two writes (`env_chromium.cc`, `log_writer.cc`, read 2026-11-16). A kill between the
+  two leaves a torn record, the next session appends after it, and at a later start that session's
+  writes are read as the torn record's unfinished payload (gone, silently) or the checksum fails and
+  Chrome deletes the origin's whole IndexedDB. CI's run lost everything run 7 typed, nothing set
+  aside or refused, exactly the first case; "Saved" had waited for `oncomplete` about 70 ms before
+  the kill. `scripts/idb-torn-log.mjs` makes it happen on purpose in real Chrome: a long torn
+  record lost the next session's writes in 20 of 20 trials, a short one deleted the store in 40 of
+  40, relaxed and strict alike. Not reproduced by killing on the reference machine (1,500 web sync
+  kills, 420 kills of a counter page): the kill must land between two writes, which a crowded
+  four-core runner makes far likelier.
+- Your answer (strict durability within the 1 s budget) is built for what the device made, and on
+  your second answer the journal of unsent document updates in the Origin Private File System
+  (`SYNC_DESIGN.md`, Local durability). `idb-torn-log.mjs --app` (10 trials a case): with the
+  journal, every save of the session after a torn record came back, in the silent case (53 updates
+  written back at open) and when Chrome deleted the store (written back once the page came back
+  from the server); without it, none did. Recovery took 6.6 to 81.5 ms of the store's open.
+- A Chromium bug report is drafted for you to file (`reuse_logs` with unbuffered two-write log
+  records and paranoid checks; the two-minute repro) in the stream's notes; nothing was sent.
+- **The server's work per push.** cgw-ydoc gained a state loaded once; the worker's pass reads each
+  checked state's meta, tree and state hash from one load (one update: 1 load, 0.7.0's 3;
+  `ValidationLoadTests`) and keeps the passed state's vector; the API's push, the hub's gate and
+  the relay's reads went to raw SQL in fewer round trips (statements a push: API 16.5 to about 4,
+  worker 14.7 to about 5.7). Every refusal, text and sequence is 0.7.0's (`RealtimeTests`: 14
+  callers answered alike over HTTP and the hub). Phase 6's figure of 55 and 45 ms a push was taken
+  on a freshly started stack and largely measured the JIT (a few hundred calls read twice the CPU
+  of the same code with tiering off).
+- **CI's work per key** (Phase 5 to Phase 6): recorded, not changed (`DECISIONS.md`). With the
+  hub off on four processors the live page costs about 0.6 to 0.8 ms a key at the median and about
+  1.5 ms at p95, and Chrome's processes twice the CPU; the save status and the relay's frames back
+  to the typist are ruled out. What is left is the save every 30 to 60 ms and its push on CI's four
+  shared cores, with the server's work per push beside it, now well under half. The benches now
+  record each part's CPU (`bench/cpu.mjs`), and Phase 5's keys are also typed off the hub, so CI's
+  next runs show the split.
+- A read-only security review of the hub's one-batch gate, notification mail and the import found
+  the gate and mail sound, with four things fixed: the gate's batch decided "may edit" on a NULL (a
+  private section with no owner: nothing makes one, but it failed open; now closed, with a test);
+  a queued mail was not filtered again by "made after mail came back on"; the import's listing
+  trusted a zip64 entry count (a 98-byte file exhausted the worker's memory), and three bounds on
+  work (an undeclared deflate stream, nested parts held after their budget came back, parse
+  amplification). Each has a test that fails without its fix.
+- The proof found two older product bugs: a file attached on one device read "This file is not on
+  this device" on every other device and could not be opened there, since 0.2.0 (the record is
+  fetched now, the bytes on Open); and the sync status said "Signed out" for about 210 ms at one
+  desktop start in five, since the account check and the first pass were apart. Also a flake of
+  the server suite (`AuthorizationTests`' cover asset could stay pending when another test deleted
+  an asset in the same job run) and a deadlock a derive could lose (now redone).
+- Every e2e spec written by the streams failed first in a browser (9 cases), each for a reason in
+  the spec: a page collapsed under its parent in the sidebar, a v4 id where the server takes v7,
+  an empty database expected to have rows, Playwright's polling timed with the paste. All pass now.
+- Flaky, not Phase 8's: `cloud.spec.ts` "a version kept in the account is viewed and restored"
+  once held the text typed after the version was named (the worker's snapshot after the next push);
+  passed 3 of 3 alone.
+- A vitest run from 2026-11-11 had a worker using one processor for five days; ending it was
+  refused in this session, so it was running through the measurements below (PIDs 952 and 23064):
+  yours to end.
+- Left for later: comments offline, groups in permissions, passkeys and single sign-on (the
+  "Later" list); people columns of a Notion export (names, not members) and relations to pages
+  outside an export stay text; attachments fetched as records, their bytes on Open, so a page read
+  offline on a second device has its files only once opened online.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| The web and desktop kill tests during sync run 1,000 times each and lose nothing reported saved; or the browser's own loss is measured and your decision recorded | Pass | `node scripts/kill-test.mjs --target web --sync --runs 1000` with strict durability: 0 failures, 2,151 saved-text checks, 494 kills while saving, 31 during a compaction, 205 offline, 40 server checks equal, 31,698 characters on the device and the server. The same with the journal: 0 failures, the journal on at all 1,000 starts, 531 kills while saving, 104 during a live push, 30 during a compaction, 40 server checks equal, 31,224 characters both sides. `--target desktop --sync --runs 1,000`: 0 lost, 2,299 checks, 494 kills while saving, 40 server checks equal, 30,972 characters both sides (3 runs whose WebView2 did not answer in 45 s started on their retry). Chrome's own loss measured and explained above; your decision (the journal) recorded and built. Unit: `durability.test.ts` (fails without strict), `journal.test.ts` (86, the `LocalStore` conformance suite with the journal on) |
+| The server's CPU per push (the API's and the worker's) at most half of 0.7.0's on the reference machine | Pass | `node bench/phase8-server.mjs --runs 6 --cycles 4` over real processes, 0.7.0 built from its tag and this build's Release, alternately: API 9.10 to 3.78 ms a push (ratio 0.42; pairs 0.29 to 0.69, median 0.40), worker 21.34 to 8.50 ms (0.40; pairs 0.34 to 0.45); typing windows alone 0.40 and 0.43; push to the other member's frame p95 93 to 66.5 ms. In process (`Phase8Bench`, 900 keys after 450 warm-up): API 10.52 to 5.14, worker 19.45 to 7.51 |
+| No stand-in that Track U replaced is left; every spec and budget of Phases 1 to 7 passes after the swaps | Pass, one stand-in kept on purpose | Every stand-in and workaround listed for Track U in Phases 1 to 8 names what replaced it and the commit (the tables in each phase); one is kept: the frame's notice and the table's `CellNotice`, since the library's toast stacks where the frame replaces one notice with the next as an alert (below). The library pinned at `92d9f09` (`c3b00f0`), on CI run 43946747259: every e2e spec in Chrome, Edge and the desktop app (Axe with `label-content-name-mismatch` among them), the macOS acceptance run, and every budget of Phases 1 to 7, e.g. Phase 1's frame at 5,000 blocks 27.2 ms (50), Phase 4's cell edit 8.3 ms (16), its board drag 16.8 ms (17.5), Phase 6's key while 19 type 3.8 ms (16) |
+| 1,000 cells copied from Excel and from Sheet paste into the table, each converted as the conversion table says, reach a second device and can be taken back; a rectangle copied from the table pastes into Excel as shown | Pass | `cells.spec.ts` (Chrome, Edge, the desktop app) "1,000 cells pasted from Excel and from Sheet: converted, on the server and a second device, taken back by Undo": 100 lines of 10 cells in Excel's and in Sheet's shape (the device's locale: thousands, currencies, percents, dates, members by email), each value as the paste-only reading and the conversion table say, refused ones counted; on the server and the second device; Undo brings back every title and value there and on the server. "a rectangle copied from the table": the copy event's and Ctrl+C's system clipboard read back as tab-separated text and an HTML table, values as shown, which is what Excel reads (not driven in Excel itself). Unit: `read.test.ts` (88: Excel en-US, en-GB, de-DE and ar-SA, Sheet), `paste.test.ts`, `tsv.test.ts`, `selection.test.ts`, `cells.test.ts`, `reorder.test.ts` |
+| A Notion export, a Markdown folder and a `.docx` file each import with their structure, links, databases with typed properties, row pages and images, into a local and a synced workspace, and say what they skipped | Pass | `import.spec.ts` (Chrome, Edge, 8 of 8; the desktop app 7 and the browser-only Axe case skipped): a Notion export into a local workspace (tree, child pages, inline database, callout, images loaded, mentions, typed columns, a row page's body, the report); two related Notion databases (relations both ways, a files column, people as names, reported); a Markdown folder chosen as a folder (tree after its folders, links, an image, a file); a Word document (headings, a table, lists, a right-to-left paragraph, a link, an image); a Notion export into a synced workspace reaching a second device, its pictures and its attachment opening there; a Markdown zip and a Word file into a synced workspace; a hostile archive contained and 2,001 pages refused; Arabic and dark with Axe. Unit: `import.test.ts`, `panel.test.ts`, `docx.test.ts`, `markdown-import.test.ts`, and the hostile files each made in a test |
+| A person mentioned while away gets one mail, in their language, that opens the block; none for a page they can no longer read, none once read in the app; one click turns mail off; with mail off, nothing is sent | Pass | `mail.spec.ts` (Chrome, Edge, 4 of 4): an Arabic mail, right to left, from the e2e stack's pickup folder, whose link opens the block; none for a page taken away before the delay, none once read; One-Click (a POST to the `List-Unsubscribe` address) turns mail off and nothing more is sent; a forged token answers the same; the settings in English and Arabic, kept across a reload, with Axe. Server: `MailNotificationTests` (access checked when sending, read means no mail, the token valid, forged, another account's and replayed, Arabic, the daily cap, off, the digest once a day, filtered again when sent, no header from a name or title) |
+
+Also: `notices.test.ts` and `refused.test.ts` (what an access refusal undid), `engine.test.ts`
+("Syncing" from sign-in), `attachments.test.ts`, `DeriveRetryTests`, `ValidationLoadTests`,
+`RealtimeTests` (the batch fails closed on NULL). Unit: 3,039 tests in `pnpm test`, 277 server
+tests; every standing check passes.
+
+Benchmarks (`bench/phase8.mjs` in CI, gated against the budgets and the last run on main; the
+server's CPU above)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A paste of 1,000 cells shown | 500 ms | 228.5 ms worst of 5 after the first (p50 208.3; the first 233) | 200.2 ms worst of 5 (p50 180.3; the warm-up 222.9) |
+| A paste of 1,000 cells on the server | 5 s | 3,823 ms worst of 5 after the first (p50 3,190; the first 4,495) | 3,021 ms worst of 5 (p50 2,453) |
+| A 1,000-page Notion export imported on the device, the uploads apart | 60 s | 3,335 ms worst of 3 (p50 3,278; reading 508, writing 2,885), all 1,000 pages made | 3,430 ms worst of 11 (p50 3,300; reading 630, writing 2,640 p50), the eleventh into a workspace of 10,000 pages; before `dac7792` 18.2, 31.4 and 45.6 s into a growing workspace |
+| The server's CPU per push, the API's and the worker's | half of 0.7.0's | reference machine only | 0.42 and 0.40 |
+| The relay at 20 editors, p95 | 150 ms (CI 500 ms) | 142.2 ms (2,929 keys, 0 refused, 0 never received, converged; 0.7.0's run 122.5) | 71.3 ms (`bench/phase6.mjs --no-load` on the final server: 2,940 keys, 0 refused, 0 never received, converged; Phase 6's 75.6 and 80.8 ms); a key's work while 19 type p95 4.3 ms, its next frame 19 ms |
+| The durability budget: a pause to "Saved", web sync, p95 | 1 s | | 200 ms with the journal (strict alone 192 ms, 0.7.0 175 ms); Phase 4's cell edit durable p95 25 ms |
+
+The paste's figures in `cells.spec.ts` on the reference machine: shown 194 to 366 ms (Chrome, Edge,
+the desktop app), on the server 1.5 to 1.9 s. The evidence run gated by the budgets only: the last
+green run on `main` (0.7.0's) ran on another processor (AMD EPYC 7763, this one 9V74), and no
+earlier run holds Phase 8's figures, so the regression half of the gate starts with the next one.
+
+Phase 6's relay while 19 type in a browser (no budget) read 878 ms on one run during the phase
+(`ca098c5`, against 0.7.0's 273 ms); on the evidence run it is 393.7 ms in Chrome and 470.1 ms in
+the desktop app (0.7.0's run: 273.1 and 522.3), with the machine 88 to 90 % busy. The relay
+between Node clients, its budget, is 142.2 ms (0.7.0's 122.5). Recorded, not chased: the figures
+move with the runner, and the desktop's is below 0.7.0's.
+
+Stand-ins for Track U (Phase 8)
+
+| Item | Where |
+| --- | --- |
+| A select and a progress bar | the import panel's native `<select>` and `<progress>`. Phase 8: `CgSelect` (`87d0e92`) and `CgProgressBar` (`57494d6`) |
+| A folder picker | the import panel's own folder input. Phase 8: `CgFilePicker directory` (library `ab467b7`; `87d0e92`) |
+| A notice with an action that goes by itself, but not while hovered or focused | `packages/database/src/table/CellNotice.tsx` and the shell's `Notice.tsx`, kept: the library's toast (`CgToastProvider`, with a link action from `2baed10`) stacks where the frame's notice replaces one with the next as an alert, and the shell mounts no toast provider for the table's to use |
+| U3's handle and drop indicator, for whole rows and board columns | the row handle (`.cgw-db-row-select`) and the column grip (`.cgw-db-column-grip`). Phase 8: `CgDragHandle`, `CgDropIndicator`, `cgTrackDrag` (`ac8a05d`) |
+| U13's announcer | `Live` (`views/board/shared.tsx`) reused by the table and the gallery. Phase 8: `CgLiveAnnouncer` (`ac8a05d`) |
+| Library defects found by the swaps | `CgCommandMenu`'s active option's detail at 4.36:1 (an override in `workspace.css`); `CgMentionArea.getValue()`'s empty lines (the composer reads its own area); five gaps in `CgToolbarItem`, `CgCommandMenu`, the docked toolbar and two icons (the editor's own CSS and key filter); the tree's five above. All fixed in the library (`ab467b7`) and their workarounds removed (`4953665`, `87d0e92`) |
 
 ## Track U: `CashGear.React.UI`
 
-- [ ] U1 Command menu
-- [ ] U2 Selection toolbar
-- [ ] U3 Drag handle, drop indicator, drag-and-drop helper
-- [ ] U4 `CgTreeView`: drag-and-drop, inline rename, virtualisation, lazy children
-- [ ] U5 Breadcrumb
-- [ ] U6 Emoji picker and page icons
-- [ ] U7 Avatar and avatar stack
-- [ ] U8 Block-type icons
+- [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
+- [x] U2 Selection toolbar (`CgSelectionToolbar`, `e20f701`)
+- [x] U3 Drag handle, drop indicator, drag-and-drop helper (`CgDragHandle`, `CgDropIndicator`, `cgTrackDrag`, `e20f701`)
+- [x] U4 `CgTreeView`: drag-and-drop, inline rename, virtualisation, lazy children (`cc62c8b`; five gaps asked)
+- [x] U5 Breadcrumb (`CgBreadcrumb`, `699b136`)
+- [x] U6 Emoji picker and page icons (`CgEmojiPicker`, `cgPageIcons`, `e20f701`)
+- [x] U7 Avatar and avatar stack (`CgAvatar`, `CgAvatarStack`, `699b136`)
+- [x] U8 Block-type icons (`CgIcon`, `699b136`)
+- [x] U9 Tag boxes (`CgOptionPicker`, `CgItemPicker`, `e20f701`; the option picker's search hook asked)
+- [x] U10 A menu surface that holds inputs, switches and panels (`CgMenuPanel`, `e20f701`)
+- [x] U11 A sortable list (`CgSortableList`, `e20f701`)
+- [x] U12 Text and number editors that keep no React draft (`CgInlineTextEditor`, `CgInlineNumberEditor`, `699b136`)
+- [x] U13 A live-region announcer (`CgLiveAnnouncer`, `699b136`)
+- [x] U14 A kanban board (`CgKanbanBoard`, `25c861b`; not yet enough for Workspace's board: asked)
+- [x] U15 A month calendar (`CgMonthCalendar`, `25c861b`; not yet enough for Workspace's calendar: asked)
+- [x] U16 A file picker that only gives the file (`CgFilePicker`, `699b136`; a folder mode asked)
+- [x] U17 An editable area with a suggestion list (`CgMentionArea`, `e20f701`)
+- [x] The library's defects listed in the phases above (`CgSplitter`, `CgDrawer`, `CgTabs`, `CgFlyout`, `CgButton`, `CgContextMenu`, `CgChart`: `0ab6883`)
+- [x] The follow-ups the swaps found (asked and built 2026-11-16, `ab467b7`, `f66cb07`, `2baed10`): `CgOptionPicker`'s `normalize`, `CgKanbanBoard`'s column moves, footer, paging, draft and titles, `CgMonthCalendar`'s handle and selected day, `CgTreeView`'s five, `CgFilePicker`'s folder mode, `CgSelect`, the toast's link action, and the two defects and five small gaps above
+- [x] `CgMonthCalendar`'s week cell described, not named, by `weekItems`, and the tree's row buttons out of the accessibility tree until hovered or focused (`92d9f09`, `98e4ff0`; Workspace `c3b00f0`)
+
+Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
+`claude/cashgear-react-ui-library-xq8tsz` (decisions, 2026-11-16).
 
 ## Track S: Cash Gear Sheet
 
