@@ -449,7 +449,7 @@ h3.cgw-body {
   white-space: nowrap;
 }
 
-/* A tool whose panel is open is drawn pressed (the editor marks it: ui/BubbleToolbar.tsx). */
+/* A tool whose panel is open (`aria-expanded`, CgToolbarItem's `expanded`) is drawn pressed. */
 .cgw-bubble-button:hover,
 .cgw-bubble-button[aria-pressed='true'],
 .cgw-bubble button[aria-expanded='true'] {
@@ -932,26 +932,10 @@ h3.cgw-body {
 }
 
 /* The touch toolbar (TouchToolbar.tsx): the library's docked selection toolbar, above the
-   on-screen keyboard, full width. Its tools are 44 pixels square, so the eight fit a 390-pixel
-   phone, and it scrolls rather than cuts off the last ones on a narrower one. */
-.cgw-touchbar [role='toolbar'] {
-  padding: 2px max(4px, env(safe-area-inset-left));
-  border: 0;
-  overflow-x: auto;
-}
-
-.cgw-touchbar button.cgw-touchbar-button {
-  min-inline-size: 44px;
-  min-block-size: 44px;
-  padding-inline: 0;
+   on-screen keyboard, full width; it keeps its tools 44 pixels square and scrolls along the line
+   on a narrow phone. A tap on a tool acts at once (no double-tap zoom). */
+.cgw-touchbar .cgw-touchbar-button {
   touch-action: manipulation;
-}
-
-/* An icon-only CgToolbar tool keeps an empty label beside its icon, and the button's gap with
-   it: none here. */
-.cgw-touchbar [role='toolbar'] button,
-.cgw-bubble [role='toolbar'] button {
-  gap: 0;
 }
 
 /* A bookmark with a preview from the server (Q13). */

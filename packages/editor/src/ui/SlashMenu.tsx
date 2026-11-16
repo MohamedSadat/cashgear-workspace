@@ -2,7 +2,12 @@
 // keyboard or pointer. `@cashgear/ui`'s CgCommandMenu (Track U1), floating at the caret while the
 // editor keeps the focus: the editor forwards the menu's keys to it (`editor.ui.slashKeys`) and
 // points its `aria-activedescendant` at the active option.
-import { CgCommandMenu, type CgCommandMenuHandle, type CgCommandMenuItem } from '@cashgear/ui';
+import {
+  CgCommandMenu,
+  type CgCommandMenuHandle,
+  type CgCommandMenuItem,
+  type CgCommandMenuKey,
+} from '@cashgear/ui';
 import type { EditorView } from '@tiptap/pm/view';
 import {
   useCallback,
@@ -17,7 +22,7 @@ import type { EditorHost, SlashItem } from '../host';
 import { closeSlash, removeSlashText, slashState, type SlashKeys } from '../slash';
 
 /** The keys a menu at the caret takes from the editor; Home, End and the rest stay the text's. */
-const MENU_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Enter', 'Tab']);
+const MENU_KEYS: readonly CgCommandMenuKey[] = ['ArrowUp', 'ArrowDown', 'Enter', 'Tab', 'Escape'];
 
 export interface CaretMenuProps {
   editor: BlockEditor;
@@ -85,8 +90,7 @@ export function CaretMenu({
 
   useEffect(() => {
     setKeys({
-      onKey: (event) =>
-        MENU_KEYS.has(event.key) ? (menu.current?.handleKeyDown(event) ?? false) : false,
+      onKey: (event) => menu.current?.handleKeyDown(event) ?? false,
     });
     return () => setKeys(null);
   }, [setKeys]);
@@ -111,6 +115,7 @@ export function CaretMenu({
       label={label}
       emptyText={emptyText}
       selectOnTab
+      handledKeys={MENU_KEYS}
       width={300}
       maxHeight="min(360px, 60vh)"
       onActiveDescendantChange={onActive}

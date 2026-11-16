@@ -11,6 +11,7 @@ import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import {
   useCallback,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -29,8 +30,6 @@ import { slashState } from '../slash';
 
 type Panel = null | 'link' | 'colour' | 'turnInto';
 
-/** The tools that open the toolbar's panel, each named by its panel. */
-const OPENS_PANEL = ['turnInto', 'link', 'colour'] as const;
 const MARKS = ['bold', 'italic', 'underline', 'strike', 'code', 'link'] as const;
 
 interface Snapshot {
@@ -198,17 +197,12 @@ export function BubbleToolbar({
   const [href, setHref] = useState('');
   const [invalid, setInvalid] = useState(false);
   const s = host.strings;
+  // The panel's id, for the tool that opens it (`aria-controls`, while it is open).
+  const panelId = useId();
 
   useLayoutEffect(() => {
     if (!snap.show) setPanel(null);
   }, [snap.show]);
-  // CgToolbar's items have no `aria-expanded`: the tools that open the panel are marked here.
-  useLayoutEffect(() => {
-    for (const name of OPENS_PANEL)
-      surface.current
-        ?.querySelector(`[data-cg-toolbar-name="${name}"]`)
-        ?.setAttribute('aria-expanded', String(panel === name));
-  });
 
   const rect = useMemo(() => (snap.show ? selectionRect(editor) : null), [snap, editor]);
   const shown = snap.show && !!s?.formatting;
@@ -231,6 +225,11 @@ export function BubbleToolbar({
       : null;
     if (snap.commentOnly) return comment ? [comment] : [];
     const on = (index: number) => marks[index] === '1';
+    // A tool that opens the panel says whether it is open, and names it while it is.
+    const opens = (name: Exclude<Panel, null>) => ({
+      expanded: panel === name,
+      controls: panel === name ? panelId : undefined,
+    });
     const mark = (name: string, text: string, index: number, icon: CgToolbarItem['icon']) => ({
       name,
       text,
@@ -249,6 +248,7 @@ export function BubbleToolbar({
           </span>
         ),
         iconOnly: true,
+        ...opens('turnInto'),
         onClick: () => setPanel((open) => (open === 'turnInto' ? null : 'turnInto')),
       },
       { ...mark('bold', s.bold, 0, 'text-bold'), beginGroup: true },
@@ -262,6 +262,7 @@ export function BubbleToolbar({
         icon: 'link',
         iconOnly: true,
         checked: on(5),
+        ...opens('link'),
         onClick: () => {
           setHref(String(editor.getAttributes('link').href ?? ''));
           setInvalid(false);
@@ -277,6 +278,7 @@ export function BubbleToolbar({
           </span>
         ),
         iconOnly: true,
+        ...opens('colour'),
         onClick: () => setPanel((open) => (open === 'colour' ? null : 'colour')),
       },
     ];
@@ -297,7 +299,19 @@ export function BubbleToolbar({
         },
       });
     return list;
-  }, [shown, s, snap.commentOnly, canComment, host, editor, kind, marks, aiAvailable]);
+  }, [
+    shown,
+    s,
+    snap.commentOnly,
+    canComment,
+    host,
+    editor,
+    kind,
+    marks,
+    aiAvailable,
+    panel,
+    panelId,
+  ]);
 
   if (!shown || !s) return null;
 
@@ -327,6 +341,7 @@ export function BubbleToolbar({
   const panels: Record<Exclude<Panel, null>, () => ReactNode> = {
     link: () => (
       <form
+        id={panelId}
         className="cgw-bubble-link"
         onSubmit={(event) => {
           event.preventDefault();
@@ -380,7 +395,7 @@ export function BubbleToolbar({
       </form>
     ),
     colour: () => (
-      <div className="cgw-bubble-colours">
+      <div id={panelId} className="cgw-bubble-colours">
         {(['textColour', 'highlight'] as const).map((type) => (
           <div
             key={type}
@@ -412,7 +427,7 @@ export function BubbleToolbar({
       </div>
     ),
     turnInto: () => (
-      <div className="cgw-bubble-menu" role="menu">
+      <div id={panelId} className="cgw-bubble-menu" role="menu">
         {BLOCK_ACTIONS.filter((action) => action.turnInto).map((action) => (
           <button
             key={action.name}

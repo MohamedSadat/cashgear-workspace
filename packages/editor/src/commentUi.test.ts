@@ -133,7 +133,14 @@ describe('"Comment"', () => {
     expect(toolbar.getAttribute('aria-label')).toBe('Formatting');
     expect(button('Bold').getAttribute('aria-pressed')).toBe('false');
     expect(button('Turn into').getAttribute('aria-expanded')).toBe('false');
+    expect(button('Turn into').hasAttribute('aria-controls')).toBe(false);
+    // Open, it names the panel it opened (the "turn into" list, under the toolbar).
+    await act(async () => button('Turn into').click());
+    expect(button('Turn into').getAttribute('aria-expanded')).toBe('true');
+    const list = document.getElementById(button('Turn into').getAttribute('aria-controls')!);
+    expect(list?.getAttribute('role')).toBe('menu');
     await act(async () => button('Comment').click());
+    expect(button('Turn into').getAttribute('aria-expanded')).toBe('false');
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({ quote: 'beta' });
     expect(created[0].start).toEqual(expect.any(String));

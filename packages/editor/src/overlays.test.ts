@@ -332,6 +332,9 @@ describe('the touch toolbar', () => {
       'Outdent',
       'Block menu',
     ]);
+    // Indent and Outdent have the library's right-to-left drawings too.
+    for (const name of ['Indent', 'Outdent'])
+      expect(tool(name).querySelector('svg [data-cg-icon-rtl]'), name).not.toBeNull();
     const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
     tool('Move up').dispatchEvent(down);
     expect(down.defaultPrevented).toBe(true);
