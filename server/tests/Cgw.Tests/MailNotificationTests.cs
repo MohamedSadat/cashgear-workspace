@@ -306,9 +306,13 @@ public sealed class MailNotificationTests(ServerFixture server)
         })
         {
             var raw = Assert.Single(RawMailsTo(address));
-            var headers = raw[..raw.IndexOf("\r\n\r\n", StringComparison.Ordinal)];
+            // The pickup folder's files end lines as the platform does (LF on Linux); SMTP sends CRLF.
+            var newline = raw.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+            var end = raw.IndexOf(newline + newline, StringComparison.Ordinal);
+            Assert.True(end > 0, "The mail has no blank line after its headers.");
+            var headers = raw[..end];
             // Header lines, a folded line's continuation joined to its header.
-            var names = Regex.Split(headers, "\r\n(?![ \t])").Select(h => h[..Math.Max(0, h.IndexOf(':'))]).ToList();
+            var names = Regex.Split(headers, "\r?\n(?![ \t])").Select(h => h[..Math.Max(0, h.IndexOf(':'))]).ToList();
             Assert.Single(names, n => n.Equals("Subject", StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(names, n => n.Equals("Bcc", StringComparison.OrdinalIgnoreCase) || n.Equals("X-Injected", StringComparison.OrdinalIgnoreCase));
             var mail = MimeMessage.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(raw)));
