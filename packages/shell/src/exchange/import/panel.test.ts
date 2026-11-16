@@ -1,0 +1,181 @@
+// Phase 8, M8.4: the import panel in English and Arabic: what to import and where, a Word file
+// chosen and imported, the report of what was made and skipped, a refusal said plainly, and a
+// stop that keeps nothing.
+import { afterEach, describe, expect, it } from 'vitest';
+import { installDom } from '../../../../database/src/testing/dom';
+
+installDom();
+Object.assign(globalThis, {
+  location: window.location,
+  history: window.history,
+  EventTarget: window.EventTarget,
+});
+const { act, createElement: h } = await import('react');
+const { createRoot } = await import('react-dom/client');
+const { I18nextProvider } = await import('react-i18next');
+const { MemoryStore } = await import('@cgw/workspace');
+const { localWorkspace } = await import('../../../../workspace/src/testing/syncHarness');
+const { createI18n } = await import('../../i18n');
+const { WorkspaceSession } = await import('../../session');
+const { ImportPanel, sectionsForNewPages } = await import('./ImportPanel');
+const { treeRows } = await import('../../sidebar/tree');
+const { manyPages, wordDocument } = await import('../fixtures/fixtures');
+// The panel loads the runner when an import starts: loaded here first, as Vitest is slow to.
+await import('./run');
+
+const roots: { unmount(): void }[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.replaceChildren();
+});
+
+async function until(check: () => boolean, what = 'the condition') {
+  for (let i = 0; i < 600 && !check(); i++)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
+  if (!check()) throw new Error(`Timed out waiting for ${what}`);
+}
+
+async function open(
+  language: 'en' | 'ar' = 'en',
+  store = new MemoryStore(),
+  before?: (session: import('../../session').WorkspaceSession) => Promise<unknown>,
+) {
+  const made = await localWorkspace(store);
+  const session = await WorkspaceSession.start(store);
+  session.switchTo(made.ws.id);
+  await before?.(session);
+  let closed = false;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const i18n = createI18n(language);
+  act(() =>
+    root.render(
+      h(
+        I18nextProvider,
+        { i18n },
+        h(ImportPanel, { session, onClose: () => (closed = true), runOptions: { inline: true } }),
+      ),
+    ),
+  );
+  return { session, made, closed: () => closed };
+}
+
+const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
+const button = (name: string) =>
+  [...dialog().querySelectorAll('button')].find((b) => b.textContent === name)!;
+
+function choose(testId: string, file: File) {
+  const input = dialog().querySelector<HTMLInputElement>(`[data-testid="${testId}"]`)!;
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  act(() => void input.dispatchEvent(new Event('change', { bubbles: true })));
+}
+
+const fileOf = (bytes: Uint8Array, name: string) =>
+  new File([bytes as Uint8Array<ArrayBuffer>], name, { type: 'application/octet-stream' });
+
+describe('the import panel', () => {
+  it('offers the sections the sidebar offers a new page in, and imports into the one chosen', async () => {
+    const { session, made } = await open('en', new MemoryStore(), (s) => s.createSection('Second'));
+    const ws = made.ws.id;
+    const sidebar = treeRows(session.mirror, ws, new Set()).flatMap((row) =>
+      row.kind === 'section' ? [row.section.id] : [],
+    );
+    expect(sectionsForNewPages(session).map((s) => s.id)).toEqual(sidebar);
+    const select = dialog().querySelector<HTMLSelectElement>('select')!;
+    expect([...select.options].map((o) => o.value)).toEqual(sidebar);
+    expect(select.closest('label')!.textContent).toContain('Section');
+    const second = session.mirror.sectionsOf(ws).find((s) => s.name === 'Second')!;
+    act(() => {
+      select.value = second.id;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    act(() => dialog().querySelector<HTMLInputElement>('input[value="word"]')!.click());
+    const fixture = wordDocument();
+    choose('import-file', fileOf(fixture.bytes, fixture.name));
+    await until(() => !!dialog().querySelector('[data-testid="import-report"]'), 'the report');
+    expect(session.mirror.topPages(second.id).map((p) => p.title)).toEqual(['Quarterly report']);
+  });
+
+  it('offers what to import, a folder for Markdown, and says where it goes', async () => {
+    await open();
+    expect(dialog().getAttribute('aria-modal')).toBe('true');
+    expect(document.getElementById('cgw-dialog-title')!.textContent).toBe('Import pages');
+    const radios = [...dialog().querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    expect(radios.map((r) => r.value)).toEqual(['markdown', 'notion', 'word']);
+    expect(radios[0].checked).toBe(true);
+    expect(button('Choose a folder…')).toBeDefined();
+    expect(dialog().textContent).toContain('one new page at the end of this section');
+    expect(dialog().textContent).toContain('2,000 pages and 500 MB');
+    act(() => radios[2].click());
+    expect(button('Choose a folder…')).toBeUndefined();
+    const input = dialog().querySelector<HTMLInputElement>('[data-testid="import-file"]')!;
+    expect(input.accept).toContain('.docx');
+    expect(input.getAttribute('aria-label')).toBe('Choose a file…');
+  });
+
+  it('imports a Word file and shows what was made and what was skipped', async () => {
+    const { session } = await open();
+    act(() => dialog().querySelector<HTMLInputElement>('input[value="word"]')!.click());
+    const fixture = wordDocument();
+    choose('import-file', fileOf(fixture.bytes, fixture.name));
+    await until(() => !!dialog().querySelector('[data-testid="import-report"]'), 'the report');
+    const report = dialog().querySelector('[data-testid="import-report"]')!;
+    expect(report.textContent).toContain('Pages: 1');
+    expect(report.textContent).toContain('Images: 1');
+    const skipped = [...report.querySelectorAll('[data-code]')].map((li) =>
+      li.getAttribute('data-code'),
+    );
+    expect(skipped).toEqual(expect.arrayContaining(['trackedChanges', 'comments', 'textBoxes']));
+    expect(report.querySelector('[data-code="comments"]')!.textContent).toBe('Comments: 1');
+    expect([...session.mirror.pages.values()].some((p) => p.title === 'Quarterly report')).toBe(
+      true,
+    );
+    expect(button('Open the imported page')).toBeDefined();
+  });
+
+  it('says plainly why nothing was imported, in Arabic too, right to left', async () => {
+    await open('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+    expect(document.getElementById('cgw-dialog-title')!.textContent).toBe('استيراد صفحات');
+    choose('import-file', fileOf(manyPages(2001), 'كثير.zip'));
+    await until(() => !!dialog().querySelector('[role="alert"]'), 'the refusal');
+    // In Arabic digits, as the interface writes numbers.
+    expect(dialog().querySelector('[role="alert"]')!.textContent).toContain(
+      (2002).toLocaleString('ar'),
+    );
+    expect(button('حاول مرة أخرى')).toBeDefined();
+    act(() => button('حاول مرة أخرى').click());
+    expect(dialog().querySelectorAll('input[type="radio"]')).toHaveLength(3);
+  });
+
+  it('stops when asked and keeps nothing', async () => {
+    // The pages' documents wait until the test lets them through, so Stop lands mid-import.
+    const store = new MemoryStore();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const append = store.appendDocUpdates.bind(store);
+    store.appendDocUpdates = async (pageId, updates) => {
+      await gate;
+      return append(pageId, updates);
+    };
+    const { session, made } = await open('en', store);
+    const pagesBefore = session.mirror.pages.size;
+    choose('import-file', fileOf(manyPages(600), 'Many.zip'));
+    await until(() => /Writing the pages/.test(dialog().textContent ?? ''), 'the writing');
+    expect(dialog().querySelector('progress')!.getAttribute('aria-label')).toBe('Import progress');
+    act(() => button('Stop').click());
+    expect(dialog().textContent).toContain('Stopping, and removing what was made');
+    release();
+    await until(() => !!dialog().querySelector('[role="alert"]'), 'the stop');
+    expect(dialog().querySelector('[role="alert"]')!.textContent).toBe(
+      'The import was stopped. Nothing was kept.',
+    );
+    expect(session.mirror.pages.size).toBe(pagesBefore);
+    expect(session.mirror.topPages(made.section.id).map((p) => p.title)).toEqual([
+      'Alpha',
+      'Gamma',
+    ]);
+  }, 30_000);
+});

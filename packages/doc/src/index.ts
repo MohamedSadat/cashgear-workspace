@@ -73,4 +73,22 @@ export {
 } from './stateHash';
 export * as build from './content';
 export { readableJSON, references, remapRefs, withNewIds, withoutIds } from './content';
-export { looksLikeMarkdown, parseInline, parseMarkdown } from './markdown';
+export {
+  MAX_NESTING,
+  looksLikeMarkdown,
+  parseInline,
+  parseMarkdown,
+  type LinkAnswer,
+  type MarkdownInOptions,
+  type MarkdownNote,
+} from './markdown';
+// Phase 8: import. A Word file's parts read by our own reader over their XML.
+export {
+  DocxError,
+  readDocx,
+  type DocxOptions,
+  type DocxParts,
+  type DocxResult,
+  type DocxSkip,
+} from './docx';
+export { XmlError, parseXml, type XmlElement, type XmlNode } from './xml';

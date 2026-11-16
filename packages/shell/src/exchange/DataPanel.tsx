@@ -1,6 +1,7 @@
 // Settings → Your data: export the workspace (from this device, or from the account as the server
-// makes it), import an export, and what the browser keeps.
-import { useEffect, useRef, useState } from 'react';
+// makes it), import an export, import from Markdown, Notion or Word (Phase 8, the import panel),
+// and what the browser keeps.
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
@@ -8,6 +9,11 @@ import { collaborates, useCollab } from '../collab/context';
 import { useDatabaseHost } from '../database/context';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
+
+/** The import panel and what it reads with load when it is opened, not with Settings. */
+const ImportPanel = lazy(() =>
+  import('./import/ImportPanel').then((m) => ({ default: m.ImportPanel })),
+);
 
 export async function exportAndSave(
   session: WorkspaceSession,
@@ -51,6 +57,7 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
   const [busy, setBusy] = useState<null | 'export' | 'import' | 'serverExport'>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [importing, setImporting] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -161,7 +168,21 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
               .finally(() => setBusy(null));
           }}
         />
+        <button
+          type="button"
+          className="cgw-button"
+          // A guest makes no pages of their own (the server refuses them): it is not offered.
+          disabled={busy !== null || !session.workspaceId || workspace?.role === 'guest'}
+          onClick={() => setImporting(true)}
+        >
+          {t('exchange.importOther')}
+        </button>
       </div>
+      {importing && (
+        <Suspense fallback={null}>
+          <ImportPanel session={session} onClose={() => setImporting(false)} />
+        </Suspense>
+      )}
       {message && (
         <p role="status" className="cgw-data-message">
           {message}

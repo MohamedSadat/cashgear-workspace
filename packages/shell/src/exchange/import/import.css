@@ -1,0 +1,68 @@
+/* The import panel (ImportPanel.tsx): logical properties only, the theme's tokens for colour. */
+.cgw-import {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.cgw-import p {
+  margin: 0;
+}
+
+.cgw-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-import-buttons {
+  flex-wrap: wrap;
+}
+
+.cgw-import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cgw-import-progress progress {
+  inline-size: 100%;
+  block-size: 8px;
+  accent-color: var(--cg-accent);
+}
+
+.cgw-import-refused {
+  color: var(--cg-danger-text, var(--cg-text));
+}
+
+.cgw-import-report h3 {
+  margin-block: 4px;
+  font-size: 0.95rem;
+}
+
+.cgw-import-report ul {
+  margin: 0;
+  padding-inline-start: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-import-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-block-start: 2px;
+}
+
+.cgw-import-example {
+  padding-inline: 4px;
+  border-radius: 4px;
+  background: var(--cg-surface-subtle);
+  color: var(--cg-text);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
