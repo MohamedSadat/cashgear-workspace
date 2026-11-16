@@ -152,9 +152,8 @@ public sealed class RealtimeHub(
                 body = null;
             }
             if (body is null) return Failure.Invalid("The push does not read as { epoch, clientSchemaVersion, updates }");
-            var opened = await gate.OpenAsync(UserId, id, Context.ConnectionAborted);
-            if (!opened.Ok) return opened.Failure!;
-            var result = await docs.PushCheckedAsync(opened.Value!, body, Context.User!.DeviceId(), RealtimeSettings.MaxPushBytes, Context.ConnectionAborted);
+            // The gate and the push, in one round trip for a caller the page's section decides (Phase 8).
+            var result = await docs.PushThroughGateAsync(gate, UserId, id, body, Context.User!.DeviceId(), RealtimeSettings.MaxPushBytes, Context.ConnectionAborted);
             if (!result.Ok) return result.Failure!;
             metrics.Pushed(id, result.Value!.Acks, started);
             return Answer<PushResponse>.Of(result.Value);

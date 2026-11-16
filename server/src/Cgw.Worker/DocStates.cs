@@ -47,7 +47,8 @@ public static class Schema
 /// </summary>
 public sealed class DocStates(BlobStore blob)
 {
-    private readonly ConcurrentDictionary<Guid, (int Epoch, long Head, byte[] State)> cache = new();
+    /// <summary>Each page's state as last read or validated, with its state vector when the validation made it.</summary>
+    private readonly ConcurrentDictionary<Guid, (int Epoch, long Head, byte[] State, byte[]? Vector)> cache = new();
     public static readonly byte[] Empty = [0, 0];
 
     /// <summary>
@@ -57,10 +58,17 @@ public sealed class DocStates(BlobStore blob)
     /// compaction that commits while the rows are read has removed some of them: the read starts
     /// again from its snapshot (the jobs run on more than one loop).
     /// </summary>
-    public async Task<byte[]> LoadAsync(CgwDb db, Page page, CancellationToken ct, long? upTo = null)
+    public async Task<byte[]> LoadAsync(CgwDb db, Page page, CancellationToken ct, long? upTo = null) =>
+        (await LoadWithVectorAsync(db, page, ct, upTo)).State;
+
+    /// <summary>
+    /// The state, and its state vector (<see cref="Yjs.StateVector"/> of those bytes) when the
+    /// validation that made the state kept it (Phase 8: the next pass need not decode the state for it).
+    /// </summary>
+    public async Task<(byte[] State, byte[]? Vector)> LoadWithVectorAsync(CgwDb db, Page page, CancellationToken ct, long? upTo = null)
     {
         var head = upTo is { } point ? Math.Min(point, page.DocHeadSeq) : page.DocHeadSeq;
-        if (cache.TryGetValue(page.Id, out var hit) && hit.Epoch == page.DocEpoch && hit.Head == head) return hit.State;
+        if (cache.TryGetValue(page.Id, out var hit) && hit.Epoch == page.DocEpoch && hit.Head == head) return (hit.State, hit.Vector);
         var compactions = db.PageDocSnapshots.AsNoTracking()
             .Where(s => s.PageId == page.Id && s.Kind == SnapshotKinds.Compaction && s.Epoch == page.DocEpoch && s.Status == "ready");
         for (var attempt = 1; ; attempt++)
@@ -91,14 +99,15 @@ public sealed class DocStates(BlobStore blob)
                 _ => Yjs.Merge(parts),
             };
             if (head == page.DocHeadSeq) Put(page.Id, page.DocEpoch, head, state);
-            return state;
+            return (state, null);
         }
     }
 
-    public void Put(Guid pageId, int epoch, long head, byte[] state)
+    /// <summary>A page's state at a head; <paramref name="vector"/>, when given, is its state vector.</summary>
+    public void Put(Guid pageId, int epoch, long head, byte[] state, byte[]? vector = null)
     {
         if (cache.Count > 64) cache.Clear();
-        cache[pageId] = (epoch, head, state);
+        cache[pageId] = (epoch, head, state, vector);
     }
 
     public void Forget(Guid pageId) => cache.TryRemove(pageId, out _);

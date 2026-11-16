@@ -8,6 +8,7 @@ using Cgw.Core.Sync;
 using Cgw.Ydoc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using IsolationLevel = System.Data.IsolationLevel;
 using SqlDbType = System.Data.SqlDbType;
 
@@ -79,6 +80,8 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         public List<PageDocUpdate> Forged { get; } = [];
         public List<PageDocUpdate> Denied { get; } = [];
         public byte[] State { get; set; } = DocStates.Empty;
+        /// <summary><see cref="Yjs.StateVector"/> of <see cref="State"/>, when the pass has it.</summary>
+        public byte[]? Vector { get; set; }
         public int SchemaVersion { get; set; }
         public string? Hash { get; set; }
     }
@@ -86,18 +89,25 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
     public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
     {
         var db = services.GetRequiredService<CgwDb>();
-        var pages = await db.PageDocUpdates.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .Where(u => u.Status == UpdateStatus.Pending)
-            .GroupBy(u => new { u.PageId, u.WorkspaceId })
-            .Select(g => new { g.Key.PageId, g.Key.WorkspaceId, First = g.Min(u => u.CreatedAt) })
-            .OrderBy(g => g.First).Take(Batch).ToListAsync(ct);
+        var pages = await DueAsync(db, ct);
         // Workspaces side by side, each in a scope of its own; a workspace's pages a few at a time
         // (their writes take its lock in turn).
         var work = pages.GroupBy(p => p.WorkspaceId)
             .Select(w => (Workspace: w.Key, Chunks: w.Chunk(PagesPerCommit).Select(c => c.Select(p => p.PageId).ToList()).ToList()))
             .ToList();
-        var scopes = services.GetRequiredService<IServiceScopeFactory>();
         var again = false;
+        if (work.Count == 1)
+        {
+            // One workspace (a person typing): in this pass's own scope, with no tasks to start.
+            foreach (var chunk in work[0].Chunks)
+            {
+                db.ChangeTracker.Clear();
+                db.Scope.Switch(work[0].Workspace);
+                if (!await ValidateAsync(services, db, work[0].Workspace, chunk, ct)) again = true;
+            }
+            return true;
+        }
+        var scopes = services.GetRequiredService<IServiceScopeFactory>();
         await Parallel.ForEachAsync(work, new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct }, async (workspace, token) =>
         {
             await using var scope = scopes.CreateAsyncScope();
@@ -114,19 +124,67 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         return pages.Count > 0 || again;
     }
 
-    /// <summary>Decides and writes these pages; false when one was left for the next pass.</summary>
+    private sealed record Due(Guid PageId, Guid WorkspaceId);
+
+    /// <summary>
+    /// The pages with pending updates, the longest waiting first, at most a batch: the poll the loop
+    /// makes every 25 ms when idle, so as plain SQL (0.7.0's query as EF wrote it, without EF's work).
+    /// </summary>
+    private static async Task<List<Due>> DueAsync(CgwDb db, CancellationToken ct)
+    {
+        await db.Database.OpenConnectionAsync(ct);
+        try
+        {
+            await using var command = db.Database.GetDbConnection().CreateCommand();
+            command.Parameters.Add(new SqlParameter("@batch", SqlDbType.Int) { Value = Batch });
+            command.CommandText = $"""
+                SELECT TOP (@batch) [PageId], [WorkspaceId] FROM [PageDocUpdates]
+                WHERE [Status] = {UpdateStatus.Pending}
+                GROUP BY [PageId], [WorkspaceId]
+                ORDER BY MIN([CreatedAt])
+                """;
+            var due = new List<Due>();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) due.Add(new Due(Id(reader, 0), Id(reader, 1)));
+            return due;
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync();
+        }
+    }
+
+    /// <summary>These pages of one workspace validated as a pass validates them (for tests).</summary>
+    internal async Task<bool> ValidatePagesAsync(IServiceProvider services, Guid workspaceId, List<Guid> pageIds, CancellationToken ct)
+    {
+        await using var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CgwDb>();
+        db.Scope.Switch(workspaceId);
+        return await ValidateAsync(scope.ServiceProvider, db, workspaceId, pageIds, ct);
+    }
+
+    /// <summary>
+    /// Decides and writes these pages; false when one was left for the next pass. Phase 8: the same
+    /// reads and writes as 0.7.0's, in the same order, in four round trips instead of thirteen: what
+    /// the decisions need (<see cref="ReadAsync"/>), then under the lock the lock itself with what
+    /// is checked under it (<see cref="LockAsync"/>), then every write in one batch
+    /// (<see cref="WriteAsync"/>); refusals' audit entries, rare, are saved beside them.
+    /// </summary>
     private async Task<bool> ValidateAsync(IServiceProvider services, CgwDb db, Guid workspaceId, List<Guid> pageIds, CancellationToken ct)
     {
-        // The feed's head before access is read: whatever changes access after it has a higher number.
-        var seen = await db.Workspaces.AsNoTracking().Where(w => w.Id == workspaceId).Select(w => (long?)w.ChangeSeq).FirstOrDefaultAsync(ct);
-        if (seen is null) return true;
-        var pages = await db.Pages.AsNoTracking().Where(p => pageIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
-        // A prefix of each page's pending updates, by sequence: in one read, or one a page when a
-        // backlog is too long for that (so no page waits behind another's).
-        var all = await db.PageDocUpdates.AsNoTracking().Where(u => pageIds.Contains(u.PageId) && u.Status == UpdateStatus.Pending)
-            .OrderBy(u => u.PageId).ThenBy(u => u.Seq).Take(RowsPerPass + 1).ToListAsync(ct);
+        var kept = editors.GetOrAdd(workspaceId, _ => new Editors());
+        long at;
+        lock (kept) at = kept.At;
+        // The feed's head before access is read (whatever changes access after it has a higher
+        // number), the pages, a prefix of each one's pending updates by sequence, the pushers' Yjs
+        // clients, and whether access changed since the remembered editors were read.
+        var read = await ReadAsync(db, workspaceId, pageIds, at, ct);
+        if (read.Seen is not { } seen) return true;
+        var pages = read.Pages;
+        var all = read.Pending;
         if (all.Count > RowsPerPass)
         {
+            // A backlog too long for one read: one a page (so no page waits behind another's).
             all.Clear();
             foreach (var pageId in pageIds)
                 all.AddRange(await db.PageDocUpdates.AsNoTracking().Where(u => u.PageId == pageId && u.Status == UpdateStatus.Pending)
@@ -135,45 +193,39 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         var pending = all.GroupBy(u => u.PageId).Where(g => pages.ContainsKey(g.Key))
             .ToDictionary(g => g.Key, g => g.Take(RowsPerPage).ToList());
         if (pending.Count == 0) return true;
-        var users = pending.Values.SelectMany(rows => rows.Select(r => r.UserId)).Distinct().ToList();
-        var clients = (await db.YjsClients.AsNoTracking().Where(c => users.Contains(c.UserId)).ToListAsync(ct))
-            .GroupBy(c => c.UserId).ToDictionary(g => g.Key, g => g.Select(c => (ulong)c.ClientId).ToHashSet());
+        var clients = read.Clients;
         var access = new Access(db);
         var pushers = Pushers(pending.Where(p => pages[p.Key].DeletedAt is null).Select(p => (p.Key, p.Value)));
-        var editors = await EditorsAsync(db, access, workspaceId, seen.Value, pushers, ct);
+        var editorsNow = await EditorsAsync(access, workspaceId, seen, at, read.AccessChanged, pushers, ct);
         var decisions = new List<Decision>();
         foreach (var (pageId, rows) in pending)
-            decisions.Add(await DecideAsync(db, new Decision(pages[pageId], rows, editors.GetValueOrDefault(pageId) ?? []), clients, ct));
+            decisions.Add(await DecideAsync(db, new Decision(pages[pageId], rows, editorsNow.GetValueOrDefault(pageId) ?? []), clients, ct));
 
-        var changes = services.GetRequiredService<ChangeLog>();
         var audit = services.GetRequiredService<Audit>();
+        var clock = services.GetRequiredService<TimeProvider>();
         var written = new List<Decision>();
         await using (var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct))
         {
-            // The workspace row first, then the pages': the order every writer takes them in.
-            await changes.LockAsync(workspaceId, ct);
+            // The workspace row first, then the pages': the order every writer takes them in. With
+            // the lock: whether access changed since it was read, and the pages as they are now.
+            var locked = await LockAsync(db, workspaceId, seen, decisions.Select(d => d.Page.Id).ToList(), ct);
             // Access changed since it was read: the pushers again, now that no change can land
             // before the commit; a page whose answer differs is decided again on the next pass.
-            var recheck = await changes.AccessChangedSinceAsync(seen.Value, ct)
+            var recheck = locked.AccessChanged
                 ? await access.EditorsAsync(workspaceId, Pushers(decisions.Where(d => d.Page.DeletedAt is null).Select(d => (d.Page.Id, d.Rows))), ct)
                 : null;
             // What was remembered is out of date: read again whole on the next pass.
             if (recheck is not null) Forget(workspaceId);
-            // The pages as they are now: a hard restore or a delete for good since they were read
-            // (each under this lock) leaves the page to the next pass.
-            var ids = decisions.Select(d => d.Page.Id).ToList();
-            var current = await db.Pages.AsNoTracking().Where(p => ids.Contains(p.Id))
-                .Select(p => new { p.Id, p.DocEpoch, p.DocHeadSeq, Live = p.DeletedAt == null }).ToDictionaryAsync(p => p.Id, ct);
+            // A hard restore or a delete for good since the pages were read (each under this lock)
+            // leaves the page to the next pass.
             foreach (var decision in decisions)
             {
                 var page = decision.Page;
-                if (!current.TryGetValue(page.Id, out var now) || now.DocEpoch != page.DocEpoch || now.DocHeadSeq != page.DocHeadSeq
+                if (!locked.Pages.TryGetValue(page.Id, out var now) || now.DocEpoch != page.DocEpoch || now.DocHeadSeq != page.DocHeadSeq
                     || now.Live != (page.DeletedAt is null))
                     continue;
                 if (recheck is not null && page.DeletedAt is null && !(recheck.GetValueOrDefault(page.Id) ?? []).SetEquals(decision.Editors)) continue;
                 written.Add(decision);
-                // Clients holding the page pull it when the feed says its head moved.
-                changes.Add("page", page.Id, "upsert", page.Version, null);
                 foreach (var row in decision.Forged)
                     audit.Add(new Actor(row.UserId, null, null), "doc.forgedClient", workspaceId, "page", page.Id, new { row.Seq, row.UpdateId });
                 foreach (var row in decision.Denied)
@@ -181,39 +233,172 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
             }
             if (written.Count > 0)
             {
-                await RejectAsync(db, written, ct);
+                // Audit entries only (nothing else is tracked): no round trip when there are none.
                 await db.SaveChangesAsync(ct);
-                await changes.FlushAsync(ct);
-                // The rows' statuses and then the pages' heads in one batch: the pages' rows last,
-                // held only to the commit, so pushes to them wait on nothing else.
-                await WriteAsync(db, written, ct);
+                // The refusals, a feed change for each page (clients holding it pull it when the feed
+                // says its head moved) and the feed's head, the rows' statuses, then the pages' heads.
+                await WriteAsync(db, workspaceId, locked.ChangeSeq, written, clock.GetUtcNow(), ct);
             }
             await tx.CommitAsync(ct);
         }
         foreach (var decision in written)
         {
-            states.Put(decision.Page.Id, decision.Page.DocEpoch, decision.Head, decision.State);
+            states.Put(decision.Page.Id, decision.Page.DocEpoch, decision.Head, decision.State, decision.Vector);
             var refused = decision.Verdicts.Count(v => v.Value.Count > 0);
             if (refused > 0) logger.LogWarning("Refused {Count} of {Total} updates to page {Page}", refused, decision.Rows.Count, decision.Page.Id);
         }
         return written.Count == decisions.Count;
     }
 
+    /// <summary>What a pass reads before it decides.</summary>
+    private sealed record Reading(long? Seen, Dictionary<Guid, Page> Pages, List<PageDocUpdate> Pending, Dictionary<Guid, HashSet<ulong>> Clients, bool AccessChanged);
+
+    /// <summary>The page columns a pass uses (every other column is left at its default).</summary>
+    private const string PageColumns = "[Id], [WorkspaceId], [Version], [DocEpoch], [DocHeadSeq], [DocSchemaVersion], [DocStateHash], [DocStateHashSeq], [DeletedAt]";
+
+    /// <summary>
+    /// 0.7.0's five reads in their order, in one batch: the feed's head; the pages; a prefix of their
+    /// pending updates, by page and sequence (one more than a pass takes, to tell a backlog); the Yjs
+    /// clients of everyone with a pending update there; whether an access, member or workspace change
+    /// committed after <paramref name="accessAt"/>. Each in the workspace, as the tenant filter reads.
+    /// </summary>
+    private static async Task<Reading> ReadAsync(CgwDb db, Guid workspaceId, List<Guid> pageIds, long accessAt, CancellationToken ct)
+    {
+        await db.Database.OpenConnectionAsync(ct);
+        try
+        {
+            await using var command = db.Database.GetDbConnection().CreateCommand();
+            var list = PageList(command, pageIds);
+            command.Parameters.Add(new SqlParameter("@ws", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspaceId) });
+            command.Parameters.Add(new SqlParameter("@at", SqlDbType.BigInt) { Value = accessAt });
+            command.Parameters.Add(new SqlParameter("@take", SqlDbType.Int) { Value = RowsPerPass + 1 });
+            command.CommandText = $"""
+                SELECT [ChangeSeq] FROM [Workspaces] WHERE [Id] = @ws;
+                SELECT {PageColumns} FROM [Pages] WHERE [WorkspaceId] = @ws AND [Id] IN ({list});
+                SELECT TOP (@take) [PageId], [Seq], [UpdateId], [Epoch], [UserId], [Data], [ClientSchemaVersion]
+                FROM [PageDocUpdates] WHERE [WorkspaceId] = @ws AND [PageId] IN ({list}) AND [Status] = {UpdateStatus.Pending}
+                ORDER BY [PageId], [Seq];
+                SELECT c.[UserId], c.[ClientId] FROM [YjsClients] c
+                WHERE c.[WorkspaceId] = @ws AND c.[UserId] IN (
+                    SELECT u.[UserId] FROM [PageDocUpdates] u WHERE u.[WorkspaceId] = @ws AND u.[PageId] IN ({list}) AND u.[Status] = {UpdateStatus.Pending});
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM [WorkspaceChanges] WHERE [WorkspaceId] = @ws AND [Seq] > @at
+                    AND [EntityType] IN (N'access', N'member', N'workspace')) THEN 1 ELSE 0 END;
+                """;
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            long? seen = await reader.ReadAsync(ct) ? reader.GetInt64(0) : null;
+            await reader.NextResultAsync(ct);
+            var pages = new Dictionary<Guid, Page>();
+            while (await reader.ReadAsync(ct))
+            {
+                var page = new Page
+                {
+                    Id = Id(reader, 0),
+                    WorkspaceId = Id(reader, 1),
+                    Version = reader.GetInt64(2),
+                    DocEpoch = reader.GetInt32(3),
+                    DocHeadSeq = reader.GetInt64(4),
+                    DocSchemaVersion = reader.GetInt32(5),
+                    DocStateHash = reader.IsDBNull(6) ? null : reader.GetString(6),
+                    DocStateHashSeq = reader.GetInt64(7),
+                    DeletedAt = reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8),
+                };
+                pages[page.Id] = page;
+            }
+            await reader.NextResultAsync(ct);
+            var pending = new List<PageDocUpdate>();
+            while (await reader.ReadAsync(ct))
+                pending.Add(new PageDocUpdate
+                {
+                    PageId = Id(reader, 0),
+                    Seq = reader.GetInt64(1),
+                    UpdateId = Id(reader, 2),
+                    WorkspaceId = workspaceId,
+                    Epoch = reader.GetInt32(3),
+                    UserId = Id(reader, 4),
+                    Data = reader.GetFieldValue<byte[]>(5),
+                    ClientSchemaVersion = reader.GetInt32(6),
+                    Status = UpdateStatus.Pending,
+                });
+            await reader.NextResultAsync(ct);
+            var clients = new Dictionary<Guid, HashSet<ulong>>();
+            while (await reader.ReadAsync(ct))
+            {
+                var user = Id(reader, 0);
+                if (!clients.TryGetValue(user, out var set)) clients[user] = set = [];
+                set.Add((ulong)reader.GetInt64(1));
+            }
+            await reader.NextResultAsync(ct);
+            var changed = await reader.ReadAsync(ct) && reader.GetInt32(0) == 1;
+            return new Reading(seen, pages, pending, clients, changed);
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync();
+        }
+    }
+
+    /// <summary>What a pass reads under the workspace's lock.</summary>
+    private sealed record Locked(long ChangeSeq, bool AccessChanged, Dictionary<Guid, (int DocEpoch, long DocHeadSeq, bool Live)> Pages);
+
+    /// <summary>
+    /// In the transaction, in one batch: the workspace row's lock and its feed head (as
+    /// <see cref="ChangeLog.LockAsync"/> takes it), whether access changed after
+    /// <paramref name="seen"/> (as <see cref="ChangeLog.AccessChangedSinceAsync"/> asks), and the pages'
+    /// documents as they are now.
+    /// </summary>
+    private static async Task<Locked> LockAsync(CgwDb db, Guid workspaceId, long seen, List<Guid> pageIds, CancellationToken ct)
+    {
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.Transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+        var list = PageList(command, pageIds);
+        command.Parameters.Add(new SqlParameter("@ws", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspaceId) });
+        command.Parameters.Add(new SqlParameter("@seen", SqlDbType.BigInt) { Value = seen });
+        command.CommandText = $"""
+            UPDATE [Workspaces] SET [ChangeSeq] = [ChangeSeq] OUTPUT inserted.[ChangeSeq] WHERE [Id] = @ws;
+            SELECT CASE WHEN EXISTS (SELECT 1 FROM [WorkspaceChanges] WHERE [WorkspaceId] = @ws AND [Seq] > @seen
+                AND [EntityType] IN (N'access', N'member', N'workspace')) THEN 1 ELSE 0 END;
+            SELECT [Id], [DocEpoch], [DocHeadSeq], CASE WHEN [DeletedAt] IS NULL THEN 1 ELSE 0 END
+            FROM [Pages] WHERE [WorkspaceId] = @ws AND [Id] IN ({list});
+            """;
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var head = await reader.ReadAsync(ct) ? reader.GetInt64(0) : throw new InvalidOperationException("The workspace is not there to lock.");
+        await reader.NextResultAsync(ct);
+        var changed = await reader.ReadAsync(ct) && reader.GetInt32(0) == 1;
+        await reader.NextResultAsync(ct);
+        var pages = new Dictionary<Guid, (int, long, bool)>();
+        while (await reader.ReadAsync(ct)) pages[Id(reader, 0)] = (reader.GetInt32(1), reader.GetInt64(2), reader.GetInt32(3) == 1);
+        return new Locked(head, changed, pages);
+    }
+
+    private static Guid Id(System.Data.Common.DbDataReader reader, int column) => GuidBytes.FromBytes(reader.GetFieldValue<byte[]>(column));
+
+    /// <summary>The pages as parameters <c>@p0</c>, <c>@p1</c>, ...: the list for an <c>IN</c>.</summary>
+    private static string PageList(System.Data.Common.DbCommand command, List<Guid> pageIds)
+    {
+        var names = new List<string>();
+        for (var i = 0; i < pageIds.Count; i++)
+        {
+            names.Add($"@p{i}");
+            command.Parameters.Add(new SqlParameter($"@p{i}", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(pageIds[i]) });
+        }
+        return string.Join(", ", names);
+    }
+
     /// <summary>
     /// Who of these pushers may edit each page, as of <paramref name="seen"/> (read before this):
     /// the answers remembered for the workspace when no change to who may edit has committed since
-    /// they were read, else read again; only pairs not asked before are read.
+    /// they were read (<paramref name="at"/>; <paramref name="changedSinceAt"/> says, read after
+    /// seen), else read again; only pairs not asked before are read.
     /// </summary>
-    private async Task<Dictionary<Guid, HashSet<Guid>>> EditorsAsync(CgwDb db, Access access, Guid workspaceId, long seen,
+    private async Task<Dictionary<Guid, HashSet<Guid>>> EditorsAsync(Access access, Guid workspaceId, long seen, long at, bool changedSinceAt,
         Dictionary<Guid, HashSet<Guid>> pushers, CancellationToken ct)
     {
         var kept = editors.GetOrAdd(workspaceId, _ => new Editors());
-        long at;
-        lock (kept) at = kept.At;
         var now = Environment.TickCount64;
         // A change committed after the answers were read (seen was read before this asks, so any
         // change up to it is visible here, and one after it the recheck under the lock catches).
-        var stale = at == 0 || now - kept.ReadAt > EditorsKeptMs || await ChangeLog.AccessChangedAsync(db, workspaceId, at, ct);
+        bool stale;
+        lock (kept) stale = at == 0 || kept.At != at || now - kept.ReadAt > EditorsKeptMs || changedSinceAt;
         Dictionary<Guid, HashSet<Guid>> missing;
         lock (kept)
         {
@@ -249,33 +434,54 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
     private static Dictionary<Guid, HashSet<Guid>> Pushers(IEnumerable<(Guid Page, List<PageDocUpdate> Rows)> pages) =>
         pages.ToDictionary(p => p.Page, p => p.Rows.Select(r => r.UserId).ToHashSet());
 
-    /// <summary>Each refused row, with its problem (rare: one statement each).</summary>
-    private static async Task RejectAsync(CgwDb db, List<Decision> decisions, CancellationToken ct)
-    {
-        foreach (var decision in decisions)
-            foreach (var (seq, problems) in decision.Verdicts.Where(v => v.Value.Count > 0))
-            {
-                var (id, text) = (decision.Page.Id, Trim(string.Join("; ", problems)));
-                await db.PageDocUpdates.Where(u => u.PageId == id && u.Seq == seq && u.Status == UpdateStatus.Pending)
-                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.Status, UpdateStatus.Rejected).SetProperty(u => u.Problem, text), ct);
-            }
-    }
-
     /// <summary>
-    /// In one batch: the rest of each page's run valid, then each page's validated head, its state
-    /// hash and its schema version. Every head must move, or the batch throws and nothing commits.
+    /// Every write of a pass, in one batch under the lock (0.7.0 made five round trips of it): each
+    /// refused row with its problem; a <c>page</c> <c>upsert</c> feed change for each page, numbered
+    /// on from the head <paramref name="changeSeq"/> read with the lock, and the feed's head moved to
+    /// the last (as <see cref="ChangeLog"/> writes them); the rest of each page's run valid; then each
+    /// page's validated head, its state hash and its schema version, the pages' rows last, held only
+    /// to the commit, so pushes to them wait on nothing else. Every head must move, or the batch
+    /// throws and nothing commits.
     /// </summary>
-    private static async Task WriteAsync(CgwDb db, List<Decision> decisions, CancellationToken ct)
+    private static async Task WriteAsync(CgwDb db, Guid workspaceId, long changeSeq, List<Decision> decisions, DateTimeOffset now, CancellationToken ct)
     {
-        var parameters = new List<SqlParameter>();
+        var parameters = new List<SqlParameter>
+        {
+            new("@ws", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspaceId) },
+            new("@now", SqlDbType.DateTimeOffset) { Value = now, Scale = 3 },
+            new("@head", SqlDbType.BigInt) { Value = changeSeq + decisions.Count },
+        };
+        var sql = new System.Text.StringBuilder();
+        // The refusals (rare): in the batch while they are few, else in batches of their own (SQL
+        // Server takes 2,100 parameters a request).
+        var refusals = decisions.SelectMany(d => d.Verdicts.Where(v => v.Value.Count > 0)
+            .Select(v => (Page: d.Page.Id, Seq: v.Key, Text: Trim(string.Join("; ", v.Value))))).ToList();
+        foreach (var chunk in refusals.Chunk(400))
+        {
+            var inBatch = refusals.Count <= 400;
+            var own = inBatch ? parameters : [new SqlParameter("@ws", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspaceId) }];
+            var text = inBatch ? sql : new System.Text.StringBuilder();
+            for (var k = 0; k < chunk.Length; k++)
+            {
+                own.Add(new SqlParameter($"@rp{k}", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(chunk[k].Page) });
+                own.Add(new SqlParameter($"@rs{k}", SqlDbType.BigInt) { Value = chunk[k].Seq });
+                own.Add(new SqlParameter($"@rt{k}", SqlDbType.NVarChar, 2000) { Value = chunk[k].Text });
+                text.AppendLine($"UPDATE [PageDocUpdates] SET [Status] = {UpdateStatus.Rejected}, [Problem] = @rt{k} WHERE [WorkspaceId] = @ws AND [PageId] = @rp{k} AND [Seq] = @rs{k} AND [Status] = {UpdateStatus.Pending};");
+            }
+            if (!inBatch) await db.Database.ExecuteSqlRawAsync(text.ToString(), own, ct);
+        }
+        var changes = new List<string>();
         var runs = new List<string>();
         var heads = new List<string>();
         foreach (var decision in decisions)
         {
             var n = runs.Count;
+            changes.Add($"(@ws, @c{n}, N'page', @p{n}, N'upsert', @pv{n}, NULL, NULL, @now)");
             runs.Add($"(@p{n}, @f{n}, @h{n})");
             heads.Add($"(@p{n}, @h{n}, @v{n}, @s{n})");
             parameters.Add(new SqlParameter($"@p{n}", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(decision.Page.Id) });
+            parameters.Add(new SqlParameter($"@c{n}", SqlDbType.BigInt) { Value = changeSeq + n + 1 });
+            parameters.Add(new SqlParameter($"@pv{n}", SqlDbType.BigInt) { Value = decision.Page.Version });
             parameters.Add(new SqlParameter($"@f{n}", SqlDbType.BigInt) { Value = decision.Rows[0].Seq });
             parameters.Add(new SqlParameter($"@h{n}", SqlDbType.BigInt) { Value = decision.Head });
             parameters.Add(new SqlParameter($"@v{n}", SqlDbType.Int) { Value = decision.SchemaVersion });
@@ -284,7 +490,10 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         // Only parameter names and constants are written into the text. A seek on each page's run,
         // so rows pushes are still writing past it are never read. The heads were checked under the
         // lock just before, and nothing else moves a head without it.
-        var sql = $"""
+        sql.Append($"""
+            INSERT INTO [WorkspaceChanges] ([WorkspaceId], [Seq], [EntityType], [EntityId], [Kind], [Version], [ActorUserId], [UserId], [CreatedAt])
+            VALUES {string.Join(", ", changes)};
+            UPDATE [Workspaces] SET [ChangeSeq] = @head WHERE [Id] = @ws;
             UPDATE u SET u.[Status] = {UpdateStatus.Valid}
             FROM (VALUES {string.Join(", ", runs)}) AS v([PageId], [First], [Head])
             INNER LOOP JOIN [PageDocUpdates] u WITH (FORCESEEK) ON u.[PageId] = v.[PageId] AND u.[Seq] BETWEEN v.[First] AND v.[Head]
@@ -293,19 +502,23 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
             FROM (VALUES {string.Join(", ", heads)}) AS v([Id], [Head], [Version], [Hash])
             INNER LOOP JOIN [Pages] p WITH (FORCESEEK) ON p.[Id] = v.[Id];
             IF @@ROWCOUNT <> {decisions.Count} THROW 51000, N'Fewer pages'' heads moved than were decided', 1;
-            """;
-        await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+            """);
+        await db.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, ct);
     }
 
-    /// <summary>One page's pending updates judged, in sequence order, with nothing locked.</summary>
+    /// <summary>
+    /// One page's pending updates judged, in sequence order, with nothing locked. Each document a
+    /// check needs is loaded once (Phase 8), and its meta, its tree and the state hash are read from
+    /// that one load: a pass of one update, or of a batch that passes, loads one document. The checks
+    /// and their order are 0.7.0's, so what is decided, and every problem's text, is the same.
+    /// </summary>
     private async Task<Decision> DecideAsync(CgwDb db, Decision decision, Dictionary<Guid, HashSet<ulong>> clients, CancellationToken ct)
     {
         var page = decision.Page;
         var rows = decision.Rows;
-        var state = await states.LoadAsync(db, page, ct);
+        var (state, vector) = await states.LoadWithVectorAsync(db, page, ct);
         var version = page.DocSchemaVersion;
         var known = Schema.For(version);
-        byte[]? vector = null;
 
         // Each update's own checks; then, if all pass, the whole batch in one merge.
         foreach (var row in rows)
@@ -342,52 +555,78 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         var policy = new ValidationPolicy([], known ?? [], DocService.MaxUpdateBytes, true);
         var passing = rows.Where(r => decision.Verdicts[r.Seq].Count == 0).ToList();
         var before = state;
-        var batchPassed = false;
-        if (passing.Count == rows.Count && rows.Count > 1)
+        // The document of `state` once a check has loaded it: the hash and the next vector are its.
+        YDocument? loaded = null;
+        try
         {
-            try
+            var batchPassed = false;
+            if (passing.Count == rows.Count && rows.Count > 1)
             {
-                var combined = Yjs.Merge(rows.Select(r => r.Data).ToList());
-                var merged = Yjs.Merge([state, combined]);
-                // A batch never raises the schema version: a migration is decided one update at a time.
-                var problems = new List<string>();
-                DocumentCheck(page, merged, version, version, problems);
-                if (problems.Count == 0 && Yjs.Validate(state, combined, policy with { MaxBytes = 0 }).Count == 0)
-                {
-                    state = merged;
-                    batchPassed = true;
-                }
-            }
-            catch (YdocException)
-            {
-                // One at a time, below, says which.
-            }
-        }
-        if (!batchPassed)
-            foreach (var row in passing)
-            {
-                var problems = decision.Verdicts[row.Seq];
+                YDocument? doc = null;
                 try
                 {
-                    var merged = Yjs.Merge([state, row.Data]);
-                    var next = DocumentCheck(page, merged, version, Math.Min(row.ClientSchemaVersion, Schema.Latest), problems);
-                    if (problems.Count == 0) problems.AddRange(Yjs.Validate(state, row.Data, policy with { Elements = Schema.For(next)! }));
-                    if (problems.Count == 0)
+                    var combined = Yjs.Merge(rows.Select(r => r.Data).ToList());
+                    var merged = Yjs.Merge([state, combined]);
+                    // A batch never raises the schema version: a migration is decided one update at a time.
+                    var problems = new List<string>();
+                    doc = DocumentCheck(page, merged, version, version, problems, out _);
+                    // Yjs.Validate(state, combined) loads merge(state, combined), which is `merged`.
+                    if (problems.Count == 0 && Validate(state, combined, doc, policy with { MaxBytes = 0 }).Count == 0)
                     {
                         state = merged;
-                        version = next;
+                        (loaded, doc) = (doc, null);
+                        batchPassed = true;
                     }
                 }
-                catch (YdocException e)
+                catch (YdocException)
                 {
-                    problems.Add($"does not decode: {e.Message}");
+                    // One at a time, below, says which.
+                }
+                finally
+                {
+                    doc?.Dispose();
                 }
             }
-        decision.State = state;
-        decision.SchemaVersion = version;
-        // Nothing passed and the hash is the head's: it stays.
-        decision.Hash = ReferenceEquals(state, before) && page.DocStateHashSeq == page.DocHeadSeq ? page.DocStateHash : Hash(state);
-        return decision;
+            if (!batchPassed)
+                foreach (var row in passing)
+                {
+                    var problems = decision.Verdicts[row.Seq];
+                    YDocument? doc = null;
+                    try
+                    {
+                        var merged = Yjs.Merge([state, row.Data]);
+                        doc = DocumentCheck(page, merged, version, Math.Min(row.ClientSchemaVersion, Schema.Latest), problems, out var next);
+                        if (problems.Count == 0) problems.AddRange(Validate(state, row.Data, doc, policy with { Elements = Schema.For(next)! }));
+                        if (problems.Count == 0)
+                        {
+                            state = merged;
+                            version = next;
+                            loaded?.Dispose();
+                            (loaded, doc) = (doc, null);
+                        }
+                    }
+                    catch (YdocException e)
+                    {
+                        problems.Add($"does not decode: {e.Message}");
+                    }
+                    finally
+                    {
+                        doc?.Dispose();
+                    }
+                }
+            decision.State = state;
+            decision.SchemaVersion = version;
+            // Nothing passed and the hash is the head's: it stays. A state that changed was loaded
+            // by the check that passed it.
+            decision.Hash = ReferenceEquals(state, before) && page.DocStateHashSeq == page.DocHeadSeq ? page.DocStateHash
+                : loaded is not null && !ReferenceEquals(state, before) ? Hash(loaded) : Hash(state);
+            decision.Vector = ReferenceEquals(state, before) ? vector : loaded?.StateVector;
+            return decision;
+        }
+        finally
+        {
+            loaded?.Dispose();
+        }
     }
 
     /// <summary>The state hash, or none when it cannot be made (the head still moves; the hash job tries again).</summary>
@@ -403,29 +642,66 @@ public sealed class ValidateJob(DocStates states, ILogger<ValidateJob> logger) :
         }
     }
 
+    /// <summary>As <see cref="Hash(byte[])"/>, from the document the state was loaded into.</summary>
+    private static string? Hash(YDocument document)
+    {
+        try
+        {
+            return document.StateHash();
+        }
+        catch (YdocException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Yjs.Validate"/> of <paramref name="update"/> on <paramref name="state"/>, given the
+    /// document it would load (merge(state, update), loaded once by <see cref="DocumentCheck"/>): its
+    /// size limit first, then the pusher's pool (empty in the worker: the forgery check is per row),
+    /// then the tree.
+    /// </summary>
+    private static IReadOnlyList<string> Validate(byte[] state, byte[] update, YDocument merged, ValidationPolicy policy)
+    {
+        if (policy.MaxBytes > 0 && update.Length > policy.MaxBytes)
+            return [string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{update.Length} bytes is over the {policy.MaxBytes}-byte limit")];
+        if (policy.Clients.Count > 0) return Yjs.Validate(state, update, policy);
+        return merged.Check(policy);
+    }
+
     /// <summary>
     /// What the whole document must keep: its page and its size; and the schema version it claims,
     /// which may rise above the page's <paramref name="current"/> only as far as
-    /// <paramref name="allowed"/> (what the pushing app and this worker both know). Returns the
-    /// version the document is at.
+    /// <paramref name="allowed"/> (what the pushing app and this worker both know). Gives the version
+    /// the document is at, and returns the document, loaded once, for the rest of its checks.
     /// </summary>
-    private static int DocumentCheck(Page page, byte[] merged, int current, int allowed, List<string> problems)
+    private static YDocument DocumentCheck(Page page, byte[] merged, int current, int allowed, List<string> problems, out int version)
     {
         if (merged.Length > Schema.MaxDocumentBytes) problems.Add("the document would be over 10 MB");
-        using var meta = JsonDocument.Parse(Yjs.Meta(merged));
-        if (meta.RootElement.TryGetProperty("pageId", out var id) && id.ValueKind == JsonValueKind.String && id.GetString() != page.Id.ToString())
-            problems.Add("the document names another page");
-        if (meta.RootElement.TryGetProperty("schemaVersion", out var claimed) && claimed.ValueKind == JsonValueKind.Number
-            && claimed.GetDouble() > current)
+        var document = YDocument.Load(merged);
+        try
         {
-            var value = claimed.GetDouble();
-            if (value != Math.Floor(value) || value > allowed)
-                problems.Add(value > Schema.Latest
-                    ? $"the document claims schema version {value}, newer than this worker knows"
-                    : $"the document claims schema version {value}, newer than the app that pushed it knows");
-            else return (int)value;
+            version = current;
+            using var meta = JsonDocument.Parse(document.Meta());
+            if (meta.RootElement.TryGetProperty("pageId", out var id) && id.ValueKind == JsonValueKind.String && id.GetString() != page.Id.ToString())
+                problems.Add("the document names another page");
+            if (meta.RootElement.TryGetProperty("schemaVersion", out var claimed) && claimed.ValueKind == JsonValueKind.Number
+                && claimed.GetDouble() > current)
+            {
+                var value = claimed.GetDouble();
+                if (value != Math.Floor(value) || value > allowed)
+                    problems.Add(value > Schema.Latest
+                        ? $"the document claims schema version {value}, newer than this worker knows"
+                        : $"the document claims schema version {value}, newer than the app that pushed it knows");
+                else version = (int)value;
+            }
+            return document;
         }
-        return current;
+        catch
+        {
+            document.Dispose();
+            throw;
+        }
     }
 
     private static string Trim(string text) => text.Length > 2000 ? text[..2000] : text;
@@ -553,12 +829,56 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
         return due.Count == 20;
     }
 
+    /// <summary>A derive is tried this many times when SQL Server picks it as a deadlock's victim.</summary>
+    public const int Attempts = 3;
+
+    private static int retried;
+
+    /// <summary>Derives done again after a deadlock, since the process started (for tests).</summary>
+    internal static int Retried => Volatile.Read(ref retried);
+
+    /// <summary>
+    /// Derives a page. A derive chosen as a deadlock's victim (SQL Server's error 1205: its
+    /// transaction meeting another writer of the page's links, references or derived row) has been
+    /// rolled back whole, so it is done again from the start, up to <see cref="Attempts"/> times.
+    /// </summary>
     public async Task DeriveAsync(CgwDb db, Guid pageId, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await DeriveOnceAsync(db, pageId, ct);
+                return;
+            }
+            catch (Exception e) when (attempt < Attempts && Deadlocked(e))
+            {
+                Interlocked.Increment(ref retried);
+                db.ChangeTracker.Clear();
+                await Task.Delay(TimeSpan.FromMilliseconds(50 * attempt), ct);
+            }
+        }
+    }
+
+    /// <summary>Whether SQL Server chose this work as a deadlock's victim (EF wraps its error).</summary>
+    public static bool Deadlocked(Exception? error)
+    {
+        for (; error is not null; error = error.InnerException)
+            if (error is SqlException { Number: 1205 }) return true;
+        return false;
+    }
+
+    private async Task DeriveOnceAsync(CgwDb db, Guid pageId, CancellationToken ct)
     {
         var page = await db.Pages.AsNoTracking().FirstAsync(p => p.Id == pageId, ct);
         var state = await states.LoadAsync(db, page, ct);
-        var json = Yjs.ToJson(state);
-        var text = Yjs.ToText(state);
+        // One load for both (Phase 8).
+        string json, text;
+        using (var document = YDocument.Load(state))
+        {
+            json = document.ToJson();
+            text = document.ToText();
+        }
         var (pages, assets) = Outgoing(json);
         // A row's files are shown by its page too: they stay referenced (and readable) by it.
         if (page.Kind == PageKinds.Row) assets.AddRange((await RowFilesAsync(db, pageId, ct)).Except(assets));
@@ -593,7 +913,18 @@ public sealed class DeriveJob(DocStates states, TimeProvider clock) : IJob
         db.PageLinks.AddRange(pages.Where(id => id != pageId).Select(id => new PageLink { FromPageId = pageId, ToPageId = id, WorkspaceId = page.WorkspaceId }));
         var held = await db.AssetRefs.Where(r => r.PageId == pageId).Select(r => r.AssetId).ToListAsync(ct);
         var known = await db.Assets.Where(a => assets.Contains(a.Id)).Select(a => a.Id).ToListAsync(ct);
-        await db.AssetRefs.Where(r => r.PageId == pageId && !known.Contains(r.AssetId)).ExecuteDeleteAsync(ct);
+        // By the page's own index, so only this page's rows are locked: a scan of the clustered key
+        // (the asset first) took other pages' rows too, and met their derives.
+        await db.Database.ExecuteSqlRawAsync("""
+            DELETE r FROM [AssetRefs] r WITH (FORCESEEK ([IX_AssetRefs_PageId] ([PageId])))
+            WHERE r.[PageId] = @page AND r.[WorkspaceId] = @ws
+                AND r.[AssetId] NOT IN (SELECT CONVERT(binary(16), [value], 2) FROM OPENJSON(@known))
+            """,
+            [
+                new SqlParameter("@page", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(pageId) },
+                new SqlParameter("@ws", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(page.WorkspaceId) },
+                new SqlParameter("@known", SqlDbType.NVarChar, -1) { Value = JsonSerializer.Serialize(known.Select(id => Convert.ToHexString(GuidBytes.ToBytes(id)))) },
+            ], ct);
         db.AssetRefs.AddRange(known.Except(held).Select(id => new AssetRef { AssetId = id, PageId = pageId, WorkspaceId = page.WorkspaceId }));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

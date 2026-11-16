@@ -13,6 +13,7 @@ use yrs::any::Number;
 use yrs::types::text::YChange;
 use yrs::types::Attrs;
 use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
 use yrs::{
     Any, Doc, Options, Out, ReadTxn, StateVector, Text, Transact, Update, Xml, XmlFragment, XmlOut,
 };
@@ -105,18 +106,20 @@ fn load(update: &[u8]) -> Result<Doc> {
     Ok(doc)
 }
 
-/// Merges updates into one, without loading a document (no garbage collection).
+/// Merges updates into one, without loading a document (no garbage collection). Each input is
+/// decoded once (Phase 8): the same bytes as `yrs::merge_updates_v1`, which decodes them again.
 pub fn merge(updates: &[&[u8]]) -> Result<Vec<u8>> {
-    for update in updates {
-        decode(update)?;
-    }
-    yrs::merge_updates_v1(updates.iter().copied()).map_err(|e| YdocError::Decode(e.to_string()))
+    let parsed = updates
+        .iter()
+        .map(|update| decode(update))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Update::merge_updates(parsed).encode_v1())
 }
 
-/// The state vector an update brings a document to.
+/// The state vector an update brings a document to (decoded once: the same bytes as
+/// `yrs::encode_state_vector_from_update_v1`).
 pub fn state_vector(update: &[u8]) -> Result<Vec<u8>> {
-    decode(update)?;
-    yrs::encode_state_vector_from_update_v1(update).map_err(|e| YdocError::Decode(e.to_string()))
+    Ok(decode(update)?.state_vector().encode_v1())
 }
 
 /// What `update` holds that a peer at `state_vector` lacks.
@@ -449,6 +452,11 @@ pub fn state_text(update: &[u8]) -> Result<String> {
     let mut txn = doc.transact_mut();
     txn.apply_update(parsed)
         .map_err(|e| YdocError::Apply(e.to_string()))?;
+    Ok(state_text_of(&txn))
+}
+
+/// [`state_text`] of a document, read in the transaction that loaded it.
+fn state_text_of<T: ReadTxn>(txn: &T) -> String {
     let snapshot = txn.snapshot();
     let mut vector: Vec<(u64, u32)> = snapshot
         .state_map
@@ -483,19 +491,118 @@ pub fn state_text(update: &[u8]) -> Result<String> {
         .iter()
         .map(|(c, s, e)| format!("{c}:{s}-{e}"))
         .collect();
-    Ok(format!("v1;sv={};ds={}", sv.join(","), ds.join(",")))
+    format!("v1;sv={};ds={}", sv.join(","), ds.join(","))
+}
+
+fn hash_text(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(text.as_bytes());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Lowercase hex SHA-256 of [`state_text`]: what the worker stores for a page's validated head and
 /// a device compares with its own before asking for a repair.
 pub fn state_hash(update: &[u8]) -> Result<String> {
-    use sha2::{Digest, Sha256};
-    let digest = Sha256::digest(state_text(update)?.as_bytes());
-    Ok(digest.iter().map(|b| format!("{b:02x}")).collect())
+    Ok(hash_text(&state_text(update)?))
+}
+
+/// A document loaded once, for everything the worker reads of one state (Phase 8): its meta, its
+/// tree against a policy, its state hash, its JSON and text. Each answer is the one the function of
+/// the same name gives for the bytes it was loaded from ([`meta_json`], the tree part of
+/// [`validate`], [`state_hash`], [`to_prosemirror_json`], [`to_plain_text`]), without loading them
+/// again; loading fails where [`meta_json`] would (bad bytes, missing dependencies).
+pub struct Loaded {
+    doc: Doc,
+    state_text: String,
+    state_vector: Vec<u8>,
+}
+
+impl Loaded {
+    pub fn load(update: &[u8]) -> Result<Loaded> {
+        let parsed = decode(update)?;
+        // What [`state_vector`] gives for these bytes: the next pass's forgery check needs it.
+        let state_vector = parsed.state_vector().encode_v1();
+        let doc = Doc::with_options(Options {
+            skip_gc: false,
+            ..Options::default()
+        });
+        let state_text = {
+            let mut txn = doc.transact_mut();
+            txn.apply_update(parsed)
+                .map_err(|e| YdocError::Apply(e.to_string()))?;
+            if txn.store().pending_update().is_some() || txn.store().pending_ds().is_some() {
+                return Err(YdocError::MissingDependencies);
+            }
+            // As [`state_text`] reads it: in the transaction that applied the update.
+            state_text_of(&txn)
+        };
+        Ok(Loaded {
+            doc,
+            state_text,
+            state_vector,
+        })
+    }
+
+    /// The state vector of the bytes this was loaded from, as [`state_vector`] encodes it.
+    pub fn state_vector(&self) -> &[u8] {
+        &self.state_vector
+    }
+
+    pub fn state_hash(&self) -> String {
+        hash_text(&self.state_text)
+    }
+
+    /// As [`meta_json`].
+    pub fn meta_json(&self) -> Result<String> {
+        use yrs::Map as _;
+        let meta = self.doc.get_or_insert_map(META);
+        let txn = self.doc.transact();
+        let mut out = Map::new();
+        for (key, value) in meta.iter(&txn) {
+            out.insert(key.to_string(), out_to_json(&value)?);
+        }
+        Ok(Value::Object(out).to_string())
+    }
+
+    /// The tree's problems against `policy` (its elements and block ids): what [`validate`] finds
+    /// after its size and client checks, for the document made by `state` and the update.
+    pub fn check(&self, policy: &Policy) -> Vec<String> {
+        let mut problems = Vec::new();
+        let root = self.doc.get_or_insert_xml_fragment(CONTENT);
+        let txn = self.doc.transact();
+        for child in root.children(&txn) {
+            check_tree(&txn, &child, 1, policy, &mut problems);
+        }
+        problems
+    }
+
+    /// As [`to_prosemirror_json`] of `content`.
+    pub fn to_prosemirror_json(&self) -> Result<String> {
+        let root = self.doc.get_or_insert_xml_fragment(CONTENT);
+        let txn = self.doc.transact();
+        let mut content = Vec::new();
+        for child in root.children(&txn) {
+            node_json(&txn, &child, 1, &mut content)?;
+        }
+        Ok(serde_json::json!({ "type": "doc", "content": content }).to_string())
+    }
+
+    /// As [`to_plain_text`] of `content`.
+    pub fn to_plain_text(&self) -> Result<String> {
+        let root = self.doc.get_or_insert_xml_fragment(CONTENT);
+        let txn = self.doc.transact();
+        let mut out = String::new();
+        for child in root.children(&txn) {
+            collect_text(&txn, &child, 1, &mut out)?;
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
 mod hostile_tests;
+#[cfg(test)]
+mod loaded_tests;
 #[cfg(test)]
 mod state_hash_tests;
 #[cfg(test)]

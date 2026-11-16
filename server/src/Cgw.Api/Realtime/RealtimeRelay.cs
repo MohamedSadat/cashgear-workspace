@@ -35,6 +35,31 @@ public sealed class RealtimeRelay(
     private static readonly TimeSpan SendWait = TimeSpan.FromMilliseconds(250);
     private readonly SemaphoreSlim passing = new(1, 1);
     private readonly Dictionary<Guid, (List<Guid> Users, long At)> presenceSent = [];
+    /// <summary>
+    /// The relay's own connection for its heads read, kept open (Phase 8: the read runs every 20 ms,
+    /// and most passes need nothing else from the database); made again after any failure.
+    /// </summary>
+    private Microsoft.Data.SqlClient.SqlConnection? headsConnection;
+    private string? connectionString;
+
+    /// <summary>A pass's database, made only when the pass needs more than the heads.</summary>
+    private sealed class PassDb(IServiceScopeFactory scopes) : IAsyncDisposable
+    {
+        private AsyncServiceScope? scope;
+        private CgwDb? db;
+
+        public CgwDb Get()
+        {
+            if (db is not null) return db;
+            scope = scopes.CreateAsyncScope();
+            return db = scope.Value.ServiceProvider.GetRequiredService<CgwDb>();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (scope is { } made) await made.DisposeAsync();
+        }
+    }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -75,11 +100,15 @@ public sealed class RealtimeRelay(
             var workspaces = registry.Workspaces();
             foreach (var gone in registry.WorkspaceCursors.Keys.Where(k => !workspaces.ContainsKey(k)).ToList()) registry.WorkspaceCursors.TryRemove(gone, out _);
             if (pages.Count == 0 && workspaces.Count == 0 && registry.PresenceDirty.IsEmpty) return;
-            await using var scope = scopes.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<CgwDb>();
-            if (pages.Count > 0) await RelayPagesAsync(db, pages, ct);
-            if (workspaces.Count > 0) await WatchWorkspacesAsync(db, workspaces, ct);
-            if (!registry.PresenceDirty.IsEmpty) await PresenceAsync(db, ct);
+            await using var db = new PassDb(scopes);
+            if (pages.Count > 0 || workspaces.Count > 0)
+            {
+                // Every head this pass needs in one round trip (Phase 8: the relay reads them every 20 ms).
+                var (pageHeads, workspaceHeads) = await HeadsAsync(db, pages.Keys, workspaces.Keys, ct);
+                if (pages.Count > 0) await RelayPagesAsync(db, pages, pageHeads, ct);
+                if (workspaces.Count > 0) await WatchWorkspacesAsync(db, workspaces, workspaceHeads, ct);
+            }
+            if (!registry.PresenceDirty.IsEmpty) await PresenceAsync(db.Get(), ct);
         }
         finally
         {
@@ -87,16 +116,109 @@ public sealed class RealtimeRelay(
         }
     }
 
-    private async Task RelayPagesAsync(CgwDb db, Dictionary<Guid, (Guid Workspace, List<string> Connections)> pages, CancellationToken ct)
+    /// <summary>
+    /// The validated heads of these pages (any workspace), and the feed heads of these workspaces
+    /// with whether an access, member or workspace change came after what this node last saw of each
+    /// (as <see cref="ChangeLog.AccessChangedAsync"/> asks): 0.7.0's reads, in one batch.
+    /// </summary>
+    private async Task<(List<(Guid Id, long Head, int Epoch)> Pages, List<(Guid Id, long Seq, bool AccessChanged, long Asked)> Workspaces)> HeadsAsync(
+        PassDb db, IEnumerable<Guid> pageIds, IEnumerable<Guid> workspaceIds, CancellationToken ct)
     {
-        var heads = new List<(Guid Id, long Head, int Epoch)>();
-        foreach (var chunk in pages.Keys.Chunk(1000))
+        static string Hex(Guid id) => Convert.ToHexString(GuidBytes.ToBytes(id));
+        var pagesJson = System.Text.Json.JsonSerializer.Serialize(pageIds.Select(Hex));
+        // A workspace first seen here has no cursor yet: nothing to ask of it.
+        var asked = workspaceIds.ToDictionary(id => id, id => registry.WorkspaceCursors.TryGetValue(id, out var cursor) ? cursor.Seen : long.MaxValue);
+        var workspacesJson = System.Text.Json.JsonSerializer.Serialize(asked.Select(a => new { id = Hex(a.Key), seen = a.Value }));
+        connectionString ??= db.Get().Database.GetConnectionString();
+        if (headsConnection is null)
         {
-            var ids = chunk.ToList();
-            heads.AddRange((await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(p => ids.Contains(p.Id))
-                    .Select(p => new { p.Id, p.DocHeadSeq, p.DocEpoch }).ToListAsync(ct))
-                .Select(p => (p.Id, p.DocHeadSeq, p.DocEpoch)));
+            headsConnection = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
+            await headsConnection.OpenAsync(ct);
         }
+        try
+        {
+            await using var command = headsConnection.CreateCommand();
+            command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@pages", System.Data.SqlDbType.NVarChar, -1) { Value = pagesJson });
+            command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@workspaces", System.Data.SqlDbType.NVarChar, -1) { Value = workspacesJson });
+            command.CommandText = """
+                SELECT p.[Id], p.[DocHeadSeq], p.[DocEpoch] FROM [Pages] p
+                WHERE p.[Id] IN (SELECT CONVERT(binary(16), [value], 2) FROM OPENJSON(@pages));
+                SELECT w.[Id], w.[ChangeSeq],
+                    CASE WHEN w.[ChangeSeq] > j.[seen] AND EXISTS (SELECT 1 FROM [WorkspaceChanges] c WHERE c.[WorkspaceId] = w.[Id] AND c.[Seq] > j.[seen]
+                        AND c.[EntityType] IN (N'access', N'member', N'workspace')) THEN 1 ELSE 0 END
+                FROM OPENJSON(@workspaces) WITH ([id] char(32), [seen] bigint) j
+                INNER JOIN [Workspaces] w ON w.[Id] = CONVERT(binary(16), j.[id], 2);
+                """;
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            var pages = new List<(Guid, long, int)>();
+            while (await reader.ReadAsync(ct))
+                pages.Add((GuidBytes.FromBytes(reader.GetFieldValue<byte[]>(0)), reader.GetInt64(1), reader.GetInt32(2)));
+            await reader.NextResultAsync(ct);
+            var workspaces = new List<(Guid, long, bool, long)>();
+            while (await reader.ReadAsync(ct))
+            {
+                var id = GuidBytes.FromBytes(reader.GetFieldValue<byte[]>(0));
+                workspaces.Add((id, reader.GetInt64(1), reader.GetInt32(2) == 1, asked[id]));
+            }
+            return (pages, workspaces);
+        }
+        catch
+        {
+            // Opened again on the next pass.
+            await headsConnection.DisposeAsync();
+            headsConnection = null;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="FrameAsync"/> of one row (a push a key), on the relay's own connection: the same
+    /// read as its one-row path, so the same frame, without a scope or EF for it.
+    /// </summary>
+    private async Task<RealtimeFrame> OneRowFrameAsync(Guid pageId, int epoch, long after, long head, CancellationToken ct)
+    {
+        var connection = headsConnection ?? throw new InvalidOperationException("The heads were not read");
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@page", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(pageId) });
+            command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@epoch", System.Data.SqlDbType.Int) { Value = epoch });
+            command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@after", System.Data.SqlDbType.BigInt) { Value = after });
+            command.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@head", System.Data.SqlDbType.BigInt) { Value = head });
+            command.CommandText = $"""
+                SELECT [Seq], [UpdateId], [Status], CAST(ISNULL(DATALENGTH([Data]), 0) AS bigint), CASE WHEN [Status] = {UpdateStatus.Valid} THEN [Data] END
+                FROM [PageDocUpdates]
+                WHERE [PageId] = @page AND [Epoch] = @epoch AND [Seq] > @after AND [Seq] <= @head AND [Status] <> {UpdateStatus.Pending}
+                """;
+            var rows = new List<(long Seq, Guid UpdateId, byte Status, long Size, byte[]? Data)>();
+            await using (var reader = await command.ExecuteReaderAsync(ct))
+                while (await reader.ReadAsync(ct))
+                    rows.Add((reader.GetInt64(0), GuidBytes.FromBytes(reader.GetFieldValue<byte[]>(1)), reader.GetByte(2), reader.GetInt64(3),
+                        reader.IsDBNull(4) ? null : reader.GetFieldValue<byte[]>(4)));
+            RealtimeFrame Incomplete() => new(pageId, epoch, after, head, head, [], [], false);
+            if (rows.Count != 1) return Incomplete();
+            var row = rows[0];
+            if (row.Status != UpdateStatus.Valid) return new RealtimeFrame(pageId, epoch, after, head, head, [], [row.UpdateId], true);
+            if (row.Size > RealtimeSettings.MaxFrameBytes) return Incomplete();
+            return new RealtimeFrame(pageId, epoch, after, head, head, [new FrameUpdate(row.Seq, row.UpdateId, row.Data!)], [], true);
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+            headsConnection = null;
+            throw;
+        }
+    }
+
+    public override void Dispose()
+    {
+        headsConnection?.Dispose();
+        base.Dispose();
+    }
+
+    private async Task RelayPagesAsync(PassDb db, Dictionary<Guid, (Guid Workspace, List<string> Connections)> pages, List<(Guid Id, long Head, int Epoch)> heads,
+        CancellationToken ct)
+    {
         var sends = new List<Task>();
         foreach (var (id, head, epoch) in heads)
         {
@@ -110,7 +232,9 @@ public sealed class RealtimeRelay(
             // Another epoch (a hard restore): the client pulls the page anew.
             var frame = cursor.Epoch != epoch
                 ? new RealtimeFrame(id, epoch, 0, head, head, [], [], false)
-                : await FrameAsync(db, id, epoch, cursor.Head, head, ct);
+                : head - cursor.Head == 1
+                    ? await OneRowFrameAsync(id, epoch, cursor.Head, head, ct)
+                    : await FrameAsync(db.Get(), id, epoch, cursor.Head, head, ct);
             registry.PageCursors[id] = new PageCursor(epoch, head);
             sends.Add(SendFrameAsync(pages[id].Connections, frame, ct));
         }
@@ -127,6 +251,17 @@ public sealed class RealtimeRelay(
         if (head - after > RealtimeSettings.MaxFrameRows) return Incomplete();
         var rows = db.PageDocUpdates.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
             .Where(u => u.PageId == pageId && u.Epoch == epoch && u.Seq > after && u.Seq <= head && u.Status != UpdateStatus.Pending);
+        if (head - after == 1)
+        {
+            // One row, a push a key (Phase 8): its data read with it, one round trip; the same frame.
+            var one = await rows.Select(u => new { u.Seq, u.UpdateId, u.Status, Size = EF.Functions.DataLength(u.Data) ?? 0, Data = u.Status == UpdateStatus.Valid ? u.Data : null })
+                .ToListAsync(ct);
+            if (one.Count != 1) return Incomplete();
+            var row = one[0];
+            if (row.Status != UpdateStatus.Valid) return new RealtimeFrame(pageId, epoch, after, head, head, [], [row.UpdateId], true);
+            if (row.Size > RealtimeSettings.MaxFrameBytes) return Incomplete();
+            return new RealtimeFrame(pageId, epoch, after, head, head, [new FrameUpdate(row.Seq, row.UpdateId, row.Data!)], [], true);
+        }
         var decided = await rows.OrderBy(u => u.Seq)
             .Select(u => new { u.Seq, u.UpdateId, u.Status, Size = EF.Functions.DataLength(u.Data) ?? 0 }).ToListAsync(ct);
         if (decided.Count != head - after) return Incomplete();
@@ -167,18 +302,12 @@ public sealed class RealtimeRelay(
         }
     }
 
-    private async Task WatchWorkspacesAsync(CgwDb db, Dictionary<Guid, List<string>> workspaces, CancellationToken ct)
+    private async Task WatchWorkspacesAsync(PassDb db, Dictionary<Guid, List<string>> workspaces, List<(Guid Id, long Seq, bool AccessChanged, long Asked)> heads,
+        CancellationToken ct)
     {
-        var heads = new List<(Guid Id, long Seq)>();
-        foreach (var chunk in workspaces.Keys.Chunk(1000))
-        {
-            var ids = chunk.ToList();
-            heads.AddRange((await db.Workspaces.AsNoTracking().Where(w => ids.Contains(w.Id)).Select(w => new { w.Id, w.ChangeSeq }).ToListAsync(ct))
-                .Select(w => (w.Id, w.ChangeSeq)));
-        }
         var now = Environment.TickCount64;
         var sends = new List<Task>();
-        foreach (var (id, seq) in heads)
+        foreach (var (id, seq, accessChanged, asked) in heads)
         {
             if (!registry.WorkspaceCursors.TryGetValue(id, out var cursor))
             {
@@ -188,7 +317,9 @@ public sealed class RealtimeRelay(
             if (seq > cursor.Seen)
             {
                 // Who may do what changed: this node's connections there are checked again at once.
-                if (await ChangeLog.AccessChangedAsync(db, id, cursor.Seen, ct))
+                // Asked with the heads (Phase 8), past the cursor as it was then; a cursor made since
+                // (a JoinWorkspaces meanwhile) is asked alone, as before.
+                if (asked == cursor.Seen ? accessChanged : await ChangeLog.AccessChangedAsync(db.Get(), id, cursor.Seen, ct))
                 {
                     registry.ForgetLevels(id);
                     registry.CheckNow(registry.In(id));

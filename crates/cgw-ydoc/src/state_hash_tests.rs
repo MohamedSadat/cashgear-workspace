@@ -4,7 +4,7 @@
 use super::*;
 use yrs::{GetString, Map as _};
 
-fn vectors() -> Vec<Value> {
+pub(crate) fn vectors() -> Vec<Value> {
     let file = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../packages/doc/vectors/state-hash-vectors.json"
@@ -15,7 +15,7 @@ fn vectors() -> Vec<Value> {
 }
 
 /// Standard base64, as the script writes it (no dependency for a test).
-fn base64(text: &str) -> Vec<u8> {
+pub(crate) fn base64(text: &str) -> Vec<u8> {
     let value = |c: u8| -> u32 {
         match c {
             b'A'..=b'Z' => (c - b'A') as u32,

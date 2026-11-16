@@ -232,6 +232,148 @@ public sealed class RealtimeTests(ServerFixture server)
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
+    /// <summary>
+    /// Phase 8: the hub's push reads the gate in the push's own batch and decides there only where
+    /// the page's section decides (the private section's owner; owners and admins; a member no page
+    /// of the chain decides for), leaving the rest to the gate. Every caller is answered as over HTTP
+    /// either way.
+    /// </summary>
+    [Fact]
+    public async Task PushUpdates_decides_every_caller_as_the_HTTP_push_does()
+    {
+        var ws = await Ws.Create(server);
+        var admin = await Kit.Join(server, ws, "admin");
+        var member = await Kit.Join(server, ws, "member");
+        var guest = await Kit.Join(server, ws, "guest");
+        var open = await NewPage(ws, "Open");
+        var parent = await NewPage(ws, "Restricted parent");
+        await Kit.Share(ws, parent, true, ("user", member.Id, "edit"));
+        var child = (await ws.NewPage("Child", parent)).GetProperty("id").GetGuid();
+        var closed = await NewPage(ws, "Closed parent");
+        await Kit.Share(ws, closed, true);
+        var closedChild = (await ws.NewPage("Closed child", closed)).GetProperty("id").GetGuid();
+        var viewedByAll = await NewPage(ws, "Viewed by the workspace");
+        await Kit.Share(ws, viewedByAll, false, ("workspace", ws.Id, "view"));
+        var editedByAll = await NewPage(ws, "Edited by the workspace");
+        await Kit.Share(ws, editedByAll, false, ("workspace", ws.Id, "edit"));
+        var guestEdits = await NewPage(ws, "The guest edits");
+        await Kit.Share(ws, guestEdits, false, ("user", guest.Id, "edit"));
+        var personal = Guid.CreateVersion7();
+        await ws.Push(member.Client, ws.Op("section.create", personal,
+            new { id = personal, workspaceId = ws.Id, name = "Mine", orderKey = "a5", visibility = "private", version = 1, createdAt = DateTimeOffset.UtcNow }));
+        var theirs = Guid.CreateVersion7();
+        Assert.Equal("applied", (await ws.Push(member.Client, ws.Op("page.create", theirs, Ws.Page(theirs, ws.Id, personal, null, "a0", "Theirs"))))[0]
+            .GetProperty("status").GetString());
+        var database = await DatabaseTests.NewDatabase(ws, "Table");
+        var row = Guid.CreateVersion7();
+        var rowPayload = DatabaseTests.PageJson(row, ws.Id, ws.Shared, database, "a0", "A row", "row");
+        rowPayload["row"] = new System.Text.Json.Nodes.JsonObject { ["values"] = new System.Text.Json.Nodes.JsonObject() };
+        Assert.Equal("applied", (await ws.Push(ws.Op("page.create", row, rowPayload)))[0].GetProperty("status").GetString());
+
+        var hubs = new Dictionary<HttpClient, HubClient>();
+        async Task<HubClient> HubOf(HttpClient client) => hubs.TryGetValue(client, out var hub) ? hub : hubs[client] = await HubClient.Connect(server.Api, client);
+        static async Task<string> OverHttp(HttpResponseMessage response)
+        {
+            if (response.IsSuccessStatusCode) return "ok";
+            var problem = await Kit.Json(response);
+            return $"{(int)response.StatusCode} {problem.GetProperty("code").GetString()} {problem.GetProperty("title").GetString()}";
+        }
+        static string OverHub(JsonElement answer) => answer.GetProperty("ok").GetBoolean()
+            ? "ok"
+            : $"{answer.GetProperty("status").GetInt32()} {answer.GetProperty("code").GetString()} {answer.GetProperty("title").GetString()}";
+        var update = Kit.Update("page");
+        var cases = new (string Name, HttpClient Client, Guid Page, string Expected)[]
+        {
+            ("the owner", ws.Client, open, "ok"),
+            ("an admin", admin.Client, open, "ok"),
+            ("a member no page decides for", member.Client, open, "ok"),
+            ("a member under a restricted page with a row for them", member.Client, child, "ok"),
+            ("a member under a restricted page", member.Client, closedChild, "404 not.found No such page"),
+            ("a member the workspace's view row decides for", member.Client, viewedByAll, "403 access.denied This page is read-only for you"),
+            ("a member the workspace's edit row decides for", member.Client, editedByAll, "ok"),
+            ("a guest with a row", guest.Client, guestEdits, "ok"),
+            ("a guest with none", guest.Client, open, "404 not.found No such page"),
+            ("the private section's owner", member.Client, theirs, "ok"),
+            ("the workspace's owner on another's private page", ws.Client, theirs, "404 not.found No such page"),
+            ("an admin on another's private page", admin.Client, theirs, "404 not.found No such page"),
+            ("a database's row", member.Client, row, "ok"),
+            ("a guest on a database's row", guest.Client, row, "404 not.found No such page"),
+        };
+        var failures = new List<string>();
+        try
+        {
+            foreach (var (name, client, target, expected) in cases)
+            {
+                var http = await OverHttp(await client.PostAsJsonAsync($"/api/v1/pages/{target}/doc/updates", RealtimeKit.Push((Guid.CreateVersion7(), update))));
+                var hub = OverHub(await (await HubOf(client)).Call("PushUpdates", target.ToString(), RealtimeKit.Push((Guid.CreateVersion7(), update))));
+                if (http != expected || hub != expected) failures.Add($"{name}: expected {expected}, HTTP {http}, hub {hub}");
+            }
+            // Refused in the push's transaction as before: an id already used for another page.
+            var used = Guid.CreateVersion7();
+            await (await HubOf(ws.Client)).Ok("PushUpdates", open.ToString(), RealtimeKit.Push((used, update)));
+            var reused = RealtimeKit.Push((used, update));
+            var httpReused = await OverHttp(await ws.Client.PostAsJsonAsync($"/api/v1/pages/{editedByAll}/doc/updates", reused));
+            var hubReused = OverHub(await (await HubOf(ws.Client)).Call("PushUpdates", editedByAll.ToString(), reused));
+            Assert.Equal("400 request.invalid An update id is already used for another page", httpReused);
+            Assert.Equal(httpReused, hubReused);
+            // A repeat (a lost answer) is answered with the number it was given the first time.
+            var repeat = await (await HubOf(member.Client)).Ok("PushUpdates", open.ToString(), RealtimeKit.Push((used, update)));
+            var acks = repeat.GetProperty("acks");
+            Assert.Equal(used, acks[0].GetProperty("updateId").GetGuid());
+            Assert.Equal(await SeqOf(ws, open, used), acks[0].GetProperty("seq").GetInt64());
+        }
+        finally
+        {
+            foreach (var hub in hubs.Values) await hub.DisposeAsync();
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    /// <summary>
+    /// Phase 8: a hub push the page's section decides is one batch, the gate's read with the push's
+    /// transaction; a caller it does not decide is decided by the gate on the row the batch read,
+    /// then pushed in a second batch (and nothing more is read of the page or the membership).
+    /// </summary>
+    [Fact]
+    public async Task A_hub_push_the_section_decides_is_one_round_trip()
+    {
+        var ws = await Ws.Create(server);
+        var admin = await Kit.Join(server, ws, "admin");
+        var member = await Kit.Join(server, ws, "member");
+        var parent = await NewPage(ws, "Restricted parent");
+        await Kit.Share(ws, parent, true, ("user", member.Id, "edit"));
+        var cases = new (string Name, HttpClient Client, Guid Page, int Batches)[]
+        {
+            ("the owner", ws.Client, await NewPage(ws, "Owner's"), 1),
+            ("an admin", admin.Client, await NewPage(ws, "Admin's"), 1),
+            ("a member no page decides for", member.Client, await NewPage(ws, "Member's"), 1),
+            ("the private section's owner", ws.Client, await NewPage(ws, "Private", ws.Personal), 1),
+            ("a member a page's row decides for", member.Client, (await ws.NewPage("Child", parent)).GetProperty("id").GetGuid(), 2),
+        };
+        using var commands = SqlCommands.Watch();
+        var failures = new List<string>();
+        foreach (var (name, client, page, batches) in cases)
+        {
+            await using var hub = await HubClient.Connect(server.Api, client);
+            commands.Clear();
+            await hub.Ok("PushUpdates", page.ToString(), RealtimeKit.Push((Guid.CreateVersion7(), Kit.Update("page"))));
+            // The page's commands that read the membership (the gate) or store updates (the push).
+            var ran = commands.Carrying(GuidBytes.ToBytes(page))
+                .Where(c => c.Contains("[WorkspaceMembers]") || c.Contains("INSERT INTO [PageDocUpdates]")).ToList();
+            var gates = ran.Count(c => c.Contains("[WorkspaceMembers]"));
+            var pushes = ran.Count(c => c.Contains("INSERT INTO [PageDocUpdates]"));
+            if (ran.Count != batches || gates != 1 || pushes != batches)
+                failures.Add($"{name}: {ran.Count} commands (expected {batches}), {gates} reading the membership (expected 1), {pushes} pushing (expected {batches})");
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    private async Task<long> SeqOf(Ws ws, Guid page, Guid updateId)
+    {
+        await using var db = server.NewDb(ws.Id);
+        return await db.PageDocUpdates.Where(u => u.PageId == page && u.UpdateId == updateId).Select(u => u.Seq).SingleAsync();
+    }
+
     [Fact]
     public async Task The_hubs_push_budget_is_the_push_buckets_size_and_refuses_as_the_bucket_does()
     {
@@ -681,5 +823,67 @@ public sealed class RealtimeTests(ServerFixture server)
         Assert.True(relayed.GetProperty("maxMs").GetDouble() > 0);
         Assert.Equal(HttpStatusCode.NoContent, (await reader.DeleteAsync("/api/v1/realtime/metrics")).StatusCode);
         Assert.Equal(0, (await reader.GetFromJsonAsync<JsonElement>("/api/v1/realtime/metrics")).GetProperty("relayed").GetProperty("count").GetInt64());
+    }
+}
+
+/// <summary>
+/// The SQL commands this process runs, as SqlClient reports them (its diagnostic listener), with
+/// their binary parameters: what a test asks of one page's requests while others run beside it.
+/// </summary>
+internal sealed class SqlCommands : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(string Text, byte[][] Binary)> ran = new();
+    private readonly List<IDisposable> subscriptions = [];
+
+    public static SqlCommands Watch()
+    {
+        var watch = new SqlCommands();
+        lock (watch.subscriptions) watch.subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(watch));
+        return watch;
+    }
+
+    public void Clear() => ran.Clear();
+
+    /// <summary>The texts of the commands run since the last <see cref="Clear"/> with this binary parameter.</summary>
+    public List<string> Carrying(byte[] value) =>
+        ran.Where(c => c.Binary.Any(b => b.AsSpan().SequenceEqual(value))).Select(c => c.Text).ToList();
+
+    void IObserver<DiagnosticListener>.OnNext(DiagnosticListener listener)
+    {
+        if (listener.Name != "SqlClientDiagnosticListener") return;
+        lock (subscriptions) subscriptions.Add(listener.Subscribe(this));
+    }
+
+    void IObserver<KeyValuePair<string, object?>>.OnNext(KeyValuePair<string, object?> e)
+    {
+        if (!e.Key.EndsWith("WriteCommandBefore", StringComparison.Ordinal)) return;
+        if (e.Value?.GetType().GetProperty("Command")?.GetValue(e.Value) is not System.Data.Common.DbCommand command) return;
+        var binary = command.Parameters.Cast<System.Data.Common.DbParameter>().Select(p => p.Value).OfType<byte[]>().ToArray();
+        ran.Enqueue((command.CommandText, binary));
+    }
+
+    void IObserver<DiagnosticListener>.OnCompleted()
+    {
+    }
+
+    void IObserver<DiagnosticListener>.OnError(Exception error)
+    {
+    }
+
+    void IObserver<KeyValuePair<string, object?>>.OnCompleted()
+    {
+    }
+
+    void IObserver<KeyValuePair<string, object?>>.OnError(Exception error)
+    {
+    }
+
+    public void Dispose()
+    {
+        lock (subscriptions)
+        {
+            foreach (var subscription in subscriptions) subscription.Dispose();
+            subscriptions.Clear();
+        }
     }
 }

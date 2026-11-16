@@ -199,6 +199,118 @@ pub unsafe extern "C" fn cgw_state_hash(update: CgwSlice, out: *mut CgwBuffer) -
     })
 }
 
+/// Loads a document once (Phase 8: a validation pass loads each state it checks once). On success
+/// writes the document to `*doc` (free it with [`cgw_doc_free`]) and the state vector of `update`
+/// to `out`; on failure `*doc` is null and `out` holds the error, as [`cgw_meta`] would fail.
+///
+/// # Safety
+/// As [`cgw_merge`], for one slice; `doc` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_load(
+    update: CgwSlice,
+    doc: *mut *mut crate::Loaded,
+    out: *mut CgwBuffer,
+) -> i32 {
+    if doc.is_null() {
+        return YdocError::Decode(String::new()).code();
+    }
+    *doc = std::ptr::null_mut();
+    run(out, || {
+        let loaded = crate::Loaded::load(borrow(&update)?)?;
+        let vector = loaded.state_vector().to_vec();
+        *doc = Box::into_raw(Box::new(loaded));
+        Ok(vector)
+    })
+}
+
+/// # Safety
+/// `doc` came from [`cgw_doc_load`] and was not freed.
+unsafe fn loaded<'a>(doc: *const crate::Loaded) -> Result<&'a crate::Loaded, YdocError> {
+    doc.as_ref()
+        .ok_or_else(|| YdocError::Decode("no document".into()))
+}
+
+/// Frees a document from [`cgw_doc_load`]; null does nothing.
+///
+/// # Safety
+/// `doc` came from [`cgw_doc_load`] and was not freed before.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_free(doc: *mut crate::Loaded) {
+    if !doc.is_null() {
+        drop(Box::from_raw(doc));
+    }
+}
+
+/// The loaded document's `meta` as JSON, as [`cgw_meta`].
+///
+/// # Safety
+/// `doc` as [`cgw_doc_free`]; `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_meta(doc: *const crate::Loaded, out: *mut CgwBuffer) -> i32 {
+    run(out, || Ok(loaded(doc)?.meta_json()?.into_bytes()))
+}
+
+/// The loaded document's tree checked against a policy given as JSON (`elements`, `blockIds`, as
+/// [`cgw_validate`]'s); writes `{"problems":[string]}`.
+///
+/// # Safety
+/// `doc` as [`cgw_doc_free`]; `policy` as [`cgw_merge`]; `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_check(
+    doc: *const crate::Loaded,
+    policy: CgwSlice,
+    out: *mut CgwBuffer,
+) -> i32 {
+    run(out, || {
+        let doc = loaded(doc)?;
+        let policy: serde_json::Value = serde_json::from_slice(borrow(&policy)?)
+            .map_err(|e| YdocError::Decode(format!("policy: {e}")))?;
+        let policy = crate::Policy {
+            clients: Vec::new(),
+            elements: policy["elements"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|e| e.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            max_bytes: 0,
+            block_ids: policy["blockIds"].as_bool().unwrap_or(false),
+        };
+        Ok(serde_json::json!({ "problems": doc.check(&policy) })
+            .to_string()
+            .into_bytes())
+    })
+}
+
+/// The loaded document's state hash, as [`cgw_state_hash`].
+///
+/// # Safety
+/// `doc` as [`cgw_doc_free`]; `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_state_hash(doc: *const crate::Loaded, out: *mut CgwBuffer) -> i32 {
+    run(out, || Ok(loaded(doc)?.state_hash().into_bytes()))
+}
+
+/// The loaded document's ProseMirror JSON of `content`, as [`cgw_to_json`].
+///
+/// # Safety
+/// `doc` as [`cgw_doc_free`]; `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_to_json(doc: *const crate::Loaded, out: *mut CgwBuffer) -> i32 {
+    run(out, || Ok(loaded(doc)?.to_prosemirror_json()?.into_bytes()))
+}
+
+/// The loaded document's plain text of `content`, as [`cgw_to_text`].
+///
+/// # Safety
+/// `doc` as [`cgw_doc_free`]; `out` is writable.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_doc_to_text(doc: *const crate::Loaded, out: *mut CgwBuffer) -> i32 {
+    run(out, || Ok(loaded(doc)?.to_plain_text()?.into_bytes()))
+}
+
 /// The library's version, for the worker's log. Never fails.
 #[no_mangle]
 pub extern "C" fn cgw_version(out: *mut CgwBuffer) -> i32 {

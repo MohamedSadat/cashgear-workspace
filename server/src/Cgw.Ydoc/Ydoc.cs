@@ -62,6 +62,107 @@ internal static class Native
 
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     public static extern int cgw_state_hash(CgwSlice update, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_doc_load(CgwSlice update, out IntPtr doc, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void cgw_doc_free(IntPtr doc);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_doc_meta(DocHandle doc, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_doc_check(DocHandle doc, CgwSlice policy, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_doc_state_hash(DocHandle doc, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_doc_to_json(DocHandle doc, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_doc_to_text(DocHandle doc, out CgwBuffer output);
+}
+
+/// A document the library loaded and keeps until it is freed.
+internal sealed class DocHandle() : SafeHandle(IntPtr.Zero, ownsHandle: true)
+{
+    public DocHandle(IntPtr handle) : this() => SetHandle(handle);
+
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
+    protected override bool ReleaseHandle()
+    {
+        Native.cgw_doc_free(handle);
+        return true;
+    }
+}
+
+/// <summary>
+/// A state loaded into a document once (Phase 8): its meta, its tree checked against a policy, its
+/// state hash, its JSON and text, each the answer <see cref="Yjs"/>'s function of the same name gives
+/// for the bytes it was loaded from, without loading them again. Loading fails, with the same
+/// <see cref="YdocException"/>, where <see cref="Yjs.Meta"/> fails.
+/// </summary>
+public sealed class YDocument : IDisposable
+{
+    private readonly DocHandle handle;
+
+    private YDocument(DocHandle handle, byte[] stateVector)
+    {
+        this.handle = handle;
+        StateVector = stateVector;
+    }
+
+    /// <summary>What <see cref="Yjs.StateVector"/> gives for the bytes it was loaded from.</summary>
+    public byte[] StateVector { get; }
+
+    public static unsafe YDocument Load(ReadOnlySpan<byte> update)
+    {
+        Yjs.Counted();
+        fixed (byte* p = update)
+        {
+            var status = Native.cgw_doc_load(new CgwSlice { Ptr = (IntPtr)p, Len = (UIntPtr)update.Length }, out var doc, out var output);
+            var vector = Yjs.Take(status, output);
+            return new YDocument(new DocHandle(doc), vector);
+        }
+    }
+
+    private delegate int Call(DocHandle doc, out CgwBuffer output);
+
+    private byte[] Run(Call call)
+    {
+        ObjectDisposedException.ThrowIf(handle.IsClosed, this);
+        var status = call(handle, out var output);
+        return Yjs.Take(status, output);
+    }
+
+    public string Meta() => Encoding.UTF8.GetString(Run(Native.cgw_doc_meta));
+
+    public string StateHash() => Encoding.UTF8.GetString(Run(Native.cgw_doc_state_hash));
+
+    public string ToJson() => Encoding.UTF8.GetString(Run(Native.cgw_doc_to_json));
+
+    public string ToText() => Encoding.UTF8.GetString(Run(Native.cgw_doc_to_text));
+
+    /// <summary>
+    /// The tree's problems against the policy's elements and block ids: what
+    /// <see cref="Yjs.Validate"/> finds past its size and client checks.
+    /// </summary>
+    public unsafe IReadOnlyList<string> Check(ValidationPolicy policy)
+    {
+        ObjectDisposedException.ThrowIf(handle.IsClosed, this);
+        var policyBytes = JsonSerializer.SerializeToUtf8Bytes(new { elements = policy.Elements, blockIds = policy.BlockIds });
+        fixed (byte* p = policyBytes)
+        {
+            var status = Native.cgw_doc_check(handle, new CgwSlice { Ptr = (IntPtr)p, Len = (UIntPtr)policyBytes.Length }, out var output);
+            using var json = JsonDocument.Parse(Yjs.Take(status, output));
+            return json.RootElement.GetProperty("problems").EnumerateArray().Select(x => x.GetString() ?? "").ToList();
+        }
+    }
+
+    public void Dispose() => handle.Dispose();
 }
 
 public sealed class YdocException(int status, string message) : Exception($"cgw-ydoc status {status}: {message}")
@@ -77,6 +178,35 @@ public sealed record ValidationPolicy(IReadOnlyCollection<ulong> Clients, IReadO
 public static class Yjs
 {
     private static int configured;
+    private static readonly AsyncLocal<LoadCount?> counting = new();
+
+    /// <summary>
+    /// The documents loaded (built from bytes, not only decoded) in this async flow from now until
+    /// the count is disposed: <see cref="Meta"/>, <see cref="Validate"/>, <see cref="StateHash"/>,
+    /// <see cref="ToJson"/>, <see cref="ToText"/>, <see cref="Compact"/> and
+    /// <see cref="YDocument.Load"/> each load one. For the test that a validation pass loads a
+    /// document once.
+    /// </summary>
+    public static LoadCount CountLoads() => counting.Value = new LoadCount(counting.Value);
+
+    internal static void Counted()
+    {
+        if (counting.Value is { } count) count.Add();
+    }
+
+    public sealed class LoadCount(LoadCount? outer) : IDisposable
+    {
+        private int loads;
+        public int Loads => Volatile.Read(ref loads);
+
+        internal void Add()
+        {
+            Interlocked.Increment(ref loads);
+            outer?.Add();
+        }
+
+        public void Dispose() => counting.Value = outer;
+    }
 
     /// <summary>
     /// Points the loader at the native library: a path from configuration, else the library
@@ -108,7 +238,7 @@ public static class Yjs
         }
     }
 
-    private static byte[] Take(int status, CgwBuffer buffer)
+    internal static byte[] Take(int status, CgwBuffer buffer)
     {
         try
         {
@@ -180,20 +310,40 @@ public static class Yjs
     }
 
     /// <summary>The whole state as one update, garbage collected.</summary>
-    public static byte[] Compact(ReadOnlySpan<byte> update) => One(Native.cgw_compact, update);
+    public static byte[] Compact(ReadOnlySpan<byte> update)
+    {
+        Counted();
+        return One(Native.cgw_compact, update);
+    }
 
-    public static string ToJson(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_to_json, update));
+    public static string ToJson(ReadOnlySpan<byte> update)
+    {
+        Counted();
+        return Encoding.UTF8.GetString(One(Native.cgw_to_json, update));
+    }
 
-    public static string ToText(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_to_text, update));
+    public static string ToText(ReadOnlySpan<byte> update)
+    {
+        Counted();
+        return Encoding.UTF8.GetString(One(Native.cgw_to_text, update));
+    }
 
-    public static string Meta(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_meta, update));
+    public static string Meta(ReadOnlySpan<byte> update)
+    {
+        Counted();
+        return Encoding.UTF8.GetString(One(Native.cgw_meta, update));
+    }
 
     /// <summary>
     /// The state hash of the document the update makes (Phase 3 contracts, section 2): lowercase hex
     /// SHA-256 of <c>v1;sv=...;ds=...</c>, the same as the doc layer's <c>stateHash</c>, so a device
     /// can tell it holds what the server holds without sending it.
     /// </summary>
-    public static string StateHash(ReadOnlySpan<byte> update) => Encoding.UTF8.GetString(One(Native.cgw_state_hash, update));
+    public static string StateHash(ReadOnlySpan<byte> update)
+    {
+        Counted();
+        return Encoding.UTF8.GetString(One(Native.cgw_state_hash, update));
+    }
 
     public static (IReadOnlyList<ClientRange> Ranges, IReadOnlyList<ulong> Deletes) ClientRanges(ReadOnlySpan<byte> update)
     {
@@ -208,6 +358,7 @@ public static class Yjs
     /// <summary>The problems with <paramref name="update"/> on top of <paramref name="state"/>; empty when it may be kept.</summary>
     public static unsafe IReadOnlyList<string> Validate(ReadOnlySpan<byte> state, ReadOnlySpan<byte> update, ValidationPolicy policy)
     {
+        Counted();
         var policyBytes = JsonSerializer.SerializeToUtf8Bytes(new { clients = policy.Clients, elements = policy.Elements, maxBytes = policy.MaxBytes, blockIds = policy.BlockIds });
         fixed (byte* s = state)
         fixed (byte* u = update)

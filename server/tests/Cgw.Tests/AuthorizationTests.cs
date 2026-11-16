@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Cgw.Core.Data;
 using Cgw.Worker.Jobs;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Cgw.Tests;
@@ -65,6 +67,25 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         return result.GetProperty("status").GetString() == "applied" ? "applied" : result.GetProperty("error").GetProperty("code").GetString()!;
     }
 
+    /// <summary>
+    /// Runs the asset check until these assets are checked, for at most 30 s. One run checks 20
+    /// pending assets of every workspace, and a run that fails saves nothing (an asset another test
+    /// deleted meanwhile: 0 rows updated), so with the suite running beside it one run may not
+    /// check these, and a pending asset is 404 to all but its uploader.
+    /// </summary>
+    private async Task CheckAssets(Guid workspace, params Guid[] ids)
+    {
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (true)
+        {
+            await server.RunJob<AssetCheckJob>();
+            await using var db = server.NewDb(workspace);
+            if (!await db.Assets.AnyAsync(a => ids.Contains(a.Id) && a.Status == AssetStatus.Pending)) return;
+            Assert.True(DateTime.UtcNow < until, "The assets were still pending after 30 s of checks");
+            await Task.Delay(100);
+        }
+    }
+
     [Fact]
     public async Task Every_role_and_page_level_gets_what_the_rules_say_on_every_page_endpoint()
     {
@@ -97,7 +118,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
                 delete[role] = await Page($"delete by {role}");
                 await ws.Push(ws.Op("page.trash", delete[role], new { }));
             }
-            await server.RunJob<AssetCheckJob>();
+            await CheckAssets(ws.Id, asset);
             var body = Kit.Entries(setup.Restricted, [.. entries]);
 
             foreach (var role in Roles)

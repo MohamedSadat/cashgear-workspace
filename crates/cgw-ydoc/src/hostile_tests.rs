@@ -14,7 +14,7 @@ fn policy() -> Policy {
 }
 
 /// One block with one text body, written as client `client`, with `text` and an optional link.
-fn page(client: u64, element: &str, link: Option<&str>) -> Vec<u8> {
+pub(crate) fn page(client: u64, element: &str, link: Option<&str>) -> Vec<u8> {
     let doc = Doc::with_client_id(client);
     let content = doc.get_or_insert_xml_fragment(CONTENT);
     let mut txn = doc.transact_mut();

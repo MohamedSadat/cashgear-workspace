@@ -43,7 +43,24 @@ public sealed class Access(CgwDb db)
         var section = await db.Sections.AsNoTracking().Where(s => s.Id == page.SectionId)
             .Select(s => new { s.Visibility, s.OwnerUserId }).FirstOrDefaultAsync();
         if (section is null) return Levels.None;
-        if (section.Visibility == "private") return section.OwnerUserId == member.UserId ? Levels.Full : Levels.None;
+        return await LevelInSectionAsync(member, pageId, section.Visibility, section.OwnerUserId);
+    }
+
+    /// <summary>
+    /// <see cref="PageLevelAsync(Member, Guid)"/> of a live page read already with its section (the
+    /// page gate reads them with the membership in one round trip, Phase 8).
+    /// </summary>
+    public async Task<string> PageLevelAsync(Member member, Page page, string? sectionVisibility, Guid? sectionOwner, bool sectionFound)
+    {
+        if (page.DeletedAt is not null) return Levels.None;
+        if (page.Kind == PageKinds.Row) return page.ParentPageId is { } database ? await PageLevelAsync(member, database) : Levels.None;
+        if (!sectionFound) return Levels.None;
+        return await LevelInSectionAsync(member, page.Id, sectionVisibility!, sectionOwner);
+    }
+
+    private async Task<string> LevelInSectionAsync(Member member, Guid pageId, string visibility, Guid? owner)
+    {
+        if (visibility == "private") return owner == member.UserId ? Levels.Full : Levels.None;
         if (member.IsAdmin) return Levels.Full;
 
         // The page and its ancestors, nearest first, with their flags and the caller's rows.
