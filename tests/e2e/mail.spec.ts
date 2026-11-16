@@ -110,15 +110,26 @@ async function waitForMail(address: string, count = 1) {
   return notificationMails(address);
 }
 
+/** A UUIDv7, as the app makes its ids: the comment routes take no other. */
+function uuidv7(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const ms = Date.now();
+  for (let i = 0; i < 6; i++) bytes[i] = Math.floor(ms / 2 ** (8 * (5 - i))) % 256;
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** The owner's comment on a block, naming the team's first member. */
 async function mention(t: Team, pageId: string, blockId: string, text: string) {
   await t.owner.api.post(`/api/v1/pages/${pageId}/comments/threads`, {
-    id: crypto.randomUUID(),
+    id: uuidv7(),
     blockId,
     anchor: { start: null, end: null },
     quote: '',
     comment: {
-      id: crypto.randomUUID(),
+      id: uuidv7(),
       body: [
         { type: 'text', text },
         { type: 'userMention', attrs: { userId: t.members[0]!.id } },
@@ -198,8 +209,9 @@ test('one click in the mail turns mail off, and with mail off nothing is sent', 
   test.setTimeout(180_000);
   const t = (current = await team(page, browser, ['Olive', 'Cleo']));
   const cleo = t.members[0]!;
-  await cleo.page.goto('about:blank');
+  // The page reaches Cleo's sidebar first (sharedPage opens it there); then she is away.
   const { pageId, ids } = await sharedPage(t, 'Plans', ['A line']);
+  await cleo.page.goto('about:blank');
   await mention(t, pageId, ids[0]!, 'First ');
   const [mail] = await waitForMail(cleo.account.email);
   const address = /^<([^>]+)>$/.exec(mail!.headers.get('list-unsubscribe')!)![1]!;
