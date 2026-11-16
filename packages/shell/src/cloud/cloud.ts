@@ -42,6 +42,8 @@ export type CloudNotice = {
   /** `doc.moveConflict`: the block, and `editLost` or `movedTwice`. */
   blockId?: string;
   reason?: string;
+  /** A refused operation: which one, so its message names what was undone (`access.denied`). */
+  refused?: Extract<SyncEvent, { kind: 'notice' }>['refused'];
 };
 
 export interface CloudOptions {
@@ -270,7 +272,12 @@ export class Cloud {
         this.session.resetDoc(event.pageId);
         break;
       case 'notice':
-        this.notify({ code: event.code, pageId: event.pageId, workspaceId: event.workspaceId });
+        this.notify({
+          code: event.code,
+          pageId: event.pageId,
+          workspaceId: event.workspaceId,
+          ...(event.refused ? { refused: event.refused } : {}),
+        });
         break;
       case 'members':
         for (const listener of this.memberListeners) listener(event.workspaceId);
@@ -583,6 +590,17 @@ export class Cloud {
   async revokeDevice(id: Id) {
     await data(this.api.DELETE('/api/v1/account/devices/{id}', { params: { path: { id } } }));
     if (id === this.account_?.deviceId) await this.refreshAccount();
+  }
+
+  // Mail for mentions and replies (Phase 8) ------------------------------------------------------
+
+  /** The account's mail choice: `on` (the default), `digest` or `off`. */
+  async notificationSettings(): Promise<{ email: string }> {
+    return data(this.api.GET('/api/v1/account/notification-settings'));
+  }
+
+  async setNotificationSettings(email: 'on' | 'digest' | 'off'): Promise<{ email: string }> {
+    return data(this.api.PUT('/api/v1/account/notification-settings', { body: { email } }));
   }
 
   // Members and invites ----------------------------------------------------------------------------

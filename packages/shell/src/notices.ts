@@ -34,6 +34,46 @@ export interface NoticeInfo {
    * unsent here sets nothing aside, and the notice says only what happened.
    */
   setAside?: boolean;
+  /** An operation the server refused (the engine names it): its type, the fields an update set. */
+  refused?: { type: string; fields?: string[] };
+}
+
+/**
+ * An operation refused for access (`access.denied` on the operations route): what was refused,
+ * and that it was undone. The same code on a page's document (edit access lost, its unsent edits
+ * set aside) keeps the recovered page's text.
+ */
+function deniedText(
+  { type, fields }: NonNullable<NoticeInfo['refused']>,
+  pageId: Id | undefined,
+): NoticeKey {
+  switch (type) {
+    case 'section.create':
+      return 'notices.deniedSection';
+    case 'section.update':
+    case 'section.delete':
+      return 'notices.deniedSectionChange';
+    case 'workspace.update':
+      return 'notices.deniedWorkspace';
+    case 'page.create':
+      // A refused create has no page on the server, so its answer names none.
+      return 'notices.deniedNewPage';
+    case 'page.move':
+      return pageId ? 'notices.deniedMove' : 'notices.deniedMoveUnnamed';
+  }
+  if (!pageId) return 'notices.deniedChangeUnnamed';
+  switch (type) {
+    case 'page.update':
+      return fields?.includes('coverAssetId') ? 'notices.deniedCover' : 'notices.deniedChange';
+    case 'page.trash':
+      return 'notices.deniedTrash';
+    case 'page.restore':
+      return 'notices.deniedRestore';
+    case 'page.delete':
+      return 'notices.deniedDelete';
+    default:
+      return 'notices.deniedChange';
+  }
 }
 
 /** The catalogue key of a notice's text. Texts with a page name take `title`. */
@@ -44,7 +84,7 @@ export function noticeText(notice: NoticeInfo): NoticeKey {
     case 'page.gone':
       return 'notices.pageGone';
     case 'access.denied':
-      return 'notices.accessDenied';
+      return notice.refused ? deniedText(notice.refused, notice.pageId) : 'notices.accessDenied';
     case 'page.removed':
       return 'notices.pageRemoved';
     case 'page.trashed':
@@ -98,6 +138,15 @@ export function noticeTarget(notice: NoticeInfo, recoveredPageId?: Id | null): N
   const { code, pageId, blockId } = notice;
   if (code === 'doc.epochMismatch' && notice.setAside === false)
     return pageId ? { kind: 'history', pageId } : null;
+  // An operation refused for access: the page as the server has it (in the trash, for a restore
+  // or a delete that was refused); nothing was set aside.
+  if (code === 'access.denied' && notice.refused) {
+    if (!pageId) return null;
+    const type = notice.refused.type;
+    return type === 'page.restore' || type === 'page.delete'
+      ? { kind: 'trash' }
+      : { kind: 'page', pageId };
+  }
   if (RECOVERY_CODES.has(code)) return { kind: 'recovered', pageId: recoveredPageId ?? null };
   if (code === 'page.trashed') return { kind: 'trash' };
   if (!pageId) return null;
