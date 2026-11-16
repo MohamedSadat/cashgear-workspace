@@ -349,6 +349,8 @@ export class SyncEngine {
   /** Workspaces where a tree operation on a subtree was answered: the mirror is checked after the feed. */
   private readonly reconcile = new Set<Id>();
   private mine = new Set<Id>();
+  /** `report` read which workspaces sync (`mine`), none perhaps, since the last change of it. */
+  private mineRead = false;
   private passes = 0;
   /** Requests for databases' rows this pass has made. */
   private rowRequests = 0;
@@ -418,6 +420,7 @@ export class SyncEngine {
     this.account = account;
     this.known = account;
     this.mine = new Set();
+    this.mineRead = false;
     this.sessionIds.clear();
     const kept: Account | null = account && {
       id: account.id,
@@ -619,15 +622,20 @@ export class SyncEngine {
     // must not land after the sign-in that follows it and say "Signed out" while signed in.
     const order = ++this.reportsStarted;
     const owner = this.account ?? this.known;
-    if (!this.mine.size) {
+    // Read once until the account or an upload changes it, even when none syncs: the read takes
+    // every record on the device, and a device of local workspaces made it at every pass.
+    if (!this.mine.size && !this.mineRead) {
       const workspaces = (await this.store.readMirror(null)).workspaces.filter(
         (w) => !w.localOnly && !w.deletedAt && (!owner || w.accountId === owner.id),
       );
       this.mine = new Set(workspaces.map((w) => w.id));
+      this.mineRead = true;
     }
-    const ops = (await this.store.nextOutboxBatch(WAITING_CAP)).filter((op) =>
-      this.mine.has(op.workspaceId),
-    ).length;
+    const ops = this.mine.size
+      ? (await this.store.nextOutboxBatch(WAITING_CAP)).filter((op) =>
+          this.mine.has(op.workspaceId),
+        ).length
+      : 0;
     const docs = (await this.store.unsentDocUpdates(WAITING_CAP))
       // A page held back (this build is too old for it) waits for an update, not for a pass.
       .filter((d) => !this.heldBack.has(d.pageId))
@@ -1277,10 +1285,13 @@ export class SyncEngine {
    * this device (unique in the workspace), or a random one registered when it is pushed.
    */
   async clientIdFor(workspaceId: Id): Promise<number | undefined> {
-    const workspace = (await this.store.readMirror(workspaceId)).workspaces[0];
-    if (!workspace || workspace.localOnly) return undefined;
+    // Asked for every document written (an import writes a thousand): once chosen, the session's
+    // id is the answer without reading the workspace's records again (a workspace that syncs
+    // never goes back to local-only; every workspace made local has a new id).
     const existing = this.sessionIds.get(workspaceId);
     if (existing !== undefined) return existing;
+    const workspace = (await this.store.readMirror(workspaceId)).workspaces[0];
+    if (!workspace || workspace.localOnly) return undefined;
     const pool = (await this.store.getPref<number[]>(poolKey(workspaceId))) ?? [];
     let id: number | undefined;
     if (pool.length) {
@@ -2636,6 +2647,7 @@ export class SyncEngine {
         });
     }
     this.mine = new Set();
+    this.mineRead = false;
     this.emit({ kind: 'mirror', workspaceId });
     this.kick(0);
   }

@@ -3,7 +3,7 @@
 // and images, into a local and a synced workspace; the report; hostile archives refused or
 // contained; the 2,000-page and 500 MB limits; a failure or a Stop midway leaves nothing, and an
 // existing page is never written into.
-import { PageDocument, fragmentToJSON, plainText, type DocJSON } from '@cgw/doc';
+import { PageDocument, docCodec, fragmentToJSON, plainText, type DocJSON } from '@cgw/doc';
 import { MemoryStore, type Id, type LocalStore } from '@cgw/workspace';
 import { deflateSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
@@ -923,6 +923,73 @@ describe('an import into a synced workspace', () => {
     const live = tree.pages.filter((p) => plan.pageIds.includes(p.id) && !p.trashedAt);
     expect(live).toEqual([]);
     expect(tree.pages.map((p) => p.title).sort()).toEqual(['Alpha', 'Beta', 'Gamma']);
+  });
+});
+
+describe('writing into a workspace of many pages', () => {
+  // Each document written asked the cloud for its Yjs client id, and the engine read every record
+  // of the workspace to answer: writing 1,000 pages took about 13 s longer for each 1,000 pages
+  // the workspace already held (bench/phase8.mjs).
+  const planned = (session: WorkspaceSession, sectionId: Id) =>
+    planImport({
+      ...request('markdown', { kind: 'bytes', name: 'Many.zip', bytes: manyPages(30) }),
+      place: {
+        workspaceId: session.workspaceId!,
+        sectionId,
+        orderKey: session.keyFor(sectionId, null),
+      },
+    });
+  function mirrorReads(store: LocalStore) {
+    const readMirror = store.readMirror.bind(store);
+    const reads = { count: 0 };
+    store.readMirror = (workspaceId) => {
+      reads.count++;
+      return readMirror(workspaceId);
+    };
+    return reads;
+  }
+
+  it('asks nothing for a local workspace’s documents', async () => {
+    const { store, session, section } = await local();
+    let asked = 0;
+    session.connect({
+      clientIdFor: async () => {
+        asked++;
+        return 7;
+      },
+      pullPage: async () => undefined,
+      changed: () => undefined,
+    });
+    const plan = await planned(session, section.id);
+    const reads = mirrorReads(store);
+    const { writePlan } = await import('./write');
+    await writePlan(session, plan);
+    expect(plan.pageIds.length).toBe(31);
+    expect(asked).toBe(0);
+    expect(reads.count).toBe(0);
+  });
+
+  it('writes a synced workspace’s documents as the session’s client id, read once', async () => {
+    const server = new FakeServer();
+    const shared = await sharedWorkspace(server);
+    const session = await WorkspaceSession.start(shared.one.store);
+    session.switchTo(shared.ws.id);
+    session.connect({
+      clientIdFor: (workspaceId) => shared.one.engine.clientIdFor(workspaceId),
+      pullPage: async () => undefined,
+      changed: () => undefined,
+    });
+    const plan = await planned(session, shared.section.id);
+    const reads = mirrorReads(shared.one.store);
+    const { writePlan } = await import('./write');
+    await writePlan(session, plan);
+    expect(reads.count).toBeLessThanOrEqual(1);
+    const clientId = await shared.one.engine.clientIdFor(shared.ws.id);
+    expect(clientId).toBeDefined();
+    for (const pageId of plan.pageIds) {
+      const { updates } = await shared.one.store.loadDoc(pageId);
+      expect(updates.flatMap((u) => docCodec.clientIds(u.data))).toEqual([clientId]);
+    }
   });
 });
 

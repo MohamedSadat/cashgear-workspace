@@ -334,6 +334,48 @@ describe('sync engine', () => {
     expect(pool.every((id) => server.spaces.get(ws.id)!.yjs.get(id) === ALICE.id)).toBe(true);
   });
 
+  it("answers the session's Yjs client id without reading the workspace again", async () => {
+    // Asked for every document written: an import of a thousand pages read every record of the
+    // workspace a thousand times, and slowed as the workspace grew.
+    const server = new FakeServer();
+    const one = device(server);
+    const { ws } = await localWorkspace(one.store);
+    await one.engine.upload(ws.id);
+    await one.engine.syncOnce();
+    const first = await one.engine.clientIdFor(ws.id);
+    expect(first).toBeDefined();
+    const readMirror = one.store.readMirror.bind(one.store);
+    let reads = 0;
+    one.store.readMirror = (workspaceId) => {
+      reads++;
+      return readMirror(workspaceId);
+    };
+    for (let i = 0; i < 100; i++) expect(await one.engine.clientIdFor(ws.id)).toBe(first);
+    expect(reads).toBe(0);
+  });
+
+  it('reads which workspaces sync once while none does, not at every pass', async () => {
+    // Every record on the device was read at each pass of a device of local workspaces.
+    const server = new FakeServer();
+    const one = device(server);
+    const { ws } = await localWorkspace(one.store);
+    one.engine.setAccount(null);
+    const readMirror = one.store.readMirror.bind(one.store);
+    let reads = 0;
+    one.store.readMirror = (workspaceId) => {
+      reads++;
+      return readMirror(workspaceId);
+    };
+    for (let i = 0; i < 5; i++) await one.engine.syncOnce();
+    expect(reads).toBe(1);
+    expect(one.engine.status).toMatchObject({ state: 'signedOut', waiting: 0 });
+    // Signed in and uploaded, the workspace syncs.
+    one.engine.setAccount(ALICE);
+    await one.engine.upload(ws.id);
+    await one.engine.syncOnce();
+    expect(one.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+  });
+
   it('says syncing as soon as a local change waits, and synced only once nothing does', async () => {
     const server = new FakeServer();
     const one = device(server);

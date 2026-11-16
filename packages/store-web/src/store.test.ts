@@ -428,3 +428,123 @@ describe('IndexedDB store, the corrupt area', () => {
     db.close();
   });
 });
+
+describe('IndexedDB store, storage usage', () => {
+  // Settings reads it as it opens. One transaction over every page, three requests a page, held
+  // the documents' writes up for seconds in a workspace of 10,000 pages (bench/phase8.mjs).
+  const DOC_STORES = ['docLogs', 'docUpdates', 'docCursors'];
+
+  /** Requests on the document stores while `run` runs. */
+  async function requestsDuring<T>(
+    run: () => Promise<T>,
+  ): Promise<{ result: T; requests: number }> {
+    const methods = ['get', 'getAll', 'getAllKeys', 'count'] as const;
+    const saved = methods.map((m) => IDBObjectStore.prototype[m]);
+    let requests = 0;
+    methods.forEach((m, i) => {
+      const original = saved[i] as (...args: unknown[]) => IDBRequest;
+      (IDBObjectStore.prototype as unknown as Record<string, unknown>)[m] = function (
+        this: IDBObjectStore,
+        ...args: unknown[]
+      ) {
+        if (DOC_STORES.includes(this.name)) requests++;
+        return original.apply(this, args);
+      };
+    });
+    try {
+      return { result: await run(), requests };
+    } finally {
+      methods.forEach((m, i) => {
+        (IDBObjectStore.prototype as unknown as Record<string, unknown>)[m] = saved[i];
+      });
+    }
+  }
+
+  /** What the page-by-page reading counted: each page's snapshot and updates, loaded. */
+  async function expected(store: IndexedDbStore, pageIds: string[]) {
+    let pages = 0;
+    let docBytes = 0;
+    for (const id of pageIds) {
+      const doc = await store.loadDoc(id);
+      if (!doc.snapshot && !doc.updates.length) continue;
+      pages++;
+      docBytes +=
+        (doc.snapshot?.byteLength ?? 0) + doc.updates.reduce((n, u) => n + u.data.byteLength, 0);
+    }
+    return { pages, docBytes, assetBytes: 0, historyBytes: 0, quarantineBytes: 0 };
+  }
+
+  async function make(store: IndexedDbStore, workspaces: { pages: number }[]) {
+    const made = workspaces.map(() => {
+      const ws = workspaceRecord();
+      return { ws, section: sectionRecord(ws.id), pages: [] as ReturnType<typeof pageRecord>[] };
+    });
+    // Made in turn, so the workspaces' ids (made in time order) interleave from first to last.
+    const most = Math.max(...workspaces.map((w) => w.pages));
+    for (let i = 0; i < most; i++)
+      made.forEach((m, w) => {
+        while (m.pages.length < Math.ceil(((i + 1) * workspaces[w].pages) / most))
+          m.pages.push(pageRecord(m.ws.id, m.section.id, null, `Page ${m.pages.length}`));
+      });
+    for (const { ws, section, pages } of made)
+      await store.applyLocalOps([
+        op('workspace.create', ws.id, ws.id, ws),
+        op('section.create', ws.id, section.id, section),
+        ...pages.map((p) => op('page.create', ws.id, p.id, p)),
+      ]);
+    return made;
+  }
+
+  it('reads a large workspace by range, a few requests for 1,001 pages', async () => {
+    const store = await IndexedDbStore.open(indexedDB, `test-usage-${uuidv7()}`);
+    const [{ ws, pages }] = await make(store, [{ pages: 1001 }]);
+    // Every tenth page holds two updates (more records than one request reads), a few of them
+    // compacted into a snapshot.
+    for (const [i, p] of pages.entries()) {
+      if (i % 10) continue;
+      const data = [new Uint8Array(i + 1), new Uint8Array(3)];
+      const seqs = await store.appendDocUpdates(
+        p.id,
+        data.map((d) => ({ updateId: uuidv7(), data: d })),
+      );
+      if (i % 300 === 0) await store.compactDoc(p.id, new Uint8Array(50 + i), seqs[0]);
+    }
+    const want = await expected(
+      store,
+      pages.map((p) => p.id),
+    );
+    expect(want.pages).toBe(101);
+    const { result, requests } = await requestsDuring(() => store.storageUsage(ws.id));
+    expect(result).toEqual(want);
+    // The logs' keys, the logs (101) and the updates (198) at 100 a request, the cursors' keys:
+    // 6, not 3 a page (3,003).
+    expect(requests).toBe(6);
+    await store.close();
+  }, 30_000);
+
+  it('reads a workspace among many more pages of another one page by page', async () => {
+    const store = await IndexedDbStore.open(indexedDB, `test-usage-${uuidv7()}`);
+    const [mine, other] = await make(store, [{ pages: 500 }, { pages: 1100 }]);
+    for (const [i, p] of other.pages.entries())
+      await store.appendDocUpdates(p.id, [{ updateId: uuidv7(), data: new Uint8Array(i % 7) }]);
+    for (const [i, p] of mine.pages.entries())
+      if (i % 5 === 0)
+        await store.appendDocUpdates(p.id, [{ updateId: uuidv7(), data: new Uint8Array(i + 2) }]);
+    const want = await expected(
+      store,
+      mine.pages.map((p) => p.id),
+    );
+    expect(want.pages).toBe(100);
+    const { result, requests } = await requestsDuring(() => store.storageUsage(mine.ws.id));
+    expect(result).toEqual(want);
+    // The range would read the other workspace's 1,100 too: three requests a page instead.
+    expect(requests).toBe(1 + 3 * 500);
+    expect(await store.storageUsage(other.ws.id)).toEqual(
+      await expected(
+        store,
+        other.pages.map((p) => p.id),
+      ),
+    );
+    await store.close();
+  }, 60_000);
+});

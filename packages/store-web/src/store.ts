@@ -253,6 +253,14 @@ const newer = (version?: number) =>
     `This store was written by a newer version${version ? ` (${version})` : ''}; update the app.`,
   );
 
+/**
+ * The most pages whose documents `storageUsage` reads one by one in one transaction; a
+ * workspace of more is read by key range. One transaction over every page of a large workspace
+ * held its stores for seconds, and every write to them waited behind it.
+ */
+const USAGE_PAGES = 500;
+/** Records `storageUsage` reads in one request of a large workspace's (snapshots among them). */
+const USAGE_RECORDS = 100;
 /** How long the journal may take to open before the store goes on without it this session. */
 const JOURNAL_OPEN_MS = 3000;
 /** Updates waiting for their page to come back from the server are kept this long. */
@@ -1390,21 +1398,11 @@ export class IndexedDbStore implements LocalStore {
   }
 
   /**
-   * Reads the workspace's documents one page at a time, so a large workspace is never in memory
-   * at once. Assets count by their records' sizes (their bytes are not read).
+   * The workspace's documents are read a bounded part at a time (`documentSizes`), so a large
+   * workspace is never in memory at once. Assets count by their records' sizes (their bytes are
+   * not read).
    */
   async storageUsage(workspaceId: Id): Promise<StorageUsage> {
-    const tx = this.tx([
-      S.pages,
-      S.rows,
-      S.docLogs,
-      S.docUpdates,
-      S.docCursors,
-      S.assets,
-      S.assetBytes,
-      S.history,
-      S.quarantine,
-    ]);
     const usage: StorageUsage = {
       pages: 0,
       docBytes: 0,
@@ -1412,17 +1410,12 @@ export class IndexedDbStore implements LocalStore {
       historyBytes: 0,
       quarantineBytes: 0,
     };
-    const pageIds = await this.workspacePageIds(tx, workspaceId);
-    for (const pageId of pageIds) {
-      const [log, rows, cursor] = await Promise.all([
-        request(tx.objectStore(S.docLogs).get(pageId)) as Promise<DocLog | undefined>,
-        getAll<UpdateRow>(tx.objectStore(S.docUpdates), pageRange(pageId)),
-        request(tx.objectStore(S.docCursors).count(pageId)),
-      ]);
-      if (log?.snapshot || rows.length || cursor) usage.pages++;
-      usage.docBytes +=
-        (log?.snapshot?.byteLength ?? 0) + rows.reduce((n, row) => n + row.data.byteLength, 0);
+    const pageIds = await this.workspacePageIds(this.tx([S.pages, S.rows]), workspaceId);
+    for (const bytes of (await this.documentSizes(pageIds)).values()) {
+      usage.pages++;
+      usage.docBytes += bytes;
     }
+    const tx = this.tx([S.assets, S.assetBytes, S.history, S.quarantine]);
     const mine = new Set(pageIds);
     const [assets, history, entries] = await Promise.all([
       getAll<AssetRecord>(tx.objectStore(S.assets).index('workspace'), workspaceId),
@@ -1439,6 +1432,82 @@ export class IndexedDbStore implements LocalStore {
     for (const entry of entries)
       usage.quarantineBytes += entry.parts.reduce((n, part) => n + part.byteLength, 0);
     return usage;
+  }
+
+  /**
+   * The bytes of each page's document (its snapshot and updates) for the pages holding any of
+   * one (a cursor counts, with no bytes). A figure, not a state: read in short transactions, so
+   * writes wait for one of them at most (an import started from Settings, which reads this as it
+   * opens, waited seconds behind one over every page of a large workspace). A large workspace is
+   * read by key range, `USAGE_RECORDS` records a request, not by three requests a page; a few
+   * pages, or pages among many more of other workspaces (which the range would read too), one
+   * page at a time.
+   */
+  private async documentSizes(pageIds: Id[]): Promise<Map<Id, number>> {
+    const sizes = new Map<Id, number>();
+    const add = (pageId: Id, bytes: number) => sizes.set(pageId, (sizes.get(pageId) ?? 0) + bytes);
+    if (!pageIds.length) return sizes;
+    const sorted = [...pageIds].sort();
+    const mine = new Set(sorted);
+    const [first, last] = [sorted[0], sorted[sorted.length - 1]];
+    const range = IDBKeyRange.bound(first, last);
+    const logged =
+      sorted.length < USAGE_PAGES
+        ? Infinity
+        : (await getAllKeys(this.tx([S.docLogs]).objectStore(S.docLogs), range)).length;
+    if (logged > 2 * sorted.length) {
+      for (let i = 0; i < sorted.length; i += USAGE_PAGES) {
+        const docs = this.tx([S.docLogs, S.docUpdates, S.docCursors]);
+        for (const pageId of sorted.slice(i, i + USAGE_PAGES)) {
+          const [log, rows, cursor] = await Promise.all([
+            request(docs.objectStore(S.docLogs).get(pageId)) as Promise<DocLog | undefined>,
+            getAll<UpdateRow>(docs.objectStore(S.docUpdates), pageRange(pageId)),
+            request(docs.objectStore(S.docCursors).count(pageId)),
+          ]);
+          if (log?.snapshot || rows.length || cursor)
+            add(
+              pageId,
+              (log?.snapshot?.byteLength ?? 0) +
+                rows.reduce((n, row) => n + row.data.byteLength, 0),
+            );
+        }
+      }
+      return sizes;
+    }
+    await this.eachInRange<DocLog>(
+      S.docLogs,
+      range,
+      (log) => log.pageId,
+      (log) => {
+        if (mine.has(log.pageId) && log.snapshot) add(log.pageId, log.snapshot.byteLength);
+      },
+    );
+    await this.eachInRange<UpdateRow>(
+      S.docUpdates,
+      IDBKeyRange.bound([first, 0], [last, Number.MAX_SAFE_INTEGER]),
+      (row) => [row.pageId, row.localSeq],
+      (row) => {
+        if (mine.has(row.pageId)) add(row.pageId, row.data.byteLength);
+      },
+    );
+    for (const key of await getAllKeys(this.tx([S.docCursors]).objectStore(S.docCursors), range))
+      if (mine.has(key as Id)) add(key as Id, 0);
+    return sizes;
+  }
+
+  /** Every record of a store in a key range, `USAGE_RECORDS` a request, each in a transaction. */
+  private async eachInRange<T>(
+    name: StoreName,
+    range: IDBKeyRange,
+    keyOf: (record: T) => IDBValidKey,
+    each: (record: T) => void,
+  ): Promise<void> {
+    for (let from = range; ;) {
+      const batch = await getAll<T>(this.tx([name]).objectStore(name), from, USAGE_RECORDS);
+      batch.forEach(each);
+      if (batch.length < USAGE_RECORDS) return;
+      from = IDBKeyRange.bound(keyOf(batch[batch.length - 1]), range.upper, true, range.upperOpen);
+    }
   }
 
   /**

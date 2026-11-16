@@ -281,10 +281,18 @@ export class WorkspaceSession {
   }
 
   private clientIdFor(pageId: Id): Promise<number | undefined> {
-    const workspaceId = this.record(pageId)?.workspaceId ?? this.workspace;
-    return workspaceId && this.cloud
-      ? this.cloud.clientIdFor(workspaceId)
-      : Promise.resolve(undefined);
+    return this.clientIdOf(this.record(pageId)?.workspaceId ?? this.workspace);
+  }
+
+  /**
+   * The Yjs client id a workspace's documents are written as: none for a local-only one, which
+   * the mirror says without the store being read for each document written (an import's
+   * thousand read every record of the workspace each time, so they slowed as it grew).
+   */
+  private clientIdOf(workspaceId: Id | null): Promise<number | undefined> {
+    if (!workspaceId || !this.cloud || this.mirror.workspaces.get(workspaceId)?.localOnly)
+      return Promise.resolve(undefined);
+    return this.cloud.clientIdFor(workspaceId);
   }
 
   get workspaceId(): Id | null {
@@ -967,7 +975,7 @@ export class WorkspaceSession {
   /** A page's first document update: the given content, or one empty paragraph. */
   async writeFirstDocument(pageId: Id, workspaceId: Id, content: DocJSON | undefined) {
     const { newDocumentUpdate } = await import('@cgw/doc');
-    const clientId = this.cloud ? await this.cloud.clientIdFor(workspaceId) : undefined;
+    const clientId = await this.clientIdOf(workspaceId);
     await this.store.appendDocUpdates(pageId, [
       { updateId: uuidv7(), data: newDocumentUpdate(pageId, content, clientId) },
     ]);

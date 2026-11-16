@@ -54,6 +54,11 @@ export function OfflineSettings({
   // A pinned database's rows held here, against the server's count (the engine holds them).
   const [rows, setRows] = useState<Map<Id, HoldProgress>>(new Map());
 
+  // What the device holds reads every document of the workspace: read as the section opens, and
+  // again only when what is kept offline changes (a synced workspace's revision), not on each
+  // change of the connection too. Three at once as Settings opened, each seconds long in a
+  // workspace of 10,000 pages, held up an import started from it (bench/phase8.mjs).
+  const usageRevision = synced ? revision : -1;
   useEffect(() => {
     if (!workspaceId) return;
     let live = true;
@@ -61,6 +66,14 @@ export function OfflineSettings({
       (answer) => live && setUsage(answer),
       () => live && setUsage(null),
     );
+    return () => {
+      live = false;
+    };
+  }, [session, workspaceId, usageRevision]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    let live = true;
     if (synced) {
       void cloud.engine.offlineProgress(workspaceId).then(
         (answer) => live && setProgress(answer),
