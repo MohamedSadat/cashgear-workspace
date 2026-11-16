@@ -5,6 +5,7 @@
 // existing page is never written into.
 import { PageDocument, fragmentToJSON, plainText, type DocJSON } from '@cgw/doc';
 import { MemoryStore, type Id, type LocalStore } from '@cgw/workspace';
+import { deflateSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { FakeServer } from '../../../../workspace/src/testing/fakeServer';
 import {
@@ -29,6 +30,7 @@ import {
   unflaggedNames,
   wordDocument,
   wordWithDoctype,
+  rawZip,
   zip,
   zipBomb,
 } from '../fixtures/fixtures';
@@ -37,7 +39,7 @@ import { contentTypeOf, imageSize, sniff } from './assets';
 import { cleanNotionCell, notionDate, notionName, withoutPropertyLines } from './notion';
 import { planImport, type ImportKind, type ImportRequest, type ImportSource } from './plan';
 import { ImportRefused, ReportBuilder, type ImportReport } from './report';
-import { runImport } from './run';
+import { isArchive, runImport } from './run';
 
 const SECTION_PLACE = { workspaceId: 'w', sectionId: 's', orderKey: 'a5' };
 
@@ -262,6 +264,168 @@ describe('hostile archives', () => {
   });
 });
 
+describe('the security review’s findings, each with its hostile file', () => {
+  const md = (text: string) => new TextEncoder().encode(text);
+  const elapsed = async (run: () => Promise<unknown>) => {
+    const started = performance.now();
+    await run().catch(() => undefined);
+    return performance.now() - started;
+  };
+
+  it('refuses a zip64 entry count the file cannot hold, before listing a single entry', async () => {
+    // A zip64 end record saying 4,294,967,295 entries, its locator, and an ordinary end record:
+    // 98 bytes, which fflate would list 4.3 billion times.
+    const bytes = new Uint8Array(56 + 20 + 22);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(0, 0x06064b50, true);
+    view.setBigUint64(4, 44n, true);
+    view.setUint32(24, 0xffffffff, true);
+    view.setUint32(32, 0xffffffff, true);
+    view.setUint32(56, 0x07064b50, true);
+    view.setBigUint64(64, 0n, true);
+    view.setUint32(72, 1, true);
+    view.setUint32(76, 0x06054b50, true);
+    view.setUint16(84, 1, true);
+    view.setUint16(86, 1, true);
+    let code: string | undefined;
+    const took = await elapsed(async () => {
+      code = await refusal(
+        planImport(request('markdown', { kind: 'bytes', name: 'z.zip', bytes })),
+      );
+    });
+    expect(code).toBe('damaged');
+    expect(took).toBeLessThan(1000);
+  });
+
+  it('refuses more than 20,000 entries before reading any of them', async () => {
+    const entries = Array.from({ length: 20_001 }, (_, i) => ({
+      name: `p${i}.md`,
+      data: md('x'),
+      method: 0 as const,
+    }));
+    const bytes = rawZip(entries);
+    expect(
+      await refusal(planImport(request('markdown', { kind: 'bytes', name: 'n.zip', bytes }))),
+    ).toBe('tooManyFiles');
+  });
+
+  it('refuses a deflated entry far larger than what it declares it unpacks to', async () => {
+    // 64 KB that do not compress, declared to unpack to one byte.
+    const noise = new Uint8Array(64 * 1024).map((_, i) => (i * 2654435761) >>> 24);
+    const bytes = rawZip([{ name: 'a.md', data: deflateSync(noise), method: 8, declared: 1 }]);
+    expect(
+      await refusal(planImport(request('markdown', { kind: 'bytes', name: 'u.zip', bytes }))),
+    ).toBe('damaged');
+  });
+
+  it('stops inflating an entry the moment it unpacks past its declared size', async () => {
+    // 64 MB of zeros (about 64 KB packed), declared as 128 KB: honest-looking sizes, a stream that
+    // would decode on to its end.
+    const data = deflateSync(new Uint8Array(64 * 1024 * 1024), { level: 9 });
+    const bytes = rawZip([{ name: 'a.md', data, method: 8, declared: 128 * 1024 }]);
+    let code: string | undefined;
+    const took = await elapsed(async () => {
+      code = await refusal(
+        planImport(request('markdown', { kind: 'bytes', name: 's.zip', bytes })),
+      );
+    });
+    expect(code).toBe('damaged');
+    expect(took).toBeLessThan(1500);
+  });
+
+  it('counts a nested part while it is held, and gives it back once its files are read', () => {
+    // Three parts, each a zip of one stored 1 MB file, in a deflated outer zip.
+    const MB = 1024 * 1024;
+    const part = (i: number) =>
+      rawZip([{ name: `f${i}.bin`, data: new Uint8Array(MB), method: 0 }]);
+    const parts = [0, 1, 2].map(part);
+    const outer = zip(Object.fromEntries(parts.map((p, i) => [`Export-Part-${i + 1}.zip`, p])));
+    // Held at most: the three files and the part being read, about 4 MB.
+    const tight = { bytes: 3.5 * MB, files: 100 };
+    expect(() => readArchive(outer, new ReportBuilder(), tight)).toThrow(ImportRefused);
+    const room = { bytes: 4.2 * MB, files: 100 };
+    const files = readArchive(outer, new ReportBuilder(), room);
+    expect(files.map((f) => f.path)).toEqual(['f0.bin', 'f1.bin', 'f2.bin']);
+    // What is still counted is what is held: the three files, not the parts.
+    expect(room.bytes).toBe(4.2 * MB - 3 * MB);
+  });
+
+  it('refuses a Word document of more elements than are read', async () => {
+    const body = '<w:p/>'.repeat(2_000_000);
+    const bytes = zip({
+      'word/document.xml': md(`<w:document xmlns:w="w"><w:body>${body}</w:body></w:document>`),
+    });
+    expect(
+      await refusal(planImport(request('word', { kind: 'bytes', name: 'p.docx', bytes }))),
+    ).toBe('tooComplex');
+  });
+
+  it('reads a Word document of fields opened and never closed in time linear in its runs', async () => {
+    const runs = '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'.repeat(200_000);
+    const bytes = zip({
+      'word/document.xml': md(
+        `<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Kept</w:t></w:r>${runs}</w:p></w:body></w:document>`,
+      ),
+    });
+    let made: Awaited<ReturnType<typeof planImport>> | undefined;
+    const took = await elapsed(async () => {
+      made = await planImport(request('word', { kind: 'bytes', name: 'f.docx', bytes }));
+    });
+    expect(took).toBeLessThan(5000);
+    expect(plainText(made!.documents[0].content)).toBe('Kept');
+  });
+
+  it('makes a page of at most 20,000 blocks, and says what was left out', async () => {
+    const markdown = md(Array.from({ length: 20_500 }, (_, i) => `Line ${i}`).join('\n\n'));
+    const plan = await planImport(
+      request('markdown', { kind: 'bytes', name: 'Long.md', bytes: markdown }),
+    );
+    expect(plan.documents[0].content.content).toHaveLength(20_000);
+    expect(plan.report.skipped.find((s) => s.code === 'blocksLeftOut')?.examples).toEqual(['Long']);
+    const paragraphs = Array.from(
+      { length: 20_500 },
+      (_, i) => `<w:p><w:r><w:t>P${i}</w:t></w:r></w:p>`,
+    );
+    const word = zip({
+      'word/document.xml': md(
+        `<w:document xmlns:w="w"><w:body>${paragraphs.join('')}</w:body></w:document>`,
+      ),
+    });
+    const docx = await planImport(
+      request('word', { kind: 'bytes', name: 'Long.docx', bytes: word }),
+    );
+    expect(docx.documents[0].content.content).toHaveLength(20_000);
+    expect(docx.report.skipped.find((s) => s.code === 'blocksLeftOut')?.count).toBe(500);
+  });
+
+  it('never plans an archive on the main thread: without a worker it is refused', async () => {
+    expect(typeof (globalThis as { Worker?: unknown }).Worker).toBe('undefined');
+    const { session, section } = await local();
+    const archive = notionExport();
+    expect(
+      isArchive({ kind: 'notion', source: { kind: 'bytes', name: 'x.zip', bytes: archive.bytes } }),
+    ).toBe(true);
+    expect(
+      await refusal(
+        runImport(
+          session,
+          input('notion', { kind: 'bytes', name: archive.name, bytes: archive.bytes }, section.id),
+        ),
+      ),
+    ).toBe('failed');
+    // A Markdown file is no archive: it is planned here.
+    const page = await runImport(
+      session,
+      input(
+        'markdown',
+        { kind: 'bytes', name: 'Note.md', bytes: md('# Note\n\nText.') },
+        section.id,
+      ),
+    );
+    expect(session.mirror.pages.get(page.topId)?.title).toBe('Note');
+  });
+});
+
 describe('the limits', () => {
   it('takes 2,000 pages and refuses 2,001 before writing anything', async () => {
     // 1,999 pages and the folder's own page.
@@ -300,6 +464,8 @@ describe('a Notion export', () => {
     // The top page is new, at the end of the section; nothing else changed.
     const top = session.mirror.pages.get(topId)!;
     expect(top).toMatchObject({ title: 'Home', parentPageId: null, sectionId: section.id });
+    // What was made shows: with no tree drawn, the expand state it reads holds the top page.
+    expect(await store.getPref<string[]>(`tree/expanded/${ws.id}`)).toEqual([topId]);
     expect(session.mirror.topPages(section.id).at(-1)!.id).toBe(topId);
     expect(await content(session, a.id).catch(() => null)).toEqual(before);
     expect(treeOf(session, topId)).toEqual({ ...fixture.expected.pages, Tasks: 'Home' });

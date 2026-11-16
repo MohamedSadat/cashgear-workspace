@@ -19,7 +19,8 @@ const { createI18n } = await import('../../i18n');
 const { WorkspaceSession } = await import('../../session');
 const { ImportPanel, sectionsForNewPages } = await import('./ImportPanel');
 const { treeRows } = await import('../../sidebar/tree');
-const { manyPages, wordDocument } = await import('../fixtures/fixtures');
+const { PageTree } = await import('../../sidebar/PageTree');
+const { manyPages, notionExport, wordDocument } = await import('../fixtures/fixtures');
 // The panel loads the runner when an import starts: loaded here first, as Vitest is slow to.
 await import('./run');
 
@@ -39,6 +40,8 @@ async function open(
   language: 'en' | 'ar' = 'en',
   store = new MemoryStore(),
   before?: (session: import('../../session').WorkspaceSession) => Promise<unknown>,
+  /** The sidebar's page tree drawn beside the panel. */
+  withTree = false,
 ) {
   const made = await localWorkspace(store);
   const session = await WorkspaceSession.start(store);
@@ -55,6 +58,7 @@ async function open(
       h(
         I18nextProvider,
         { i18n },
+        withTree ? h(PageTree, { session, activePageId: null, onError: () => undefined }) : null,
         h(ImportPanel, { session, onClose: () => (closed = true), runOptions: { inline: true } }),
       ),
     ),
@@ -76,6 +80,29 @@ const fileOf = (bytes: Uint8Array, name: string) =>
   new File([bytes as Uint8Array<ArrayBuffer>], name, { type: 'application/octet-stream' });
 
 describe('the import panel', () => {
+  it('shows what was made: the import’s top page expanded in the sidebar, the report open', async () => {
+    const { session } = await open('en', new MemoryStore(), undefined, true);
+    const row = (title: string) =>
+      [...document.querySelectorAll<HTMLElement>('[role="tree"] [role="treeitem"]')].find(
+        (item) => item.querySelector('.cgw-tree-title')?.textContent === title,
+      );
+    await until(() => !!row('Alpha'), 'the tree');
+    act(() => dialog().querySelector<HTMLInputElement>('input[value="notion"]')!.click());
+    const fixture = notionExport();
+    choose('import-file', fileOf(fixture.bytes, fixture.name));
+    await until(() => !!dialog().querySelector('[data-testid="import-report"]'), 'the report');
+    await until(() => row('Home')?.getAttribute('aria-expanded') === 'true', 'Home expanded');
+    // Its pages and database show under it; the report is still open over Settings.
+    for (const title of ['Projects', 'Meeting notes', 'Tasks'])
+      expect(row(title), title).toBeDefined();
+    expect(dialog().querySelector('[data-testid="import-report"]')).not.toBeNull();
+    // Kept in the tree's own state, as ArrowRight would leave it.
+    const ws = session.workspaceId!;
+    const home = [...session.mirror.pages.values()].find((p) => p.title === 'Home')!;
+    await until(() => true, 'a tick');
+    expect(await session.store.getPref<string[]>(`tree/expanded/${ws}`)).toContain(home.id);
+  });
+
   it('offers the sections the sidebar offers a new page in, and imports into the one chosen', async () => {
     const { session, made } = await open('en', new MemoryStore(), (s) => s.createSection('Second'));
     const ws = made.ws.id;

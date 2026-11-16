@@ -2,10 +2,11 @@
 // (M8.4): a path out of the folder (`..`), an absolute path or one with control characters is
 // not read; a zip bomb (an entry unpacking to over 1,000 times its size, or more than 500 MB in
 // all) and more than 20,000 files are refused before anything is unpacked, by the sizes the
-// archive declares; nothing unpacks to more than it declared (fflate writes into a buffer of the
-// declared size). An archive of archives (a Notion export in parts) is read as their files, two
-// levels deep at most. Nothing is ever written to a disk: paths are only names here.
-import { unzipSync } from 'fflate';
+// archive declares; the central directory is read by our own bounds-checked code, and an entry is
+// inflated in slices and refused once it unpacks past what it declared. An archive of archives (a
+// Notion export in parts) is read as their files, a part at a time, two levels deep at most.
+// Nothing is ever written to a disk: paths are only names here.
+import { Inflate } from 'fflate';
 import {
   IMPORT_MAX_BYTES,
   IMPORT_MAX_FILES,
@@ -74,89 +75,176 @@ export function cleanName(name: string): { name: string; cleaned: boolean } {
 /** A path as the report shows it: its control characters made visible. */
 const shown = (raw: string) => raw.replace(/\p{Cc}/gu, '?').slice(0, 200);
 
-interface Entry {
+/** An entry as the archive's central directory lists it. */
+interface CentralEntry {
+  /** Its name: UTF-8 when flagged or valid, else Latin-1 (`garbled`). */
   name: string;
+  garbled: boolean;
+  method: number;
+  encrypted: boolean;
+  /** Packed and unpacked sizes as declared, and where its local header is. */
   size: number;
   originalSize: number;
-  compression: number;
-}
-
-function listEntries(bytes: Uint8Array): Entry[] {
-  const entries: Entry[] = [];
-  try {
-    unzipSync(bytes, {
-      filter: (file) => {
-        entries.push({ ...file });
-        return false;
-      },
-    });
-  } catch {
-    throw new ImportRefused('damaged');
-  }
-  return entries;
+  offset: number;
 }
 
 const u16 = (d: Uint8Array, at: number) => d[at] | (d[at + 1] << 8);
 const u32 = (d: Uint8Array, at: number) =>
   (d[at] | (d[at + 1] << 8) | (d[at + 2] << 16) | (d[at + 3] << 24)) >>> 0;
-
-/**
- * Each entry's name as the central directory writes it, in its order (fflate's): its bytes and
- * whether the UTF-8 flag (bit 11) is set. Read the way fflate reads it (the end record, zip64's
- * when there is one), after fflate has read the same bytes without an error.
- */
-function rawNames(d: Uint8Array): { utf8: boolean; bytes: Uint8Array }[] {
-  let end = d.length - 22;
-  while (end > 0 && u32(d, end) !== 0x06054b50) end--;
-  let count = u16(d, end + 8);
-  let at = u32(d, end + 16);
-  if (end >= 20 && u32(d, end - 20) === 0x07064b50) {
-    const zip64 = u32(d, end - 12);
-    if (u32(d, zip64) === 0x06064b50) {
-      count = u32(d, zip64 + 32);
-      at = u32(d, zip64 + 48);
-    }
-  }
-  const out: { utf8: boolean; bytes: Uint8Array }[] = [];
-  for (let i = 0; i < count && at + 46 <= d.length; i++) {
-    const nameLength = u16(d, at + 28);
-    out.push({
-      utf8: (u16(d, at + 8) & 0x800) !== 0,
-      bytes: d.subarray(at + 46, at + 46 + nameLength),
-    });
-    at += 46 + nameLength + u16(d, at + 30) + u16(d, at + 32);
-  }
-  return out;
-}
+const u64 = (d: Uint8Array, at: number) => u32(d, at) + u32(d, at + 4) * 0x100000000;
 
 const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+const utf8 = new TextDecoder();
+const latin1 = (bytes: Uint8Array) => {
+  let out = '';
+  for (const b of bytes) out += String.fromCharCode(b);
+  return out;
+};
+
+/** A central directory entry takes at least this many bytes. */
+const CENTRAL_ENTRY = 46;
 
 /**
- * An entry's name: fflate reads a name without the UTF-8 flag as Latin-1, but macOS, 7-Zip and
- * many tools write UTF-8 there without setting the flag. Bytes that are valid UTF-8 are read as
- * UTF-8; others keep fflate's Latin-1 and are reported as possibly garbled (an old code page).
+ * The archive's central directory, read by our own code before anything else (the security
+ * review: fflate takes a zip64 end record's entry count as it stands, so a 100-byte file could make
+ * it list 4.3 billion entries). The end record is the last one within a comment's reach of the
+ * end; zip64's end record, when its locator is there, gives the count and offset. A count the
+ * file cannot hold (46 bytes an entry) is refused as damaged, one over `maxFiles` as too many,
+ * before a single entry is read. Every read is bounds-checked. Names without the UTF-8 flag are
+ * read as UTF-8 when the bytes are valid UTF-8 (macOS, 7-Zip and others write it so), else as
+ * Latin-1 and marked possibly garbled (an old code page).
  */
-function nameOf(
-  latin1: string,
-  raw: { utf8: boolean; bytes: Uint8Array } | undefined,
-  report: ReportBuilder,
-): string {
-  if (!raw || raw.utf8 || raw.bytes.every((b) => b < 0x80)) return latin1;
-  try {
-    return strictUtf8.decode(raw.bytes);
-  } catch {
-    report.skip('namesGarbled', shown(latin1));
-    return latin1;
+function readCentral(d: Uint8Array, maxFiles: number): CentralEntry[] {
+  const damaged = () => new ImportRefused('damaged');
+  const floor = Math.max(0, d.length - 22 - 0xffff);
+  let end = d.length - 22;
+  while (end >= floor && u32(d, end) !== 0x06054b50) end--;
+  if (end < floor) throw damaged();
+  let count = u16(d, end + 10);
+  let at = u32(d, end + 16);
+  if (end >= 20 && u32(d, end - 20) === 0x07064b50) {
+    const record = u64(d, end - 12);
+    if (record + 56 <= end && u32(d, record) === 0x06064b50) {
+      count = u64(d, record + 32);
+      at = u64(d, record + 48);
+    }
   }
+  if (at > d.length || count > (d.length - at) / CENTRAL_ENTRY) throw damaged();
+  if (count > maxFiles) throw new ImportRefused('tooManyFiles');
+  const entries: CentralEntry[] = [];
+  for (let i = 0; i < count; i++) {
+    if (at + CENTRAL_ENTRY > d.length || u32(d, at) !== 0x02014b50) throw damaged();
+    const flags = u16(d, at + 8);
+    const nameLength = u16(d, at + 28);
+    const extraLength = u16(d, at + 30);
+    const commentLength = u16(d, at + 32);
+    const nameStart = at + CENTRAL_ENTRY;
+    const extraEnd = nameStart + nameLength + extraLength;
+    if (extraEnd + commentLength > d.length) throw damaged();
+    let size = u32(d, at + 20);
+    let originalSize = u32(d, at + 24);
+    let offset = u32(d, at + 42);
+    // Zip64: the fields written as 0xFFFFFFFF are in the extra field of id 1, in this order.
+    if (size === 0xffffffff || originalSize === 0xffffffff || offset === 0xffffffff) {
+      for (let x = nameStart + nameLength; x + 4 <= extraEnd; x += 4 + u16(d, x + 2)) {
+        if (u16(d, x) !== 1) continue;
+        let field = x + 4;
+        const next = () => {
+          if (field + 8 > extraEnd) throw damaged();
+          const value = u64(d, field);
+          field += 8;
+          return value;
+        };
+        if (originalSize === 0xffffffff) originalSize = next();
+        if (size === 0xffffffff) size = next();
+        if (offset === 0xffffffff) offset = next();
+        break;
+      }
+    }
+    const raw = d.subarray(nameStart, nameStart + nameLength);
+    let name: string;
+    let garbled = false;
+    if (flags & 0x800) name = utf8.decode(raw);
+    else if (raw.every((b) => b < 0x80)) name = latin1(raw);
+    else
+      try {
+        name = strictUtf8.decode(raw);
+      } catch {
+        name = latin1(raw);
+        garbled = true;
+      }
+    entries.push({
+      name,
+      garbled,
+      method: u16(d, at + 10),
+      encrypted: (flags & 1) !== 0,
+      size,
+      originalSize,
+      offset,
+    });
+    at = extraEnd + commentLength;
+  }
+  return entries;
+}
+
+/** Packed bytes fed to the inflater at a time: what one push can unpack to is bounded by it. */
+const INFLATE_SLICE = 16 * 1024;
+
+/**
+ * An entry's bytes. A deflated one is inflated in slices and refused the moment it unpacks to more
+ * than it declares, so neither memory nor work ever goes past the declared size (the review: a
+ * one-shot inflate into a buffer of the declared size kept decoding to the stream's end).
+ */
+function extract(d: Uint8Array, entry: CentralEntry): Uint8Array {
+  const local = entry.offset;
+  if (local + 30 > d.length || u32(d, local) !== 0x04034b50) throw new ImportRefused('damaged');
+  const start = local + 30 + u16(d, local + 26) + u16(d, local + 28);
+  if (start + entry.size > d.length) throw new ImportRefused('damaged');
+  const data = d.subarray(start, start + entry.size);
+  if (entry.method === 0) return data.slice();
+  if (!data.length) return new Uint8Array(0);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    const inflater = new Inflate((chunk) => {
+      total += chunk.length;
+      if (total > entry.originalSize) throw new ImportRefused('damaged');
+      chunks.push(chunk);
+    });
+    for (let at = 0; at < data.length; at += INFLATE_SLICE) {
+      const last = at + INFLATE_SLICE >= data.length;
+      inflater.push(data.subarray(at, Math.min(at + INFLATE_SLICE, data.length)), last);
+    }
+  } catch (error) {
+    if (error instanceof ImportRefused) throw error;
+    throw new ImportRefused('damaged');
+  }
+  if (chunks.length === 1) return chunks[0];
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+  return out;
 }
 
 const isZip = (path: string) => /\.zip$/i.test(path);
 const MB = 1024 * 1024;
 
+/** What an entry costs while held: a stored one its packed bytes, a deflated one its declared size. */
+const held = (entry: CentralEntry) => (entry.method === 0 ? entry.size : entry.originalSize);
+
+const charge = (budget: Budget, bytes: number) => {
+  budget.bytes -= bytes;
+  if (budget.bytes < 0) throw new ImportRefused('tooLarge', Math.round(IMPORT_MAX_BYTES / MB));
+};
+
 /**
  * An archive's files, checked: what cannot be read safely is left out and reported; a bomb, too
- * many files or too many bytes refuse the whole import. An archive made only of archives is
- * read as their files.
+ * many files or too many bytes refuse the whole import. An archive made only of archives is read as
+ * their files, one part at a time: a part is counted while it is held and given back once its
+ * files are read (they are counted instead), so the budget is what is in memory.
  */
 export function readArchive(
   bytes: Uint8Array,
@@ -164,83 +252,72 @@ export function readArchive(
   budget: Budget = newBudget(),
   depth = 0,
 ): ImportFile[] {
-  const entries = listEntries(bytes);
-  if (entries.length > budget.files) throw new ImportRefused('tooManyFiles');
-  const names = rawNames(bytes);
-  const accepted = new Map<number, string>();
+  const entries = readCentral(bytes, budget.files);
+  const accepted: { entry: CentralEntry; path: string }[] = [];
   const seen = new Set<string>();
-  entries.forEach((entry, index) => {
-    const check = checkPath(nameOf(entry.name, names[index], report));
+  for (const entry of entries) {
+    if (entry.garbled) report.skip('namesGarbled', shown(entry.name));
+    const check = checkPath(entry.name);
     if ('reason' in check) {
       if (check.reason === 'unsafe') report.skip('unsafePath', shown(entry.name));
       else if (check.reason === 'tooDeep') report.skip('tooDeep', shown(entry.name));
-      return;
+      continue;
     }
-    if (entry.compression !== 0 && entry.compression !== 8) {
+    if (entry.encrypted || (entry.method !== 0 && entry.method !== 8)) {
       report.skip('unsupportedEntry', check.path);
-      return;
+      continue;
     }
     const key = check.path.toLowerCase();
     if (seen.has(key)) {
       report.skip('duplicate', check.path);
-      return;
+      continue;
     }
     seen.add(key);
-    // A stored entry is its packed bytes; a deflated one unpacks to what it declares, never more.
-    const size = entry.compression === 0 ? entry.size : entry.originalSize;
-    if (
-      entry.originalSize > IMPORT_RATIO_FLOOR &&
-      entry.originalSize > entry.size * IMPORT_MAX_RATIO
-    )
-      throw new ImportRefused('zipBomb');
-    budget.bytes -= size;
-    budget.files -= 1;
-    if (budget.bytes < 0) throw new ImportRefused('tooLarge', Math.round(IMPORT_MAX_BYTES / MB));
-    if (budget.files < 0) throw new ImportRefused('tooManyFiles');
-    accepted.set(index, check.path);
-  });
-  let unpacked: Record<string, Uint8Array>;
-  const order: string[] = [];
-  try {
-    let index = -1;
-    unpacked = unzipSync(bytes, {
-      filter: (file) => {
-        index++;
-        if (!accepted.has(index)) return false;
-        // fflate keys files by their names as written; ours are checked and may differ.
-        order.push(file.name);
-        return true;
-      },
-    });
-  } catch {
-    throw new ImportRefused('damaged');
+    if (entry.method === 8) {
+      if (
+        entry.originalSize > IMPORT_RATIO_FLOOR &&
+        entry.originalSize > entry.size * IMPORT_MAX_RATIO
+      )
+        throw new ImportRefused('zipBomb');
+      // Deflate never needs much more room than the bytes it holds (stored blocks add 5 bytes in
+      // 64 KB): far more packed bytes than the declared size can need is not an honest entry.
+      if (entry.size > entry.originalSize + entry.originalSize / 1000 + 1024)
+        throw new ImportRefused('damaged');
+    }
+    accepted.push({ entry, path: check.path });
   }
-  const paths = [...accepted.values()];
-  const files: ImportFile[] = order.map((name, i) => ({ path: paths[i], bytes: unpacked[name] }));
+  budget.files -= accepted.length;
+  if (budget.files < 0) throw new ImportRefused('tooManyFiles');
   // Notion writes a large export as an archive of archives (`Export-…-Part-1.zip`).
-  if (files.length && files.every((file) => isZip(file.path))) {
+  if (accepted.length && accepted.every((file) => isZip(file.path))) {
     if (depth >= IMPORT_MAX_NESTED_ZIPS) {
-      for (const file of files) report.skip('nestedArchive', file.path);
+      for (const file of accepted) report.skip('nestedArchive', file.path);
       return [];
     }
     const out: ImportFile[] = [];
     const taken = new Set<string>();
-    for (const file of files) {
-      // The part's own bytes are gone once it is read: its files count instead.
-      budget.bytes += file.bytes.length;
+    for (const part of accepted) {
+      charge(budget, held(part.entry));
+      const inner = readArchive(extract(bytes, part.entry), report, budget, depth + 1);
+      // The part's bytes are let go now; its files are what is held (and counted).
+      budget.bytes += held(part.entry);
       budget.files += 1;
-      for (const inner of readArchive(file.bytes, report, budget, depth + 1)) {
-        const key = inner.path.toLowerCase();
-        if (taken.has(key)) report.skip('duplicate', inner.path);
+      for (const file of inner) {
+        const key = file.path.toLowerCase();
+        if (taken.has(key)) report.skip('duplicate', file.path);
         else {
           taken.add(key);
-          out.push(inner);
+          out.push(file);
         }
       }
     }
     return out;
   }
-  return files;
+  charge(
+    budget,
+    accepted.reduce((sum, file) => sum + held(file.entry), 0),
+  );
+  return accepted.map((file) => ({ path: file.path, bytes: extract(bytes, file.entry) }));
 }
 
 /** Files of a chosen folder (their paths start with the folder's name), checked the same way. */

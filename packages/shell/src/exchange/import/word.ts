@@ -1,7 +1,7 @@
 // A Word `.docx` as one page (M8.4): the file unzipped with the archive's guards (it is a zip),
 // its parts read by `@cgw/doc`'s own reader (`readDocx`, over the XML), its images made assets,
 // and what Word has that a page does not counted in the report.
-import { DocxError, XmlError, readDocx, type DocxSkip } from '@cgw/doc';
+import { DocxError, MAX_ELEMENTS, XmlError, readDocx, type DocxSkip } from '@cgw/doc';
 import { uuidv7 } from '@cgw/workspace';
 import { readArchive, type ImportFile } from './archive';
 import { AssetPlanner } from './assets';
@@ -22,6 +22,7 @@ const SKIPS: Record<DocxSkip, SkipCode> = {
   linkedImages: 'linkedImages',
   missingImages: 'missingImage',
   headersAndFooters: 'headersAndFooters',
+  blocksLeftOut: 'blocksLeftOut',
 };
 
 /** An XML part as text: UTF-8 (Word's own), or UTF-16 when it starts with a byte order mark. */
@@ -72,6 +73,9 @@ export function planWord(
       },
     );
   } catch (error) {
+    // A document that holds more than is read (the security review: parse amplification).
+    if (error instanceof DocxError && error.code === 'tooMany')
+      throw new ImportRefused('tooComplex', MAX_ELEMENTS);
     if (error instanceof DocxError || error instanceof XmlError) throw new ImportRefused('damaged');
     throw error;
   }

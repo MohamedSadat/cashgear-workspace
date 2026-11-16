@@ -21,7 +21,15 @@ import { pageGlyph } from '../database/make';
 import { navigate } from '../route';
 import { canEditPage, type WorkspaceSession } from '../session';
 import { PointMenu, RowMenu } from './RowMenu';
-import { dropTarget, dropZone, treeRows, type DropZone, type TreeRow } from './tree';
+import {
+  dropTarget,
+  dropZone,
+  expandedKey,
+  onExpandRequest,
+  treeRows,
+  type DropZone,
+  type TreeRow,
+} from './tree';
 
 export const ROW_HEIGHT = 28;
 const OVERSCAN = 8;
@@ -36,7 +44,7 @@ export interface PageTreeProps {
 /** Which pages are expanded, kept per device and per workspace in the local store. */
 function useExpanded(session: WorkspaceSession, workspaceId: Id) {
   const [expanded, setExpanded] = useState<Set<Id>>(() => new Set());
-  const key = `tree/expanded/${workspaceId}`;
+  const key = expandedKey(workspaceId);
   useEffect(() => {
     let live = true;
     void session.store.getPref<Id[]>(key).then((ids) => {
@@ -100,6 +108,20 @@ export function PageTree({ session, activePageId, onError }: PageTreeProps) {
     if (ancestors.some((a) => !expanded.has(a.id)))
       updateExpanded((set) => ancestors.forEach((a) => set.add(a.id)));
   }, [activePageId, session]);
+
+  // Phase 8: a page expanded from outside the tree (an import's top page once it is made), with
+  // its ancestors, as a person's ArrowRight would leave it.
+  useEffect(
+    () =>
+      onExpandRequest((pageId) => {
+        const page = session.mirror.pages.get(pageId);
+        if (page?.workspaceId !== workspaceId) return false;
+        const ancestors = session.mirror.ancestors(pageId);
+        updateExpanded((set) => [page, ...ancestors].forEach((p) => set.add(p.id)));
+        return true;
+      }),
+    [session, workspaceId, updateExpanded],
+  );
 
   useLayoutEffect(() => {
     const el = scroller.current;

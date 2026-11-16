@@ -14,7 +14,17 @@
 import type { DocJSON } from './binding';
 import { newBlockId } from './ids';
 import { safeHref } from './schema';
-import { attr, descendant, element, elements, local, parseXml, type XmlElement } from './xml';
+import { MAX_PAGE_BLOCKS } from './markdown';
+import {
+  XmlError,
+  attr,
+  descendant,
+  element,
+  elements,
+  local,
+  parseXml,
+  type XmlElement,
+} from './xml';
 
 /** A `.docx` file's parts, as text; only the document is needed. */
 export interface DocxParts {
@@ -43,7 +53,9 @@ export type DocxSkip =
   | 'nestedTables'
   | 'linkedImages'
   | 'missingImages'
-  | 'headersAndFooters';
+  | 'headersAndFooters'
+  /** Blocks past `maxBlocks`, left out. */
+  | 'blocksLeftOut';
 
 export interface DocxOptions {
   /**
@@ -51,6 +63,8 @@ export interface DocxOptions {
    * it cannot be one (missing, too large, not an image): counted as `missingImages` then.
    */
   image?(path: string, alt: string | null): string | null;
+  /** Blocks a page is made of at most (default `MAX_PAGE_BLOCKS`); the rest are counted. */
+  maxBlocks?: number;
 }
 
 export interface DocxResult {
@@ -62,7 +76,11 @@ export interface DocxResult {
 }
 
 export class DocxError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** `tooMany`: a part holds more elements than are read (`MAX_ELEMENTS`). */
+    readonly code: 'tooMany' | 'other' = 'other',
+  ) {
     super(message);
     this.name = 'DocxError';
   }
@@ -286,6 +304,9 @@ function partPath(target: string): string {
   return out.join('/');
 }
 
+/** Fields open inside each other that are kept (a document's own nest two or three). */
+const MAX_FIELDS = 32;
+
 const block = (body: DocJSON, children: DocJSON[] = []): DocJSON => ({
   type: 'block',
   attrs: { id: newBlockId() },
@@ -331,7 +352,11 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
     numbering = readNumbering(parts.numbering);
     rels = readRelationships(parts.relationships);
   } catch (error) {
-    throw new DocxError(error instanceof Error ? error.message : String(error));
+    const tooMany = error instanceof XmlError && error.code === 'tooMany';
+    throw new DocxError(
+      error instanceof Error ? error.message : String(error),
+      tooMany ? 'tooMany' : 'other',
+    );
   }
   const skipped: Partial<Record<DocxSkip, number>> = {};
   const skip = (what: DocxSkip, count = 1) => (skipped[what] = (skipped[what] ?? 0) + count);
@@ -342,8 +367,29 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
   const defaultStyle = [...styles.entries()].find(
     ([, s]) => s.type === 'paragraph' && s.name === 'normal',
   )?.[0];
-  /** Fields open across runs (and paragraphs): a HYPERLINK's result is a link. */
+  /**
+   * Fields open across runs (and paragraphs): a HYPERLINK's result is a link. At most
+   * `MAX_FIELDS` are kept open; deeper ones are counted, so their ends still match (the review:
+   * fields opened and never closed, scanned on every run, cost runs × fields).
+   */
   const fields: Field[] = [];
+  let overflow = 0;
+  const openLink = () => {
+    for (let i = fields.length - 1; i >= 0; i--)
+      if (fields[i].separated && fields[i].link) return fields[i].link;
+    return null;
+  };
+  const inInstruction = () => {
+    for (const field of fields) if (!field.separated) return true;
+    return false;
+  };
+  /** Blocks made so far, and how many a page may hold. */
+  let made = 0;
+  const maxBlocks = options.maxBlocks ?? MAX_PAGE_BLOCKS;
+  const blockOf = (body: DocJSON, children: DocJSON[] = []) => {
+    made++;
+    return block(body, children);
+  };
 
   // ---- Runs ----------------------------------------------------------------------------------
   const marksOf = (format: RunFormat, link: string | null): Mark[] => {
@@ -376,7 +422,7 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
       ).trim();
       const assetId = options.image?.(partPath(rel.target), alt || null) ?? null;
       if (!assetId) return void skip('missingImages');
-      out.images.push(block({ type: 'image', attrs: { assetId, alt: alt || null } }));
+      out.images.push(blockOf({ type: 'image', attrs: { assetId, alt: alt || null } }));
       return;
     }
     if (descendant(el, 'chart')) skip('charts');
@@ -391,10 +437,9 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
       merge(base, charStyle ? resolveStyle(styles, charStyle).run : {}),
       runFormat(rPr),
     );
-    const field = [...fields].reverse().find((f) => f.separated && f.link);
-    const href = link ?? field?.link ?? null;
+    const href = link ?? openLink();
     // Text inside a field's instruction (before its `separate`) is not shown.
-    const hidden = fields.some((f) => !f.separated);
+    const hidden = inInstruction();
     const add = (text: string) => {
       if (!text || hidden) return;
       if (/\S/.test(text)) {
@@ -436,16 +481,22 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
           break;
         case 'fldChar': {
           const kind = attr(child, 'fldCharType');
-          if (kind === 'begin') fields.push({ instruction: '', separated: false, link: null });
-          else if (kind === 'separate' && fields.length) {
+          if (kind === 'begin') {
+            if (fields.length < MAX_FIELDS)
+              fields.push({ instruction: '', separated: false, link: null });
+            else overflow++;
+          } else if (kind === 'separate' && fields.length && !overflow) {
             const top = fields[fields.length - 1];
             top.separated = true;
             top.link = fieldLink(top.instruction);
-          } else if (kind === 'end') fields.pop();
+          } else if (kind === 'end') {
+            if (overflow) overflow--;
+            else fields.pop();
+          }
           break;
         }
         case 'instrText':
-          if (fields.length)
+          if (fields.length && !overflow && fields[fields.length - 1].instruction.length < 2048)
             fields[fields.length - 1].instruction += child.children
               .filter((c): c is string => typeof c === 'string')
               .join('');
@@ -626,7 +677,7 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
           attrs: { language: null },
           content: [{ type: 'text', text }],
         };
-        out.push(block(body));
+        out.push(blockOf(body));
         code = body;
       }
       out.push(...para.images);
@@ -654,7 +705,7 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
             ? textBody('bulletItem')
             : textBody('numberedItem', numberAttrs);
       started.add(key);
-      const item = block(body, para.images);
+      const item = blockOf(body, para.images);
       while (lists.length && lists[lists.length - 1].level >= ilvl) lists.pop();
       const parent = lists[lists.length - 1];
       if (parent) parent.item.content!.push(item);
@@ -667,7 +718,7 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
       para.checkbox !== null
         ? textBody('checkItem', { checked: para.checkbox })
         : textBody(kind.kind, kind.attrs);
-    out.push(block(body), ...para.images);
+    out.push(blockOf(body), ...para.images);
   };
 
   /** A table's cell: its paragraphs' text joined by line breaks (images go after the table). */
@@ -755,7 +806,7 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
     if (!rows.length) return;
     const hasFirstRowText = grid[0]?.some((c) => c.node.content?.length);
     out.push(
-      block({
+      blockOf({
         type: 'table',
         attrs: { headerRow: headerRow || (firstRowBold && !!hasFirstRowText && grid.length > 1) },
         content: rows,
@@ -767,6 +818,11 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
   const walk = (parent: XmlElement, depth = 0) => {
     if (depth > 32) return;
     for (const child of elements(parent)) {
+      // A page holds at most so many blocks; what is past them is counted, not read.
+      if (made >= maxBlocks && /^(p|tbl)$/.test(local(child.name))) {
+        skip('blocksLeftOut');
+        continue;
+      }
       switch (local(child.name)) {
         case 'p':
           paragraphBlock(readParagraph(child));

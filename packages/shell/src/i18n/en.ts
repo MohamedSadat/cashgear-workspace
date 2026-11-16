@@ -374,6 +374,8 @@ export const en = {
       tooManyFiles: 'Nothing was imported: it holds too many files.',
       zipBomb: 'Nothing was imported: a file in the archive unpacks to far more than its size.',
       damaged: 'Nothing was imported: the file is damaged or cannot be read.',
+      tooComplex:
+        'Nothing was imported: a document in it holds more than {{number}} parts, more than is read.',
       empty: 'Nothing was imported: there are no pages in it.',
       workspaceExport:
         'This is a Cash Gear Workspace export: use “Import an export” to bring it back whole.',
@@ -388,6 +390,7 @@ export const en = {
       unsupportedEntry: 'Files packed in a way this app cannot unpack',
       nestedArchive: 'Archives inside archives too deep to read',
       tooDeep: 'Pages or lists nested too deeply, placed at the deepest level',
+      blocksLeftOut: 'Pages longer than 20,000 blocks: the rest of them left out',
       namesCleaned: 'Names with control or direction characters, cleaned',
       namesGarbled: 'Names in an old character set, which may show garbled',
       unknownType: 'Files of a type that cannot be kept',

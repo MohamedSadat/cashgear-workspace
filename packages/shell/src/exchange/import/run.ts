@@ -4,6 +4,7 @@
 // sees the archive, only the pages, rows and assets it makes (DECISIONS.md, 2026-11-16).
 import type { Id } from '@cgw/workspace';
 import type { WorkspaceSession } from '../../session';
+import { expandInTree } from '../../sidebar/tree';
 import {
   planImport,
   type ImportKind,
@@ -28,7 +29,7 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** Reading (the plan being made), then writing, with how far it got. */
   onPhase?(phase: 'reading' | 'writing', progress?: WriteProgress): void;
-  /** Plans on this thread instead of a worker (tests). */
+  /** Plans on this thread instead of a worker: the unit tests only (Node has no page to hold). */
   inline?: boolean;
 }
 
@@ -73,6 +74,23 @@ function planInWorker(request: ImportRequest, signal?: AbortSignal): Promise<Imp
   });
 }
 
+/** Whether what is imported is an archive (a zip, or a Word file, which is one). */
+export const isArchive = (request: Pick<ImportRequest, 'kind' | 'source'>): boolean =>
+  request.kind === 'word' ||
+  (request.source.kind === 'bytes' &&
+    request.source.bytes[0] === 0x50 &&
+    request.source.bytes[1] === 0x4b);
+
+/**
+ * Where no worker can be made (an old WebView): a Markdown file or a folder is planned on this
+ * thread (nothing is unpacked), an archive never is (the security review: unpacking a hostile one
+ * would hold the page, with no Stop).
+ */
+function planHere(request: ImportRequest): Promise<ImportPlan> {
+  if (isArchive(request)) return Promise.reject(new ImportRefused('failed'));
+  return planImport(request);
+}
+
 /** Plans and writes an import into the open workspace; throws `ImportRefused` with nothing made. */
 export async function runImport(
   session: WorkspaceSession,
@@ -97,16 +115,18 @@ export async function runImport(
       orderKey: session.keyFor(input.sectionId, null),
     },
   };
-  // Where there is no worker (an old WebView), the plan is made on this thread.
-  const plan =
-    options.inline || typeof Worker === 'undefined'
-      ? await planImport(request)
-      : await planInWorker(request, options.signal);
+  const plan = options.inline
+    ? await planImport(request)
+    : typeof Worker !== 'undefined'
+      ? await planInWorker(request, options.signal)
+      : await planHere(request);
   if (options.signal?.aborted) throw new ImportRefused('stopped');
   options.onPhase?.('writing', { done: 0, total: plan.ops.length });
   await writePlan(session, plan, {
     signal: options.signal,
     onProgress: (progress) => options.onPhase?.('writing', progress),
   });
+  // What was made shows: the top page's row expanded in the sidebar (the report stays open).
+  await expandInTree(session.store, session.mirror, plan.topId).catch(() => undefined);
   return { topId: plan.topId, report: plan.report };
 }

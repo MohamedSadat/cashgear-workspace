@@ -75,6 +75,7 @@ export * as build from './content';
 export { readableJSON, references, remapRefs, withNewIds, withoutIds } from './content';
 export {
   MAX_NESTING,
+  MAX_PAGE_BLOCKS,
   looksLikeMarkdown,
   parseInline,
   parseMarkdown,
@@ -91,4 +92,4 @@ export {
   type DocxResult,
   type DocxSkip,
 } from './docx';
-export { XmlError, parseXml, type XmlElement, type XmlNode } from './xml';
+export { MAX_ELEMENTS, XmlError, parseXml, type XmlElement, type XmlNode } from './xml';

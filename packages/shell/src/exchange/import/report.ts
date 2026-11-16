@@ -9,6 +9,7 @@ export const SKIP_CODES = [
   'unsupportedEntry',
   'nestedArchive',
   'tooDeep',
+  'blocksLeftOut',
   'namesCleaned',
   'namesGarbled',
   // Files
@@ -75,6 +76,7 @@ export type RefusalCode =
   | 'tooManyFiles'
   | 'zipBomb'
   | 'damaged'
+  | 'tooComplex'
   | 'empty'
   | 'workspaceExport'
   | 'notWord'

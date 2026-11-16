@@ -11,13 +11,11 @@ import type { Locator, Page } from '@playwright/test';
 import { desktop, expect, test } from './fixtures';
 import { createWorkspace, editor, watchErrors } from './helpers';
 import { newAccount, syncStatus } from './cloud';
-import { apiSession } from '../../scripts/cloud-account.mjs';
 import {
   fullPage,
   grid,
   openRow,
   otherDevice,
-  pageId,
   rowOf,
   signedInWorkspace,
   signers,
@@ -80,19 +78,6 @@ const pageRow = (page: Page, title: string) =>
     .getByRole('tree', { name: 'Pages' })
     .getByRole('treeitem', { name: new RegExp(`^${title}(\\s|$)`) })
     .first();
-
-/** The assets a page's file blocks name, in the server's derived document. */
-async function serverFiles(api: Awaited<ReturnType<typeof apiSession>>, id: string) {
-  const answer = await api.get(`/api/v1/pages/${id}/doc/json`);
-  const json = typeof answer.json === 'string' ? JSON.parse(answer.json) : answer.json;
-  const ids: string[] = [];
-  const walk = (node: { type?: string; attrs?: { assetId?: string }; content?: unknown[] }) => {
-    if (node.type === 'file' && node.attrs?.assetId) ids.push(node.attrs.assetId);
-    for (const child of node.content ?? []) walk(child as typeof node);
-  };
-  if (json) walk(json);
-  return ids;
-}
 
 /**
  * Expands a page's row in the sidebar as a person does (focus it, ArrowRight). The tree opens the
@@ -202,9 +187,12 @@ test.describe('import', () => {
     expect(await skipped(page)).toEqual(
       expect.arrayContaining(['peopleAsText', 'linksAsText', 'filesAsText']),
     );
+    // What was made shows: the import's top page is expanded in the sidebar while the report is
+    // open, its databases under it.
+    await expect(pageRow(page, 'Work')).toHaveAttribute('aria-expanded', 'true');
+    await expect(pageRow(page, 'Tasks')).toBeVisible();
     await report(page).getByRole('button', { name: 'Close' }).click();
     // Tasks name their project; Projects list their tasks, the back relation filled in.
-    await expandRow(page, 'Work');
     await pageRow(page, 'Tasks').click();
     const tasks = fullPage(page);
     await expect(rowOf(tasks, 'Write the spec')).toContainText('Launch');
@@ -239,6 +227,8 @@ test.describe('import', () => {
     expect(await skipped(page)).toEqual(
       expect.arrayContaining(['frontMatter', 'externalImage', 'brokenLink', 'notLinked']),
     );
+    await expect(pageRow(page, 'Handbook')).toHaveAttribute('aria-expanded', 'true');
+    await expect(pageRow(page, 'Welcome')).toBeVisible();
     await report(page).getByRole('button', { name: 'Open the imported page' }).click();
     await expect(page.getByLabel('Page title')).toHaveValue('Handbook');
     await openPage(page, 'Handbook', 'Welcome');
@@ -343,25 +333,15 @@ test.describe('import', () => {
     await expect(syncStatus(page)).toHaveText('Synced', { timeout: 60000 });
     const other = await otherDevice(await cloud.signer(), account);
     await openPage(other.page, 'Handbook', 'Welcome');
-    // The attachment reached the server, named and readable, and the second device draws its
-    // block. (Its name shows there only once the host fetches the asset's record: a file block
-    // whose asset another device uploaded reads "This file is not on this device" today, for any
-    // file, not only an import's. A product gap reported to the parent, outside the import.)
-    await expect(editor(other.page).locator('.cgw-file')).toHaveCount(1);
-    const api = await apiSession(account);
-    const welcome = pageId(other.page);
-    await expect
-      .poll(async () => (await serverFiles(api, welcome)).length, { timeout: 30000 })
-      .toBe(1);
-    const [assetId] = await serverFiles(api, welcome);
-    await expect
-      .poll(async () => (await api.raw(`/api/v1/assets/${assetId}/url`)).status, { timeout: 30000 })
-      .toBe(200);
-    expect(await api.get(`/api/v1/assets/${assetId}`)).toMatchObject({
-      fileName: 'manual.pdf',
-      contentType: 'application/pdf',
-    });
-    await api.dispose();
+    // The attachment shows its name on a device that did not upload it, and opens there: the
+    // host brings its record from the server, as it brings an image's picture (Phase 8; before,
+    // it read "This file is not on this device").
+    const file = editor(other.page).locator('.cgw-file');
+    await expect(file.locator('.cgw-file-name')).toHaveText('manual.pdf', { timeout: 30000 });
+    await expect(file).toHaveAttribute('data-missing', 'false');
+    const download = other.page.waitForEvent('download');
+    await file.getByRole('button', { name: /manual\.pdf/ }).click();
+    expect((await download).suggestedFilename()).toBe('manual.pdf');
     await openPage(other.page, 'Quarterly report');
     await imagesLoaded(editor(other.page));
     await other.context.close();
@@ -390,11 +370,14 @@ test.describe('import', () => {
       'Nothing was imported: it makes 2,002 pages, and an import makes at most 2,000.',
     );
     await panel(page).getByRole('button', { name: 'Close' }).click();
-    // The hostile archive's own pages are there; the refused one left nothing.
+    // The hostile archive's own pages are there (its top page expanded, as an import leaves it:
+    // the top page and its two pages); the refused one left nothing.
+    await expect(pageRow(page, 'evil')).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('tree', { name: 'Pages' }).getByRole('treeitem')).toHaveCount(
-      before + 1,
+      before + 3,
     );
     await expect(treeRow(page, 'evil')).toHaveCount(1);
+    for (const title of ['Good', 'Reversed']) await expect(pageRow(page, title)).toBeVisible();
   });
 
   test('the panel in Arabic and dark: right to left, Axe finds nothing', async ({ page }) => {

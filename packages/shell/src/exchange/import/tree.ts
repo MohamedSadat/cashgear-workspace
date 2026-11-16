@@ -9,6 +9,7 @@
 // page or an inline database when the link is alone on a line), links to other files
 // attachments, images assets; what cannot be read is reported.
 import {
+  MAX_PAGE_BLOCKS,
   newBlockId,
   parseMarkdown,
   type DocJSON,
@@ -169,6 +170,7 @@ const NOTE_CODES: Record<MarkdownNote, SkipCode> = {
   externalImage: 'externalImage',
   missingImage: 'missingImage',
   tooDeep: 'tooDeep',
+  tooManyBlocks: 'blocksLeftOut',
 };
 
 const decoder = new TextDecoder();
@@ -390,6 +392,7 @@ export function planTree(files: readonly ImportFile[], options: TreeOptions): Pl
     };
     const linkOptions: MarkdownInOptions = {
       wikiLinks: !notion,
+      maxBlocks: MAX_PAGE_BLOCKS,
       link: (href, text, alone) => {
         if (href.startsWith('[[')) {
           const target = titled.get(fold(href.slice(2, -2).split('#')[0]));
@@ -441,7 +444,7 @@ export function planTree(files: readonly ImportFile[], options: TreeOptions): Pl
       },
       note: (what, detail) => {
         if (what === 'missingImage' && detail && imageSeen.has(detail)) return;
-        report.skip(NOTE_CODES[what], detail);
+        report.skip(NOTE_CODES[what], what === 'tooManyBlocks' ? n.title : detail);
       },
     };
     n.content = parseMarkdown(text, linkOptions);

@@ -34,7 +34,14 @@ export type LinkAnswer =
 
 /** Something an import reads and does not keep, or keeps only in part. */
 export type MarkdownNote =
-  'html' | 'frontMatter' | 'equation' | 'externalImage' | 'missingImage' | 'tooDeep';
+  | 'html'
+  | 'frontMatter'
+  | 'equation'
+  | 'externalImage'
+  | 'missingImage'
+  | 'tooDeep'
+  /** Lines past `maxBlocks` blocks were left out. */
+  | 'tooManyBlocks';
 
 export interface MarkdownInOptions {
   /** A link's target, as written (URL-decoded once), its text, and whether it is alone on a line. */
@@ -43,7 +50,18 @@ export interface MarkdownInOptions {
   image?(src: string, alt: string): string | null;
   /** `[[Page]]`, `[[Page|text]]` and `![[image.png]]` (Obsidian): resolved by `link` and `image`. */
   wikiLinks?: boolean;
+  /** Blocks a page is made of at most; the lines after them are left out (`tooManyBlocks`). */
+  maxBlocks?: number;
   note?(what: MarkdownNote, detail?: string): void;
+}
+
+/** Blocks an imported page is made of at most (Markdown and Word alike): a page an editor draws. */
+export const MAX_PAGE_BLOCKS = 20_000;
+
+/** Blocks made so far in one document, against its cap. */
+interface BlockBudget {
+  made: number;
+  max: number;
 }
 
 /** List items nest at most this deep; deeper ones stay at the deepest level. */
@@ -366,7 +384,8 @@ const EMOJI_ONLY = new RegExp(`^(${EMOJI})$`, 'u');
 export function parseMarkdown(markdown: string, options?: MarkdownInOptions): DocJSON {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
   if (options) skipFrontMatter(lines, options);
-  return { type: 'doc', content: parseLines(lines, options ?? null) };
+  const budget: BlockBudget = { made: 0, max: options?.maxBlocks ?? Number.POSITIVE_INFINITY };
+  return { type: 'doc', content: parseLines(lines, options ?? null, 0, budget) };
 }
 
 /** YAML front matter (`---` … `---` at the very top) is not the page's content. */
@@ -386,7 +405,12 @@ function skipFrontMatter(lines: string[], options: MarkdownInOptions) {
 /** `<aside>` and `<details>` inside each other are read this deep; deeper ones are their text. */
 const MAX_HTML_NESTING = 8;
 
-function parseLines(lines: string[], options: MarkdownInOptions | null, depth = 0): DocJSON[] {
+function parseLines(
+  lines: string[],
+  options: MarkdownInOptions | null,
+  depth: number,
+  budget: BlockBudget,
+): DocJSON[] {
   const root: DocJSON[] = [];
   const ctx: Context = { options, trailing: [] };
   let numberedRun = false;
@@ -418,6 +442,7 @@ function parseLines(lines: string[], options: MarkdownInOptions | null, depth = 
   const push = (into: DocJSON[], body: DocJSON, children: DocJSON[] = []) => {
     // Any other block ends a run of numbered items (a blank line between items does not).
     if (body.attrs?.kind !== 'numberedItem') numberedRun = false;
+    budget.made++;
     const made = block(body, children);
     into.push(made);
     placeTrailing(into, made);
@@ -478,6 +503,12 @@ function parseLines(lines: string[], options: MarkdownInOptions | null, depth = 
   };
 
   for (let i = 0; i < lines.length; i++) {
+    // Past the page's cap the rest is left out (and said once).
+    if (budget.made >= budget.max) {
+      if (budget.made !== Number.POSITIVE_INFINITY) options?.note?.('tooManyBlocks');
+      budget.made = Number.POSITIVE_INFINITY;
+      break;
+    }
     const line = lines[i];
     const indent = indentOf(line);
     const trimmed = line.trim();
@@ -560,7 +591,7 @@ function parseLines(lines: string[], options: MarkdownInOptions | null, depth = 
         inner.push(current);
       }
       i = j;
-      push(target(indent), ...htmlBlock(tag, inner, options, depth));
+      push(target(indent), ...htmlBlock(tag, inner, options, depth, budget));
       continue;
     }
     const heading = /^(#{1,6})\s+(.*?)\s*#*$/.exec(trimmed);
@@ -694,19 +725,20 @@ function htmlBlock(
   inner: string[],
   options: MarkdownInOptions,
   depth: number,
+  budget: BlockBudget,
 ): [DocJSON, DocJSON[]] {
   if (tag === 'details') {
     const joined = inner.join('\n');
     const summary = /<summary\b[^>]*>([\s\S]*?)<\/summary>/i.exec(joined);
     const rest = summary ? joined.replace(summary[0], '') : joined;
-    const children = parseLines(rest.split('\n'), options, depth + 1);
+    const children = parseLines(rest.split('\n'), options, depth + 1, budget);
     const content = parseInline(stripTags(summary?.[1] ?? '').trim());
     return [
       { type: 'textBody', attrs: { kind: 'toggle' }, ...(content.length ? { content } : {}) },
       children,
     ];
   }
-  const blocks = parseLines(inner, options, depth + 1);
+  const blocks = parseLines(inner, options, depth + 1, budget);
   const first = blocks[0]?.content?.[0];
   let lead: DocJSON[] = [];
   let icon: string | null = null;

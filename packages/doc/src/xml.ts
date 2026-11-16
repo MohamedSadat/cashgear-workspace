@@ -1,7 +1,8 @@
 // A small XML reader for the parts of an Office file (Word's document, styles, numbering and
 // relationships): elements, attributes, text and CDATA; the five named entities and character
 // references. No DTD is read: a document type is refused, so no entity can expand (a "billion
-// laughs" file), and nesting deeper than `maxDepth` is refused. Names keep their prefixes
+// laughs" file), and nesting deeper than `maxDepth`, or more than `maxElements` elements, is
+// refused. Names keep their prefixes
 // (`w:p`); `local` reads a name without one. Pure: it runs in a worker and in Node, where there
 // is no DOMParser (DECISIONS.md, Phase 8: our own tokenizer, not the main thread's parser).
 
@@ -14,7 +15,7 @@ export type XmlNode = XmlElement | string;
 
 export class XmlError extends Error {
   constructor(
-    readonly code: 'doctype' | 'depth' | 'malformed',
+    readonly code: 'doctype' | 'depth' | 'tooMany' | 'malformed',
     message: string = code,
   ) {
     super(message);
@@ -38,9 +39,19 @@ export function decodeEntities(text: string): string {
 
 const isSpace = (c: string) => c === ' ' || c === '\n' || c === '\r' || c === '\t';
 
+/** Elements a document is read up to; past it the document is refused (`tooMany`). */
+export const MAX_ELEMENTS = 2_000_000;
+
 /** The root element of an XML text. Throws `XmlError` for what it will not read. */
-export function parseXml(input: string, options: { maxDepth?: number } = {}): XmlElement {
+export function parseXml(
+  input: string,
+  options: { maxDepth?: number; maxElements?: number } = {},
+): XmlElement {
   const maxDepth = options.maxDepth ?? 256;
+  // What parsing makes of a few bytes is bounded too (the security review: 50 MB of `<w:p/>`,
+  // 50 KB zipped, made 12.5 million elements).
+  const maxElements = options.maxElements ?? MAX_ELEMENTS;
+  let made = 0;
   const text = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
   const stack: XmlElement[] = [];
   let root: XmlElement | null = null;
@@ -125,6 +136,7 @@ export function parseXml(input: string, options: { maxDepth?: number } = {}): Xm
       attrs[key] = decodeEntities(text.slice(j + 1, close));
       j = close + 1;
     }
+    if (++made > maxElements) throw new XmlError('tooMany', 'More elements than are read');
     const element: XmlElement = { name, attrs, children: [] };
     const parent = stack[stack.length - 1];
     if (parent) parent.children.push(element);

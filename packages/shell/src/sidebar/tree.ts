@@ -45,6 +45,42 @@ export function treeRows(mirror: Mirror, workspaceId: Id, expanded: ReadonlySet<
   return rows;
 }
 
+/** Where the tree keeps which pages are expanded, per device and workspace (the local store). */
+export const expandedKey = (workspaceId: Id) => `tree/expanded/${workspaceId}`;
+
+/** A request from outside the tree to expand a page's row; true when a tree drawn took it. */
+type ExpandListener = (pageId: Id) => boolean;
+const expandListeners = new Set<ExpandListener>();
+
+/** The tree drawn takes expand requests while it is (`PageTree`). */
+export function onExpandRequest(listener: ExpandListener): () => void {
+  expandListeners.add(listener);
+  return () => void expandListeners.delete(listener);
+}
+
+/**
+ * Expands a page's row, and its ancestors', in the tree's own state, as a person's ArrowRight
+ * would leave it (Phase 8: an import's top page once the import ends, so what was made shows).
+ * When no tree is drawn, the state the tree reads when it is drawn is written instead.
+ */
+export async function expandInTree(
+  store: {
+    getPref<T>(key: string): Promise<T | undefined>;
+    setPref(key: string, value: unknown): Promise<void>;
+  },
+  mirror: Mirror,
+  pageId: Id,
+): Promise<void> {
+  let taken = false;
+  for (const listener of expandListeners) taken = listener(pageId) || taken;
+  const page = mirror.pages.get(pageId);
+  if (taken || !page) return;
+  const key = expandedKey(page.workspaceId);
+  const held = (await store.getPref<Id[]>(key)) ?? [];
+  const ids = [pageId, ...mirror.ancestors(pageId).map((a) => a.id)];
+  await store.setPref(key, [...new Set([...held, ...ids])]);
+}
+
 /** Where a drop lands, from the pointer's place in a row: above, inside, or below it. */
 export type DropZone = 'before' | 'inside' | 'after';
 
