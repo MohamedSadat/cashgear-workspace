@@ -337,8 +337,56 @@ they need no Track S4; S4's pictures and charts are what 5c's live charts draw.
 | S4 | `requestPreview` (PNG of the current view) and chart views | Offline picture, live charts |
 | S5 | A contract test suite both repos run against a mock: `sheet-embed.1`'s vectors and handshake against Sheet's embed and Workspace's mock embed; Sheet's `sheet-session.1` suite against Workspace's real API | Either side can change without breaking the other |
 
+| S6 | Sheet's desktop app takes a Workspace launch by its deep link (below) | "Open in Cash Gear Sheet" on the desktop opens the installed app (Phase 9) |
+
 S1 and S2 were built during Phase 4; S3 to S5 in their own session during Phase 5 (decisions,
-2026-11-14).
+2026-11-14); S6 in its own session during Phase 9 (decisions, 2026-11-17).
+
+### Opening Sheet's desktop app (Track S6, Phase 9)
+
+On the desktop, "Open in Cash Gear Sheet" opens Sheet's desktop app when it is installed, else
+Sheet's web app in the system browser, as before. It adds a link form and two origins to
+`sheet-session.1`; Sheet's redeem request and everything after it are unchanged.
+
+1. Workspace's desktop app asks the system whether anything handles the `cashgear-sheet` scheme:
+   on Windows the scheme's open command through `AssocQueryStringW` (which reads
+   `HKCU\Software\Classes` and `HKLM\Software\Classes` both), on macOS
+   `LSCopyDefaultApplicationURLForURL`. It reads only that, and never starts a program to ask.
+2. If something does, it calls `POST /api/v1/workbooks/{id}/launch` with `{target: "desktop"}`
+   and gets `{url: "cashgear-sheet://workspace/launch#ticket=<ticket>", expiresAt}`. The ticket is
+   the web's (256 random bits in base64url, 120 seconds, one use, kept as its SHA-256, bound to the
+   person, the workbook and the access) and records its target. `{}` or `{target: "web"}` is the
+   web link as before.
+3. Workspace hands the link to the system (`ShellExecuteW`, `NSWorkspace`), never logs or keeps
+   it, and never opens it in a browser.
+4. Sheet's desktop app, one instance, takes the link cold or while running, checks its shape (the
+   path `workspace/launch`, exactly one `ticket` of 43 base64url characters in the fragment,
+   nothing else), and redeems `{ticket}` at `POST /api/v1/sheet-sessions/redeem` from its
+   WebView's origin (`http://tauri.localhost` on Windows, `tauri://localhost` on macOS), at the
+   Workspace API its build names (`VITE_WORKSPACE_API_URL`), never one from the link. From there
+   the file session is the web's: read by signed URL, save with `If-Match`, copy, renew, end.
+
+What Workspace's API checks:
+
+- A desktop ticket is redeemed only from an origin on `Sheet__DesktopOrigins` (default
+  `http://tauri.localhost` and `tauri://localhost`), a web ticket only from one on `Sheet__Origins`.
+  The origin is checked before the ticket, as before; a ticket of the other target is used up and
+  answered 401 `ticket.invalid`, as an unknown one is.
+- CORS for `/api/v1/sheet-sessions/*` allows the desktop origins too. Blob Storage needs nothing
+  new: the rule for Workspace's own desktop already allows `GET` and `HEAD` from both.
+- No PKCE, unlike Sheet's ERP launch (Sheet's `docs/desktop-deep-link.md`): a program running as
+  the person that registers `cashgear-sheet` under `HKCU` receives the ticket, but such a program
+  can already read Workspace's own sign-in from the person's keychain, so the ticket gives it
+  nothing more. The ticket stays one use and 120 seconds, in the fragment, written down by neither
+  side.
+
+What Sheet builds (S6, in `cashgear-sheet`, to its own rules): the `cashgear-sheet` scheme
+(`tauri-plugin-deep-link` and `tauri-plugin-single-instance`; the installer registers it under
+`HKCU\Software\Classes` and the uninstaller removes exactly that key; `CFBundleURLTypes` on a Mac
+build); the link taken cold and while running; the cloud platform in the desktop app, as `/cloud`
+does on the web, with `connect-src` for Workspace's API and the storage account; the ticket and the
+token never on disk, in a log or in the registry; tests of the link's parser, a desktop run against
+a mock of Workspace's routes, and the installer test checking the scheme registered and removed.
 
 ### Clipboard (Phase 8)
 

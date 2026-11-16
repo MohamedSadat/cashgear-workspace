@@ -1202,3 +1202,18 @@ Import (M8.4):
 | Paths and names | `..`, absolute paths, C0 controls and DEL left out and reported; zip names without the UTF-8 flag read as UTF-8 when valid, else Latin-1, reported as possibly garbled | macOS, 7-Zip and others write UTF-8 without the flag; Windows' own zip writes the OEM code page, which cannot be known |
 | Files kept | Typed by their bytes as the server sniffs them, only the server's allowed types; images on the web kept as links, not downloaded | The engine's upload is never refused; an import makes no network call of its own |
 | Guests | The import is not offered | The server refuses a guest's pages |
+
+## 2026-11-17: Phase 9
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| The site's address and host | `pages.cashgearerp.com`, an origin of its own: its own IIS site and its own small process (`Cgw.Sites`) beside the API on the API's host, with no sign-in code and no cookies, reading the database and storage. As in Phase 2, the package and the install script are built and rehearsed here; the DNS record, the certificate and running the install are yours |
+| Custom domains | Not in 0.9.0: every site is `pages.cashgearerp.com/<slug>`. Custom domains go on "Later" |
+| Search engines | Not indexed unless the publisher turns indexing on for that site: every page sends `noindex` and `robots.txt` disallows the site until then |
+| Databases on a published page and on a share link | Their rows, read-only, through the block's own view (its filter, sorts and shown properties), and a full-page database by its first view; on published sites and share links alike. Row pages stay closed. Supersedes Phase 4's note on a share link |
+| Workbooks on a published page | A placeholder, as on a share link: nothing of a workbook leaves its workspace (Phase 5's answer stands) |
+| The timeline in Arabic | Time runs right to left in Arabic, left to right in English |
+| Tracks U18 and S6 | Two sessions of their own, started now: U18 in `CashGear.React.UI` on the branch both pins follow (`claude/cashgear-react-ui-library-xq8tsz`), pinned here by commit as in Phase 8; S6 in `cashgear-sheet` on its `main`, to its own rules. Workspace uses a stand-in and Sheet's web app meanwhile |
+| Who may publish | Anyone with `full` on the page. A workspace setting for owners and admins, on by default, turns publishing off, and turning it off takes every site of the workspace down at once |
