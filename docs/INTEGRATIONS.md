@@ -340,6 +340,13 @@ they need no Track S4; S4's pictures and charts are what 5c's live charts draw.
 S1 and S2 were built during Phase 4; S3 to S5 in their own session during Phase 5 (decisions,
 2026-11-14).
 
+### Clipboard (Phase 8)
+
+Workspace's table reads Sheet's clipboard text: tab-separated, a field in quotes when it holds a
+tab, a quote or a line break, rows ending CRLF. When only HTML is there, it reads Sheet's table
+(`x:num` for a number cell). Workspace writes the same shapes, so a rectangle copied from a table
+pastes into Sheet, and into Excel, as shown. Sheet needs no change for this.
+
 ## Cash Gear ERP
 
 ### What the ERP offers today
@@ -819,6 +826,34 @@ the editor's `nodeviews/plugin.ts`):
   contract like `sheet-embed.1`, and get no access to the document, the session or other blocks.
 - Charts, kanban, calendar, timeline and embedded presentations are planned as first-party
   definitions on this interface.
+
+## Import formats (Phase 8)
+
+What an import reads, on the device:
+
+- **Notion's "Markdown & CSV" export.** An id of 32 hex characters after each page's, folder's
+  and database's name (also URL-encoded in links); a large export as an archive of
+  `…-Part-N.zip` archives; a database as `Name <id>.csv` and `Name <id>_all.csv` (every row) with
+  its rows' pages in `Name <id>/`, each starting with its title and its properties as `Key: value`
+  lines; callouts as `<aside>`; dates as `November 16, 2026 3:04 PM`; related pages as
+  `Name (path.md)`. People columns hold names, not members, and stay text.
+- **Markdown folders and zips.** A folder's page is `X.md` beside `X/`, `X/X.md` (this app's own
+  export) or `X/index.md`; relative links between the files and to images and attachments.
+- **Word `.docx`.** `word/document.xml` with `styles.xml`, `numbering.xml` and
+  `_rels/document.xml.rels`, read by Workspace's own reader. What Word has that a page does not
+  (comments, footnotes, text boxes, equations, charts, shapes, embedded objects, headers and
+  footers) is counted in the report, never imported; tracked changes are read as accepted.
+
+Zip names are read as UTF-8 when they are valid UTF-8, with or without the archive's UTF-8 flag;
+otherwise as Latin-1, reported as possibly garbled.
+
+## Mail (Phase 8)
+
+Notification mail for mentions and replies goes through the SMTP account already set
+(`Smtp__From`), under a daily cap (`Mail__DailyCap`, 1,500) below the account's own limit, with
+`List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058), and
+`Auto-Submitted: auto-generated`. Account mails (sign-in, invitations) share the account and are
+not counted in the cap.
 
 ## Future applications
 

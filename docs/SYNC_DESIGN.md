@@ -169,6 +169,50 @@ support, and reported; the rest still load.
 Assets: a pasted or dropped image is written to the local store first and shown from there. In
 local-only mode that is the end. With an account, the upload is queued.
 
+### Local durability (web, Phase 8)
+
+The browser store writes what this device made and the server may not hold yet (a page's own
+updates, the session's operations, an asset's bytes, a repaired log) with strict durability. What
+came from the server is written relaxed, as it can be fetched again. "Saved" waits for those
+writes.
+
+Chrome's IndexedDB can still lose them. It keeps an origin's data in LevelDB, reuses its log from
+start to start, and writes a log record's header and payload as two writes. A crash between them
+leaves a torn record, and the next session appends after it. At a later start those writes are
+read as the torn record's unfinished payload and are gone, or the checksum fails and Chrome
+deletes the whole store (it opens IndexedDB with paranoid checks). Strict durability does not
+prevent it. CI run 43746282731 lost a run's typing this way; `scripts/idb-torn-log.mjs` makes it
+happen on purpose.
+
+So every document update the device makes is also written to the journal: a file of the tab's own
+in the Origin Private File System (`cgw-journal/<tab>.<generation>.cgwj`), written through a
+dedicated worker's `FileSystemSyncAccessHandle`. Each record (a length, a CRC-32, the page id, the
+update id, its local sequence and the bytes) is flushed before the save resolves, and "Saved"
+waits for the journal and IndexedDB both. The journal never writes after a torn record: at open
+each tab cuts its own file at the last whole record. An update leaves the journal when the server
+acknowledges it, a local-only page's compaction covers it, it is set aside, or its page is
+removed. A tab's forgets reach the other tabs over a `BroadcastChannel`, and a closed tab's file
+is taken over and removed at the next start of any tab. A tab holds at most 64 MB of needed
+updates; past that the journal is skipped until forgets make room.
+
+At each start, before the store is used, every journal file that can be read is checked against
+the store by update id and local sequence:
+
+- An update with no row in its page's log, at or past the log's next sequence, was lost by
+  IndexedDB. It goes back in as unsent, at its sequence.
+- One below the log's next sequence was taken by a compaction, a repair, a set-aside or a removal,
+  and is forgotten. A forget lost in a crash therefore never brings an update back.
+- One whose page is not in the store (Chrome deleted it) waits until the workspace comes back from
+  the server, then goes back in as unsent and is pushed as the device's own. The server keeps an
+  update id once and Yjs a struct once, so nothing is applied twice. Updates for a page that never
+  comes back are kept 30 days.
+
+Where there is no OPFS or no sync access handle (WebKit before 15.2, Firefox's private windows, a
+worker that does not start), the journal is off, with its reason, and the store is IndexedDB
+alone; the store also waits at most 3 s for the journal's recovery. Operations, assets and
+preferences are not journalled. The desktop's SQLite store (WAL) has neither the journal nor the
+loss.
+
 ## Cloud sync
 
 Two channels, because the two models differ.
@@ -669,6 +713,11 @@ rest.
 | The resulting document fits the schema: only the schema version's elements, block ids of 12 base-62 characters, attributes that are plain values, link schemes from the allow-list; `meta.pageId` stays the page's and `meta.schemaVersion` no higher than the page's | Worker, before it is served | Refused. Attributes the schema does not know are not judged: clients keep them (Q18) and draw them inert (S7) |
 | Document size (10 MB of state) | Worker, before it is served | The update that would pass it is refused |
 
+From Phase 8 each document state the worker checks is loaded once (its meta, its tree and its
+state hash read from that one load), and the state vector of the state that passed is kept for the
+next pass's check; the checks and their order are unchanged. A pass of one update loads one
+document, where 0.7.0 loaded three.
+
 What the server cannot check is intent. "Delete everything" is a valid update. The remedies are
 version history and, for a document bloated on purpose with tiny structs, a hard restore.
 
@@ -779,7 +828,8 @@ before Phase 6 ignore both.
 | Test | Proves |
 | --- | --- |
 | `LocalStore` conformance suite, run on IndexedDB and SQLite | Both stores behave the same |
-| Kill the app at random points during typing, 1,000 runs | Reopened document equals the keystrokes whose save returned |
+| Kill the app at random points during typing, 1,000 runs | Reopened document equals the keystrokes whose save returned. From Phase 8 a failure records every write the page saw complete before the kill, the save status's changes, the journal at each start, and LevelDB's and Chrome's own log lines, so a loss is told apart as Chrome's or the app's; kills during a live push and during a compaction are counted |
+| Chrome's IndexedDB after a torn log record (`scripts/idb-torn-log.mjs --app`) | With the journal, every save of the session after it comes back, both when Chrome drops them silently and when it deletes the store |
 | Two and three simulated clients, random operations, random network order, loss and duplication | All clients converge to the same document and the same tree, and from Phase 4 the same database records, views and rows (values and per-property versions) |
 | Filter, sort, group, formula, rollup, conversion and CSV vectors, run in TypeScript and C# | The device and the server give the same rows and values |
 | Block-id fuzz: 10,000 operations including moves, splits, pastes, offline merges | No duplicate ids after quiescence; ids stable across moves |

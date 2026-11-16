@@ -337,7 +337,7 @@ in C# (`server/src/Cgw.Core/Databases/`), held together by the shared vectors
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `Databases` | `PageId` (its page, kind `database`), `WorkspaceId`, `Properties` (JSON array, in display order, deleted ones included), `Version`, `RowCount`, `RowsVersion`, `ComputePending`, `CreatedAt`, `UpdatedAt` | Exactly one property of type `title`, id `title`: the row's page title. `Version` rises on every change to the properties; `RowsVersion` on any write to its rows (the query cache's check). `RowCount` counts rows not trashed and not templates |
-| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`; `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap |
+| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`; `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap; a board's column order (`group.order`: group keys, those named first, the rest in the group's own order; Phase 8; queries ignore it) |
 | `DatabaseRows` | `PageId` (its page, kind `row`), `WorkspaceId`, `DatabaseId`, `Values` (JSON by property id), `PropertyVersions` (JSON by property id), `Computed` (JSON), `ComputedVersion`, `Seq` | The row's title, icon, cover, order key, trash and document are its page's. `Seq` is the `RowsVersion` it was last written at. Indexes (`DatabaseId`, `PageId`), (`DatabaseId`, `Seq`) |
 
 A database page sits anywhere a page may; only rows sit under it, and nothing sits under a row.
@@ -437,6 +437,19 @@ in canonical form (options, people, related rows and files by name). A text cell
 `+`, `-`, `@`, a tab or a carriage return is written with a leading `'`, and import takes exactly
 one such `'` off, so a spreadsheet never runs a cell as a formula and a round trip changes nothing.
 
+Paste (Phase 8, `packages/database/src/clipboard/`): a paste into a table reads each pasted text
+first by a paste-only reading of what Excel and Sheet show in the device's language (numbers with
+the locale's separators, Arabic-Indic digits, a currency, a percent, accounting negatives; the
+locale's numeric short date with two-digit years in Excel's 1930 to 2029 window; a member by an
+exact email or a display name only one member has), then by the text column of the conversion
+table above, which stays as it is (the C# port never sees a paste). Options a paste needs are made
+as a type change makes them, with ids derived from their names. A file or a related row has no
+reading from text and is refused. A paste of what the same tab copied converts the copied values
+from their own type. Computed properties and refused values keep their values. A paste is
+`row.update`s, `page.update`s for titles, `page.create`s for rows past the last (at most 1,000),
+and a `db.update` for new options, written as one batch; copy writes the values as shown, as
+tab-separated text and an HTML table.
+
 ### Workbooks (Phase 5)
 
 As built (`server/src/Cgw.Core/Workbooks`, migration `Phase5Workbooks`); every table is tenant-owned.
@@ -516,6 +529,21 @@ whoever can read the page; a new or read notification a per-person `notification
 is kept in a local store: comments are online only in 0.6.0 (DECISIONS.md, Phase 6). Presence and
 awareness are never stored anywhere. A page's share link reaches none of this.
 
+### Mail for mentions and replies (Phase 8)
+
+As built (`server/src/Cgw.Core/Notifications/NotificationMail.cs`, `Cgw.Worker/Jobs/MailJobs.cs`,
+migration `Phase8Mail`); none of these is tenant-owned: they are a person's, across workspaces.
+
+| Table | Key fields | Notes |
+| --- | --- | --- |
+| `Notifications` (columns added) | `EmailedAt` (when a mail told the person of it), `MailId` (the queued mail to carry it; set once, so it is never queued twice) | The mail job's queue is the filtered index `IX_Notifications_MailDue` (unread, given to no mail, not mailed) |
+| `MailSettings` | `UserId` (key), `Mode` (`on`, `digest`, `off`), `Stamp`, `OnSince`, `LastMailAt`, `UpdatedAt` | One row an account, made by its first change or its first mail; none reads as `on`. `Stamp` is in every unsubscribe token: a new one (mail turned on again after off) voids the links of every mail sent before. Nothing made before `OnSince` is mailed. Deleted with the account |
+| `MailOutbox` | `Id`, `UserId`, `Kind` (`on` or `digest`), `CreatedAt`, `NextAttemptAt`, `Attempts`, `SentAt`, `Outcome` (null while it waits; `sent`, `skipped`, `off`, `failed`), `EndedAt`, `LastError` | The mail queue. It holds no address, subject or body: the mail is made when it is sent, from the notifications that name it, each still unread and on a page the person can read then. `LastError` is an exception's type and an SMTP status, never a message. The daily cap counts `SentAt` in the last 24 hours. Deleted a week after it ends, and with the account |
+
+The unsubscribe token is Data Protection's output (purpose `Cgw.Mail.Unsubscribe.v1`) of the
+account's id and its stamp, base64url, with no expiry: the worker writes it, the API reads it, from
+the one key ring in `DataProtectionKeys`.
+
 ## Local stores
 
 Both local stores hold the same logical data, behind the `LocalStore` interface.
@@ -549,6 +577,11 @@ Schema 4's IndexedDB object stores are `databases` (index `workspace`), `views` 
 rows, each row as a removed page (document, history, search entry, pin, repair state, unsent edits
 set aside when it is the server's word). A database made on the device is held in full from its
 creation. Rows count as pages for documents (held pages, storage, unsent updates, compaction).
+
+From Phase 8 the browser keeps, beside IndexedDB, the journal: files in the Origin Private File
+System under `cgw-journal/`, one a tab, holding the document updates this device made that the
+server has not acknowledged (the record format in `packages/store-web/src/journal/format.ts`;
+SYNC_DESIGN.md, Local durability). It is not a schema change: the store stays at 4.
 
 Migrations are tested from stores of every earlier version: the SQLite fixtures
 (`crates/cgw-store/tests/fixtures/v1`, `v2`, `v3`) are stores written by the v0.1.0, v0.2.0 and
@@ -586,3 +619,14 @@ workspace's records as creates. A workspace made while signed in is uploaded at 
   not; the worker writes the zip, and it is kept 7 days behind a signed URL for the requester
   only. Its Markdown is written by the server's own writer (`Cgw.Core/Documents/Markdown.cs`),
   held to the client's by shared vectors (`packages/doc/vectors/markdown-vectors.json`).
+- From Phase 8 a person imports a Markdown folder or zip, a Notion export (Markdown and CSV) or a
+  Word `.docx` into the open workspace, on the device (the server never opens an archive):
+  everything goes under one new page at the end of a chosen section (an import of one page is
+  that page), at most 2,000 pages (databases and rows included) and 500 MB unpacked. Notion's ids
+  are taken off every name; a Notion database is its CSV (`_all.csv` when there is one), its
+  properties inferred as the CSV import infers them, its relation and files columns made relations
+  and files when every value is in the export, its rows' pages their bodies. Links between the
+  files become mentions, page links (`#/p/…`), child page and inline database blocks; images and
+  attachments become assets (typed by their bytes as the server types them, at most 25 MB). Block
+  ids are new. An import that fails or is stopped is removed whole (its top page trashed and
+  deleted for good); a report says what was made and what was skipped, and why.

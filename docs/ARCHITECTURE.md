@@ -193,10 +193,10 @@ Package level only. Files inside are decided by the phase that creates them.
 | `packages/doc` (`@cgw/doc`) | Document schema, block ids, Yjs seam, migrations, text extraction | 1 |
 | `packages/editor` (`@cgw/editor`) | The block editor | 1 |
 | `packages/workspace` (`@cgw/workspace`) | Tree, operations, outbox, sync engine, `LocalStore` | 1 |
-| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB | 1 |
+| `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB; from Phase 8 the device's own writes strict and its document updates journalled in the Origin Private File System (`journal/`, a worker; SYNC_DESIGN.md, Local durability) | 1 |
 | `packages/shell` (`@cgw/shell`) | App frame and everything around the editor | 1 |
 | `packages/api` (`@cgw/api`) | Client generated from the server's OpenAPI document | 2 |
-| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost` | 4 |
+| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost`; from Phase 8 cell selection, copy and paste in the table, board columns and gallery cards in an order of their own | 4 |
 | `packages/erp` (`@cgw/erp`) | ERP connector client and the ERP view | 5 (built) |
 | `crates/cgw-store` | `LocalStore` on SQLite, with FTS5 | 1 |
 | `crates/cgw-native` | Desktop helpers without Tauri: deep links read into routes, safe file names; the keychain in Phase 2 | 1 |
@@ -294,14 +294,42 @@ Online, results from the server and the local index are merged, local first. Tex
 the same way everywhere before indexing and querying (D25). Results are filtered by permission on
 the server at query time, never by the client.
 
+### Cells in bulk (Phase 8)
+
+The table selects cells (an anchor and the active cell, in its own state, so the selection outlives
+the virtual window's scrolling), copies them as tab-separated text and an HTML table (the values
+as shown; the tab keeps the copied values in memory for a paste of the same text), and pastes and
+clears them through `clipboard/paste.ts`: each pasted text read by a paste-only reading of what
+Excel and Sheet show in the device's language (`clipboard/read.ts`), then by the conversion table,
+planned, then written as one batch through `DatabaseHost.apply`. The table's own notice offers
+Undo, which writes the old values back. Board columns keep an order per view (`group.order`);
+gallery cards move by the rows' order keys.
+
+### Import (Phase 8)
+
+`packages/shell/src/exchange/import` reads a Markdown folder or zip, a Notion export or a Word
+`.docx` on the device; the server never opens an archive. Everything is planned in a worker: an
+archive is listed by its central directory and refused before anything unpacks when it declares
+more than 500 MB, more than 20,000 files, or an entry that unpacks to over 1,000 times its size;
+entries with `..`, absolute paths or control characters are left out; archives of archives
+(Notion's parts) are read two deep. Markdown goes through `@cgw/doc`'s Markdown in with the
+import's resolvers, Word through `@cgw/doc`'s own XML reader (no DOMParser in a worker, no DTD).
+The plan (operations, documents, assets) comes back to the main thread, which writes it through
+the session in order: assets (the engine uploads them), operations 500 at a time, then each page's
+first document with the session's client id. Everything goes under one new page; on a failure or
+a Stop that page is trashed and deleted for good in one batch, and its search entries removed.
+
 ## The backend
 
 One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
 
 | Process | Does | Never |
 | --- | --- | --- |
-| API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox | Loads a Yjs library, or decodes an update, a presence state or a relative position |
-| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports | Serves requests |
+| API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
+| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap) | Serves requests |
+
+Both processes share one Data Protection key ring (`DataProtectionKeys`): from Phase 8 the worker
+writes the unsubscribe tokens the API reads.
 
 Modules, each with its own folder, services and tests: Identity, Workspaces, Pages, Documents,
 Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), Workbooks and ErpLinks (Phase 5,
@@ -322,7 +350,9 @@ Conventions:
 - **Paging.** Keyset, with an opaque cursor.
 - **Results.** Services return a result type, not exceptions, for expected failures.
 - **Data access.** EF Core with migrations. A global query filter applies the workspace scope;
-  raw SQL is allowed only in named, tested queries (search, the closure table).
+  raw SQL is allowed only in named, tested queries (search, the closure table) and, from Phase 8,
+  the push's path: the hub push's gate and transaction, the relay's heads and frames, the
+  validation pass's reads and writes, where EF's work per statement was most of a push.
 - **Tests.** Each module is tested against a real SQL Server in a container, not an in-memory
   provider.
 
