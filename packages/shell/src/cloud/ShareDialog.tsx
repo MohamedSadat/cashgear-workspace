@@ -1,6 +1,7 @@
 // Page sharing (M2.6): who may open the page and at what level, whether it is restricted to the
 // people listed, and view links. The server decides access on every request; this dialog only
 // shows and asks (ARCHITECTURE.md: hiding a control is never the check).
+import { CgCheckBox } from '@cashgear/ui';
 import type { Id, PageRecord } from '@cgw/workspace';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -104,15 +105,12 @@ export function ShareDialog({
   return (
     <Dialog title={t('share.title', { title: page.title || t('page.untitled') })} onClose={onClose}>
       {!full && entries && <p className="cgw-muted">{t('share.readOnly')}</p>}
-      <label className="cgw-check">
-        <input
-          type="checkbox"
-          checked={restricted}
-          disabled={!full}
-          onChange={(e) => setRestricted(e.target.checked)}
-        />
-        {t('share.restricted')}
-      </label>
+      <CgCheckBox
+        label={t('share.restricted')}
+        checked={restricted}
+        disabled={!full}
+        onCheckedChange={(checked) => setRestricted(checked === true)}
+      />
       <ul className="cgw-list cgw-share-entries" data-testid="share-entries">
         {(entries ?? []).map((entry, i) => (
           <li key={`${entry.principalType}:${entry.principalId}`} className="cgw-list-row">

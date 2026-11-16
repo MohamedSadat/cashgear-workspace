@@ -21,7 +21,7 @@ const { SyncHttpError } = await import('@cgw/workspace');
 const { createI18n } = await import('../i18n');
 const { CommandRegistry } = await import('../commands');
 const { matchesShortcut, formatShortcut } = await import('../shortcuts');
-const { colourIndex, colourOf, initialsOf, PRESENCE_COLOURS } = await import('./colour');
+const { colourIndex, colourOf, PRESENCE_COLOURS } = await import('./colour');
 const { PeopleDirectory } = await import('./people');
 const { PagePresence, TransportHub, WorkspacePresence, PRESENCE_TTL_MS, HEARTBEAT_MS } =
   await import('./presence');
@@ -29,7 +29,7 @@ const { CommentsStore, orderThreads } = await import('./comments');
 const body = await import('./body');
 const { InboxStore } = await import('./inbox');
 const { Collab } = await import('./collab');
-const { Composer, insertMention } = await import('./Composer');
+const { Composer } = await import('./Composer');
 const { CommentsPanel, levelOf } = await import('./CommentsPanel');
 const { InboxView } = await import('./InboxView');
 const { PresenceBar } = await import('./Avatars');
@@ -161,13 +161,6 @@ describe('presence colours', () => {
           expect(contrast(colour, surface), `${colour} on ${surface}`).toBeGreaterThanOrEqual(3);
       }
     }
-  });
-
-  it('give initials, one letter for a name in Arabic script', () => {
-    expect(initialsOf('Ada Lovelace')).toBe('AL');
-    expect(initialsOf('  ben ')).toBe('B');
-    expect(initialsOf('سلمى الإدريسي')).toBe('س');
-    expect(initialsOf('')).toBe('?');
   });
 });
 
@@ -928,13 +921,34 @@ describe('the panel’s order', () => {
 
 describe('a comment’s body', () => {
   it('is read from the composer: text, line breaks a browser made, mentions; trimmed and merged', () => {
-    const root = document.createElement('div');
-    root.innerHTML =
-      '  Hi <span data-user-id="u1" contenteditable="false">@Ada</span> see ' +
-      '<span data-page-id="p1" contenteditable="false">Budget</span><div><br></div><div><b>bold</b>' +
+    const onSubmit = vi.fn();
+    const container = render(
+      h(Composer, {
+        label: 'New comment',
+        placeholder: 'Add a comment…',
+        submitLabel: 'Comment',
+        people: null,
+        pages: () => [],
+        personName: () => 'Ada',
+        pageTitle: () => 'Budget',
+        onSubmit,
+      }),
+    );
+    const area = container.querySelector<HTMLElement>('[role="textbox"]')!;
+    // The library's mention atoms; an empty line a browser made a block of (its <br> is not a
+    // second break); formatting it added.
+    area.innerHTML =
+      '  Hi <span data-cg-mention-kind="user" data-cg-mention-id="u1" contenteditable="false">@Ada</span> see ' +
+      '<span data-cg-mention-kind="page" data-cg-mention-id="p1" contenteditable="false">Budget</span><div><br></div><div><b>bold</b>' +
       String.fromCharCode(160) +
       'line</div>a<br>b<br><br>';
-    expect(body.bodyFromElement(root)).toEqual([
+    act(() => area.dispatchEvent(new Event('input', { bubbles: true })));
+    act(() =>
+      area.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }),
+      ),
+    );
+    expect(onSubmit).toHaveBeenCalledWith([
       { type: 'text', text: 'Hi ' },
       { type: 'userMention', attrs: { userId: 'u1' } },
       { type: 'text', text: ' see ' },
@@ -947,6 +961,36 @@ describe('a comment’s body', () => {
       { type: 'hardBreak' },
       { type: 'text', text: 'b' },
     ]);
+  });
+
+  it('opens an edit with the comment as it was, mentions by their names', () => {
+    const container = render(
+      h(Composer, {
+        label: 'Edit',
+        placeholder: 'Reply…',
+        submitLabel: 'Save',
+        initial: [
+          { type: 'text', text: 'See ' },
+          { type: 'userMention', attrs: { userId: ADA } },
+          { type: 'hardBreak' },
+          { type: 'pageMention', attrs: { pageId: OTHER_PAGE } },
+        ],
+        people: null,
+        pages: () => [],
+        personName: () => 'Ada Lovelace',
+        pageTitle: () => 'Plans',
+        onSubmit: () => {},
+      }),
+    );
+    const area = container.querySelector<HTMLElement>('[role="textbox"]')!;
+    expect(area.textContent).toBe('See @Ada LovelacePlans');
+    expect(
+      area.querySelector('[data-cg-mention-kind="user"]')?.getAttribute('data-cg-mention-id'),
+    ).toBe(ADA);
+    expect(area.querySelectorAll('br')).toHaveLength(1);
+    // It can be saved as it is.
+    const save = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Save')!;
+    expect(save.disabled).toBe(false);
   });
 
   it('holds text without line breaks inside, and keeps to the limits', () => {
@@ -969,34 +1013,6 @@ describe('a comment’s body', () => {
     expect(
       body.readBody([{ type: 'text', text: 'a' }, { type: 'image' }, { type: 'hardBreak' }]),
     ).toEqual([{ type: 'text', text: 'a' }, { type: 'hardBreak' }]);
-  });
-
-  it('finds the "@" being typed', () => {
-    expect(body.mentionQueryAt('Hi @ad', 6)).toEqual({ query: 'ad', start: 3 });
-    expect(body.mentionQueryAt('@', 1)).toEqual({ query: '', start: 0 });
-    expect(body.mentionQueryAt('mail a@b', 8)).toBeNull();
-    expect(body.mentionQueryAt('Hi @ad more', 11)).toBeNull();
-    expect(body.mentionQueryAt('مرحبا @سل', 9)).toEqual({ query: 'سل', start: 6 });
-  });
-
-  it('puts a mention where the "@" was typed', () => {
-    const root = document.createElement('div');
-    root.contentEditable = 'true';
-    document.body.append(root);
-    const node = document.createTextNode('Hi @ad');
-    root.append(node);
-    const range = document.createRange();
-    range.setStart(node, 6);
-    range.collapse(true);
-    getSelection()!.removeAllRanges();
-    getSelection()!.addRange(range);
-    insertMention(root, { node, start: 3 }, { kind: 'user', id: ADA }, 'Ada Lovelace');
-    expect(body.bodyFromElement(root)).toEqual([
-      { type: 'text', text: 'Hi ' },
-      { type: 'userMention', attrs: { userId: ADA } },
-    ]);
-    expect(root.textContent).toBe('Hi @Ada Lovelace ');
-    root.remove();
   });
 });
 
@@ -1351,7 +1367,9 @@ describe('the composer', () => {
     expect(area.getAttribute('aria-activedescendant')).toBe(options[0].id);
     act(() => area.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(container.querySelector('[role="listbox"]')).toBeNull();
-    expect(area.querySelector('[data-user-id]')?.textContent).toBe('@Ben Ali');
+    const atom = area.querySelector('[data-cg-mention-kind="user"]');
+    expect(atom?.textContent).toBe('@Ben Ali');
+    expect(atom?.getAttribute('data-cg-mention-id')).toBe(BEN);
     expect(send.disabled).toBe(false);
     act(() =>
       area.dispatchEvent(
@@ -1422,9 +1440,13 @@ describe('the top bar’s avatars', () => {
     });
     const bar = container.querySelector('[data-testid="presence-bar"]')!;
     expect(bar.getAttribute('aria-label')).toBe('People on this page: 2');
-    expect(
-      [...bar.querySelectorAll('[role="img"]')].map((el) => el.getAttribute('aria-label')),
-    ).toEqual(['Ben Ali', 'سلمى الإدريسي']);
+    const avatars = [...bar.querySelectorAll('[role="img"]')];
+    expect(avatars.map((el) => el.getAttribute('aria-label'))).toEqual([
+      'Ben Ali',
+      'سلمى الإدريسي',
+    ]);
+    // Initials: the first and last words' letters; one letter for a name in Arabic script.
+    expect(avatars.map((el) => el.textContent)).toEqual(['BA', 'س']);
     store.dispose();
   });
 });

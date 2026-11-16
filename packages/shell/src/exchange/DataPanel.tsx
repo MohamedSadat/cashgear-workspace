@@ -1,7 +1,8 @@
 // Settings → Your data: export the workspace (from this device, or from the account as the server
 // makes it), import an export, import from Markdown, Notion or Word (Phase 8, the import panel),
 // and what the browser keeps.
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { CgFilePicker } from '@cashgear/ui';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
@@ -58,7 +59,29 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
   const [message, setMessage] = useState<string | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [importing, setImporting] = useState(false);
-  const file = useRef<HTMLInputElement>(null);
+
+  /** Reads a workspace export and imports it, then opens its first page. */
+  const importExport = (chosen: File) => {
+    setBusy('import');
+    setMessage(null);
+    void chosen
+      .arrayBuffer()
+      .then(async (buffer) => {
+        const { importZip } = await import('./exchange');
+        const first = await importZip(
+          session,
+          new Uint8Array(buffer),
+          t('exchange.importedSuffix'),
+        );
+        setMessage(t('exchange.imported'));
+        if (first) navigate({ kind: 'page', pageId: first });
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+        setMessage(t('exchange.importFailed'));
+      })
+      .finally(() => setBusy(null));
+  };
 
   useEffect(() => {
     if (platform.kind !== 'web') return;
@@ -129,45 +152,17 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
             {t('exchange.serverExport')}
           </button>
         )}
-        <button
-          type="button"
-          className="cgw-button"
+        {/* The library's file picker (Track U16): it gives the export chosen, nothing else. */}
+        <CgFilePicker
+          appearance="outline"
+          accept=".zip,application/zip"
           disabled={busy !== null}
-          onClick={() => file.current?.click()}
+          // A file the dialog let through that is not a zip: the import says why it fails.
+          onReject={([chosen]) => importExport(chosen)}
+          onPick={([chosen]) => importExport(chosen)}
         >
           {t('exchange.import')}
-        </button>
-        <input
-          ref={file}
-          type="file"
-          accept=".zip,application/zip"
-          hidden
-          aria-label={t('exchange.import')}
-          onChange={(event) => {
-            const chosen = event.target.files?.[0];
-            event.target.value = '';
-            if (!chosen) return;
-            setBusy('import');
-            setMessage(null);
-            void chosen
-              .arrayBuffer()
-              .then(async (buffer) => {
-                const { importZip } = await import('./exchange');
-                const first = await importZip(
-                  session,
-                  new Uint8Array(buffer),
-                  t('exchange.importedSuffix'),
-                );
-                setMessage(t('exchange.imported'));
-                if (first) navigate({ kind: 'page', pageId: first });
-              })
-              .catch((error: unknown) => {
-                console.error(error);
-                setMessage(t('exchange.importFailed'));
-              })
-              .finally(() => setBusy(null));
-          }}
-        />
+        </CgFilePicker>
         <button
           type="button"
           className="cgw-button"

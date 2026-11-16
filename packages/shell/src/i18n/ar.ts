@@ -97,6 +97,10 @@ export const ar: Catalogue = {
     addCover: 'إضافة غلاف',
     removeCover: 'إزالة الغلاف',
     breadcrumbs: 'موقع هذه الصفحة',
+    // Phase 8 (Track U5, U6): the breadcrumb's "…" menu, and the emoji picker's search.
+    breadcrumbsMore: 'صفحات أخرى في الأعلى: {{count}}',
+    searchIcons: 'ابحث في الرموز',
+    noIconMatch: 'لا يوجد رمز مطابق',
   },
   editor: {
     placeholder: 'اكتب «/» لعرض الأوامر',

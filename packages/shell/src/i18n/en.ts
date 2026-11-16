@@ -103,6 +103,10 @@ export const en = {
     addCover: 'Add cover',
     removeCover: 'Remove cover',
     breadcrumbs: 'Where this page is',
+    // Phase 8 (Track U5, U6): the breadcrumb's "…" menu, and the emoji picker's search.
+    breadcrumbsMore: 'More pages above: {{count}}',
+    searchIcons: 'Search icons',
+    noIconMatch: 'No icon matches',
   },
   editor: {
     placeholder: "Type '/' for commands",

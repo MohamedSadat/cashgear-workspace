@@ -8,7 +8,6 @@ import {
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -65,16 +64,6 @@ export function Frame({ sidebar, topBar, children }: FrameProps) {
   // a page opened: then focus belongs to that page.
   const [giveFocusBack, setGiveFocusBack] = useState(true);
   const toggleRef = useRef<HTMLButtonElement>(null);
-  const frameRef = useRef<HTMLDivElement>(null);
-
-  // Track U (PROGRESS.md): CgSplitter names its separator with an English template ("Resize A and
-  // B") that takes no translation. Until it does, the separator gets its name from the catalogue
-  // after each render.
-  useLayoutEffect(() => {
-    frameRef.current
-      ?.querySelector('.cgw-splitter [role="separator"]')
-      ?.setAttribute('aria-label', t('frame.resize'));
-  });
 
   const toggleSidebar = useCallback(() => {
     if (isNarrow()) {
@@ -164,7 +153,8 @@ export function Frame({ sidebar, topBar, children }: FrameProps) {
         onOpenChange={(open) => setDrawer(open)}
         mode="overlay"
         position="start"
-        openSize="20rem"
+        // A strip of the page stays in view on a phone, to tap and close it.
+        openSize="min(20rem, 85vw)"
         responsiveOverlay={false}
         restoreFocus={giveFocusBack}
         panelId="cgw-drawer"
@@ -187,10 +177,12 @@ export function Frame({ sidebar, topBar, children }: FrameProps) {
   }
 
   return (
-    <div ref={frameRef} className="cgw-frame" data-sidebar={collapsed ? 'collapsed' : 'open'}>
+    <div className="cgw-frame" data-sidebar={collapsed ? 'collapsed' : 'open'}>
       <CgSplitter
         className="cgw-splitter"
         aria-label={t('frame.layout')}
+        // The one separator, between the sidebar and the page.
+        separatorAriaLabel={() => t('frame.resize')}
         actionsRef={splitter}
         defaultState={defaultState}
         onStateChange={(state) => {

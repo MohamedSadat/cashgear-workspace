@@ -2,6 +2,7 @@
 // in, the sync status, uploading a local workspace, members and invites, and accepting an invite.
 // Phase 3: the status while offline or retrying, what is kept offline (the menus' items and the
 // sidebar's marks), and the recovered pages' count.
+import { CgAvatar } from '@cashgear/ui';
 import type { Id, SyncStatus } from '@cgw/workspace';
 import type { TFunction } from 'i18next';
 import {
@@ -14,6 +15,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { avatarColours } from '../collab/colour';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
 import type { MenuItem } from '../sidebar/RowMenu';
@@ -118,7 +120,7 @@ export function offlineMenuItems(
   ];
 }
 
-/** The sidebar's sign-in button, or the account's name with sign-out. */
+/** The sidebar's sign-in button, or the account's avatar and name, which open Settings. */
 export function AccountButton({ cloud }: { cloud: Cloud }) {
   const { t } = useTranslation();
   const account = useAccount(cloud);
@@ -146,6 +148,8 @@ export function AccountButton({ cloud }: { cloud: Cloud }) {
       aria-label={t('cloud.accountMenu', { name: account.displayName })}
       onClick={() => navigate({ kind: 'settings' })}
     >
+      {/* The person's own colour, as others see them on a page (Track U7). */}
+      <CgAvatar name={account.displayName} {...avatarColours(account.id)} decorative />
       {account.displayName}
     </button>
   );
@@ -372,7 +376,12 @@ export function MembersSettings({ cloud, session }: { cloud: Cloud; session: Wor
           <ul className="cgw-list" data-testid="members">
             {(members ?? []).map((member) => (
               <li key={member.userId} className="cgw-list-row">
-                <span>
+                <span className="cgw-member">
+                  <CgAvatar
+                    name={member.displayName}
+                    {...avatarColours(member.userId)}
+                    decorative
+                  />
                   {member.displayName}
                   {member.userId === account.id && <> ({t('cloud.you')})</>}
                   <span className="cgw-muted"> {member.email}</span>

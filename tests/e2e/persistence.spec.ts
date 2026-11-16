@@ -56,7 +56,10 @@ test.describe('local persistence', () => {
     }
     const bytes = readFileSync(path);
     expect(bytes.subarray(0, 2).toString()).toBe('PK');
-    await page.getByLabel('Import an export').setInputFiles(path);
+    // "Import an export" opens the browser's file dialog (the library's file picker).
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Import an export' }).click();
+    await (await chooser).setFiles(path);
     await expect(page.getByRole('button', { name: /Source \(imported\)/ })).toBeVisible();
     await page.getByRole('treeitem', { name: /Report/ }).click();
     await expect(editor(page)).toContainText('Quarterly figures');

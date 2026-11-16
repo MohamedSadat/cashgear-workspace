@@ -1,7 +1,7 @@
 // The import panel (Settings → Your data → Import from Markdown, Notion or Word): what to import,
 // the section it goes into, the file or folder, then the import's progress with a Stop button, and
 // at its end the report of what was made and what was skipped, and why (M8.4).
-import { CgRadioGroup } from '@cashgear/ui';
+import { CgButton, CgFilePicker, CgProgressBar, CgRadioGroup } from '@cashgear/ui';
 import { useRef, useState, type InputHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../../Dialog';
@@ -31,7 +31,10 @@ const ACCEPT: Record<ImportKind, string> = {
   word: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
-/** A folder picker: the browsers' attribute, which React does not type. */
+/**
+ * A folder picker: the browsers' attribute, which React does not type. The library's file picker
+ * (Track U16) takes files only, so the folder keeps its own input (phase-8 swaps).
+ */
 const folderPicker = {
   webkitdirectory: '',
   directory: '',
@@ -66,7 +69,6 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
   const [phase, setPhase] = useState<Phase>({ kind: 'choose' });
   const stop = useRef<AbortController | null>(null);
   const drawn = useRef(0);
-  const file = useRef<HTMLInputElement>(null);
   const folder = useRef<HTMLInputElement>(null);
   const busy = phase.kind === 'reading' || phase.kind === 'writing' || phase.kind === 'stopping';
 
@@ -187,37 +189,26 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
             </p>
             <div className="cgw-dialog-buttons cgw-import-buttons">
               {kind === 'markdown' && (
-                <button
-                  type="button"
-                  className="cgw-button"
+                <CgButton
+                  appearance="outline"
                   disabled={!sectionId}
                   onClick={() => folder.current?.click()}
                 >
                   {t('exchange.chooseFolder')}
-                </button>
+                </CgButton>
               )}
-              <button
-                type="button"
-                className="cgw-button is-primary"
+              <CgFilePicker
+                intent="primary"
+                containerClassName="cgw-import-file"
+                accept={ACCEPT[kind]}
                 disabled={!sectionId}
-                onClick={() => file.current?.click()}
+                onPick={([chosen]) => void onFile(chosen)}
+                // A file the dialog let through of another kind: the import says why it refuses.
+                onReject={([chosen]) => void onFile(chosen)}
               >
                 {t('exchange.chooseFile')}
-              </button>
+              </CgFilePicker>
             </div>
-            <input
-              ref={file}
-              type="file"
-              hidden
-              accept={ACCEPT[kind]}
-              aria-label={t('exchange.chooseFile')}
-              data-testid="import-file"
-              onChange={(event) => {
-                const chosen = event.target.files?.[0];
-                event.target.value = '';
-                void onFile(chosen);
-              }}
-            />
             <input
               ref={folder}
               type="file"
@@ -250,7 +241,7 @@ export function ImportPanel({ session, onClose, runOptions }: ImportPanelProps) 
                 {t('exchange.writing', { done: number(phase.done), total: number(phase.total) })}
               </p>
             )}
-            <progress
+            <CgProgressBar
               aria-label={t('exchange.progress')}
               {...(phase.kind === 'writing' && phase.total
                 ? { value: phase.done, max: phase.total }

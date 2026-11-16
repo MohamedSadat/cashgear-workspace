@@ -4,6 +4,7 @@
 // and reopening. Offline it says comments need a connection and keeps what it last showed
 // (DECISIONS.md, 2026-11-14: Phase 6). The server decides every write; the controls only follow
 // the person's level on the page.
+import { CgAvatar } from '@cashgear/ui';
 import type { PageDocument } from '@cgw/doc';
 import type { BlockEditor } from '@cgw/editor';
 import type { Id } from '@cgw/workspace';
@@ -21,7 +22,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { routeHash } from '../route';
 import { isRowRecord, type AnyPage, type WorkspaceSession } from '../session';
-import { Avatar } from './Avatars';
 import type { CommentBody } from './body';
 import {
   orderThreads,
@@ -30,6 +30,7 @@ import {
   type CommentsStore,
   type ThreadView,
 } from './comments';
+import { avatarColours } from './colour';
 import { Composer, type ComposerHandle } from './Composer';
 import type { PeopleDirectory } from './people';
 
@@ -672,7 +673,7 @@ function CommentItem({
   return (
     <li className="cgw-comment" data-state={comment.state} data-testid="comment">
       <div className="cgw-comment-head" id={headId}>
-        <Avatar userId={comment.author.id} name={name} decorative />
+        <CgAvatar name={name} {...avatarColours(comment.author.id)} decorative />
         <span className="cgw-comment-author" dir="auto">
           {mine ? t('comments.you', { name }) : name}
         </span>

@@ -192,16 +192,6 @@
   gap: 8px;
 }
 
-/* Track U: the library's context menu reads `--cg-color-*` tokens the app's themes do not set,
-   so in the dark theme its items were the light theme's dark text, and the active one a light
-   band, on the dark surface. */
-.cgw-sheet-menu {
-  --cg-color-text: var(--cg-text);
-  --cg-color-border: var(--cg-border);
-  --cg-color-focus: var(--cg-accent);
-  --cg-color-surface-hover: color-mix(in srgb, var(--cg-text) 12%, var(--cg-surface));
-}
-
 /* A block on a page shared by link, or with no way to reach workbooks: what it is, no picture. */
 .cgw-sheet-note {
   margin: 0;

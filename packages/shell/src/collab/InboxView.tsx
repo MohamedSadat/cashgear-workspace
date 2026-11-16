@@ -2,12 +2,13 @@
 // comments and replies, from every workspace they are in. Opening one marks it read and goes to
 // its page at its block, or opens the comments at its thread. "Mark all as read". Online only:
 // offline it says so and keeps what it last showed.
+import { CgAvatar } from '@cashgear/ui';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { navigate, routeHash } from '../route';
 import type { WorkspaceSession } from '../session';
-import { Avatar } from './Avatars';
 import type { Collab } from './collab';
+import { avatarColours } from './colour';
 import type { NotificationDto } from './inbox';
 import { openThread } from './threads';
 
@@ -101,7 +102,7 @@ export function InboxView({ collab, session }: { collab: Collab; session: Worksp
                     openOne(n);
                   }}
                 >
-                  <Avatar userId={n.actor.id} name={name} decorative />
+                  <CgAvatar name={name} {...avatarColours(n.actor.id)} decorative />
                   <span className="cgw-inbox-text">
                     <span className="cgw-inbox-line">
                       {!n.readAt && (

@@ -37,28 +37,11 @@ body {
   block-size: 100%;
 }
 
-/* Track U (PROGRESS.md): CgSplitter's pane scrolls as a whole, and its content box has no height
-   for ours to fill, so the top bar scrolled away and the page tree, which draws only the rows in
-   view, drew them all. Each pane is a column here and its content fills it: the sidebar's body
-   and the page area scroll. */
-.cgw-pane {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
+/* CgSplitter's pane is a column whose content fills it (Track U's fix): the sidebar and the main
+   column fill that content at 100%, and their own bodies scroll. The library pads a pane's
+   content; ours draw edge to edge. */
 .cgw-pane > * {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-block-size: 0;
   padding: 0;
-}
-
-.cgw-pane > * > .cgw-sidebar,
-.cgw-pane > * > .cgw-main {
-  flex: 1 1 auto;
-  min-block-size: 0;
 }
 
 .cgw-sidebar {
@@ -245,18 +228,6 @@ body {
   padding-block-end: 64px;
 }
 
-/* Track U (listed in PROGRESS.md): @cashgear/ui's primary button keeps white text on the dark
-   theme's light accent, 2.5:1. Its own dialog actions use a dark colour there instead; the same
-   here, until the library changes. */
-[data-cg-theme='dark'] button[data-intent='primary'] {
-  --button-color: var(--cg-page-bg);
-}
-
-/* The shell's own primary buttons (account, sharing, history), likewise. */
-[data-cg-theme='dark'] .cgw-button.is-primary {
-  color: var(--cg-page-bg);
-}
-
 /* Phase 2: account, sync and sharing */
 .cgw-sync-status {
   font-size: 0.8125rem;
@@ -281,6 +252,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The account's avatar before its name, and each member's in Settings (Track U7). */
+.cgw-account-button > [data-cg-avatar],
+.cgw-member > [data-cg-avatar] {
+  margin-inline-end: 8px;
 }
 
 .cgw-firstrun-account {

@@ -17,26 +17,11 @@ export function colourIndex(userId: string): number {
 /** The person's colour as a CSS value the editor's cursors and the avatars draw with. */
 export const colourOf = (userId: string) => `var(--cgw-presence-${colourIndex(userId)})`;
 
-const ARABIC = /\p{Script=Arabic}/u;
-
-/** The first character of a word as drawn (a letter with its marks), upper-cased. */
-function firstOf(word: string): string {
-  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
-  const first = Segmenter
-    ? (new Segmenter(undefined, { granularity: 'grapheme' }).segment(word)[Symbol.iterator]().next()
-        .value?.segment ?? '')
-    : (Array.from(word)[0] ?? '');
-  return first.toLocaleUpperCase();
-}
-
 /**
- * The avatar's letters: the first of the first and last words ("Ada Lovelace" → "AL"). A name in
- * Arabic script takes one letter: two Arabic letters side by side join into a word.
+ * A person's avatar colours for the library's `CgAvatar` (Track U7): their colour, and the text
+ * that holds contrast on it in each theme (white in the light theme, the page's dark in the dark).
  */
-export function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return '?';
-  const first = firstOf(words[0]);
-  if (words.length === 1 || ARABIC.test(name)) return first;
-  return first + firstOf(words[words.length - 1]);
-}
+export const avatarColours = (userId: string) => ({
+  color: colourOf(userId),
+  textColor: 'var(--cgw-presence-text)',
+});

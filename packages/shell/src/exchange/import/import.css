@@ -27,12 +27,6 @@
   gap: 8px;
 }
 
-.cgw-import-progress progress {
-  inline-size: 100%;
-  block-size: 8px;
-  accent-color: var(--cg-accent);
-}
-
 .cgw-import-refused {
   color: var(--cg-danger-text, var(--cg-text));
 }

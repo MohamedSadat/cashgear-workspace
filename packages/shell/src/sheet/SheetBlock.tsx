@@ -744,12 +744,7 @@ export function SheetBlock({
           style={showLive && frameHeight ? { blockSize: `${frameHeight}px` } : undefined}
         />
       </div>
-      <CgContextMenu<null>
-        items={items}
-        actionsRef={menu}
-        ariaLabel={t('sheets.menu')}
-        className="cgw-sheet-menu"
-      />
+      <CgContextMenu<null> items={items} actionsRef={menu} ariaLabel={t('sheets.menu')} />
     </div>
   );
 }

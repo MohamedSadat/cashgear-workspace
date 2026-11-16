@@ -66,25 +66,19 @@ export const mentionedPeople = (body: CommentBody): Id[] => [
   ...new Set(body.flatMap((node) => (node.type === 'userMention' ? [node.attrs.userId] : []))),
 ];
 
-/** A mention as the composer draws it: an atom the caret moves over, with its id. */
-export function mentionElement(
-  doc: Document,
-  mention: { kind: 'user'; id: Id } | { kind: 'page'; id: Id },
-  label: string,
-): HTMLElement {
-  const span = doc.createElement('span');
-  span.className = `cgw-comment-mention is-${mention.kind}`;
-  span.contentEditable = 'false';
-  span.dataset[mention.kind === 'user' ? 'userId' : 'pageId'] = mention.id;
-  span.textContent = mention.kind === 'user' ? `@${label}` : label;
-  return span;
-}
+/** The composer's content (the library's editable area, Track U17): text and mention atoms. */
+export type ComposerValue = ReadonlyArray<string | { kind: string; id: string; text: string }>;
 
 const BLOCKS = new Set(['DIV', 'P', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'PRE']);
 
 /**
  * The body the composer's editable area holds: its text, its line breaks (a `<br>`, or a line a
- * browser made a `<div>` of) and its mention atoms. Formatting a browser adds is left out.
+ * browser made a `<div>` of) and its mention atoms (the library's, `data-cg-mention-kind` and
+ * `-id`: people and pages; any other kind is left out). Formatting a browser adds is left out.
+ *
+ * Track U (phase-8 swaps): read here, not with the area's `getValue()`, which counts the `<br>` a
+ * browser leaves in an empty line it made a `<div>` of as a line break of its own, so two Enters
+ * gave two empty lines.
  */
 export function bodyFromElement(root: Node): CommentBody {
   const out: CommentBody = [];
@@ -107,13 +101,14 @@ export function bodyFromElement(root: Node): CommentBody {
       }
       if (child.nodeType !== 1) continue;
       const el = child as HTMLElement;
+      const mention = el.dataset.cgMentionId;
       if (el.tagName === 'BR') {
         // Breaks at the end are trimmed: a browser's placeholder <br> adds nothing.
         push({ type: 'hardBreak' });
-      } else if (el.dataset.userId) {
-        push({ type: 'userMention', attrs: { userId: el.dataset.userId } });
-      } else if (el.dataset.pageId) {
-        push({ type: 'pageMention', attrs: { pageId: el.dataset.pageId } });
+      } else if (mention !== undefined) {
+        const kind = el.dataset.cgMentionKind;
+        if (kind === 'user') push({ type: 'userMention', attrs: { userId: mention } });
+        else if (kind === 'page') push({ type: 'pageMention', attrs: { pageId: mention } });
       } else if (BLOCKS.has(el.tagName)) {
         breakBefore();
         walk(el);
@@ -125,34 +120,20 @@ export function bodyFromElement(root: Node): CommentBody {
   return normaliseBody(out);
 }
 
-/** Fills the composer's editable area with a body (editing a comment). */
-export function fillElement(
-  root: HTMLElement,
+/** A body as the composer's area opens with it (editing a comment): mentions by their labels. */
+export function valueFromBody(
   body: CommentBody,
   labels: { person: (userId: Id) => string; page: (pageId: Id) => string },
-) {
-  root.replaceChildren();
-  const doc = root.ownerDocument;
-  for (const node of body) {
-    if (node.type === 'text') root.append(doc.createTextNode(node.text));
-    else if (node.type === 'hardBreak') root.append(doc.createElement('br'));
-    else if (node.type === 'userMention')
-      root.append(
-        mentionElement(
-          doc,
-          { kind: 'user', id: node.attrs.userId },
-          labels.person(node.attrs.userId),
-        ),
-      );
-    else
-      root.append(
-        mentionElement(
-          doc,
-          { kind: 'page', id: node.attrs.pageId },
-          labels.page(node.attrs.pageId),
-        ),
-      );
-  }
+): ComposerValue {
+  return body.map((node) =>
+    node.type === 'text'
+      ? node.text
+      : node.type === 'hardBreak'
+        ? '\n'
+        : node.type === 'userMention'
+          ? { kind: 'user', id: node.attrs.userId, text: `@${labels.person(node.attrs.userId)}` }
+          : { kind: 'page', id: node.attrs.pageId, text: labels.page(node.attrs.pageId) },
+  );
 }
 
 /** The body as one line of plain text (an editor's label, a test): mentions by their labels. */
@@ -191,18 +172,4 @@ export function readBody(value: unknown): CommentBody {
       out.push({ type: 'pageMention', attrs: { pageId: node.attrs.pageId } });
   }
   return out;
-}
-
-/**
- * The "@" being typed before the caret in a text node, if any: what follows it (the query) and
- * where it starts. An "@" counts at the start of the text or after a space or an opening bracket.
- */
-export function mentionQueryAt(
-  text: string,
-  caret: number,
-): { query: string; start: number } | null {
-  const before = text.slice(0, caret);
-  const match = /(?:^|[\s(])@([^\s@]{0,40})$/u.exec(before);
-  if (!match) return null;
-  return { query: match[1], start: caret - match[1].length - 1 };
 }

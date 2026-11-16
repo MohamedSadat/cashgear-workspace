@@ -70,8 +70,14 @@ const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
 const button = (name: string) =>
   [...dialog().querySelectorAll('button')].find((b) => b.textContent === name)!;
 
-function choose(testId: string, file: File) {
-  const input = dialog().querySelector<HTMLInputElement>(`[data-testid="${testId}"]`)!;
+/** The file input behind a picker: the library's file picker's, or the folder's own. */
+const fileInput = (picker: 'file' | 'folder') =>
+  dialog().querySelector<HTMLInputElement>(
+    picker === 'file' ? '.cgw-import-file input[type="file"]' : '[data-testid="import-folder"]',
+  )!;
+
+function choose(picker: 'file' | 'folder', file: File) {
+  const input = fileInput(picker);
   Object.defineProperty(input, 'files', { value: [file], configurable: true });
   act(() => void input.dispatchEvent(new Event('change', { bubbles: true })));
 }
@@ -89,7 +95,7 @@ describe('the import panel', () => {
     await until(() => !!row('Alpha'), 'the tree');
     act(() => dialog().querySelector<HTMLInputElement>('input[value="notion"]')!.click());
     const fixture = notionExport();
-    choose('import-file', fileOf(fixture.bytes, fixture.name));
+    choose('file', fileOf(fixture.bytes, fixture.name));
     await until(() => !!dialog().querySelector('[data-testid="import-report"]'), 'the report');
     await until(() => row('Home')?.getAttribute('aria-expanded') === 'true', 'Home expanded');
     // Its pages and database show under it; the report is still open over Settings.
@@ -120,7 +126,7 @@ describe('the import panel', () => {
     });
     act(() => dialog().querySelector<HTMLInputElement>('input[value="word"]')!.click());
     const fixture = wordDocument();
-    choose('import-file', fileOf(fixture.bytes, fixture.name));
+    choose('file', fileOf(fixture.bytes, fixture.name));
     await until(() => !!dialog().querySelector('[data-testid="import-report"]'), 'the report');
     expect(session.mirror.topPages(second.id).map((p) => p.title)).toEqual(['Quarterly report']);
   });
@@ -137,16 +143,16 @@ describe('the import panel', () => {
     expect(dialog().textContent).toContain('2,000 pages and 500 MB');
     act(() => radios[2].click());
     expect(button('Choose a folder…')).toBeUndefined();
-    const input = dialog().querySelector<HTMLInputElement>('[data-testid="import-file"]')!;
-    expect(input.accept).toContain('.docx');
-    expect(input.getAttribute('aria-label')).toBe('Choose a file…');
+    // The library's file picker: its button names it, and its dialog takes Word files.
+    expect(button('Choose a file…')).toBeDefined();
+    expect(fileInput('file').accept).toContain('.docx');
   });
 
   it('imports a Word file and shows what was made and what was skipped', async () => {
     const { session } = await open();
     act(() => dialog().querySelector<HTMLInputElement>('input[value="word"]')!.click());
     const fixture = wordDocument();
-    choose('import-file', fileOf(fixture.bytes, fixture.name));
+    choose('file', fileOf(fixture.bytes, fixture.name));
     await until(() => !!dialog().querySelector('[data-testid="import-report"]'), 'the report');
     const report = dialog().querySelector('[data-testid="import-report"]')!;
     expect(report.textContent).toContain('Pages: 1');
@@ -166,7 +172,7 @@ describe('the import panel', () => {
     await open('ar');
     expect(document.documentElement.dir).toBe('rtl');
     expect(document.getElementById('cgw-dialog-title')!.textContent).toBe('استيراد صفحات');
-    choose('import-file', fileOf(manyPages(2001), 'كثير.zip'));
+    choose('file', fileOf(manyPages(2001), 'كثير.zip'));
     await until(() => !!dialog().querySelector('[role="alert"]'), 'the refusal');
     // In Arabic digits, as the interface writes numbers.
     expect(dialog().querySelector('[role="alert"]')!.textContent).toContain(
@@ -189,9 +195,11 @@ describe('the import panel', () => {
     };
     const { session, made } = await open('en', store);
     const pagesBefore = session.mirror.pages.size;
-    choose('import-file', fileOf(manyPages(600), 'Many.zip'));
+    choose('file', fileOf(manyPages(600), 'Many.zip'));
     await until(() => /Writing the pages/.test(dialog().textContent ?? ''), 'the writing');
-    expect(dialog().querySelector('progress')!.getAttribute('aria-label')).toBe('Import progress');
+    expect(dialog().querySelector('[role="progressbar"]')!.getAttribute('aria-label')).toBe(
+      'Import progress',
+    );
     act(() => button('Stop').click());
     expect(dialog().textContent).toContain('Stopping, and removing what was made');
     release();

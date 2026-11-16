@@ -1,7 +1,9 @@
 // Ctrl+K: search page titles and text, open a result, or run a command. Titles come from the
 // mirror at once; text matches come from the local store's index (M1.8), normalised the same way.
+// Drawn by the library's command menu (Track U1) in place, with its own search box.
+import { CgCommandMenu, type CgCommandMenuItem } from '@cashgear/ui';
 import { normaliseText } from '@cgw/workspace';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell } from '../context';
 import { Dialog } from '../Dialog';
@@ -42,16 +44,13 @@ export function Palette({
     hits: [],
   });
   const hits = result.hits;
-  const [active, setActive] = useState(0);
-  const list = useRef<HTMLDivElement>(null);
   const workspaceId = session.workspaceId;
+  // Until the results for what was typed are in, an Enter waits for them (the menu's `loading`).
   const ready = !workspaceId || result.query === normaliseText(query);
   // Phase 7: "Ask AI" about what was typed, answered in the AI panel of the page on screen.
   const ai = useAi(session, workspaceId);
   const route = parseRoute(location.hash);
   const aiPage = ai?.availability === 'ready' && route.kind === 'page' ? route.pageId : null;
-  // Enter pressed before the results for what was typed are in: it acts when they arrive.
-  const enterWhenReady = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -152,103 +151,41 @@ export function Palette({
     return [...pages, ...asks, ...commands];
   }, [hits, query, session, services, t, onClose, workspaceId, databases, aiPage]);
 
-  useEffect(() => setActive(0), [query]);
-  useEffect(() => {
-    if (!enterWhenReady.current || !ready) return;
-    enterWhenReady.current = false;
-    items[active]?.run();
-  }, [ready, items, active]);
-  useEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [active]);
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      enterWhenReady.current = false;
-      setActive((i) => Math.min(items.length - 1, i + 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      enterWhenReady.current = false;
-      setActive((i) => Math.max(0, i - 1));
-    } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      if (ready) items[active]?.run();
-      else enterWhenReady.current = true;
-    }
-  };
-
-  const pages = items.filter((i) => i.kind === 'page');
-  const commands = items.filter((i) => i.kind === 'command');
-  const row = (item: Item) => {
-    const index = items.indexOf(item);
-    return (
-      <div
-        key={item.id}
-        id={`cgw-palette-${index}`}
-        role="option"
-        aria-selected={index === active}
-        className="cgw-palette-item"
-        onMouseEnter={() => setActive(index)}
-        onClick={item.run}
-      >
-        <span className="cgw-palette-icon" aria-hidden="true">
-          {item.icon}
-        </span>
-        <span className="cgw-palette-text">
-          <span className="cgw-palette-label" dir="auto">
-            {item.label}
-          </span>
-          {item.detail && (
-            <span className="cgw-palette-detail" dir="auto">
-              {item.detail}
-            </span>
-          )}
-        </span>
-        {item.shortcut && <kbd className="cgw-kbd">{item.shortcut}</kbd>}
-      </div>
-    );
-  };
+  // Pages first (the results, or the recent pages before anything is typed), then the commands:
+  // each kind a named group, in this order.
+  const menuItems = useMemo<CgCommandMenuItem<Item>[]>(() => {
+    const pagesGroup = t(query ? 'search.pages' : 'workspace.recent');
+    return items.map((item) => ({
+      key: item.id,
+      label: item.label,
+      group: item.kind === 'page' ? pagesGroup : t('search.commands'),
+      // An element, so a page's icon is always drawn as written (a lowercase word would be read
+      // as one of the library's icon names).
+      icon: <span>{item.icon}</span>,
+      ...(item.detail ? { detail: item.detail } : {}),
+      ...(item.shortcut ? { shortcut: item.shortcut } : {}),
+      data: item,
+    }));
+  }, [items, query, t]);
 
   return (
     <Dialog title={t('search.title')} onClose={onClose}>
-      <input
-        className="cgw-palette-input cgw-input"
-        role="combobox"
-        aria-expanded="true"
-        aria-controls="cgw-palette-list"
-        aria-activedescendant={items.length ? `cgw-palette-${active}` : undefined}
-        aria-label={t('search.placeholder')}
-        placeholder={t('search.placeholder')}
-        autoFocus
-        dir="auto"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={onKeyDown}
+      {/* The dialog focuses the search box; Escape reaches the dialog, which closes. */}
+      <CgCommandMenu<Item>
+        className="cgw-palette"
+        items={menuItems}
+        filter={false}
+        searchable
+        searchLabel={t('search.placeholder')}
+        searchPlaceholder={t('search.placeholder')}
+        query={query}
+        onQueryChange={setQuery}
+        loading={!ready}
+        label={t('search.results')}
+        emptyText={t('search.noResults')}
+        maxHeight="52vh"
+        onSelect={(item) => item.data?.run()}
       />
-      <div
-        ref={list}
-        id="cgw-palette-list"
-        role="listbox"
-        aria-label={t('search.results')}
-        className="cgw-palette-list"
-      >
-        {pages.length > 0 && (
-          <div role="group" aria-label={t(query ? 'search.pages' : 'workspace.recent')}>
-            <div className="cgw-palette-group">
-              {t(query ? 'search.pages' : 'workspace.recent')}
-            </div>
-            {pages.map(row)}
-          </div>
-        )}
-        {commands.length > 0 && (
-          <div role="group" aria-label={t('search.commands')}>
-            <div className="cgw-palette-group">{t('search.commands')}</div>
-            {commands.map(row)}
-          </div>
-        )}
-        {items.length === 0 && <div className="cgw-palette-empty">{t('search.noResults')}</div>}
-      </div>
     </Dialog>
   );
 }

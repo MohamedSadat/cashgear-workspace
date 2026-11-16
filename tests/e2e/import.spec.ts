@@ -54,15 +54,25 @@ async function openImport(page: Page, kind: 'Markdown' | 'A Notion export' | 'A 
     .check();
 }
 
+/**
+ * Chooses a file in the panel: its "Choose a file…" (the library's file picker) opens the
+ * browser's dialog, and the file chosen there goes to the import.
+ */
+async function chooseFile(page: Page, file: { name: string; mimeType: string; buffer: Buffer }) {
+  const chooser = page.waitForEvent('filechooser');
+  await panel(page)
+    .getByRole('button', { name: /^(Choose a file…|اختر ملفًا…)$/ })
+    .click();
+  await (await chooser).setFiles(file);
+}
+
 async function importBytes(
   page: Page,
   name: string,
   bytes: Uint8Array,
   mimeType = 'application/zip',
 ) {
-  await panel(page)
-    .getByTestId('import-file')
-    .setInputFiles({ name, mimeType, buffer: Buffer.from(bytes) });
+  await chooseFile(page, { name, mimeType, buffer: Buffer.from(bytes) });
   await expect(report(page)).toBeVisible({ timeout: 60000 });
 }
 
@@ -359,13 +369,11 @@ test.describe('import', () => {
       expect.arrayContaining(['unsafePath', 'tooDeep', 'namesCleaned']),
     );
     await report(page).getByRole('button', { name: 'Import something else' }).click();
-    await panel(page)
-      .getByTestId('import-file')
-      .setInputFiles({
-        name: 'many.zip',
-        mimeType: 'application/zip',
-        buffer: Buffer.from(manyPages(2001)),
-      });
+    await chooseFile(page, {
+      name: 'many.zip',
+      mimeType: 'application/zip',
+      buffer: Buffer.from(manyPages(2001)),
+    });
     await expect(panel(page).getByRole('alert')).toHaveText(
       'Nothing was imported: it makes 2,002 pages, and an import makes at most 2,000.',
     );
@@ -402,7 +410,7 @@ test.describe('import', () => {
     expect(problems.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
     await dialog.getByRole('radio', { name: /^تصدير من نوشن/ }).check();
     const fixture = notionExport();
-    await dialog.getByTestId('import-file').setInputFiles({
+    await chooseFile(page, {
       name: fixture.name,
       mimeType: 'application/zip',
       buffer: Buffer.from(fixture.bytes),

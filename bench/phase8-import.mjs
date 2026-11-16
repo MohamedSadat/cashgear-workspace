@@ -48,13 +48,26 @@ async function oneRun(page, app, fixture, run) {
       }
     });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true });
-    const input = document.querySelector('[data-testid="import-file"]');
-    input.addEventListener('change', () => (marks.start = performance.now()), {
-      once: true,
-      capture: true,
-    });
+    // The file handed over: the change of the panel's file input (the library's file picker's).
+    const panel = document.querySelector('[data-testid="import-panel"]');
+    panel.addEventListener(
+      'change',
+      (event) => {
+        if (
+          !marks.start &&
+          event.target instanceof HTMLInputElement &&
+          event.target.type === 'file'
+        )
+          marks.start = performance.now();
+      },
+      { capture: true },
+    );
   });
-  await dialog.getByTestId('import-file').setInputFiles({
+  // "Choose a file…" opens the browser's file dialog; the export is chosen there.
+  const chooser = page.waitForEvent('filechooser');
+  await dialog.getByRole('button', { name: 'Choose a file…' }).click();
+  const fileChooser = await chooser;
+  await fileChooser.setFiles({
     name: fixture.name,
     mimeType: 'application/zip',
     buffer: Buffer.from(fixture.bytes),

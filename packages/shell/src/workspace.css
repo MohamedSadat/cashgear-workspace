@@ -334,10 +334,12 @@
   outline-offset: 1px;
 }
 
+/* The text the library's solid buttons draw on the accent: white in the light theme, the page's
+   dark in the dark theme (6.3:1 or more). */
 .cgw-button.is-primary {
   border-color: var(--cg-accent);
   background: var(--cg-accent);
-  color: #fff;
+  color: var(--cg-color-fg-on-accent, #fff);
 }
 
 .cgw-button.is-danger {
@@ -383,43 +385,7 @@
   color: inherit;
 }
 
-/* Top bar: breadcrumbs (Track U5 stand-in), page actions */
-.cgw-breadcrumbs {
-  min-inline-size: 0;
-}
-
-.cgw-breadcrumbs ol {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  overflow: hidden;
-  font-size: 0.875rem;
-}
-
-.cgw-breadcrumbs li {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cgw-breadcrumbs li + li::before {
-  content: '/';
-  margin-inline-end: 4px;
-  color: var(--cg-text-secondary);
-}
-
-.cgw-breadcrumbs a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.cgw-crumb-section {
-  color: var(--cg-text-secondary);
-}
-
+/* Top bar: page actions (the breadcrumb is the library's, Track U5) */
 .cgw-topbar-button {
   inline-size: 30px;
   block-size: 30px;
@@ -435,7 +401,7 @@
   background: color-mix(in srgb, var(--cg-text) 8%, transparent);
 }
 
-/* Page header: cover and icon (Track U6 stand-in for the emoji picker) */
+/* Page header: cover and icon (the emoji picker is the library's, Track U6) */
 .cgw-cover {
   position: relative;
   margin: -48px -56px 16px;
@@ -491,45 +457,6 @@
   }
 }
 
-.cgw-emoji-picker {
-  position: fixed;
-  z-index: 61;
-  inset-block-start: 120px;
-  inset-inline: 0;
-  inline-size: fit-content;
-  margin-inline: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--cg-border);
-  border-radius: 10px;
-  background: var(--cg-surface);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-}
-
-.cgw-emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 36px);
-  gap: 2px;
-}
-
-.cgw-emoji {
-  inline-size: 36px;
-  block-size: 36px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  font-size: 1.4rem;
-  cursor: pointer;
-}
-
-.cgw-emoji:hover,
-.cgw-emoji:focus-visible {
-  outline: none;
-  background: color-mix(in srgb, var(--cg-text) 10%, transparent);
-}
-
 /* Trash */
 .cgw-trash {
   max-inline-size: 760px;
@@ -556,7 +483,18 @@
   font-weight: 500;
 }
 
-/* Palette (Ctrl+K) */
+/* Palette (Ctrl+K): the library's command menu (Track U1); the comment composer's "@" list is one
+   too. Track U (phase-8 swaps): on the active option's tint (`--cg-selected`, #eaf0ff) the menu's
+   secondary text, a second line or a shortcut, is 4.36:1 in the light theme; the theme's text
+   there instead. */
+:is(.cgw-palette, .cgw-composer-area)
+  [role='option'][aria-selected='true']
+  :is(span[dir='auto'] + span[dir='auto'], kbd) {
+  color: var(--cg-text);
+}
+
+/* A searchable list in a dialog, the palette's former look: the page history, the workbook picker
+   and the database dialogs draw with it. */
 .cgw-palette-input {
   inline-size: 100%;
   box-sizing: border-box;

@@ -33,6 +33,14 @@ import {
 // from Phase 7 also the AI provider's and its models' names (Anthropic, Claude Opus 5.5), shown in
 // Settings' AI section on every screen walked there.
 
+/**
+ * Groups whose options are what the person wrote, by their names: the palette's page results and
+ * recent pages (a title, and a line of the page's text): `search.pages`, `workspace.recent`.
+ */
+const OWN_GROUPS = ['الصفحات', 'الأخيرة'];
+/** The breadcrumb's landmark (`page.breadcrumbs`). */
+const BREADCRUMBS = 'موقع هذه الصفحة';
+
 const KEYS =
   /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?)\b/g;
 
@@ -49,22 +57,33 @@ interface Theirs {
 
 async function english(page: Page, screen: string, theirs: Theirs = {}): Promise<string[]> {
   return page.evaluate(
-    ({ screen, keys, theirs }) => {
+    ({ screen, keys, theirs, ownGroups, breadcrumbs }) => {
       const keyNames = new RegExp(keys, 'g');
+      // The breadcrumb, by its landmark's name: the section's and the pages' names.
+      const crumbs = `nav[aria-label="${breadcrumbs}"]`;
       // What the person wrote: page titles (the sidebar, breadcrumbs, the title, search
       // results), the page itself, and the workspace's name.
       const own = [
         '.cgw-editor',
         '.cgw-title',
         '.cgw-tree-title',
-        '.cgw-breadcrumbs',
-        '.cgw-palette-label',
-        '.cgw-palette-detail',
+        crumbs,
         '.cgw-workspace-switcher',
         'kbd',
         '[lang="en"]',
         ...(theirs.within ?? []),
       ].join(', ');
+      // The search results' groups (by their names): every option in them is a page's.
+      const groups = [...document.querySelectorAll('[role="group"]')].filter((group) => {
+        const by = group.getAttribute('aria-labelledby');
+        const name = by
+          ? document.getElementById(by)?.textContent
+          : group.getAttribute('aria-label');
+        return !!name && ownGroups.includes(name.trim());
+      });
+      const theirsAt = (el: Element) =>
+        !!el.closest(own) ||
+        groups.some((group) => group.contains(el) && !!el.closest('[role="option"]'));
       const titles = [
         ...[...document.querySelectorAll('.cgw-tree-title')].map((el) => el.textContent!),
         ...(theirs.names ?? []),
@@ -82,13 +101,15 @@ async function english(page: Page, screen: string, theirs: Theirs = {}): Promise
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const parent = node.parentElement;
-        if (!parent || parent.closest(own) || parent.closest('[aria-hidden="true"]')) continue;
+        if (!parent || theirsAt(parent) || parent.closest('[aria-hidden="true"]')) continue;
         if (!visible(parent)) continue;
         const text = strip(node.textContent ?? '');
         if (/[A-Za-z]{2,}/.test(text)) found.push(`${screen}: text "${node.textContent!.trim()}"`);
       }
       for (const el of document.querySelectorAll('[aria-label], [placeholder], [title]')) {
-        if (el.closest('.cgw-editor') || !visible(el)) continue;
+        // A crumb's tooltip is its page's or section's name (the "…" button's are the app's).
+        if (el.closest('.cgw-editor') || el.matches(`${crumbs} li > :is(a, span)`) || !visible(el))
+          continue;
         for (const name of ['aria-label', 'placeholder', 'title']) {
           const value = el.getAttribute(name);
           if (value && /[A-Za-z]{2,}/.test(strip(value)))
@@ -97,7 +118,13 @@ async function english(page: Page, screen: string, theirs: Theirs = {}): Promise
       }
       return found;
     },
-    { screen, keys: KEYS.source, theirs },
+    {
+      screen,
+      keys: KEYS.source,
+      theirs,
+      ownGroups: OWN_GROUPS,
+      breadcrumbs: BREADCRUMBS,
+    },
   );
 }
 
@@ -296,7 +323,7 @@ test('the Arabic comments, inbox and presence have no English of their own', asy
         '.cgw-comment-body',
         '.cgw-thread-quote',
         '.cgw-thread-quote-text',
-        '.cgw-composer-area',
+        '[data-testid="comment-composer"]',
         '.cgw-inbox-excerpt',
       ],
       names: [
