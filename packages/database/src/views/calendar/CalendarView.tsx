@@ -226,9 +226,8 @@ export function CalendarView({
             ? t('calendar.timed', { time: info.time, title: info.title })
             : info.title,
       moveHint: t('calendar.moveHint'),
-      // No `weekItems`: the calendar would make it the week's cell's name (`aria-label`), and that
-      // cell shows its rows' titles, which a name must hold (Axe, label-content-name-mismatch).
-      // Unnamed, the cell is named by the rows it holds, as the view's own grid was.
+      // The week's cell is named by the rows it shows; this describes it (`aria-describedby`).
+      weekItems: (start, end) => t('calendar.weekItems', { start, end }),
       untitled: t('untitled'),
     }),
     [t, name],

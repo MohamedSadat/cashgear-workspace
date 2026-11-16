@@ -306,8 +306,12 @@ describe('the calendar', () => {
     for (const item of items) {
       const cell = item.parentElement!.closest('[role]')!;
       expect(cell.getAttribute('role')).toBe('gridcell');
-      // Named by the rows it shows (an `aria-label` would have to hold their titles).
+      // Named by the rows it shows (an `aria-label` would have to hold their titles), described
+      // as the week's rows.
       expect(cell.hasAttribute('aria-label')).toBe(false);
+      const described = cell.getAttribute('aria-describedby');
+      expect(described).toBeTruthy();
+      expect(document.getElementById(described!)?.textContent).toMatch(/^Rows in the week from /);
       expect(cell.parentElement!.getAttribute('role')).toBe('row');
     }
     const weeks = [...container.querySelectorAll('[role="grid"] > [role="row"]')].slice(1);

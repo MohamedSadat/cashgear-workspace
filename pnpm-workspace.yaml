@@ -8,6 +8,6 @@ onlyBuiltDependencies:
 allowBuilds:
   # Azurite's telemetry dependency; its install script is not needed.
   protobufjs: false
-  '@cashgear/ui@https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/5e70441770f4c1b7ca613d1634977aa06f7e0a9d': true
+  '@cashgear/ui@https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/92d9f099950a98aa4c1ccfb9592fb35692126e76': true
 patchedDependencies:
   '@tiptap/y-tiptap@3.3.0': patches/@tiptap__y-tiptap@3.3.0.patch

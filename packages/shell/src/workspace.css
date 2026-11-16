@@ -112,19 +112,27 @@
   white-space: nowrap;
 }
 
-/* A page's buttons are there only on hover and focus, as they always were: not merely
-   transparent, so the top bar's "Page actions" is the one page-wide (and a screen reader does not
-   meet two buttons in every row). A section's are always there. */
+/* A page's buttons show on hover and focus, and are out of the accessibility tree until then
+   (the library's own, from `98e4ff0`). A section's are always there ("Add a page in"). */
 .cgw-tree [data-cg-tree-actions] {
-  display: none;
   gap: 2px;
 }
 
-.cgw-tree [role='treeitem']:hover [data-cg-tree-actions],
-.cgw-tree [role='treeitem']:focus-within [data-cg-tree-actions],
 .cgw-tree .cgw-tree-section [data-cg-tree-actions] {
-  display: inline-flex;
+  visibility: visible;
   opacity: 1;
+}
+
+/* The open page's row is selected, which the library shows the buttons of; here they still wait
+   for hover or focus, so the top bar's "Page actions" stays the one on screen. Touch screens keep
+   the library's (always shown). */
+@media (hover: hover) {
+  .cgw-tree
+    [role='treeitem'][aria-selected='true']:not(:focus):not(:hover)
+    > div
+    > [data-cg-tree-actions]:not(:focus-within) {
+    visibility: hidden;
+  }
 }
 
 .cgw-tree-action {

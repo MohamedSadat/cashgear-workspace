@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cashgear/ui": "github:MohamedSadat/CashGear.React.UI#5e70441770f4c1b7ca613d1634977aa06f7e0a9d",
+    "@cashgear/ui": "github:MohamedSadat/CashGear.React.UI#92d9f099950a98aa4c1ccfb9592fb35692126e76",
     "i18next": "27.1.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
