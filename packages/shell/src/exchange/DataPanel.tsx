@@ -14,6 +14,7 @@ import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
 import { collaborates, useCollab } from '../collab/context';
 import { useDatabaseHost } from '../database/context';
+import { pageEvents } from '../page/PageMenu';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
 import { workbookApi } from '../sheet/api';
@@ -137,8 +138,17 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
         } else parts.push(t('exchange.imported'));
         if (result.skippedWorkbooks)
           parts.push(t('exchange.workbooksSkipped', { count: result.skippedWorkbooks }));
-        setMessage(parts.join(' '));
-        if (result.first) navigate({ kind: 'page', pageId: result.first });
+        const report = parts.join(' ');
+        setMessage(report);
+        if (result.first) {
+          // The new workspace's first page closes this panel: its report goes with it, as the
+          // window's notice (after the account's own "uploaded", which it says more fully).
+          navigate({ kind: 'page', pageId: result.first });
+          window.setTimeout(
+            () => pageEvents.dispatchEvent(new CustomEvent('notice', { detail: report })),
+            0,
+          );
+        }
       })
       .catch((error: unknown) => {
         console.error(error);

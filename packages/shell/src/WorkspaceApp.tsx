@@ -326,6 +326,13 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     pageEvents.addEventListener('share', open);
     return () => pageEvents.removeEventListener('share', open);
   }, []);
+  // A report that outlives the screen it was made on (an import's, which opens the new
+  // workspace): shown as the window's notice.
+  useEffect(() => {
+    const show = (event: Event) => setNotice({ text: (event as CustomEvent<string>).detail });
+    pageEvents.addEventListener('notice', show);
+    return () => pageEvents.removeEventListener('notice', show);
+  }, []);
   // What the sync engine or an open document has to say, in the interface language: what
   // happened, and a link to where the work is (the recovered page, the trash, the history).
   useEffect(() => {
