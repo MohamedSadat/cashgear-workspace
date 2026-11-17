@@ -18,9 +18,10 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 6: Collaboration | Done, 2026-11-15 (0.6.0; the 300 ms and 150 ms budgets are met on the reference machine, CI's shared runner holds wider ones; one node, Q17) | `phase-6`, `v0.6.0` |
 | Phase 7: Editable ERP blocks, plugins, AI | Done, 2026-11-15 (0.7.0; proven against the mocks in CI and against the real ERP run locally; pushing Track E6 and E7, and the live test against Anthropic, are yours) | `phase-7`, `v0.7.0` |
 | Phase 8: Hardening and moving in | Done, 2026-11-16 (0.8.0; Chrome's own IndexedDB loss answered by a journal; the Chromium report, drafted, is yours to file; one notice keeps its own component) | `phase-8`, `v0.8.0` |
-| Phases 9 and 10 | Planned, 2026-11-15 ("Later" reviewed with you; `IMPLEMENTATION_PLAN.md`, `DECISIONS.md`) | |
-| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `92d9f09` | |
-| Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14) | |
+| Phase 9: Publishing and views | Done, 2026-11-18 (0.9.0; the site's origin, DNS and certificate, and its install on the host are yours; Sheet's real desktop app proven on the reference machine) | `phase-9`, `v0.9.0` |
+| Phase 10 | Planned, 2026-11-15 ("Later" reviewed with you; `IMPLEMENTATION_PLAN.md`, `DECISIONS.md`) | |
+| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `0490cbd` | |
+| Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), committed there and not pushed | |
 
 ## Planning
@@ -1107,6 +1108,99 @@ Stand-ins for Track U (Phase 8)
 | U13's announcer | `Live` (`views/board/shared.tsx`) reused by the table and the gallery. Phase 8: `CgLiveAnnouncer` (`ac8a05d`) |
 | Library defects found by the swaps | `CgCommandMenu`'s active option's detail at 4.36:1 (an override in `workspace.css`); `CgMentionArea.getValue()`'s empty lines (the composer reads its own area); five gaps in `CgToolbarItem`, `CgCommandMenu`, the docked toolbar and two icons (the editor's own CSS and key filter); the tree's five above. All fixed in the library (`ab467b7`) and their workarounds removed (`4953665`, `87d0e92`) |
 
+## Phase 9: Publishing and views
+
+Done 2026-11-18. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44144260609 (commit `a68d304`, all jobs green: 274 browser e2e cases passed and 12 skipped, the desktop app's 61 passed, every kill test 25 of 25, every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44144260246 (green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, WebView2, SQL Server LocalDB, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-17: Phase 9); the design as built in `ARCHITECTURE.md` (The backend: the Sites process; Security), `DATA_MODEL.md` (the share-link and site scope, the date window, export format 3), `SYNC_DESIGN.md` (`viewTypes`; a query's rows kept after the answer), `INTEGRATIONS.md` (the workbook routes and history; Track S6) and `OPERATIONS.md` (the third IIS site); what changed for users in `CHANGELOG.md` (0.9.0).
+
+Milestones
+
+- [x] M9.1 Publishing. Commits `419716f` (the Phase 9 migration, the publishing routes and the
+      workspace's switch, the Sites process and its renderer, the share link's databases),
+      `6f5bf6d` (the share dialog's "Publish to the web", the switch in Settings, a share link's
+      databases, charts and boards), `a68d304` (Settings and the publish view loaded when they
+      open), `88e1edc` and `82f9a2e` (`site.spec.ts`)
+- [x] M9.2 Timeline view. Commits `0e08a62` (the library at Track U18's `0490cbd`), `30e107a` (the
+      date window and the view type), `64d48f6` (the timeline over `CgTimeline`, the calendar by a
+      date window), `6a01e1c`, `ab902da`, `1935dc3` (first bars within budget: below),
+      `88e1edc` (`timeline.spec.ts`, v0.8.0 and v0.7.0 in `old-build.spec.ts`)
+- [x] M9.3 Workbooks. Commits `419716f` (the history and upload routes, the launch target, export
+      format 3 on the server), `6f5bf6d` (a workbook's history, export format 3 and import),
+      `239f9c6` (Sheet's desktop app by its deep link), `806d359` (the upload's CORS), `07c9350`
+      (the import's report), `e5d95b3` and `f45d792` (`desktop-sheet.spec.ts`), `6ff5f21`; Track S6 in
+      `cashgear-sheet` (below)
+
+Notes
+
+- The work ran as three streams in one checkout to a written contract (the server, the timeline,
+  the client), then a proof run by the parent, after your answers (decisions, 2026-11-17). Tracks
+  U18 and S6 ran in sessions of their own in their repositories.
+- The proof found, in Chrome and on the desktop app, what the streams' specs had not run against:
+  the app's CORS policy refused `If-None-Match`, so an import while signed in could not upload a
+  workbook's first version (`806d359`, with a preflight test, since the server's own tests are
+  same-origin); an import opened the new workspace and so closed its own report, which said what it
+  skipped (`07c9350`: the window's notice); and eight spec assumptions (an inline database is a page
+  of the site, the site's colours are on the root, the timeline's first lines are rows already under
+  way, a drop crossing the timeline's edge scrolls its days, two "Sign out" buttons in Settings, the
+  401s of requests in flight at sign-out, WebView2's opener caught by its IPC fetch, an empty test
+  setting is a set one).
+- **The timeline's first bars.** First measured at about 950 ms against the 500 ms budget: sorted
+  by start, the wide window's first pages were the days before those shown, and each page of the
+  server's answer waited for IndexedDB to keep its 500 rows (about 150 ms) before it was drawn. The
+  timeline now asks for the days shown first, and the engine keeps a query's rows just after it
+  answers, one answer at a time (`kept()` waits; a search that pulls a row waits for it). Then 107
+  to 301 ms. A server row source says `complete` before its first page comes, which made the
+  timeline draw no bars for a moment mid-load; a window now counts as in only when it is not
+  loading (`1935dc3`).
+- `ab902da` (and `793d175` on it) fails `pnpm typecheck` alone: its test read a window without its
+  type. `1935dc3` fixes it; the history is kept as pushed.
+- CI on `1935dc3` (run 44009551156) failed one older spec, the Arabic check of the workbook block's
+  menu, which chose "Change view" by its place: Phase 9 put "Version history" before it (`6ff5f21`,
+  by its name). CI on `6ff5f21` (run 44059646552) passed every spec and failed Phase 1's initial
+  JavaScript: 350.8 kB against 350 (0.8.0 had 335.8). Phase 9's Settings sections, publishing
+  among them, came in with Settings, which the app imported at start; Settings now loads as the
+  other screens do, and the publish view and the publishing section with their first look
+  (`a68d304`): 341.1 kB on the evidence run.
+- **Sheet's real desktop app.** Track S6's build (Sheet `0247ad0`, against this stack) was not
+  installed over your CashGear Sheet 1.0.0: on your answer, the `cashgear-sheet` link was
+  registered for the built `cgs-desktop.exe` alone, the opt-in case run, and the key removed after
+  (your Sheet 1.0.0 untouched).
+- What `CgTimeline` lacks (for Track U, none blocks a criterion): bringing its lines to the first
+  item of the days shown (the view draws only the rows the days shown hold instead), `scrollToItem`
+  revealing a line at the top, a `startCreate` on its handle, a stable mark for today's line.
+- Left for later: custom domains (on "Later", your answer); a site's file cell check reads a
+  database's rows by `LIKE` (an index of row files if a large gallery is slow); the Sites process
+  has no rate limit (an unknown slug is remembered 5 s); publishing changes are not in the change
+  feed (the dialog and Settings read them); moving a bar to another lane by dragging (U18 left it
+  out).
+- Deployment is yours, as before: the DNS record and certificate for `pages.cashgearerp.com`, and
+  `install.ps1` with `-SitesHostName` (`docs/OPERATIONS.md`); the deploy package and its site are
+  rehearsed on this machine (below).
+- The stale vitest processes from 2026-11-11 (952 and 23064) were still running through this phase's
+  measurements: yours to end.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A published subtree reads in a browser with no account and with script off, in English and in Arabic; a restricted page under it, its comments, its history and its Yjs updates are never reachable; an ERP view and a workbook show placeholders; after unpublishing, every address answers 404 within a minute | Pass | `site.spec.ts` "a page tree is published from the dialog and read with no account, then comes down" (Chrome, Edge, the desktop app): what will be published listed first (the restricted page left out, counted), published, read in a fresh context with JavaScript off, its headers (the strict CSP, no script, `noindex`, `nosniff`, `no-referrer`, `no-cache` and an ETag answered 304), the tree as navigation, the database's rows through the block's view, placeholders for the workbook and the ERP view, in English then Arabic (`lang`, `dir`), light and dark with Axe; the restricted page and its child 404 on the site, and the comments, history, document updates and JSON 404 on the site's origin and 401 on the API with no account; unpublished, every address 404 within a minute. "turning publishing off takes every site of the workspace down, and refuses publishing". Server: `SiteTests` (the scope matrix: restricted, private, hidden, trashed, unpublished, the switch, a guest), `PublishingTests`, `SiteRendererTests` (every node of schema 6 against expected HTML in both languages, hostile content escaped) |
+| Nothing on the site's origin can read the app's or the API's session, proven by a test | Pass | `site.spec.ts` "nothing on the site's origin can read the app's or the API's session": signed in to the app, on the site (`localhost:5290`, another host than the app's `127.0.0.1`) `document.cookie` is empty and a credentialed fetch to the API fails; the site's answers carry the strict CSP and no `Set-Cookie`. `SiteTests`: the same answer with the API's session cookie or without, the headers, no cookie set |
+| A timeline view of a 50,000-row database shows the rows in its window and moves and resizes bars by pointer and keyboard, in both directions; an older build that shows it keeps its type and settings | Pass | `timeline.spec.ts` (Chrome, Edge, the desktop app; 50,000 rows by the import route): the window in the server's queries and every answered row in it; Alt and an arrow, Alt, Shift and an arrow, Ctrl, Shift and an arrow, and pointer drags of a bar's body and ends, each on the server; right to left in Arabic (later to the left, the keys and the pointer mirrored); an undated row dropped on a day; lanes; Axe in both languages. `old-build.spec.ts`: v0.8.0 and v0.7.0 show the timeline as a table and change its filter there; here it is a timeline with its settings. Server: `TimelineTests` (the older-build rule), `DatabaseVectorTests` (the window's 39 cases) |
+| A workspace exported with workbooks imports into a new synced workspace with them; an older version of a workbook is restored as a new one by an editor and refused for a reader | Pass | `export-workbooks.spec.ts`: exported with its workbook, imported signed in (a new workspace in the account, the workbook made again under a new id, its sheet block pointed at it, live), and signed out (skipped and said). `workbook-history.spec.ts`: an editor sees the versions, opens one read-only and restores it as the newest; a reader is offered no restore and the server refuses theirs. Server: `WorkbookHistoryTests` (the access matrix, a trashed workbook, the upload, the preflight) |
+| On the desktop with Sheet's app installed, "Open in Cash Gear Sheet" opens the app on the workbook | Pass | `desktop-sheet.spec.ts` on the desktop app: with the system saying Sheet is installed, the click hands it a desktop launch whose ticket redeems only from `http://tauri.localhost`; with it missing, Sheet's web app as before. On the reference machine with Sheet's real app (Track S6's build): `REAL_SHEET_APP=1`, 3 of 3, the system opened it on the workbook ("Real book … – CashGear Sheet"). Sheet's CI run 43999690589 (its desktop smoke run against Workspace's routes, the installer test registering and removing the scheme) |
+
+Also: `sharedDatabase.test.ts` (a share link sends the view, paging, search, a window and `undated`, never a filter, sort or group), `SharedDatabaseTests` (hidden properties never sent, the timeline's window and undated rows), `publishing.test.ts`, `history.test.ts`, `workbooks.test.ts`, `window.test.ts`, `TimelineView.test.ts`, `databases.test.ts` (a query's rows kept). Unit: 3,160 tests in `pnpm test`, 308 server tests (300 passed, the 8 benches skipped) server tests; every standing check passes.
+
+Benchmarks (`bench/phase9.mjs` in CI, gated against the budgets and the last run on main)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A published page of 2,000 blocks, first byte from the cache, p95 | 200 ms | 2.5 ms (200 reads; p50 2, max 15.3) | 11.5 ms (20 pages, 10 reads each; the earlier run 12.4) |
+| The same, rendered fresh, p95 | 1 s | 208.7 ms (20 pages; p50 154.9, max 297.4) | 92.6 ms (the earlier run 341.1); 426 KB a page |
+| A timeline over 50,000 rows: the first bars | 500 ms | 104.9 ms, the median of five opens after a first (102.4 to 128.5); the first open 1,828 ms (tracked) | 159.9 ms, the median of five opens after a first (107 to 169); the first open, while the server reads the rows into its cache, 2,634 ms (tracked) |
+| Dragging a bar, frames' p95 | 17.5 ms (60 frames a second) | 16.8 ms over 117 frames (max 16.8) | 16.8 ms over 119 frames |
+
+The deploy rehearsal (`node scripts/deploy-rehearsal.mjs`, 2026-11-17: rehearsal pass and drill pass. The package built with its `sites/` folder, the migration bundle applied, the published API, worker and Sites process running, every earlier smoke step, and a page published and read on its own origin with no account and no cookie; restored elsewhere, the site reads there too and is gone after an unpublish).
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
@@ -1129,6 +1223,7 @@ Stand-ins for Track U (Phase 8)
 - [x] The library's defects listed in the phases above (`CgSplitter`, `CgDrawer`, `CgTabs`, `CgFlyout`, `CgButton`, `CgContextMenu`, `CgChart`: `0ab6883`)
 - [x] The follow-ups the swaps found (asked and built 2026-11-16, `ab467b7`, `f66cb07`, `2baed10`): `CgOptionPicker`'s `normalize`, `CgKanbanBoard`'s column moves, footer, paging, draft and titles, `CgMonthCalendar`'s handle and selected day, `CgTreeView`'s five, `CgFilePicker`'s folder mode, `CgSelect`, the toast's link action, and the two defects and five small gaps above
 - [x] `CgMonthCalendar`'s week cell described, not named, by `weekItems`, and the tree's row buttons out of the accessibility tree until hovered or focused (`92d9f09`, `98e4ff0`; Workspace `c3b00f0`)
+- [x] U18 A timeline (`CgTimeline`: lines and lanes on a date axis, zoom by day, week, month and quarter, pointer and keyboard moves and resizes, right to left, virtualised for 50,000 items; library `0490cbd`, pushed 2026-11-17; Workspace `0e08a62`). Left for Track U: bringing the lines to the first item of the days shown, `scrollToItem` to the top, a `startCreate`, a mark for today's line
 
 Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
 `claude/cashgear-react-ui-library-xq8tsz` (decisions, 2026-11-16).
@@ -1140,6 +1235,7 @@ Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
 - [x] S3 `/embed` route and `sheet-embed.1` (Sheet commits `960bd8b..f35c5a8`, CI run 43583125944)
 - [x] S4 Preview pictures and chart views (the same commits; `610d104` reads prefixed SpreadsheetML)
 - [x] S5 Shared contract suite (Workspace's 288 vectors through Sheet's validators; Sheet's `sheet-session.1` suite against Workspace's real API, 12 passed)
+- [x] S6 Sheet's desktop app takes `cashgear-sheet://workspace/launch#ticket=…` (Sheet `e6eb628..73cc18e`, evidence `0247ad0`, its CI run 43999690589: the desktop smoke run against Workspace's routes, the installer test registering and removing the scheme); the contract as written in `INTEGRATIONS.md`, nothing changed
 
 ## Track E: Cash Gear ERP
 
