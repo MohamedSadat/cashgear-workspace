@@ -12,6 +12,7 @@
 import type { RowGroup, RowRequest, RowSnapshot, RowSource } from '@cgw/database';
 import {
   groupKeys,
+  inWindow,
   matchesFilter,
   queryRows,
   type DatabaseRecord,
@@ -164,6 +165,8 @@ export class ShellRowSource implements RowSource {
       sorts: spec.sorts,
       group: spec.group,
       ...(spec.search ? { search: spec.search } : {}),
+      // A calendar's or a timeline's days (Phase 9): the server answers only the rows in them.
+      ...(spec.window ? { window: spec.window } : {}),
       ...(groupKey !== undefined ? { groupKey } : {}),
       context: this.host.queryContext(),
       after,
@@ -251,15 +254,18 @@ export class ShellRowSource implements RowSource {
       shown.add(id);
       rows.push(this.host.withComputed(row));
     }
-    // Rows made since the view opened (here, or brought by the feed) that its filter takes.
+    // Rows made since the view opened (here, or brought by the feed) that its filter (and its date
+    // window) takes.
     const added: RowRecord[] = [];
+    const { window } = this.request.spec;
     for (const row of local)
       if (
         live(row) &&
         !shown.has(row.id) &&
         !state.rows.has(row.id) &&
         row.createdAt >= this.openedAt &&
-        matchesFilter(database, row, this.request.spec.filter, ctx)
+        matchesFilter(database, row, this.request.spec.filter, ctx) &&
+        (!window || inWindow(database, this.host.withComputed(row), window, ctx))
       )
         added.push(this.host.withComputed(row));
     const gone = state.order.length - shown.size;

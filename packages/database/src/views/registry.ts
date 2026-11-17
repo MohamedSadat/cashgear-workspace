@@ -1,6 +1,7 @@
-// The view types a database can be shown as. The table is built (this package's table stream);
-// board, list, calendar and gallery are placeholders the views stream fills in: each sets its
-// `component` and, where it differs, its default configuration and what its toolbar offers.
+// The view types a database can be shown as: table, board, list, calendar, gallery and (Phase 9)
+// timeline. Each sets its `component` and, where it differs, its default configuration and what
+// its toolbar offers; the calendar and the timeline read their rows by queries of their own (a date
+// window: `ownRows`).
 import { TITLE_PROPERTY, type DatabaseRecord, type ViewType } from '../core';
 import { isDateType, isGroupable, liveProperties } from '../model/properties';
 import { emptyConfig } from '../model/viewConfig';
@@ -11,6 +12,8 @@ import { CalendarView } from './calendar/CalendarView';
 import { GallerySettings } from './gallery/GallerySettings';
 import { GalleryView } from './gallery/GalleryView';
 import { ListView } from './list/ListView';
+import { TimelineSettings } from './timeline/TimelineSettings';
+import { TimelineView, defaultTimeline } from './timeline/TimelineView';
 import type { ViewTypeDefinition } from './types';
 
 /**
@@ -75,6 +78,7 @@ export const VIEW_TYPES: Record<ViewType, ViewTypeDefinition> = {
       properties: titleOnly(database),
     }),
     supports: { group: false, wrap: false, properties: true },
+    ownRows: true,
   },
   // ui-views: the gallery view (cards with a cover).
   gallery: {
@@ -90,9 +94,35 @@ export const VIEW_TYPES: Record<ViewType, ViewTypeDefinition> = {
     }),
     supports: { group: false, wrap: false, properties: true },
   },
+  // Phase 9: a line per row, its bar across its dates; lanes, zoom, the rows with no date beside.
+  timeline: {
+    type: 'timeline',
+    glyph: '▤',
+    component: TimelineView,
+    settings: TimelineSettings,
+    defaultConfig: (database) => {
+      const timeline = defaultTimeline(database);
+      return {
+        ...emptyConfig('timeline'),
+        // Earliest first: the bars fall away down the lines.
+        sorts: timeline.start ? [{ propertyId: timeline.start, direction: 'asc' }] : [],
+        properties: titleOnly(database),
+        timeline,
+      };
+    },
+    supports: { group: false, wrap: false, properties: false },
+    ownRows: true,
+  },
 };
 
-export const VIEW_ORDER: readonly ViewType[] = ['table', 'board', 'list', 'calendar', 'gallery'];
+export const VIEW_ORDER: readonly ViewType[] = [
+  'table',
+  'board',
+  'list',
+  'calendar',
+  'gallery',
+  'timeline',
+];
 
 export const viewType = (type: ViewType): ViewTypeDefinition =>
   VIEW_TYPES[type] ?? VIEW_TYPES.table;

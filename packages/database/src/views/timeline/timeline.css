@@ -1,0 +1,59 @@
+/* The timeline view: its status line, the timeline (the library's `CgTimeline`, its own styles),
+   and the rows with no date beside it at the inline end (the calendar's list). */
+
+.cgw-db-tl {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.cgw-db-tl-head {
+  display: flex;
+  align-items: center;
+  min-block-size: 20px;
+  padding-block: 2px;
+  padding-inline: 8px;
+}
+
+.cgw-db-tl-status {
+  flex: 1;
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-db-tl-main {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  min-block-size: 0;
+  padding-inline: 8px;
+}
+
+/* Its block size is the timeline's `height`: all of the area on the database's own page, a
+   block's inside a page. */
+.cgw-db-tl-lines {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.cgw-db-tl-new {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.cgw-db-tl-new-date {
+  color: var(--cg-text-secondary);
+  font-size: 12px;
+}
+
+.cgw-db-tl-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 28px;
+  margin-block-start: 6px;
+  font-size: 13px;
+}

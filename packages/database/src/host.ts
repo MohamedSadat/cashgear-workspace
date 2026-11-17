@@ -67,6 +67,12 @@ export interface RowRequest {
    * database queried on this device (a full hold) gives every row at once.
    */
   pageSize?: number;
+  /**
+   * Phase 9: the rows with no value in this date property (a calendar's or a timeline's list
+   * beside it). `spec.filter` says so too; a host that sends no filter (a share link's) asks for
+   * them by this.
+   */
+  undated?: PropertyId;
 }
 
 /** One group of a grouped query, in group order. */

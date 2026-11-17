@@ -43,6 +43,7 @@ export const en = {
       list: 'List',
       calendar: 'Calendar',
       gallery: 'Gallery',
+      timeline: 'Timeline',
     },
     toolbar: {
       label: 'Database tools',

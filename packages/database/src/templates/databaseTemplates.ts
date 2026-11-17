@@ -1,7 +1,7 @@
 // The built-in database templates (contract section 1: definitions in `@cgw/database`, not
 // records): Tasks, Projects, Reading list, Meeting notes and Contacts, each with its properties,
-// its views (a table, a board, a list, a calendar and a gallery between them) and a few sample
-// rows, made in the interface language. `makeDatabase` turns a choice into the operations that make
+// its views (a table, a board, a list, a calendar, a gallery and a timeline between them) and a
+// few sample rows, made in the interface language. `makeDatabase` turns a choice into the operations that make
 // it: a `page.create` of kind `database` with its properties, a `view.upsert` per view, and a
 // `page.create` of kind `row` per row (row templates included). Ids are new each time. Pure: the
 // strings come in through `t`.
@@ -249,9 +249,14 @@ function projects(ctx: MakeContext): Shape {
         config: { group: { propertyId: status.id }, properties: hidden(status.id) },
       },
       {
+        // Named "Timeline" since Phase 4, a calendar until the timeline view (Phase 9).
         name: t('templates.projects.viewCalendar'),
-        type: 'calendar',
-        config: { calendarBy: span.id, properties: hidden(span.id) },
+        type: 'timeline',
+        config: {
+          sorts: [{ propertyId: span.id, direction: 'asc' }],
+          properties: hidden(span.id),
+          timeline: { start: span.id, end: null, lane: status.id, scale: 'month', undated: true },
+        },
       },
     ],
     rows: [

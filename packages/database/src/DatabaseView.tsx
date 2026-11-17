@@ -158,7 +158,9 @@ export function DatabaseView({
         : null,
     [view, database, search],
   );
-  const { source, snapshot } = useRowSource(host, databaseId, request);
+  // A calendar or a timeline reads its rows by queries of its own (a date window; Phase 9).
+  const ownRows = !!view && !!viewType(view.type).ownRows;
+  const { source, snapshot } = useRowSource(host, databaseId, ownRows ? null : request);
 
   const [panel, setPanel] = useState<Panel | null>(null);
   const [newRowRequest, setNewRowRequest] = useState(0);
@@ -260,6 +262,7 @@ export function DatabaseView({
       view={view}
       source={source}
       snapshot={snapshot}
+      request={request}
       embedded={embedded}
       searching={search !== ''}
       newRowRequest={newRowRequest}

@@ -500,6 +500,10 @@ function specReads(spec: QuerySpec, props: Set<PropertyId>): boolean {
   if ((spec.search && props.has('title')) || spec.sorts.some((s) => props.has(s.propertyId)))
     return true;
   if (spec.group && props.has(spec.group.propertyId)) return true;
+  // A date window's properties: a move or a resize can take a row in or out of it.
+  const window = spec.window;
+  if (window && (props.has(window.propertyId) || props.has(window.endPropertyId ?? '')))
+    return true;
   const walk = (node: QuerySpec['filter']): boolean =>
     !!node && node.children.some((c) => (c.kind === 'group' ? walk(c) : props.has(c.propertyId)));
   return walk(spec.filter);

@@ -2,14 +2,23 @@
 // `registry.ts`, lists them).
 import type { ComponentType } from 'react';
 import type { DatabaseRecord, ViewConfig, ViewRecord, ViewType } from '../core';
-import type { RowSnapshot, RowSource } from '../host';
+import type { RowRequest, RowSnapshot, RowSource } from '../host';
 
 export interface ViewProps {
   database: DatabaseRecord;
   view: ViewRecord;
-  /** The view's rows (its filter, sorts, group and the toolbar's search). */
+  /**
+   * The view's rows (its filter, sorts, group and the toolbar's search). Null for a view type that
+   * reads its rows by queries of its own (`ownRows`).
+   */
   source: RowSource | null;
   snapshot: RowSnapshot;
+  /**
+   * The query `DatabaseView` builds for the view (its filter, sorts, group and the toolbar's
+   * search): a view type with `ownRows` builds its own queries from it (a date window, the rows
+   * with no date). Null while the database or the view is not there.
+   */
+  request?: RowRequest | null;
   /** Inside a page (its own scroll, a limited height) rather than the database's full page. */
   embedded: boolean;
   /** The toolbar's search is set: an empty result says "no rows match". */
@@ -33,6 +42,12 @@ export interface ViewTypeDefinition {
   defaultConfig(database: DatabaseRecord): ViewConfig;
   /** What the toolbar offers for it. */
   supports: { group: boolean; wrap: boolean; properties: boolean };
+  /**
+   * The view reads its rows by queries of its own, built from `ViewProps.request` (the calendar's
+   * and the timeline's date window and their rows with no date; Phase 9): `DatabaseView` runs
+   * none for it, and the view shows its own "rows on this device" and failure notices.
+   */
+  ownRows?: boolean;
   /**
    * The view type's own layout settings (the calendar's date property, the gallery's picture and
    * card size), shown by the toolbar's Layout button; absent when it has none (views stream).

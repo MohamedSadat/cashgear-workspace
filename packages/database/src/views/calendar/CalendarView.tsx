@@ -5,6 +5,11 @@
 // (Saturday in Arabic, Sunday in English unless `Intl` says otherwise); and the rows with no date
 // in a side list of the view's own. The grid mirrors in RTL.
 //
+// Its rows come by queries of its own (Phase 9; `ownRows` in the registry): the rows whose dates
+// meet the month shown and a week on each side (a date window, which the server answers for a
+// database it queries, so a month of a 50,000-row database fetches only that month), every page of
+// it up to `LOCAL_ROW_LIMIT`; and the rows with no date (its own query, paged as the list scrolls).
+//
 // A row moves to another day by dragging it, or with Alt and the arrow keys on it (it keeps its
 // time and its length: one `row.update`). A row with no date is dragged from the list onto a day
 // (the calendar finds and marks the day under the pointer: `dayAt`, `markDropDay`) or placed on
@@ -23,34 +28,16 @@ import {
   type CgMonthCalendarLabels,
 } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent,
-} from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { CellFlyout } from '../../cells/CellFlyout';
 import { InlineEditor } from '../../cells/InlineEditor';
 import { useCellEnv, type CellEnv } from '../../cells/env';
-import {
-  LOCAL_ROW_LIMIT,
-  TITLE_PROPERTY,
-  type DatabaseRecord,
-  type PropertyDef,
-  type ViewRecord,
-} from '../../core';
+import { TITLE_PROPERTY, type DatabaseRecord, type PropertyDef, type ViewRecord } from '../../core';
 import { useDatabaseContext } from '../../context';
 import { useDbT } from '../../i18n';
 import { formatDatePart } from '../../model/format';
 import { isDateType, liveProperties, propertyOf, uniqueName } from '../../model/properties';
 import { newPropertyDef } from '../../properties/defs';
-import { layoutOf, sameRange, visibleRange, type Range } from '../../table/windowing';
 import { draftRow } from '../board/shared';
 import type { ViewProps } from '../types';
 import {
@@ -64,10 +51,14 @@ import {
   type Month,
 } from './dates';
 import { calendarItems, type CalendarItem } from './layout';
+import { undatedRequest, windowRequest } from './requests';
+import { Undated } from './Undated';
+import { useWindowRows } from './useWindowRows';
 import '../board/card.css';
 import './calendar.css';
 
-const UNDATED_ITEM = 34;
+/** Days fetched on each side of the month shown. */
+export const CALENDAR_MARGIN = 7;
 /** `weekStartOf`'s 1 (Monday) to 7 (Sunday), as the calendar names them. */
 const WEEKDAYS: readonly CgDayOfWeek[] = [
   'monday',
@@ -81,14 +72,7 @@ const WEEKDAYS: readonly CgDayOfWeek[] = [
 const pad = (n: number) => String(n).padStart(2, '0');
 const monthText = (month: Month) => `${String(month.year).padStart(4, '0')}-${pad(month.month)}`;
 
-export function CalendarView({
-  database,
-  view,
-  source,
-  snapshot,
-  embedded,
-  newRowRequest,
-}: ViewProps) {
+export function CalendarView({ database, view, request, embedded, newRowRequest }: ViewProps) {
   const { host, actions, editable } = useDatabaseContext();
   const { t, locale } = useDbT();
   const env = useCellEnv(host, actions, editable);
@@ -106,20 +90,33 @@ export function CalendarView({
   const [undatedOpen, setUndatedOpen] = useState(false);
   const live = useRef<CgLiveAnnouncerHandle>(null);
   const calendar = useRef<CgMonthCalendarHandle>(null);
+  const first = dayNumber(firstOfMonth(month));
+  const last = first + daysInMonth(month.year, month.month) - 1;
 
-  // Every row is needed to place them: fetch the rest while some remain, up to the local limit.
-  const loaded = snapshot.rows.length;
-  useEffect(() => {
-    if (!source || snapshot.complete || snapshot.loading || snapshot.error) return;
-    if (loaded < LOCAL_ROW_LIMIT) source.loadMore();
-  }, [source, snapshot.complete, snapshot.loading, snapshot.error, loaded]);
-
-  const { items, undated } = useMemo(
+  // The month and a week on each side, every page of it; and the rows with no date, paged.
+  const datedRequest = useMemo(
     () =>
-      usable && def
-        ? calendarItems(snapshot.rows, def, ctx.offsetMinutes)
-        : { items: [], undated: [] },
-    [snapshot.rows, def, usable, ctx.offsetMinutes],
+      request && usable && def
+        ? windowRequest(request, {
+            propertyId: def.id,
+            from: dateOfDay(first - CALENDAR_MARGIN),
+            to: dateOfDay(last + CALENDAR_MARGIN),
+          })
+        : null,
+    [request, usable, def, first, last],
+  );
+  const noDateRequest = useMemo(
+    () => (request && usable && def ? undatedRequest(request, def.id) : null),
+    [request, usable, def],
+  );
+  const dated = useWindowRows(host, database.id, datedRequest);
+  const undatedRows = useWindowRows(host, database.id, noDateRequest, Infinity);
+  const undated = undatedRows.rows;
+  const snapshot = dated.snapshot;
+
+  const items = useMemo(
+    () => (usable && def ? calendarItems(dated.rows, def, ctx.offsetMinutes).items : []),
+    [dated.rows, def, usable, ctx.offsetMinutes],
   );
   // The rows as the calendar takes them: their days on the person's own calendar (a date-time
   // with its time there), so the grid places them as the cells do.
@@ -135,8 +132,6 @@ export function CalendarView({
       })),
     [items, writable],
   );
-  const first = dayNumber(firstOfMonth(month));
-  const last = first + daysInMonth(month.year, month.month) - 1;
 
   // ---- Changes --------------------------------------------------------------------------------
   /** Puts a row with no date on a day: one `row.update`, said aloud. */
@@ -235,16 +230,34 @@ export function CalendarView({
 
   if (!usable || !def) return <CalendarSetup database={database} view={view} env={env} />;
 
-  const capped = !snapshot.complete && loaded >= LOCAL_ROW_LIMIT;
-  const fetching = !snapshot.complete && !capped && !snapshot.error;
-
+  const loaded = snapshot.rows.length;
   return (
     <div className={`cgw-cal${embedded ? ' is-embedded' : ''}`}>
+      {snapshot.localOnly ? (
+        <p className="cgw-db-notice" role="status">
+          {t('localOnly')}
+        </p>
+      ) : null}
+      {snapshot.error || undatedRows.snapshot.error ? (
+        <p className="cgw-db-notice cgw-db-error" role="alert">
+          {t('loadFailed')}{' '}
+          <button
+            type="button"
+            className="cgw-text-button"
+            onClick={() => {
+              dated.source?.retry();
+              undatedRows.source?.retry();
+            }}
+          >
+            {t('retry')}
+          </button>
+        </p>
+      ) : null}
       <div className="cgw-cal-head">
         <span className="cgw-cal-status" role="status">
-          {fetching
+          {dated.fetching
             ? t('calendar.loadingAll', { count: loaded })
-            : capped
+            : dated.capped
               ? t('calendar.capped', { count: loaded })
               : ''}
         </span>
@@ -256,7 +269,7 @@ export function CalendarView({
           aria-controls={undatedOpen ? `${idPrefix}-undated` : undefined}
           onClick={() => setUndatedOpen((open) => !open)}
         >
-          {t('calendar.noDate', { count: undated.length })}
+          {t('calendar.noDate', { count: undatedRows.snapshot.total })}
         </button>
       </div>
       <div className="cgw-cal-main">
@@ -292,13 +305,19 @@ export function CalendarView({
         {undatedOpen ? (
           <Undated
             id={`${idPrefix}-undated`}
+            title={t('calendar.noDateTitle')}
+            empty={t('calendar.noDateEmpty')}
             rows={undated}
+            total={undatedRows.snapshot.total}
             env={env}
             writable={writable}
-            activeDay={activeDay}
+            placeLabel={t('calendar.placeOn', {
+              date: formatDatePart(dateOfDay(activeDay), locale),
+            })}
             onPointerDown={onUndatedPointerDown}
             onOpen={(row) => host.openRow(row.id)}
             onPlace={(row) => placeRow(row, activeDay)}
+            onNearEnd={() => undatedRows.source?.loadMore()}
           />
         ) : null}
       </div>
@@ -325,113 +344,6 @@ export function CalendarView({
         </CellFlyout>
       ) : null}
     </div>
-  );
-}
-
-/** The rows with no date: a scrolling list beside the grid, drawn a window at a time. */
-function Undated({
-  id,
-  rows,
-  env,
-  writable,
-  activeDay,
-  onPointerDown,
-  onOpen,
-  onPlace,
-}: {
-  id: string;
-  rows: RowRecord[];
-  env: CellEnv;
-  writable: boolean;
-  activeDay: number;
-  onPointerDown(event: PointerEvent<HTMLElement>): void;
-  onOpen(row: RowRecord): void;
-  onPlace(row: RowRecord): void;
-}) {
-  const { t } = env;
-  const box = useRef<HTMLUListElement>(null);
-  const layout = useMemo(() => layoutOf(rows.length, () => UNDATED_ITEM), [rows.length]);
-  const [range, setRange] = useState<Range>({ start: 0, end: 30 });
-  const measure = useCallback(() => {
-    const el = box.current;
-    if (!el) return;
-    const next = visibleRange(layout, el.scrollTop, el.clientHeight || 480, 8);
-    setRange((prev) => (sameRange(prev, next) ? prev : next));
-  }, [layout]);
-  useLayoutEffect(measure, [measure]);
-  const day = formatDatePart(dateOfDay(activeDay), env.locale);
-  const drawn = rows.slice(range.start, range.end);
-  const rowOf = (target: EventTarget) => {
-    const rowId = (target as HTMLElement).closest<HTMLElement>('[data-cal-item]')?.dataset.rowId;
-    return rows.find((r) => r.id === rowId);
-  };
-  const onClick = (event: MouseEvent<HTMLElement>) => {
-    const row = rowOf(event.target);
-    if (row) onOpen(row);
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    const row = rowOf(event.target);
-    if (!row) return;
-    event.preventDefault();
-    onOpen(row);
-  };
-  return (
-    <aside id={id} className="cgw-cal-undated" aria-label={t('calendar.noDateTitle')}>
-      <h4 className="cgw-cal-undated-title">{t('calendar.noDateTitle')}</h4>
-      {rows.length ? (
-        <ul
-          ref={box}
-          className="cgw-cal-undated-list"
-          onScroll={measure}
-          onPointerDown={onPointerDown}
-          onClick={onClick}
-          onKeyDown={onKeyDown}
-        >
-          <li
-            aria-hidden="true"
-            style={{ blockSize: layout.total }}
-            className="cgw-cal-undated-space"
-          />
-          {drawn.map((row, i) => (
-            <li
-              key={row.id}
-              className="cgw-cal-undated-item"
-              data-cal-drag={writable ? '' : undefined}
-              data-row-id={row.id}
-              style={{ insetBlockStart: layout.offsets[range.start + i] }}
-            >
-              <span
-                role="button"
-                tabIndex={0}
-                className="cgw-cal-undated-open"
-                data-cal-item=""
-                data-row-id={row.id}
-                dir="auto"
-              >
-                {row.title || t('untitled')}
-              </span>
-              {writable ? (
-                <button
-                  type="button"
-                  className="cgw-icon-button"
-                  aria-label={t('calendar.placeOn', { date: day })}
-                  title={t('calendar.placeOn', { date: day })}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onPlace(row);
-                  }}
-                >
-                  <span aria-hidden="true">↧</span>
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="cgw-cal-undated-empty">{t('calendar.noDateEmpty')}</p>
-      )}
-    </aside>
   );
 }
 
