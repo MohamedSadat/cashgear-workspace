@@ -4,6 +4,48 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.9.0] - 2026-11-18
+
+Publish a page and the pages under it as a public site, plan with a timeline over any database,
+and keep your workbooks in your export, with their history.
+
+- **Publish to the web.** In a page's Share dialog, "Publish to the web" lists what will be
+  published, and how many restricted or hidden pages are left out, before anything is public;
+  then the page and the pages under it read at `pages.cashgearerp.com/<address>` with no account
+  and no script, in English or Arabic, light or dark as the reader's system is. Databases show
+  their rows through the block's own view, and charts and boards are drawn from them; workbooks
+  and ERP data show a placeholder; comments, history and people's names are never on a site.
+  Unpublish takes every address down within a minute, and search engines stay away unless you turn
+  indexing on. Only someone with full access to a page can publish it, and owners and admins can
+  turn publishing off for a workspace in Settings, which takes all its sites down at once.
+- **Databases on share links.** A page shared by link now shows its databases' rows, read-only,
+  through each block's view (a hidden column never leaves the server), with charts and boards
+  drawn from them; a database's own page shows its views.
+- **Timeline view.** A sixth view for databases: each row a bar from a date, or from a start and an
+  end date, by day, week, month or quarter, in lanes by a select or status. Drag a bar to move it
+  or its ends to change its dates, or use the keyboard (Alt and an arrow move it a day; Alt,
+  Shift and an arrow its end; Ctrl, Shift and an arrow its start). Rows without a date wait
+  beside it and take the day you drop them on. In Arabic, time runs from right to left. A
+  timeline or a calendar over a
+  large database asks the server only for the days it shows, so the calendar's 5,000-row limit is
+  gone. The Projects template's Timeline is now a timeline.
+- **Workbooks.** A workbook's version history (from the workbook list or a sheet block's menu)
+  shows each kept version with when and by whom: open one read-only, or, with edit access,
+  restore it as the newest. The workspace's export now holds the workbooks you can read;
+  importing it while signed in puts the new workspace in your account with its workbooks, and an
+  import on this device alone says how many it skipped. On the desktop, "Open in Cash Gear Sheet"
+  opens Cash Gear Sheet's desktop app when it is installed, and its web app otherwise.
+- **Older versions.** 0.8.0 and earlier show a timeline view as a table, and changing it there
+  leaves it a timeline here.
+- **Fixed.** An import's report (what it made and what it skipped) now shows after the new
+  workspace opens.
+- **For whoever runs the server.** A third process serves the sites: `sites/` in the deploy
+  package, its own IIS site at `pages.cashgearerp.com` with read-only database access. Add its DNS
+  record and certificate and run `install.ps1` (`-SitesHostName pages.cashgearerp.com`, the
+  default). The API needs `Sites__PublicUrl` (an https address in Production, or it does not
+  start). The update adds the published sites table, each workspace's publishing switch and the
+  launch ticket's target (`docs/OPERATIONS.md`).
+
 ## [0.8.0] - 2026-11-16
 
 Bring work in from Notion, Markdown and Word, edit many cells at once, get an email when someone
