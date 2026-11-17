@@ -1,10 +1,14 @@
 // Ctrl+K: search page titles and text, open a result, or run a command. Titles come from the
 // mirror at once; text matches come from the local store's index (M1.8), normalised the same way.
 // Drawn by the library's command menu (Track U1) in place, with its own search box.
+// Phase 10: once the person pauses, with search by meaning on, the pages the words did not find
+// that the question means follow under "Related by meaning" (`meaning.ts`), each marked so for a
+// screen reader.
 import { CgCommandMenu, type CgCommandMenuItem } from '@cashgear/ui';
 import { normaliseText } from '@cgw/workspace';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
 import { Dialog } from '../Dialog';
 import type { ShellDatabaseHost } from '../database/host';
@@ -14,10 +18,13 @@ import { openAi } from '../ai/open';
 import { navigate, parseRoute } from '../route';
 import { isRowRecord, type RemoteSearchHit, type WorkspaceSession } from '../session';
 import { formatShortcut } from '../shortcuts';
+import { relatedByMeaning, useMeaning } from './meaning';
 
 interface Item {
   id: string;
   kind: 'page' | 'command';
+  /** A page only meaning found (Phase 10). */
+  meaning?: boolean;
   label: string;
   detail?: string;
   icon: string;
@@ -51,6 +58,9 @@ export function Palette({
   const ai = useAi(session, workspaceId);
   const route = parseRoute(location.hash);
   const aiPage = ai?.availability === 'ready' && route.kind === 'page' ? route.pageId : null;
+  // Phase 10: the pages the question means, once the person pauses.
+  const cloud = useCloud();
+  const meaningHits = useMeaning(cloud, session, ai, query).hits;
 
   useEffect(() => {
     let live = true;
@@ -86,7 +96,7 @@ export function Palette({
       onClose();
       run();
     };
-    const pages: Item[] = hits.map((hit) => {
+    const pageItem = (hit: RemoteSearchHit, byMeaning: boolean): Item => {
       const page = session.record(hit.pageId);
       const row = isRowRecord(page) ? page : null;
       const databaseId = row?.databaseId ?? hit.databaseId ?? null;
@@ -102,8 +112,9 @@ export function Palette({
           .then(() => navigate({ kind: 'page', pageId: hit.pageId }));
       };
       return {
-        id: `page:${hit.pageId}`,
+        id: `${byMeaning ? 'meaning' : 'page'}:${hit.pageId}`,
         kind: 'page',
+        ...(byMeaning ? { meaning: true } : {}),
         label: page?.title || hit.title || t('page.untitled'),
         detail:
           hit.snippet ||
@@ -113,7 +124,16 @@ export function Palette({
         icon: pageGlyph(page),
         run: close(open),
       };
-    });
+    };
+    const pages: Item[] = hits.map((hit) => pageItem(hit, false));
+    // Phase 10: what meaning adds, once the words' results for the same text are in.
+    if (query.trim() && ready)
+      for (const hit of relatedByMeaning(
+        hits,
+        meaningHits,
+        (id) => !!session.mirror.pages.get(id)?.trashedAt,
+      ))
+        pages.push(pageItem(hit, true));
     if (!query.trim())
       for (const page of workspaceId ? session.mirror.recentOf(workspaceId, 6) : [])
         pages.push({
@@ -149,16 +169,32 @@ export function Palette({
           ]
         : [];
     return [...pages, ...asks, ...commands];
-  }, [hits, query, session, services, t, onClose, workspaceId, databases, aiPage]);
+  }, [
+    hits,
+    query,
+    session,
+    services,
+    t,
+    onClose,
+    workspaceId,
+    databases,
+    aiPage,
+    ready,
+    meaningHits,
+  ]);
 
-  // Pages first (the results, or the recent pages before anything is typed), then the commands:
-  // each kind a named group, in this order.
+  // Pages first (the results, or the recent pages before anything is typed), then those related
+  // by meaning, then the commands: each kind a named group, in this order.
   const menuItems = useMemo<CgCommandMenuItem<Item>[]>(() => {
     const pagesGroup = t(query ? 'search.pages' : 'workspace.recent');
     return items.map((item) => ({
       key: item.id,
       label: item.label,
-      group: item.kind === 'page' ? pagesGroup : t('search.commands'),
+      group: item.meaning
+        ? t('ai.meaningGroup')
+        : item.kind === 'page'
+          ? pagesGroup
+          : t('search.commands'),
       // An element, so a page's icon is always drawn as written (a lowercase word would be read
       // as one of the library's icon names).
       icon: <span>{item.icon}</span>,
@@ -184,6 +220,18 @@ export function Palette({
         emptyText={t('search.noResults')}
         maxHeight="52vh"
         onSelect={(item) => item.data?.run()}
+        renderItem={({ item, defaultContent }) =>
+          item.data?.meaning ? (
+            <>
+              {defaultContent}
+              <span className="cgw-visually-hidden" data-testid="meaning-mark">
+                {t('ai.meaningMark')}
+              </span>
+            </>
+          ) : (
+            defaultContent
+          )
+        }
       />
     </Dialog>
   );

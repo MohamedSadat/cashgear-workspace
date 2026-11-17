@@ -10,6 +10,7 @@ import {
   type AiEvent,
   type AiSettings,
   type AiSettingsChange,
+  type EmbeddingsSettings,
 } from './types';
 
 /** What the AI client needs of the server; tests give their own. */
@@ -20,11 +21,18 @@ export interface AiApi {
   complete(request: AiCompleteRequest, signal?: AbortSignal): AsyncGenerator<AiEvent>;
 }
 
-/** An `AiError` for what went wrong with a request. */
-async function failure(error: unknown, response?: Response): Promise<AiError> {
+/**
+ * An `AiError` for what went wrong with a request. `body` is the problem openapi-fetch already
+ * read from an answer that was not ok (it consumes the body, so `problemOf` alone finds no code).
+ */
+async function failure(error: unknown, response?: Response, body?: unknown): Promise<AiError> {
   if (error instanceof AiError) return error;
   if (response) {
-    const problem = await problemOf(response);
+    const read = body as { code?: unknown } | null | undefined;
+    const problem =
+      typeof read?.code === 'string'
+        ? { code: read.code, status: response.status }
+        : await problemOf(response);
     const retry = Number(response.headers.get('Retry-After'));
     return new AiError(
       problem.code,
@@ -43,8 +51,37 @@ const count = (value: number | string | undefined | null) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** Phase 10: search by meaning's settings as the contract's; null from a server before it. */
+export function embeddingsOf(
+  dto: Schemas['EmbeddingsSettingsDto'] | null | undefined,
+): EmbeddingsSettings | null {
+  if (!dto) return null;
+  return {
+    enabled: dto.enabled,
+    provider: 'voyage',
+    model: dto.model,
+    models: dto.models,
+    ...(dto.hasKey === undefined || dto.hasKey === null ? {} : { hasKey: dto.hasKey }),
+    ...(dto.keySetAt === undefined ? {} : { keySetAt: dto.keySetAt }),
+    ...(dto.keySetBy === undefined ? {} : { keySetBy: dto.keySetBy }),
+    ...(dto.usage
+      ? {
+          usage: {
+            month: dto.usage.month,
+            requests: count(dto.usage.requests),
+            tokens: count(dto.usage.tokens),
+          },
+        }
+      : {}),
+    ...(dto.progress
+      ? { progress: { pages: count(dto.progress.pages), embedded: count(dto.progress.embedded) } }
+      : {}),
+  };
+}
+
 /** The server's settings as the contract's (counts as numbers, absent fields as absent). */
 export function settingsOf(dto: Schemas['AiSettingsDto']): AiSettings {
+  const embeddings = embeddingsOf(dto.embeddings);
   return {
     enabled: dto.enabled,
     provider: 'anthropic',
@@ -63,6 +100,7 @@ export function settingsOf(dto: Schemas['AiSettingsDto']): AiSettings {
           },
         }
       : {}),
+    ...(embeddings ? { embeddings } : {}),
   };
 }
 
@@ -76,7 +114,8 @@ export function cloudAiApi(api: ApiClient): AiApi {
         .catch(async (error: unknown) => {
           throw await failure(error);
         });
-      if (!result.response.ok || !result.data) throw await failure(null, result.response);
+      if (!result.response.ok || !result.data)
+        throw await failure(null, result.response, result.error);
       return settingsOf(result.data);
     },
     async saveSettings(workspaceId, change) {
@@ -88,11 +127,12 @@ export function cloudAiApi(api: ApiClient): AiApi {
         .catch(async (error: unknown) => {
           throw await failure(error);
         });
-      if (!result.response.ok || !result.data) throw await failure(null, result.response);
+      if (!result.response.ok || !result.data)
+        throw await failure(null, result.response, result.error);
       return settingsOf(result.data);
     },
     async *complete(request, signal) {
-      let result: { data?: unknown; response: Response };
+      let result: { data?: unknown; error?: unknown; response: Response };
       try {
         result = await api.POST('/api/v1/ai/complete', {
           body: request,
@@ -103,7 +143,7 @@ export function cloudAiApi(api: ApiClient): AiApi {
         if (signal?.aborted) throw new AiError('aborted');
         throw await failure(error);
       }
-      if (!result.response.ok) throw await failure(null, result.response);
+      if (!result.response.ok) throw await failure(null, result.response, result.error);
       const body = result.data as ReadableStream<Uint8Array> | null | undefined;
       if (!body) throw new AiError('response.invalid');
       yield* readAiEvents(body, signal);

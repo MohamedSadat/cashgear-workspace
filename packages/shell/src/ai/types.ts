@@ -24,6 +24,28 @@ export interface AiSettings {
   keySetAt?: string | null;
   keySetBy?: { id: string; name: string } | null;
   usage?: AiUsageMonth;
+  /** Phase 10: search by meaning; absent from a server before it (read as off). */
+  embeddings?: EmbeddingsSettings;
+}
+
+/**
+ * Phase 10: search by meaning's own switch, key and model (decisions, 2026-11-18): on while AI
+ * completions are off too, since it needs no Anthropic key. The vectors never reach a client.
+ */
+export interface EmbeddingsSettings {
+  /** On, with a key, and AI on for this server. */
+  enabled: boolean;
+  provider: 'voyage';
+  /** `voyage-4` unless changed. */
+  model: string;
+  models: string[];
+  /** Owners and admins only. */
+  hasKey?: boolean;
+  keySetAt?: string | null;
+  keySetBy?: { id: string; name: string } | null;
+  usage?: { month: string; requests: number; tokens: number };
+  /** While on: the pages to embed with this model, and those embedded. */
+  progress?: { pages: number; embedded: number };
 }
 
 /** What `PUT …/ai-settings` takes: `apiKey` a string sets the key, null removes it, absent keeps it. */
@@ -31,6 +53,8 @@ export interface AiSettingsChange {
   enabled?: boolean;
   model?: string;
   apiKey?: string | null;
+  /** Phase 10: search by meaning's, with the same rules for its key. */
+  embeddings?: { enabled?: boolean; model?: string; apiKey?: string | null };
 }
 
 export const AI_ACTIONS = [

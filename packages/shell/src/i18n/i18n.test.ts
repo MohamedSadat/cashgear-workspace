@@ -54,6 +54,13 @@ describe('catalogues', () => {
       'ai.modelOpus',
       'ai.modelSonnet',
       'ai.modelHaiku',
+      // Phase 10: the embeddings provider, Voyage AI, and its models' names; ERP is a product.
+      'ai.embeddingsNote',
+      'ai.embeddingsKey',
+      'ai.embeddingsKeyMissing',
+      'ai.modelVoyage4',
+      'ai.modelVoyage4Large',
+      'ai.modelVoyage4Lite',
     ]);
     for (const [key, text] of arabic) {
       if (allowed.has(key) || key.startsWith('keywords.')) continue;

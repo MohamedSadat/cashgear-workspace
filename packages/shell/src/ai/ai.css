@@ -221,6 +221,18 @@
   margin-block: 4px;
 }
 
+/* Phase 10: search by meaning's part of the section. */
+.cgw-ai-embeddings {
+  margin-block-start: 16px;
+  padding-block-start: 12px;
+  border-block-start: 1px solid var(--cg-border, #d9dde3);
+}
+
+.cgw-ai-embeddings h3 {
+  margin-block: 0 6px;
+  font-size: inherit;
+}
+
 .cgw-ai-notice {
   margin: 0;
   padding: 8px 10px;
