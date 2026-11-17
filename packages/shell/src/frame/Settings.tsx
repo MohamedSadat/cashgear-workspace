@@ -1,4 +1,5 @@
 import { CgRadioGroup } from '@cashgear/ui';
+import { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell, useThemePreference } from '../context';
 import { LANGUAGES, type Language } from '../i18n';
@@ -9,9 +10,13 @@ import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 import { OfflineSettings } from '../cloud/OfflineSettings';
 import { MailSettings } from '../cloud/MailSettings';
-import { PublishingSettings } from '../cloud/PublishingSettings';
 import { ErpSettingsSection } from '../erp/SettingsSection';
 import { AiSettingsSection } from '../ai/AiSettings';
+
+/** The publishing section, loaded with Settings' first look (not with the app). */
+const PublishingSettings = lazy(() =>
+  import('../cloud/PublishingSettings').then((m) => ({ default: m.PublishingSettings })),
+);
 
 export function Settings({
   onLanguage,
@@ -54,7 +59,11 @@ export function Settings({
       {cloud && <AccountSettings cloud={cloud} />}
       {cloud && <MailSettings cloud={cloud} />}
       {cloud && session.workspaceId && <MembersSettings cloud={cloud} session={session} />}
-      {cloud && session.workspaceId && <PublishingSettings cloud={cloud} session={session} />}
+      {cloud && session.workspaceId && (
+        <Suspense fallback={null}>
+          <PublishingSettings cloud={cloud} session={session} />
+        </Suspense>
+      )}
       {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
       {session.workspaceId && <DataPanel session={session} />}
       {cloud && session.workspaceId && <ErpSettingsSection session={session} />}

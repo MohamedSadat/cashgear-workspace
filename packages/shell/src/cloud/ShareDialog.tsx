@@ -4,12 +4,16 @@
 // full access, a second view of the dialog, "Publish to the web" (PublishSection.tsx).
 import { CgCheckBox } from '@cashgear/ui';
 import type { Id, PageRecord } from '@cgw/workspace';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../Dialog';
 import type { Cloud } from './cloud';
-import { PublishSection } from './PublishSection';
 import { publishingApi } from './publishing';
+
+/** The publish view, loaded when it is first shown (not with the app: Phase 1's initial budget). */
+const PublishSection = lazy(() =>
+  import('./PublishSection').then((m) => ({ default: m.PublishSection })),
+);
 
 type Level = 'full' | 'edit' | 'comment' | 'view' | 'none';
 const LEVELS: Level[] = ['full', 'edit', 'comment', 'view', 'none'];
@@ -134,7 +138,9 @@ export function ShareDialog({
       )}
       {shown === 'publish' && (
         <div className="cgw-publish-scroll">
-          <PublishSection api={publishing} page={page} />
+          <Suspense fallback={<p aria-busy="true">{t('app.loading')}</p>}>
+            <PublishSection api={publishing} page={page} />
+          </Suspense>
         </div>
       )}
       {shown === 'share' && (

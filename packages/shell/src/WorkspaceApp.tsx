@@ -14,7 +14,6 @@ import { CommandRegistry } from './commands';
 import { ShellContext, useShell, type CommandContext, type ShellServices } from './context';
 import { FirstRun } from './FirstRun';
 import { Frame } from './frame/Frame';
-import { Settings } from './frame/Settings';
 import { UpdateButton, UpdateCheck, useUpdates } from './frame/Updates';
 import { applyLanguage, createI18n, type Language } from './i18n';
 import { hasCloud, type WorkspacePlatform } from './platform';
@@ -71,6 +70,9 @@ const WorkbooksView = lazy(() =>
 );
 // The inbox (Phase 6), loaded when it opens.
 const InboxView = lazy(() => import('./collab/InboxView').then((m) => ({ default: m.InboxView })));
+// Settings, loaded when they open (Phase 9: their sections, publishing among them, had grown the
+// initial JavaScript past Phase 1's budget).
+const Settings = lazy(() => import('./frame/Settings').then((m) => ({ default: m.Settings })));
 // A database's own page: the database views' chunk, loaded when one opens.
 const DatabasePage = lazy(() =>
   import('./database/DatabasePage').then((m) => ({ default: m.DatabasePage })),
@@ -658,7 +660,9 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
           ) : route.kind === 'erpLink' ? (
             <ErpLinkRoute session={session} services={erp} />
           ) : route.kind === 'settings' ? (
-            <Settings onLanguage={setLanguage} session={session} updates={updates} />
+            <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
+              <Settings onLanguage={setLanguage} session={session} updates={updates} />
+            </Suspense>
           ) : route.kind === 'workbooks' ? (
             <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
               <WorkbooksView session={session} cloud={cloud} />
