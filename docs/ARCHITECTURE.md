@@ -196,7 +196,7 @@ Package level only. Files inside are decided by the phase that creates them.
 | `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB; from Phase 8 the device's own writes strict and its document updates journalled in the Origin Private File System (`journal/`, a worker; SYNC_DESIGN.md, Local durability) | 1 |
 | `packages/shell` (`@cgw/shell`) | App frame and everything around the editor | 1 |
 | `packages/api` (`@cgw/api`) | Client generated from the server's OpenAPI document | 2 |
-| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost`; from Phase 8 cell selection, copy and paste in the table, board columns and gallery cards in an order of their own | 4 |
+| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost`; from Phase 8 cell selection, copy and paste in the table, board columns and gallery cards in an order of their own; from Phase 9 the timeline over the library's `CgTimeline`, and a calendar and a timeline reading their own rows by a date window (`ownRows`) | 4 |
 | `packages/erp` (`@cgw/erp`) | ERP connector client and the ERP view | 5 (built) |
 | `crates/cgw-store` | `LocalStore` on SQLite, with FTS5 | 1 |
 | `crates/cgw-native` | Desktop helpers without Tauri: deep links read into routes, safe file names; the keychain in Phase 2 | 1 |
@@ -321,12 +321,13 @@ a Stop that page is trashed and deleted for good in one batch, and its search en
 
 ## The backend
 
-One ASP.NET Core (.NET 10) solution in `server/`. Two processes.
+One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites process from Phase 9).
 
 | Process | Does | Never |
 | --- | --- | --- |
 | API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
 | Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap) | Serves requests |
+| Sites (Phase 9) | Published pages as HTML on an origin of its own (`server/src/Cgw.Sites`, IIS site `CashGearWorkspaceSites`, `pages.cashgearerp.com`; `http://localhost:5290` in development), rendered on the server from the worker's derived JSON; `robots.txt`; a page's files by a redirect to a short signed URL checked on every request | Signs anyone in, sets or reads a cookie, sends script, loads a Yjs library, writes anything |
 
 Both processes share one Data Protection key ring (`DataProtectionKeys`): from Phase 8 the worker
 writes the unsubscribe tokens the API reads.
@@ -337,6 +338,16 @@ Assets, Search, Sharing, Sync, Audit, Databases (Phase 4), Workbooks and ErpLink
 (coercion, conversion, queries, formulas, rollups, CSV) held to the TypeScript by shared vectors,
 the operations on databases, views and rows, and the query engine: a database's rows cached in
 memory per database and rows version, evaluated by the ported `queryRows`, keyset paged.
+
+Phase 9's Sites (`Cgw.Core/Sites`): `PublishingService` (the site records, the workspace's switch,
+the audit), `SiteReader` and `SiteCache` (what the Sites process reads and holds) and
+`SiteRenderer` with its parts (a page as HTML). What a site shows is a share link's scope decided
+at read time (`SharedReader`), its databases through their views (`Sharing/SharedDatabases.cs`,
+which a share link reads too: the view's shown and layout properties' values only, never a
+person's), and its files by a checked redirect. The Sites process keeps a slug's site and scope at
+most 30 s and drawn pages by a key of everything they are drawn from; every answer is `no-cache`
+with a strong ETag and a strict CSP (`default-src 'none'`, one hashed stylesheet, images from the
+site and the blob account). It reads SQL and Blob with the API's configuration names.
 
 Conventions:
 
@@ -473,7 +484,8 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Tenant isolation | Workspace id from the route, membership check, query filter, test that every entity is filtered, blob paths under the workspace id |
 | Workspace roles | Owner, admin, member, guest |
 | Page sharing | Per page with inheritance; access lists by user or whole workspace; share links off by default, created by a person, hashed, expiring, revocable, view-only at first |
-| No public URLs | Nothing is reachable without a session or a share link someone made. Blob containers are private |
+| No public URLs | Nothing is reachable without a session, a share link someone made, or a site someone published (Phase 9). Blob containers are private |
+| Published sites (Phase 9) | Published by someone with `full` on the page, while the workspace's switch is on; a share link's scope; unpublished at once, holding within 30 s; audited. They cannot read a session: another origin (`pages.` against `workspace.` and `workspace-api.`; `localhost` against `127.0.0.1` in development), no cookie on the Sites process at all, no script allowed by its CSP, `frame-ancestors 'none'`, COOP and CORP `same-origin`. Proven by `SiteTests` (the same answer with the API's session cookie or without) and `tests/e2e/site.spec.ts` |
 | Attachments | Signed URL for one blob, about 5 minutes, issued after a permission check. Downloads are served with `Content-Disposition: attachment` and a safe content type; images are served only as images |
 | Upload safety | Allow-list of types; size limit; type checked against the bytes; SVG is not rendered inline; a hook for malware scanning before `ready` |
 | XSS | Content is drawn only through the ProseMirror schema, which whitelists nodes and attributes. No `innerHTML` from document data. Pasted HTML goes through the schema parser, so scripts, handlers and unknown attributes do not survive |

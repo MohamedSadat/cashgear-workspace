@@ -11,6 +11,7 @@ the hosting choices are in `DECISIONS.md` (2026-11-12: Phase 2: Q5, Q6, Q8, Q11,
 | Web app | Azure Static Web Apps at `https://workspace.cashgearerp.com` | `pnpm build` (`apps/web/dist`), built with `VITE_CGW_API=https://workspace-api.cashgearerp.com`; the build writes `staticwebapp.config.json`, whose headers (the Content Security Policy among them) name that API, so build with the variable set |
 | API | IIS beside UnifiedAPI, its own site and app pool, at `https://workspace-api.cashgearerp.com` | The deploy package's `api` folder |
 | Worker | A Windows service on the same host, `CashGearWorkspaceWorker` | The deploy package's `worker` folder (with `cgw_ydoc.dll`) |
+| Sites (Phase 9) | IIS on the same host, a site and app pool of their own, `CashGearWorkspaceSites`, at `https://pages.cashgearerp.com`: published pages as HTML, an origin of its own so a published page can read neither the app's nor the API's session | The deploy package's `sites` folder: no sign-in code, no cookies, no Yjs library (checked when packing); it reads the database and Blob Storage only |
 | Database | SQL Server, a database of its own (never the ERP's), full-text search installed if available (Q7) | The migration bundle |
 | Blob Storage | One Azure Storage account in the ERP storage account's region, one private container `workspace` | Created once (below) |
 | Desktop app | The signed installer from a GitHub release | The release workflow, built with `VITE_CGW_API` and `CGW_API_BASES` |
@@ -26,6 +27,7 @@ API's host and no token is in JavaScript (Q5).
 | --- | --- |
 | `api/` | The API, framework-dependent .NET 10 for `win-x64`, with `web.config` for the ASP.NET Core Module. It holds no Yjs library (checked when packing) |
 | `worker/` | The worker and `cgw_ydoc.dll` |
+| `sites/` | Phase 9: the Sites process, framework-dependent .NET 10 for `win-x64`, with its own `web.config` (bodies over 64 KB refused; IIS's `Server` and `X-Powered-By` headers removed). It holds no Yjs library and no OpenID Connect server (checked when packing) |
 | `migrate/efbundle.exe` | The EF Core migration bundle: `efbundle.exe --connection "<connection>"` |
 | `migrate/migrations.sql` | The same migrations as an idempotent script, for a DBA who runs SQL by hand |
 | `deploy/iis/install.ps1` | Installs or updates both on an IIS host (below) |
@@ -72,7 +74,8 @@ API's host and no token is in JavaScript (Q5).
 5. **Mail (Q8).** An SMTP account at the provider you choose: host, port (587 with STARTTLS, or
    465), user and password.
 6. **DNS.** `workspace-api.cashgearerp.com` to the IIS host; `workspace.cashgearerp.com` to Static
-   Web Apps (its custom-domain wizard).
+   Web Apps (its custom-domain wizard); from 0.9.0 `pages.cashgearerp.com` to the IIS host too,
+   with a certificate for it (the host's `*.cashgearerp.com` covers it).
 7. **Install.** Unpack the package, then in an elevated PowerShell, with the SMTP password in the
    session's environment only:
 
@@ -86,6 +89,8 @@ API's host and no token is in JavaScript (Q5).
    # Phase 5's three, shown with their defaults (the live Sheet and ERP):
    #   -SheetOrigin https://sheet.cashgearerp.com -SheetOrigins https://sheet.cashgearerp.com
    #   -ErpApiBase https://api.cashgearerp.com
+   # Phase 9's sites, shown with their defaults (the certificate is the API's unless given):
+   #   -SitesHostName pages.cashgearerp.com -SitesSiteName CashGearWorkspaceSites -SitesCertificateThumbprint <https>
    Remove-Item Env:\CGW_SMTP_PASSWORD
    ```
 
@@ -97,7 +102,11 @@ API's host and no token is in JavaScript (Q5).
    It runs the migrations first (a failure stops it with the old version still serving), copies
    the files, configures the app pool (no managed code, the gMSA, always running) with the
    environment below, binds HTTPS, installs the worker service with the same environment in its
-   own registry key, starts both, and prints `/health/ready`.
+   own registry key, starts both, and prints `/health/ready`. From 0.9.0 it also makes the sites'
+   app pool and site (`CashGearWorkspaceSites`, bound by SNI to `-SitesHostName`), with only the
+   database's and storage's settings (no SMTP password, no OpenID Connect certificates, no Data
+   Protection), gives a built-in identity `db_datareader` alone and read on the Azure certificate
+   file, and prints the sites' `/health/live`.
 8. **Web app.** Deploy `apps/web/dist` to Static Web Apps (its GitHub Action with the deployment
    token as a repository secret, as Sheet does), built with
    `VITE_CGW_API=https://workspace-api.cashgearerp.com`, and from 0.5.0
@@ -121,6 +130,7 @@ Installed 2026-11-14. Names only; no setting here is a secret.
 | Database | `CashGearWorkspace` on the host's `MSSQLSERVER01` instance (SQL Server 2019 Standard, no Full-Text Search: search uses `LIKE`) |
 | Blob Storage | Storage account `cashgearworkspace` (Spain Central, Standard LRS, no public access, soft delete and container soft delete 30 days, versioning), container `workspace`, CORS as in step 3 |
 | Blob identity | App registration `cashgear-workspace-api` with Storage Blob Data Contributor and Storage Blob Delegator on that account only; its certificate made on the host, PFX in `C:\CashGearWorkspace\secrets` (expires 2028-11-14; the app registration accepts it until 2027-11-14, so upload it again or make a new one before then) |
+| Sites | Not installed yet (0.9.0): `pages.cashgearerp.com`'s DNS record and running `install.ps1` with the new package are the owner's steps |
 | Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account), with its own Google app password named "Cash Gear Workspace", entered on the host only. Gmail answers a wrong one with `535 5.7.8` (in the event log as "A confirm mail was not sent: AuthenticationException…"); test a new password from the host (an SMTP `AUTH` alone sends nothing) before storing it in the app pool's and the worker's `Smtp__Password` |
 
 ## Configuration
@@ -141,6 +151,8 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Realtime__RelayMs`, `__RecheckSeconds`, `__SweepSeconds`, `__ChangesMs` | Phase 6, the hub: how often the relay reads joined pages' and followed workspaces' heads (20 ms); the longest a connection's access is trusted unchecked (60 s) and how often the sweep looks (10 s); `ChangesAvailable` at most this often a workspace (250 ms). Leave unset in production |
 | `Realtime__Metrics` | `true` maps `GET`/`DELETE /api/v1/realtime/metrics` (relay times, connections) for the bench; ignored in Production |
 | `Sheet__Origin`, `Sheet__Origins__N` | Phase 5: Cash Gear Sheet's origin for launch links (`{origin}/cloud#launch=…`), and the origins allowed to redeem them, to call the sheet-session routes (CORS without credentials) and, outside production, to read Azurite. Required, https, in production |
+| `Sheet__DesktopOrigins__N` | Phase 9 (Track S6): the origins of Sheet's desktop app, which alone redeem a desktop launch ticket (`cashgear-sheet://workspace/launch#ticket=…`) and are allowed by the sheet-session routes' CORS. Default `http://tauri.localhost` and `tauri://localhost`, in production too; leave unset |
+| `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*` and `Logging__*` |
 | `Workbooks__MaxSaveBytes` | The largest version Sheet may save (100 MB; 413 `limit.size` above it). The API's `web.config` lets IIS take bodies up to 110 MB, so the API's own limit answers first |
 | `Erp__ApiBase` | The one ERP API an ERP link may name (`https://api.cashgearerp.com`). Required, https, in production. The server never calls it |
 | `Ai__Enabled` | Phase 7: `false` turns AI off for every workspace on this server, whatever their settings say (on by default; each workspace is off until an owner or admin turns it on with the workspace's own Anthropic key) |
@@ -151,7 +163,7 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Mail__NotificationDelaySeconds` | Phase 8: a mention, a mention in a comment or a reply is mailed once it has been unread this long, and a person gets at most one such mail in this long (900, 15 minutes; a daily summary once a day). The e2e stack sets 5. Leave unset in production |
 | `Mail__DailyCap` | Phase 8: notification mails sent in any 24 hours, at most (1,500); what is over waits in the queue for room. Keep it under the SMTP account's own limit (Google Workspace: 2,000 a day, and the account mails count there too); a personal Gmail account allows 500 |
 | `Logging__Format` | `json` for structured logs with the correlation id in every line |
-| `Logging__EventLog__Enabled` | `true` (`install.ps1` sets it and registers the sources): under IIS and as a service the console goes nowhere, so warnings and errors also go to the Application event log, as "Cash Gear Workspace API" and "Cash Gear Workspace worker", and each account mail sent or not sent, by kind only (never its address or link) |
+| `Logging__EventLog__Enabled` | `true` (`install.ps1` sets it and registers the sources): under IIS and as a service the console goes nowhere, so warnings and errors also go to the Application event log, as "Cash Gear Workspace API", "Cash Gear Workspace worker" and (Phase 9) "Cash Gear Workspace sites", and each account mail sent or not sent, by kind only (never its address or link) |
 | `Logging__LogLevel__Microsoft.AspNetCore` | `Warning` (`install.ps1` sets it), so ASP.NET Core's request lines, which hold the query string, are not logged |
 | `Ydoc__Library` | The worker's `cgw_ydoc.dll`, if not beside the worker |
 | `AZURE_*` | The identity for Blob Storage when the host has no managed identity (DefaultAzureCredential) |
@@ -214,6 +226,28 @@ for the machine, which both identities on the host can read. The unsubscribe lin
 `https://workspace-api.cashgearerp.com/mail/unsubscribe?token=…`, carries its token in the query
 string, which the site's IIS log already leaves out (above).
 
+Version 0.9.0's migration (`Phase9`) adds `PublishedSites` (with its filtered unique indexes on
+the live slug and the live root) and two columns: `Workspaces.PublishingEnabled` (on for every
+workspace already there) and `WorkbookTickets.Target` (`web` for every ticket already there), in
+a transaction like the others. Before installing it, point `pages.cashgearerp.com` at the host
+(First installation, step 6); `install.ps1` then makes the third IIS site and app pool,
+`CashGearWorkspaceSites`, and sets the API's `Sites__PublicUrl`, without which the API refuses to
+start in production. The Sites process answers `GET /{slug}`, `/{slug}/{pageId}`,
+`/{slug}/files/{assetId}` (a 302 to a signed blob URL of a few minutes, checked on every request,
+`Cache-Control: no-store`), `/robots.txt` and `/health/live`, and the bilingual 404 page for
+anything else; every answer carries `Content-Security-Policy: default-src 'none'; style-src
+'sha256-…'; img-src 'self' https://<account>.blob.core.windows.net; base-uri 'none'; form-action
+'none'; frame-ancestors 'none'`, `nosniff`, `no-referrer`, COOP and CORP `same-origin`, a
+`Permissions-Policy` that allows no powerful feature, HSTS on https, `X-Robots-Tag: noindex` unless the site's indexing is on, and
+never `Set-Cookie`. It needs nothing new of Blob Storage (images load through the redirect, no
+CORS). It keeps a slug's site at most 30 s, so an unpublish, the workspace's switch turned off or
+the root moved out of reach holds within 30 s; pages it drew are kept in memory (at most 512, 64
+MB) by a key of what they are drawn from, and every answer is `Cache-Control: no-cache` with a
+strong `ETag`. Like the API, it is one process per app pool; a recycle only empties its memory.
+The worker's purge of a page deleted for good unpublishes its site (`page.deleted`), freeing the
+slug. The export the worker writes is format version 3: each workbook the requester may read
+that has a version, as `workbooks/<name>.xlsx`.
+
 The ERP's side (Track E, in its repositories, deployed by you): run
 `CashGear.IdentitySystem/DbScripts/Create_WorkspaceConnect.sql` on CGService before deploying a
 UnifiedAPI built with Track E (Sheet's sessions read its columns too), deploy UnifiedAPI, then add
@@ -251,6 +285,7 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 | Retention | `JobStates` for `feedRetention` and `trashRetention` (every 10 minutes); `AuditLog` `page.purgedByRetention` | The change feed keeps 90 days and the trash 60 (DECISIONS.md, Phase 3); a device away longer than 90 days takes the whole tree when it returns (`410 feed.expired`) |
 | Database results | `JobStates` for `recompute`; `Databases.ComputePending` rows waiting | Formula and rollup results of big databases lag while it is behind; filters on them use the last results |
 | Notification mail | `JobStates` for `notificationMail` and `mailSend`; `MailOutbox` rows with `Outcome` null (waiting) and their `LastError`; the worker's event log: "A notification mail was not sent (attempt N of 6)" with the failure's type and SMTP status only, "The daily mail cap (N) is reached" | Failures: the SMTP account (as for account mail). The cap reached day after day: raise `Mail__DailyCap` if the account allows it, or ask people to choose the daily summary |
+| Published sites | `https://pages.cashgearerp.com/health/live`; Event Viewer, source "Cash Gear Workspace sites"; `AuditLog` `site.publish`, `site.unpublish`, `workspace.publishing`; live sites: `PublishedSites` with `UnpublishedAt` null | A site that must go now: unpublish it in the app (or turn the workspace's publishing off); it is gone within 30 s. A page that should not be public: its share-link rules decide (restrict it, and it leaves every site within 30 s) |
 | Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its

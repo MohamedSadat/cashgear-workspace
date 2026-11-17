@@ -490,7 +490,10 @@ are in `DATA_MODEL.md` (Databases).
   `order`), `view.upsert`, `view.delete`, `row.update` (values merged per property, null clears),
   and the page operations on rows (title, icon, cover, reorder among the database's rows, trash,
   restore, delete). No `baseVersion` on the database ones: the last to reach the server wins, per
-  property. The answers carry `entityType` `database`, `view` or `row` (a database's create carries
+  property. From Phase 9 a build sends `viewTypes` (the number of view types it knows, 6) in every
+  `view.upsert`. An upsert without it (every build before 0.9.0) that says `table` for a type it
+  cannot know (`timeline`) keeps the stored type, and keeps every stored setting such a build does
+  not know and did not send; one with it is taken as sent. The answers carry `entityType` `database`, `view` or `row` (a database's create carries
   its page and its record).
 - **Tree and feed**: the tree holds every database and view record the account may see and never a
   row. The feed carries `database`, `view` and `row` changes; every change to a row (its values, its

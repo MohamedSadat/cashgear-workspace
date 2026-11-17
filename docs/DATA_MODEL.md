@@ -225,7 +225,7 @@ workspace (a test fails if a table with `WorkspaceId` lacks it).
 | `Devices` | `Id`, `UserId`, `Name`, `Platform`, `LastSeenAt`, `RevokedAt`, `AuthorizationId` | A desktop install or a browser profile. A cookie session carries its device id and is refused once it is revoked; a desktop's OpenIddict authorisation is revoked with it |
 | `DataProtectionKeys` | `FriendlyName`, `Xml` | The key ring for cookies and Identity tokens, shared by every API instance, DPAPI-protected on Windows hosts |
 | `YjsClients` | `ClientId`, `WorkspaceId`, `UserId`, `DeviceId`, `Origin` | Unique on (`WorkspaceId`, `ClientId`). `Origin` is `issued` (a device's pool) or `registered` (used before the device synced) |
-| `Workspaces` | `Id`, `Name`, `Icon`, `OwnerUserId`, `ChangeSeq`, `Version`, `StorageQuotaBytes`, `StorageUsedBytes`, `DeletedAt` | `ChangeSeq` is the head of the change feed, given out under the row's lock. The quota is recorded and shown, not enforced (Q10) |
+| `Workspaces` | `Id`, `Name`, `Icon`, `OwnerUserId`, `ChangeSeq`, `Version`, `StorageQuotaBytes`, `StorageUsedBytes`, `PublishingEnabled`, `DeletedAt` | `ChangeSeq` is the head of the change feed, given out under the row's lock. The quota is recorded and shown, not enforced (Q10). `PublishingEnabled` (Phase 9, on by default, every workspace before it too): off, every live site of the workspace is unpublished at once and none may be published; on again, none comes back |
 | `WorkspaceMembers` | (`WorkspaceId`, `UserId`), `Role` | `owner`, `admin`, `member`, `guest` |
 | `WorkspaceInvites` | `Id`, `WorkspaceId`, `Email`, `Role`, `TokenHash`, `ExpiresAt`, `AcceptedAt` | The token is stored hashed |
 
@@ -314,7 +314,12 @@ A share link reads its page and the pages under it, except restricted pages, pag
 workspace (a `workspace` row of `none`) and everything under either, and trashed pages; it reads
 each as the worker's derived JSON, never the Yjs updates (which still carry text deleted moments
 before). The token is 32 random bytes, stored as its SHA-256, sent in the `X-Share-Token` header,
-and an unknown, revoked or expired link gets the same 404 as a missing page.
+and an unknown, revoked or expired link gets the same 404 as a missing page. From Phase 9 a link
+also reads the databases among those pages, through one of their views (`SharedDatabases`): the
+view's shown properties and the ones it lays rows out by (its group, a calendar's date, a
+timeline's start, end and lane, a gallery's cover), never a person, a created-by or edited-by, a
+formula reading one, or a rollup reaching outside the scope; a related row only in a database the
+link holds; paged by an opaque offset. A published site's scope is the same.
 
 A guest sees only themselves and the people named on pages they can see (no addresses but their
 own), only sections that hold a page they can see, and no other member's changes in the feed. A
@@ -337,7 +342,7 @@ in C# (`server/src/Cgw.Core/Databases/`), held together by the shared vectors
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `Databases` | `PageId` (its page, kind `database`), `WorkspaceId`, `Properties` (JSON array, in display order, deleted ones included), `Version`, `RowCount`, `RowsVersion`, `ComputePending`, `CreatedAt`, `UpdatedAt` | Exactly one property of type `title`, id `title`: the row's page title. `Version` rises on every change to the properties; `RowsVersion` on any write to its rows (the query cache's check). `RowCount` counts rows not trashed and not templates |
-| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`; `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap; a board's column order (`group.order`: group keys, those named first, the rest in the group's own order; Phase 8; queries ignore it) |
+| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`, and from Phase 9 `timeline`; `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap; a board's column order (`group.order`: group keys, those named first, the rest in the group's own order; Phase 8; queries ignore it); a timeline's `timeline: {start, end?, lane?, scale?, undated?}` (Phase 9). A `view.upsert` without `viewTypes` (a build before 0.9.0) that says `table` for a type it cannot know keeps the stored type, and keeps every stored config key such a build does not know and did not send; one with `viewTypes` is taken as sent |
 | `DatabaseRows` | `PageId` (its page, kind `row`), `WorkspaceId`, `DatabaseId`, `Values` (JSON by property id), `PropertyVersions` (JSON by property id), `Computed` (JSON), `ComputedVersion`, `Seq` | The row's title, icon, cover, order key, trash and document are its page's. `Seq` is the `RowsVersion` it was last written at. Indexes (`DatabaseId`, `PageId`), (`DatabaseId`, `Seq`) |
 
 A database page sits anywhere a page may; only rows sit under it, and nothing sits under a row.
@@ -405,6 +410,15 @@ Rules (both sides, in the vectors):
   or unknown property is ignored. The server evaluates queries in memory over the database's rows,
   cached per database and `RowsVersion` (decided by measurement in M4.3: 270 ms p95 at 50,000 rows
   with a filter and a sort, against a 300 ms budget).
+- **A date window** (Phase 9): a query may carry `window: {propertyId, endPropertyId?, from, to}`
+  (inclusive `YYYY-MM-DD` dates). A row is in it when its span (the property's start to the end
+  property's value, else the property's own end, else its start; an end before the start is the
+  start) meets the days, by calendar date in the asker's offset; a row with no start never is. It
+  applies with the search and the filter, before sorts and groups; a window on a property that is
+  not a date matches nothing. A calendar asks for its month and a week each side, a timeline for its
+  days and as many again each side; their rows with no date come by a query of their own (a filter
+  `isEmpty`, or `undated` on a share link). The shared vectors hold it (`db-query-vectors.json`,
+  "the date window").
 
 A value is first read as what it holds by its old type, then written as the new type:
 
@@ -460,7 +474,7 @@ As built (`server/src/Cgw.Core/Workbooks`, migration `Phase5Workbooks`); every t
 | `WorkbookVersions` | `Id`, `WorkbookId`, `BlobKey`, `SizeBytes`, `Sha256`, `SavedBy`, `SavedAt` | The xlsx bytes, at most 100 MB; `Sha256` is lower-case hex over the stored bytes (Sheet's lost-answer rule). The newest 10 are kept |
 | `WorkbookPermissions` | (`WorkbookId`, `PrincipalType`, `PrincipalId`), `Level` | Its own access list, by person or for the whole workspace, at the pages' five levels (decided by `WorkbookAccess`) |
 | `WorkbookPreviews` | (`WorkbookId`, `ViewHash`), `VersionId`, `BlobKey`, `Width`, `Height`, `SizeBytes`, `MadeBy`, `MadeAt` | A PNG of one view (a range or a chart, in the file's own colours), sent by someone who may edit the workbook: at most 2 MB and 4,096 px a side, the newest one per view, at most 100 a workbook. Its own blob, not an asset, so the unreferenced-asset clean-up never takes it |
-| `WorkbookTickets` | `Id`, `WorkbookId`, `UserId`, `Access`, `TokenHash`, `ExpiresAt`, `UsedAt` | A launch ticket: 256 random bits kept only as SHA-256, 120 seconds, one use |
+| `WorkbookTickets` | `Id`, `WorkbookId`, `UserId`, `Access`, `Target`, `TokenHash`, `ExpiresAt`, `UsedAt` | A launch ticket: 256 random bits kept only as SHA-256, 120 seconds, one use. `Target` (Phase 9) is `web` or `desktop`: a desktop ticket is redeemed only from `Sheet__DesktopOrigins`, a web one only from `Sheet__Origins`; one offered at the other kind is used up and refused |
 | `FileSessions` | `Id`, `WorkbookId`, `UserId`, `Access`, `TokenHash`, `Language`, `IdleExpiresAt`, `MaxExpiresAt`, `EndedAt`, `Renews` | Sheet's file session: the token kept only as SHA-256, 30 minutes idle, 10 hours at most; a copy moves it to the copy |
 
 Blob layout: `workspaces/{workspaceId}/workbooks/{workbookId}/versions/{versionId}.xlsx` and
@@ -470,6 +484,12 @@ to a workbook takes its database's access: neither is seen by more people than w
 Deleting a page that embeds a workbook does not delete the workbook; a workbook trashed for 60
 days is deleted with its versions and pictures by the worker (`WorkbookRetentionJob`). Removing a
 member drops their rows in workbooks' lists and ends their file sessions.
+
+From Phase 9 a workbook's history is its kept versions: listed newest first with time and saver,
+each readable by its own signed URL, and restored by someone with `edit` as a new newest version
+(the old bytes copied, saved by the restorer, audited `workbook.restore` with the version it came
+from); the app also uploads a version (`POST /workbooks/{id}/versions`, an import's version 1) by
+Sheet's save's rules. No table changes.
 
 On a device, the last picture drawn or fetched for a block's view is kept as an asset
 (`uploaded: true`, so it is never sent; its id derived from the workbook id and `viewHash`) with a
@@ -502,13 +522,33 @@ under the person's permission filter and sends the derived text of what it finds
 is stored. A completion's content is in no table and no log; its `ai.complete` audit row holds the
 request id, action, model, tokens and outcome only.
 
+### Published sites (Phase 9)
+
+As built (`server/src/Cgw.Core/Sites`, the Sites process `server/src/Cgw.Sites`, migration
+`Phase9`); tenant-owned (the Sites process finds a site by its slug across workspaces, then reads in
+the site's own).
+
+| Table | Key fields | Notes |
+| --- | --- | --- |
+| `PublishedSites` | `Id`, `WorkspaceId`, `RootPageId`, `Slug`, `Indexing`, `Language`, `Version`, `PublishedBy`, `PublishedAt`, `UpdatedAt`, `UnpublishedAt`, `UnpublishedBy`, `UnpublishReason` | A page and its subtree published by someone with `full` on it, in a shared section, while the workspace's `PublishingEnabled` is on; never a row. At most one live site a page and a live slug unique across every workspace (filtered unique indexes `IX_PublishedSites_LiveRoot`, `IX_PublishedSites_LiveSlug`); a slug is 3 to 63 of `a-z`, `0-9` and `-`, a letter or digit at each end, no `--`, none of the reserved words. `Language` (`en`, `ar`) is the site's own words. `Version` rises on every change (an unpublish too). An unpublished row stays for the audit and frees its slug; `UnpublishReason` is `person`, `publishing.off`, or `page.deleted` (the worker's purge of the root) |
+
+What a site shows is decided when it is read, from the current state, by a share link's rules
+(`SharedReader.ScopeAsync`): the root and its subtree but restricted pages, pages hidden from the
+workspace, what is under either, and trashed pages; the root trashed, deleted or moved into a
+private section, or the workspace's switch off or the workspace deleted, and every address of the
+site answers 404. Its pages are the worker's derived JSON drawn as HTML; its databases are read
+through the view a block names (`SharedDatabases`, as a share link's are: only the view's shown
+and layout properties' values, never a person); its files are checked on every request. Nothing of
+comments, presence, history or the Yjs updates is reachable from it. The Sites process keeps a
+slug's site and scope at most 30 s, and drawn pages by a key of everything they are drawn from.
+
 ### Sync and audit
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `WorkspaceChanges` | (`WorkspaceId`, `Seq`), `EntityType`, `EntityId`, `Kind`, `Version`, `ActorUserId`, `CreatedAt` | The change feed. `Kind` is `upsert`, `delete`, `grant` or `revoke` |
 | `AppliedOps` | `OpId`, `WorkspaceId`, `UserId`, `Result` (JSON), `CreatedAt` | Idempotency. Written in the same transaction as the operation |
-| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes, workbook changes (made, renamed, trashed, restored, access changed, saved and copied by Sheet); Phase 7: `ai.settings` (on, off, model, key set or removed, never the key), `ai.complete` (each completion, without content), `erp.commit` (each real ERP commit attempt from a page, without values). Account events have no workspace |
+| `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes, workbook changes (made, renamed, trashed, restored, access changed, saved and copied by Sheet); Phase 7: `ai.settings` (on, off, model, key set or removed, never the key), `ai.complete` (each completion, without content), `erp.commit` (each real ERP commit attempt from a page, without values); Phase 9: `site.publish`, `site.update`, `site.unpublish` (with its reason), `workspace.publishing` (on or off, and how many sites it took down), `workbook.restore` with `from` (a version restored; without detail it is still a workbook brought back from the trash). Account events have no workspace |
 | `WorkspaceExports` | `Id`, `WorkspaceId`, `RequestedBy`, `Status`, `BlobKey`, `SizeBytes`, `Error` | A workspace's export zip, written by the worker |
 | `JobStates` | `Name`, `LastRunAt`, `LastOkAt`, `LastError`, `Runs` | Each worker job's last run: the worker's lag and the API's health check |
 
@@ -606,6 +646,15 @@ workspace's records as creates. A workspace made while signed in is uploaded at 
   side, and makes new ids for pages, rows, databases, views and assets while keeping property and
   option ids; relations, rollups and formulas, and rows' relation values, are set once every
   database and row exists. A device exports what it holds; the server exports every row.
+- From Phase 9 the manifest is version 3: `workbooks` lists each workbook the exporter could read
+  that has a version, `{id, name, file}`, its newest version's bytes at `file`
+  (`workbooks/<name>.xlsx`, numbered when names repeat); a workspace's export holds every one the
+  exporter may read, an export of pages those its sheet blocks show. A workbook's view is in the
+  block that shows it. Import reads versions 1 to 3. Done while signed in, the new workspace goes
+  to the account and each workbook is made again there under a new id (the record, then its bytes
+  as version 1), every sheet block pointed at it; done signed out, it stays on the device, its
+  blocks unchanged, and the report counts the workbooks skipped. The app and the server's export
+  write the same manifest.
 - Deleting a workspace marks it deleted, removes access at once, and purges rows and blobs after
   30 days (the worker's `purgeWorkspaces` job). Its audit rows stay: the log is append-only.
 - Deleting a page for good (from the trash) leaves a tombstone row; the worker purges its

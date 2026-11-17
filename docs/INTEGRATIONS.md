@@ -243,7 +243,11 @@ Workspace's own routes (Phase 5), on the Workspace session:
 | `/api/v1/workbooks/{id}/content` | GET | Read | 200 `{readUrl, etag, size, versionId, expiresAt}` (null with no version) |
 | `/api/v1/workbooks/{id}/previews/{viewHash}` | GET | Read | 200 `{url, versionId, etag, madeAt, width, height, expiresAt}`: the view's newest picture, of whichever version (`etag` says which), or 404 |
 | `/api/v1/workbooks/{id}/previews/{viewHash}` | PUT | Edit; body the PNG; `X-Workbook-Version` | 204 |
-| `/api/v1/workbooks/{id}/launch` | POST | Read; `{}` | 200 `{url, expiresAt}` |
+| `/api/v1/workbooks/{id}/launch` | POST | Read; `{}` or `{target: "web"}`: Sheet's web app; `{target: "desktop"}`: `cashgear-sheet://workspace/launch#ticket=…` (Phase 9) | 200 `{url, expiresAt}` |
+| `/api/v1/workbooks/{id}/versions` | GET | Read | 200 `{versions: [{id, size, sha256, savedAt, savedBy, current}]}`, newest first, the kept 10 (Phase 9) |
+| `/api/v1/workbooks/{id}/versions` | POST | Edit; the xlsx, `If-None-Match: *` or `If-Match`, as Sheet's save | 201 `{versionId, etag}` (an import's version 1; Phase 9) |
+| `/api/v1/workbooks/{id}/versions/{versionId}/content` | GET | Read | 200 `{readUrl, etag, size, versionId, expiresAt}` (Phase 9) |
+| `/api/v1/workbooks/{id}/versions/{versionId}/restore` | POST | Edit; optional `If-Match` on the current content | 201 `{versionId, etag}`: the old bytes as a new newest version, saved by the restorer now; audited `workbook.restore` (Phase 9) |
 | `/api/v1/workbooks/{id}/sheets` | GET | Read | 200 `{sheets: [{name, usedRange, hidden}]}` (empty with no version) |
 | `/api/v1/workbooks/{id}/range?sheet=&range=` | GET | Read | 200 `{sheet, range, csv}`: the range as CSV in canonical text (dates `YYYY-MM-DD`, numbers as JavaScript's `String(n)`, `true`/`false`); the app's CSV import makes the rows, in a new database or an existing one |
 | `/api/v1/databases/{id}/workbooks` | POST | Read the database, not a guest; `{viewId?, name}` | 201 `Workbook` (version 1, written by the server with `DocumentFormat.OpenXml`: the view's rows in its order, its shown properties, typed cells; it takes the database's access) |
@@ -253,6 +257,11 @@ createdBy, createdAt, trashedAt, access}`: `version` is the record's (`ETag` of 
 of `PATCH` and of the permissions' `PUT`, 409 `version.conflict` when stale), `etag` the content's
 (`"<versionId>"`, null with no version), `savedBy` `{id, name}`, `access` the caller's level. As
 built in Phase 5 (`server/src/Cgw.Core/Workbooks`; operation ids in `server/openapi/v1.json`).
+
+A workbook's history (Phase 9) is shown from the workbook list and from a block's menu: each
+kept version with when and by whom, one opened read-only in the embed by its own signed URL, and,
+for `edit` and above, an older one restored as the newest. A trashed workbook's history routes
+answer 410 `workbook.gone`; a version that is not the workbook's, or was pruned, 404.
 
 ### Opening the full editor
 
@@ -348,17 +357,22 @@ On the desktop, "Open in Cash Gear Sheet" opens Sheet's desktop app when it is i
 Sheet's web app in the system browser, as before. It adds a link form and two origins to
 `sheet-session.1`; Sheet's redeem request and everything after it are unchanged.
 
-1. Workspace's desktop app asks the system whether anything handles the `cashgear-sheet` scheme:
-   on Windows the scheme's open command through `AssocQueryStringW` (which reads
-   `HKCU\Software\Classes` and `HKLM\Software\Classes` both), on macOS
-   `LSCopyDefaultApplicationURLForURL`. It reads only that, and never starts a program to ask.
+1. Workspace's desktop app asks the system, on every click, whether anything handles the
+   `cashgear-sheet` scheme: on Windows the scheme's open command through `AssocQueryStringW`
+   (`ASSOCF_IS_PROTOCOL | ASSOCF_INIT_IGNOREUNKNOWN`, which reads `HKCU\Software\Classes`,
+   `HKLM\Software\Classes` and the person's choice), on macOS `LSCopyDefaultApplicationURLForURL`
+   (`crates/cgw-native/src/sheet.rs`). It reads only that, and never starts a program to ask.
 2. If something does, it calls `POST /api/v1/workbooks/{id}/launch` with `{target: "desktop"}`
    and gets `{url: "cashgear-sheet://workspace/launch#ticket=<ticket>", expiresAt}`. The ticket is
    the web's (256 random bits in base64url, 120 seconds, one use, kept as its SHA-256, bound to the
    person, the workbook and the access) and records its target. `{}` or `{target: "web"}` is the
    web link as before.
-3. Workspace hands the link to the system (`ShellExecuteW`, `NSWorkspace`), never logs or keeps
-   it, and never opens it in a browser.
+3. Workspace hands the link to the system (`ShellExecuteW`; LaunchServices' `LSOpenCFURLRef` on
+   macOS) after reading it again as exactly `cashgear-sheet://workspace/launch#ticket=<43
+   base64url>` (any other link is refused); it never logs or keeps it, and never opens it in a
+   browser. A server that answers a desktop request with its web link has that opened as before.
+   In tests `CGW_SHEET_APP=installed|missing` answers the question and `CGW_OPEN_URL_FILE` takes
+   the link instead of the system.
 4. Sheet's desktop app, one instance, takes the link cold or while running, checks its shape (the
    path `workspace/launch`, exactly one `ticket` of 43 base64url characters in the fragment,
    nothing else), and redeems `{ticket}` at `POST /api/v1/sheet-sessions/redeem` from its
