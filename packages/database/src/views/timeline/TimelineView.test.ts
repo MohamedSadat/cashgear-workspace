@@ -167,7 +167,12 @@ describe('the timeline', () => {
       true,
     );
     const windowed = requests.filter((r) => r.spec.window);
-    expect(windowed.length).toBeGreaterThan(0);
+    expect(windowed.length).toBeGreaterThan(1);
+    // The days shown first (their rows are the lines drawn at once: sorted by start, the wide
+    // window's first pages are days before them), then the wide window.
+    const first = windowed[0].spec.window!;
+    expect(first.from > '2026-08-01' && first.to < '2027-03-31').toBe(true);
+    expect(first.to > first.from).toBe(true);
     // A few days before today, a view of 48 days at 20 px a day (jsdom's 960 px), and as
     // many again on each side, out to whole months.
     expect(windowed.at(-1)!.spec.window).toEqual({

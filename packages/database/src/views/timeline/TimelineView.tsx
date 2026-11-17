@@ -32,6 +32,7 @@ import { InlineEditor } from '../../cells/InlineEditor';
 import { useCellEnv, type CellEnv } from '../../cells/env';
 import {
   TITLE_PROPERTY,
+  queryRows,
   type DatabaseRecord,
   type PropertyDef,
   type TimelineScale,
@@ -112,27 +113,39 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
       });
   };
 
-  // The window fetched: the days shown and as many again on each side, asked again only when the
-  // days shown leave it.
+  // The window fetched: the days shown first (their rows are the lines drawn at once), then those
+  // days and as many again on each side, asked again only when the days shown leave it. Sorted by
+  // start, the wide window's first pages are days before those shown, so asking it alone first
+  // drew no line until they had come.
   const [shownDays, setShownDays] = useState<CgTimelineRange>(() =>
     firstRange(ctx.today, settings.scale),
   );
-  const [fetched, setFetched] = useState<CgTimelineRange>(() => fetchWindow(shownDays));
+  const [fetched, setFetched] = useState<{ near: CgTimelineRange; wide: CgTimelineRange }>(() => ({
+    near: shownDays,
+    wide: fetchWindow(shownDays),
+  }));
   const onRangeChange = useCallback((range: CgTimelineRange) => {
     setShownDays(range);
-    setFetched((w) => (covers(w, range) ? w : fetchWindow(range)));
+    setFetched((w) => (covers(w.wide, range) ? w : { near: range, wide: fetchWindow(range) }));
   }, []);
-  const datedRequest = useMemo(
-    () =>
+  const windowFor = useCallback(
+    (days: CgTimelineRange) =>
       request && usable && startDef
         ? windowRequest(request, {
             propertyId: startDef.id,
             endPropertyId: endDef?.id ?? null,
-            from: fetched.from,
-            to: fetched.to,
+            from: days.from,
+            to: days.to,
           })
         : null,
-    [request, usable, startDef, endDef, fetched],
+    [request, usable, startDef, endDef],
+  );
+  const nearRequest = useMemo(() => windowFor(fetched.near), [windowFor, fetched.near]);
+  const near = useWindowRows(host, database.id, nearRequest);
+  const nearDone = near.snapshot.complete || near.capped || !!near.snapshot.error;
+  const wideRequest = useMemo(
+    () => (nearDone ? windowFor(fetched.wide) : null),
+    [nearDone, windowFor, fetched.wide],
   );
   const noDateRequest = useMemo(
     () =>
@@ -141,8 +154,30 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
         : null,
     [request, usable, startDef, settings.undated],
   );
-  const dated = useWindowRows(host, database.id, datedRequest);
+  const wide = useWindowRows(host, database.id, wideRequest);
   const undated = useWindowRows(host, database.id, noDateRequest, Infinity);
+  // The rows drawn: the wide window's once it is in; until then the days shown's with what of the
+  // wide one has come, in the view's own order.
+  const wideDone = wide.snapshot.complete || wide.capped;
+  const datedRows = useMemo(() => {
+    if (wideDone) return wide.rows;
+    if (!wide.rows.length) return near.rows;
+    const byId = new Map<string, RowRecord>();
+    for (const row of near.rows) byId.set(row.id, row);
+    for (const row of wide.rows) byId.set(row.id, row);
+    const sorts = request?.spec.sorts ?? [];
+    return queryRows(database, [...byId.values()], { filter: null, sorts, group: null }, ctx).rows;
+  }, [wideDone, wide.rows, near.rows, request, database, ctx]);
+  const dated = {
+    rows: datedRows,
+    fetching: near.fetching || !nearDone || wide.fetching,
+    capped: wide.capped || near.capped,
+    snapshot: wideRequest ? wide.snapshot : near.snapshot,
+    retry: () => {
+      near.source?.retry();
+      wide.source?.retry();
+    },
+  };
 
   // The lines: the rows the days shown hold (the window's others are ready for a scroll).
   const items = useMemo(
@@ -301,7 +336,7 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
   if (!usable || !startDef) return <TimelineSetup database={database} view={view} env={env} />;
 
   const snapshot = dated.snapshot;
-  const loaded = snapshot.rows.length;
+  const loaded = dated.rows.length;
   return (
     <div className={`cgw-db-tl${embedded ? ' is-embedded' : ''}`}>
       {snapshot.localOnly ? (
@@ -309,14 +344,14 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
           {t('localOnly')}
         </p>
       ) : null}
-      {snapshot.error || undated.snapshot.error ? (
+      {near.snapshot.error || wide.snapshot.error || undated.snapshot.error ? (
         <p className="cgw-db-notice cgw-db-error" role="alert">
           {t('loadFailed')}{' '}
           <button
             type="button"
             className="cgw-text-button"
             onClick={() => {
-              dated.source?.retry();
+              dated.retry();
               undated.source?.retry();
             }}
           >
