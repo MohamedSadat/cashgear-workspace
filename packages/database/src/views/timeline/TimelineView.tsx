@@ -142,7 +142,7 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
   );
   const nearRequest = useMemo(() => windowFor(fetched.near), [windowFor, fetched.near]);
   const near = useWindowRows(host, database.id, nearRequest);
-  const nearDone = near.snapshot.complete || near.capped || !!near.snapshot.error;
+  const nearDone = near.settled;
   const wideRequest = useMemo(
     () => (nearDone ? windowFor(fetched.wide) : null),
     [nearDone, windowFor, fetched.wide],
@@ -158,7 +158,7 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
   const undated = useWindowRows(host, database.id, noDateRequest, Infinity);
   // The rows drawn: the wide window's once it is in; until then the days shown's with what of the
   // wide one has come, in the view's own order.
-  const wideDone = wide.snapshot.complete || wide.capped;
+  const wideDone = wide.settled && !wide.snapshot.error;
   const datedRows = useMemo(() => {
     if (wideDone) return wide.rows;
     if (!wide.rows.length) return near.rows;

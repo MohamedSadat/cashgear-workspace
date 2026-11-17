@@ -14,8 +14,14 @@ export interface WindowRows {
   snapshot: RowSnapshot;
   /** The rows to draw: the source's, or the last ones while its first page comes. */
   rows: RowRecord[];
-  /** Pages are still coming (under the bound). */
+  /** Pages are still coming (under the bound), the first one included. */
   fetching: boolean;
+  /**
+   * Every page it will fetch is in (or the bound was reached, or it failed). A server source says
+   * `complete` before its first page comes (it knows of no next page yet): only a snapshot that is
+   * not loading counts.
+   */
+  settled: boolean;
   /** The bound was reached with rows left: only the first `limit` are drawn. */
   capped: boolean;
 }
@@ -45,7 +51,12 @@ export function useWindowRows(
     source,
     snapshot,
     rows,
-    fetching: !!request && !snapshot.complete && loaded < limit && !snapshot.error,
+    fetching:
+      !!request && !snapshot.error && (snapshot.loading || (!snapshot.complete && loaded < limit)),
+    settled:
+      !!request &&
+      (!!snapshot.error ||
+        (!snapshot.loading && (snapshot.complete || (Number.isFinite(limit) && loaded >= limit)))),
     capped: !snapshot.complete && Number.isFinite(limit) && loaded >= limit,
   };
 }
