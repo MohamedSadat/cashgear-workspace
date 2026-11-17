@@ -217,6 +217,10 @@ describe('databases: sync', { timeout: 30_000 }, () => {
     const paged = await two.engine.queryDatabase(db.id, { context: CONTEXT, limit: 500 });
     expect(paged).toMatchObject({ total: 5002, next: '500' });
     expect(paged.rows).toHaveLength(500);
+    // Answered first, kept after (Phase 9): every row of the answer is in the store once kept.
+    await two.engine.kept();
+    const kept = new Set((await two.store.readRows(db.id)).map((r) => r.id));
+    expect(paged.rows.every((r) => kept.has(r.id))).toBe(true);
 
     // Rows trashed on another device bring it under the limit: held in full again, fetched.
     await one.engine.syncOnce();

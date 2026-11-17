@@ -534,6 +534,7 @@ export class Cloud {
       account: () => this.account_,
       holdDatabase: (databaseId) => this.engine.holdDatabase(databaseId),
       queryDatabase: (databaseId, request) => this.engine.queryDatabase(databaseId, request),
+      kept: () => this.engine.kept(),
       peekQuery: (databaseId, request) => this.sync.query(databaseId, request),
       members: async (workspaceId) =>
         (await this.members(workspaceId)).map((m) => ({

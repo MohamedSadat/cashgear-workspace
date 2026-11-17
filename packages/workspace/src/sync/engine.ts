@@ -1975,16 +1975,33 @@ export class SyncEngine {
    * The server's query of a database this device does not hold in full (a view of a large
    * database, a relation picker's search). The rows it returns are kept when the database is
    * held (a partial hold is this cache), so they show offline. Throws `OfflineError` offline.
+   * Phase 9: the answer is returned before its rows are kept (a view draws them without waiting
+   * for the store's write of 500 rows); they are kept one answer at a time, in the order answered
+   * (`kept()` waits for them).
    */
   async queryDatabase(databaseId: Id, request: QueryRequest): Promise<QueryAnswer> {
     if (!this.account) throw new SyncHttpError(401, 'auth.required');
     const answer = await this.api.query(databaseId, request);
-    const page = await this.store.getPage(databaseId);
-    if (page && answer.rows.length && (await this.store.dbHold(databaseId))) {
-      await this.beforeRemote(page.workspaceId, [], answer.rows);
-      await this.applyBatch({ workspaceId: page.workspaceId, rows: answer.rows });
-    }
+    if (answer.rows.length) this.keepQueried(databaseId, answer.rows);
     return answer;
+  }
+
+  private keeping: Promise<void> = Promise.resolve();
+
+  private keepQueried(databaseId: Id, rows: RowRecord[]) {
+    this.keeping = this.keeping
+      .then(async () => {
+        const page = await this.store.getPage(databaseId);
+        if (!page || !(await this.store.dbHold(databaseId))) return;
+        await this.beforeRemote(page.workspaceId, [], rows);
+        await this.applyBatch({ workspaceId: page.workspaceId, rows });
+      })
+      .catch((error: unknown) => console.warn('Rows a query answered were not kept:', error));
+  }
+
+  /** Every query's rows kept that were answered so far (tests; a close). */
+  kept(): Promise<void> {
+    return this.keeping;
   }
 
   /**

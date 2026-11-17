@@ -79,6 +79,7 @@ function syncOf(d: Device, server: FakeServer, overrides: Partial<DatabaseSync> 
     account: () => ({ id: ALICE.id, displayName: 'Ada', email: ALICE.email }),
     holdDatabase: (id) => d.engine.holdDatabase(id),
     queryDatabase: (id, request) => d.engine.queryDatabase(id, request),
+    kept: () => d.engine.kept(),
     peekQuery: (id, request) => server.api(ALICE).query(id, request),
     members: async () => [{ userId: ALICE.id, displayName: 'Ada', email: ALICE.email }],
     syncNow: () => d.engine.syncOnce(),

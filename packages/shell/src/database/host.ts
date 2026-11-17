@@ -66,8 +66,10 @@ export interface DatabaseSync {
   account(): { id: Id; displayName: string; email: string } | null;
   /** Keeps the database's rows on this device (the engine's hold). */
   holdDatabase(databaseId: Id): Promise<DbHold>;
-  /** The server's query; its rows are kept when the database is held. */
+  /** The server's query; its rows are kept when the database is held, just after it answers. */
   queryDatabase(databaseId: Id, request: QueryRequest): Promise<QueryAnswer>;
+  /** Phase 9: every query's rows kept that were answered so far (the engine's `kept`). */
+  kept?(): Promise<void>;
   /** The server's query, nothing kept (finding which database a row a search found is in). */
   peekQuery?(databaseId: Id, request: QueryRequest): Promise<QueryAnswer>;
   /** The workspace's members (the people a person cell can name). */
@@ -522,6 +524,7 @@ export class ShellDatabaseHost implements DatabaseHost {
         const hold = await sync.holdDatabase(databaseId);
         this.holds.set(databaseId, hold);
         if (title.trim()) await sync.queryDatabase(databaseId, request);
+        await sync.kept?.();
         if (await this.session.findRow(rowId)) return true;
         if (hold.mode !== 'full') return false;
         await sync.syncNow();
@@ -542,6 +545,7 @@ export class ShellDatabaseHost implements DatabaseHost {
         if (!answer.rows.some((r) => r.id === rowId)) continue;
         this.holds.set(database.id, await sync.holdDatabase(database.id));
         await sync.queryDatabase(database.id, request);
+        await sync.kept?.();
         return !!(await this.session.findRow(rowId));
       } catch {
         // Refused or offline: the next database, or nothing found.
