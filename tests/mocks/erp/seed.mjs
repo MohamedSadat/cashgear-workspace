@@ -1,8 +1,16 @@
 // The mock ERP's data (tests/mocks/erp/server.mjs): two companies in one database, as Kit and Dot
-// share ASTDataTest, their users, and three read-only connectors (Vendors as `vendors.1`,
-// Customers, Items on hand) with seeded records. Every record's name holds one of `MARKERS`, a
-// made-up word found nowhere else, so a test can search a document, a store, the search index or
-// a log for ERP data and know that finding nothing means something.
+// share ASTDataTest, their users, and three connectors (Vendors as `vendors.1`, Customers as
+// `customers.1`, Items on hand as `itemsOnHand.1`) with seeded records. Every record's name holds
+// one of `MARKERS`, a made-up word found nowhere else, so a test can search a document, a store,
+// the search index or a log for ERP data and know that finding nothing means something.
+//
+// Phase 10: Customers and Items on hand have the real connectors' fields, labels, lookups and
+// rules (CashGear's `CustomerConnector.cs` and `ItemsOnHandConnector.cs`, Track E4, with Track E8's
+// editing, INTEGRATIONS.md "Customers and Items on hand editable"): a customer list where a user
+// whose profile says so sees only the customers they created, the national ID kept from employees,
+// one Items on hand record per item and storage place whose name and group belong to the item
+// (`scope: 'key'`), and versions made from the values a user sees, as neither CustTable nor
+// InvTable nor InvSum has a rowversion.
 
 /** The companies, each with Workspace turned on. */
 export const COMPANIES = {
@@ -14,8 +22,11 @@ export const CONNECTOR_IDS = ['vendors', 'customers', 'itemsOnHand'];
 
 /**
  * The ERP users the mock client signs in as, each with the API key the ERP client would hold.
- * `connectors` are those the user may view; `hidden` the fields kept from them; `rules` the
- * record rules the ERP applies to them; `admin` whether they may link and revoke.
+ * `connectors` are those the user may view; `hidden` the fields the ERP's field rules keep from
+ * them (Customers' national ID from employees, as the customer list's ShowSensitiveData does);
+ * `rules` the record rules it applies (Customers' `LoadOwnedRows`: only the customers they
+ * created); `admin` whether they may link and revoke; `edit` (Phase 7, Phase 10) a connector's
+ * Edit privilege (`edit`) or Edit and AdvEdit (`advEdit`).
  */
 export const USERS = {
   alice: {
@@ -32,9 +43,9 @@ export const USERS = {
     company: 'Kit',
     displayName: 'Bob Mansour',
     connectors: ['vendors', 'customers'],
-    // Bob sells: he sees his own customers only, and not their credit limits.
-    rules: { customers: { salesperson: 'S-BOB' } },
-    hidden: { customers: ['creditLimit'] },
+    // Bob sells: an employee who sees only the customers he created, without their national ID.
+    rules: { customers: { createdBy: 'u102' } },
+    hidden: { customers: ['nationalId'] },
     admin: false,
   },
   carol: {
@@ -61,23 +72,26 @@ export const USERS = {
     connectors: ['vendors', 'customers', 'itemsOnHand'],
     admin: true,
   },
-  // Phase 7: `edit` gives a connector's Edit privilege (`edit`) or Edit and AdvEdit (`advEdit`).
+  // Vendors' and Customers' Edit; like Bob, an employee who sees only the customers she created.
   gina: {
     id: 'u105',
     key: 'mock-gina',
     company: 'Kit',
     displayName: 'Gina Wahba',
     connectors: ['vendors', 'customers'],
-    edit: { vendors: 'edit' },
+    rules: { customers: { createdBy: 'u105' } },
+    hidden: { customers: ['nationalId'] },
+    edit: { vendors: 'edit', customers: 'edit' },
     admin: false,
   },
+  // Vendors' and Customers' Edit and AdvEdit, Items' Edit; sees every customer.
   faris: {
     id: 'u106',
     key: 'mock-faris',
     company: 'Kit',
     displayName: 'فارس منير',
     connectors: ['vendors', 'customers', 'itemsOnHand'],
-    edit: { vendors: 'advEdit' },
+    edit: { vendors: 'advEdit', customers: 'advEdit', itemsOnHand: 'edit' },
     admin: false,
   },
 };
@@ -102,7 +116,11 @@ export const MARKERS = {
 
 const label = (en, ar) => ({ en, ar });
 
-/** A text, lookup or other field; `search` marks what the ERP's own list searches. */
+/**
+ * A field, as the real connector lists it. `search` marks what the ERP's own list searches; `edit`
+ * the privilege a change through a workspace needs (none, `edit` or `advEdit`); `scope: 'key'` a
+ * value that belongs to every record of the same key.
+ */
 const field = (name, en, ar, type, extra = {}) => ({
   name,
   label: label(en, ar),
@@ -124,6 +142,8 @@ export const CONNECTORS = {
     maxPageSize: 1000,
     maxRecords: 10000,
     maxCommitRecords: 500,
+    // Vendors has a rowversion: one 8-byte counter per database.
+    versions: 'rowversion',
     // vendors.1's fields, in the ERP's list order, with its labels. `edit` is the privilege a
     // field needs to be changed (Phase 7, INTEGRATIONS.md): none, Edit or AdvEdit.
     fields: [
@@ -181,6 +201,9 @@ export const CONNECTORS = {
     // The ERP's Vendors list also searches the phone, which is never sent.
     searchAlso: ['phone'],
   },
+  // customers.1 (CustomerConnector.cs): every field sortable, codes and texts filterable; Track
+  // E8's editing (INTEGRATIONS.md's table): Edit for the name, group, mobiles, payment method,
+  // address and tax file; AdvEdit for the currency, price list, credit limit and blocked.
   customers: {
     id: 'customers',
     kind: 'entity',
@@ -188,9 +211,12 @@ export const CONNECTORS = {
     schemaVersion: 'customers.1',
     keyField: 'customerAccount',
     idField: 'recId',
-    maxPageSize: 500,
+    maxPageSize: 1000,
     maxRecords: 10000,
-    maxCommitRecords: 0,
+    maxCommitRecords: 500,
+    versions: 'content',
+    // A commit writes CustTable's modified stamps, as the ERP's customer screen does.
+    stamps: true,
     fields: [
       field('customerAccount', 'Account', 'الحساب', 'text', {
         maxLength: 50,
@@ -203,66 +229,167 @@ export const CONNECTORS = {
         required: true,
         sortable: true,
         search: true,
+        edit: 'edit',
       }),
-      field('city', 'City', 'المدينة', 'text', {
-        maxLength: 80,
+      field('customerGroup', 'Group', 'المجموعة', 'lookup', {
+        lookup: 'customerGroups',
+        required: true,
+        filterable: true,
+        sortable: true,
+        edit: 'edit',
+      }),
+      field('mobile', 'Mobile', 'الجوال', 'text', {
+        maxLength: 50,
         filterable: true,
         sortable: true,
         search: true,
+        edit: 'edit',
+      }),
+      field('mobile2', 'Second mobile', 'الجوال 2', 'text', {
+        maxLength: 50,
+        filterable: true,
+        sortable: true,
+        search: true,
+        edit: 'edit',
+      }),
+      field('nationalId', 'National ID', 'الرقم القومي', 'text', {
+        maxLength: 50,
+        filterable: true,
+        sortable: true,
+        search: true,
+      }),
+      field('currency', 'Currency', 'العملة', 'lookup', {
+        lookup: 'currencies',
+        required: true,
+        filterable: true,
+        sortable: true,
+        edit: 'advEdit',
+      }),
+      field('payMethod', 'Payment method', 'طريقة الدفع', 'lookup', {
+        lookup: 'paymentModes',
+        filterable: true,
+        sortable: true,
+        edit: 'edit',
+      }),
+      field('priceList', 'Price list', 'قائمة الأسعار', 'text', {
+        maxLength: 50,
+        filterable: true,
+        sortable: true,
+        edit: 'advEdit',
+      }),
+      field('governorate', 'Governorate', 'المحافظة', 'text', {
+        maxLength: 100,
+        filterable: true,
+        sortable: true,
+        search: true,
+      }),
+      field('city', 'City', 'المدينة', 'text', {
+        maxLength: 100,
+        filterable: true,
+        sortable: true,
+        search: true,
+      }),
+      field('address', 'Address', 'العنوان', 'text', {
+        maxLength: 150,
+        sortable: true,
+        edit: 'edit',
+      }),
+      field('taxFile', 'Tax file', 'الملف الضريبي', 'text', {
+        maxLength: 50,
+        filterable: true,
+        sortable: true,
+        edit: 'edit',
       }),
       field('creditLimit', 'Credit limit', 'حد الائتمان', 'decimal', {
         scale: 2,
         min: '0',
         sortable: true,
+        edit: 'advEdit',
       }),
-      field('salesperson', 'Salesperson', 'مندوب المبيعات', 'lookup', {
-        lookup: 'salespeople',
+      field('blocked', 'Blocked', 'موقوف', 'boolean', {
+        required: true,
+        filterable: true,
+        sortable: true,
+        edit: 'advEdit',
+      }),
+      field('createdBy', 'Created by', 'أنشئ بواسطة', 'text', {
+        maxLength: 50,
         filterable: true,
         sortable: true,
       }),
-      field('customerGroup', 'Group', 'المجموعة', 'lookup', {
-        lookup: 'customerGroups',
+      field('createdDate', 'Created', 'تاريخ الإنشاء', 'date', {
         filterable: true,
+        sortable: true,
       }),
-      field('blocked', 'Blocked', 'موقوف', 'boolean', { required: true, filterable: true }),
-      field('lastInvoiceDate', 'Last invoice', 'آخر فاتورة', 'date', { sortable: true }),
+      field('modifiedBy', 'Modified by', 'عدل بواسطة', 'text', {
+        maxLength: 50,
+        filterable: true,
+        sortable: true,
+      }),
       field('modifiedDate', 'Modified', 'تاريخ التعديل', 'dateTime', { sortable: true }),
     ],
-    searchAlso: [],
+    // The ERP's customer search also looks in the search name, which is never sent.
+    searchAlso: ['searchName'],
   },
+  // itemsOnHand.1 (ItemsOnHandConnector.cs): one record per item and storage place, keyed by the
+  // item; Track E8: the item's name and group with the Items unit's Edit, each the item's own
+  // (`scope: 'key'`); stock never.
   itemsOnHand: {
     id: 'itemsOnHand',
     kind: 'entity',
-    label: label('Items on hand', 'الأصناف المتاحة'),
+    label: label('Items on hand', 'أرصدة الأصناف'),
     schemaVersion: 'itemsOnHand.1',
     keyField: 'itemId',
-    // One record per item, summed over its main warehouse: no surrogate id of its own.
     idField: null,
-    maxPageSize: 500,
+    maxPageSize: 1000,
     maxRecords: 10000,
-    maxCommitRecords: 0,
+    maxCommitRecords: 500,
+    versions: 'content',
+    stamps: false,
     fields: [
-      field('itemId', 'Item', 'الصنف', 'text', {
-        maxLength: 30,
+      field('itemId', 'Item ID', 'كود الصنف', 'text', {
+        maxLength: 50,
         filterable: true,
         sortable: true,
         search: true,
       }),
-      field('itemName', 'Name', 'الاسم', 'text', { maxLength: 120, sortable: true, search: true }),
-      field('warehouse', 'Warehouse', 'المخزن', 'lookup', {
+      field('itemName', 'Name', 'الاسم', 'text', {
+        maxLength: 150,
+        required: true,
+        sortable: true,
+        search: true,
+        edit: 'edit',
+        scope: 'key',
+      }),
+      field('unit', 'Unit', 'الوحدة', 'text', { maxLength: 50, filterable: true, sortable: true }),
+      field('itemGroup', 'Item group', 'مجموعة الصنف', 'lookup', {
+        lookup: 'itemGroups',
+        required: true,
+        filterable: true,
+        sortable: true,
+        edit: 'edit',
+        scope: 'key',
+      }),
+      field('siteId', 'Site', 'الموقع', 'lookup', {
+        lookup: 'sites',
+        filterable: true,
+        sortable: true,
+      }),
+      field('warehouseId', 'Warehouse', 'المخزن', 'lookup', {
         lookup: 'warehouses',
         filterable: true,
         sortable: true,
       }),
-      field('quantity', 'On hand', 'الكمية المتاحة', 'decimal', { scale: 3, sortable: true }),
-      field('unit', 'Unit', 'الوحدة', 'lookup', { lookup: 'units', filterable: true }),
-      field('reorderLevel', 'Reorder level', 'حد إعادة الطلب', 'integer', {
-        min: 0,
+      field('locationId', 'Location', 'مكان التخزين', 'text', {
+        maxLength: 50,
+        filterable: true,
         sortable: true,
       }),
-      field('lastMovement', 'Last movement', 'آخر حركة', 'date', { sortable: true }),
+      field('onHandQty', 'On hand', 'الرصيد', 'decimal', { scale: 3, sortable: true }),
+      field('onHandValue', 'Value', 'القيمة', 'decimal', { scale: 2, sortable: true }),
     ],
-    searchAlso: [],
+    // The item search: id, name and search name.
+    searchAlso: ['searchName'],
   },
 };
 
@@ -290,32 +417,33 @@ export function lookups(company) {
       { code: 'NET30', label: '30 days' },
       { code: 'NET60', label: 'آجل 60 يوم' },
     ],
-    salespeople: kit
-      ? [
-          { code: 'S-BOB', label: 'Bob Mansour' },
-          { code: 'S-NOUR', label: 'نور عادل' },
-          { code: 'S-HANY', label: 'Hany Gad' },
-          { code: 'S-OLD', label: 'Former representative', active: false },
-        ]
-      : [{ code: 'S-RANA', label: 'رنا فؤاد' }],
     customerGroups: [
+      { code: 'EXPORT', label: 'Export' },
       { code: 'RETAIL', label: 'Retail' },
       { code: 'WHOLESALE', label: 'جملة' },
-      { code: 'EXPORT', label: 'Export' },
+      ...(kit ? [{ code: 'ZOLD', label: 'Former customers', active: false }] : []),
     ],
+    itemGroups: kit
+      ? [
+          { code: 'FOOD', label: 'Food' },
+          { code: 'HARDWARE', label: 'عدد وأدوات' },
+          { code: 'PAPER', label: 'Paper' },
+          { code: 'ZOLD', label: 'Discontinued', active: false },
+        ]
+      : [{ code: 'FOOD', label: 'أغذية' }],
+    sites: kit
+      ? [
+          { code: 'S-MAIN', label: 'Main site' },
+          { code: 'S-PORT', label: 'الميناء' },
+        ]
+      : [{ code: 'S-DOT', label: 'Dot site' }],
     warehouses: kit
       ? [
-          { code: 'WH-CAI', label: 'Cairo main' },
           { code: 'WH-ALX', label: 'ميناء الإسكندرية' },
           { code: 'WH-ASW', label: 'Aswan' },
+          { code: 'WH-CAI', label: 'Cairo main' },
         ]
       : [{ code: 'WH-DOT', label: 'Dot central' }],
-    units: [
-      { code: 'PCS', label: 'Piece' },
-      { code: 'KG', label: 'كيلوجرام' },
-      { code: 'BOX', label: 'Box' },
-      { code: 'LTR', label: 'Litre' },
-    ],
   };
 }
 
@@ -342,15 +470,33 @@ const choose = (pick, list) => list[Math.floor(pick() * list.length)];
 const VENDOR_KINDS = ['Trading', 'Supplies', 'Logistics', 'Foods', 'Steel', 'Paper'];
 const VENDOR_KINDS_AR = ['للتجارة', 'للتوريدات', 'للنقل', 'للأغذية'];
 const CITIES = ['Cairo', 'Giza', 'Alexandria', 'Mansoura', 'Tanta', 'Aswan', 'القاهرة', 'الجيزة'];
+/** Governorates and their cities, as the ERP's address book holds them. */
+const PLACES = [
+  ['Cairo', 'Nasr City'],
+  ['Giza', 'Dokki'],
+  ['Alexandria', 'Smouha'],
+  ['Dakahlia', 'Mansoura'],
+  ['القاهرة', 'مصر الجديدة'],
+  ['الإسكندرية', 'سيدي جابر'],
+];
 const CUSTOMER_KINDS = ['Bakeries', 'Pharmacy', 'Markets', 'Hotels', 'Kitchens', 'Clinics'];
 const ITEMS = [
-  'olive oil 1 L',
-  'steel bolts M8',
-  'paper A4',
-  'rice 5 kg',
-  'cables 2 m',
-  'tea 250 g',
+  ['olive oil 1 L', 'FOOD', 'LTR'],
+  ['steel bolts M8', 'HARDWARE', 'PCS'],
+  ['paper A4', 'PAPER', 'BOX'],
+  ['rice 5 kg', 'FOOD', 'KG'],
+  ['cables 2 m', 'HARDWARE', 'PCS'],
+  ['tea 250 g', 'FOOD', 'BOX'],
 ];
+/** Kit's storage places: site, warehouse, location. */
+const PLACES_KIT = [
+  ['S-MAIN', 'WH-CAI', 'A-01'],
+  ['S-MAIN', 'WH-CAI', 'A-02'],
+  ['S-PORT', 'WH-ALX', 'B-01'],
+  ['S-MAIN', 'WH-ASW', null],
+];
+/** Who made Kit's customers: Bob, Gina, Faris, Alice and an ERP user Workspace never sees. */
+const MAKERS = ['u102', 'u105', 'u106', 'u101', 'u199'];
 
 function vendorRow(company, account, values) {
   return {
@@ -451,72 +597,109 @@ function vendors(pick, kitVendors = 150, locks = true) {
 }
 
 function customerRow(company, account, values) {
+  const [governorate, city] = PLACES[0];
   return {
     company,
     customerAccount: account,
     customerName: '',
-    city: null,
-    creditLimit: '0.00',
-    salesperson: company === 'Kit' ? 'S-NOUR' : 'S-RANA',
+    // Never sent: the ERP's customer search looks in it.
+    searchName: null,
     customerGroup: 'RETAIL',
+    mobile: null,
+    mobile2: null,
+    nationalId: null,
+    currency: 'EGP',
+    payMethod: 'CASH',
+    priceList: null,
+    governorate,
+    city,
+    address: null,
+    taxFile: null,
+    creditLimit: '0.00',
     blocked: false,
-    lastInvoiceDate: null,
+    createdBy: company === 'Kit' ? 'u101' : 'u201',
+    createdDate: '2025-06-01',
+    modifiedBy: 'seed',
     modifiedDate: '2026-11-01T09:00:00+02:00',
     ...values,
   };
 }
 
-function customers(pick) {
+function customers(pick, kitCustomers = 240) {
   const kit = [
     customerRow('Kit', 'C-1001', {
       customerName: 'Qorvath Bakeries',
-      city: 'Cairo',
+      searchName: 'qorvath bakery',
+      mobile: '01001112233',
+      nationalId: '28501011234567',
+      address: '4 Abbas St, Nasr City',
+      taxFile: '310-555-120',
       creditLimit: '25000.00',
-      salesperson: 'S-BOB',
-      lastInvoiceDate: '2026-11-02',
+      priceList: 'Wholesale 2026',
+      createdBy: 'u102',
     }),
     customerRow('Kit', 'C-1002', {
       customerName: 'مخابز زمرّدان',
-      city: 'الإسكندرية',
+      governorate: 'الإسكندرية',
+      city: 'سيدي جابر',
+      mobile: '01223334455',
+      mobile2: '0345678901',
+      address: 'شارع فؤاد، الإسكندرية',
       creditLimit: '120000.50',
       customerGroup: 'WHOLESALE',
-      lastInvoiceDate: '2026-10-28',
+      payMethod: 'NET30',
+      createdBy: 'u105',
     }),
     customerRow('Kit', 'C-1003', {
       customerName: 'Velmorra Pharmacy',
-      city: 'Giza',
+      ...placeOf(1),
       creditLimit: null,
-      salesperson: 'S-BOB',
       blocked: true,
+      createdBy: 'u102',
     }),
     customerRow('Kit', 'C-1004', {
       customerName: 'Calderune Hotels',
-      city: 'Hurghada',
+      ...placeOf(3),
+      currency: 'USD',
       creditLimit: '9999999.99',
-      salesperson: 'S-HANY',
       customerGroup: 'EXPORT',
-      lastInvoiceDate: '2026-09-15',
+      payMethod: 'NET60',
+      createdBy: 'u106',
     }),
     customerRow('Kit', 'C-1005', {
       customerName: 'Ystrelle Markets',
-      city: 'Mansoura',
-      salesperson: 'S-OLD',
-      lastInvoiceDate: '2025-12-31',
+      ...placeOf(2),
+      customerGroup: 'ZOLD',
+      createdBy: 'u101',
+    }),
+    customerRow('Kit', 'C-1006', {
+      customerName: 'Brinmoor Kitchens',
+      mobile: '01509998877',
+      createdBy: 'u105',
     }),
   ];
-  for (let n = kit.length + 1; kit.length < 240; n++) {
+  for (let n = kit.length + 1; kit.length < kitCustomers; n++) {
     const arabic = pick() < 0.25;
+    const place = PLACES[Math.floor(pick() * PLACES.length)];
     kit.push(
       customerRow('Kit', `C-${pad(1000 + n, 4)}`, {
         customerName: arabic
           ? `${choose(pick, ['صيدليات', 'أسواق', 'مطابخ'])} ${choose(pick, MARKERS.Kit.slice(8))} ${n}`
           : `${choose(pick, MARKERS.Kit.slice(0, 8))} ${choose(pick, CUSTOMER_KINDS)} ${n}`,
-        city: pick() < 0.9 ? choose(pick, CITIES) : null,
+        governorate: place[0],
+        city: place[1],
+        mobile: pick() < 0.85 ? '01' + pad(Math.floor(pick() * 1e9), 9) : null,
+        mobile2: pick() < 0.2 ? '01' + pad(Math.floor(pick() * 1e9), 9) : null,
+        nationalId: pick() < 0.5 ? `2${pad(Math.floor(pick() * 1e13), 13)}` : null,
+        address: pick() < 0.6 ? `${1 + Math.floor(pick() * 200)} ${place[1]} St` : null,
+        taxFile: pick() < 0.4 ? pad(Math.floor(pick() * 1e6), 9) : null,
         creditLimit: pick() < 0.9 ? money(Math.floor(pick() * 20_000_000)) : null,
-        salesperson: choose(pick, ['S-BOB', 'S-NOUR', 'S-NOUR', 'S-HANY']),
         customerGroup: choose(pick, ['RETAIL', 'WHOLESALE', 'EXPORT']),
+        currency: choose(pick, ['EGP', 'EGP', 'EGP', 'USD', 'EUR']),
+        payMethod: choose(pick, ['CASH', 'NET30', 'NET60', null]),
         blocked: pick() < 0.05,
-        lastInvoiceDate: pick() < 0.8 ? day(pick) : null,
+        createdBy: choose(pick, MAKERS),
+        createdDate: day(pick),
         modifiedDate: stamp(pick),
       }),
     );
@@ -526,79 +709,88 @@ function customers(pick) {
     dot.push(
       customerRow('Dot', `DC-${pad(n, 3)}`, {
         customerName: `${choose(pick, MARKERS.Dot)} ${choose(pick, CUSTOMER_KINDS)} ${n}`,
-        city: choose(pick, CITIES),
+        ...placeOf(Math.floor(pick() * PLACES.length)),
         creditLimit: money(Math.floor(pick() * 1_000_000)),
-        lastInvoiceDate: day(pick),
+        createdDate: day(pick),
       }),
     );
   }
   return interleave(kit, dot, 7101);
 }
 
-function itemRow(company, itemId, values) {
+function placeOf(index) {
+  const [governorate, city] = PLACES[index % PLACES.length];
+  return { governorate, city };
+}
+
+/** An item's stock at one place: the item's own fields copied onto each of its rows. */
+function stockRow(company, item, [siteId, warehouseId, locationId], qty, value) {
   return {
     company,
-    itemId,
-    itemName: '',
-    warehouse: company === 'Kit' ? 'WH-CAI' : 'WH-DOT',
-    quantity: '0.000',
-    unit: 'PCS',
-    reorderLevel: null,
-    lastMovement: null,
-    ...values,
+    ...item,
+    siteId,
+    warehouseId,
+    locationId,
+    onHandQty: qty,
+    onHandValue: value,
   };
 }
 
+function itemOf(itemId, itemName, itemGroup, unit, searchName = null) {
+  return { itemId, itemName, itemGroup, unit, searchName };
+}
+
 function items(pick) {
+  const one = itemOf('ITM-0001', 'Qorvath olive oil 1 L', 'FOOD', 'LTR', 'olive oil');
+  const two = itemOf('ITM-0002', 'أرز زمرّدان 5 كجم', 'FOOD', 'KG');
+  const three = itemOf('ITM-0003', 'Velmorra steel bolts M8', 'HARDWARE', 'PCS');
+  const four = itemOf('ITM-0004', 'Brinmoor paper A4', 'PAPER', 'BOX');
   const kit = [
-    itemRow('Kit', 'ITM-0001', {
-      itemName: 'Qorvath olive oil 1 L',
-      quantity: '1250.500',
-      unit: 'LTR',
-      reorderLevel: 200,
-      lastMovement: '2026-11-10',
-    }),
-    itemRow('Kit', 'ITM-0002', {
-      itemName: 'أرز زمرّدان 5 كجم',
-      warehouse: 'WH-ALX',
-      unit: 'KG',
-      reorderLevel: 50,
-      lastMovement: '2026-11-12',
-    }),
-    itemRow('Kit', 'ITM-0003', {
-      itemName: 'Velmorra steel bolts M8',
-      quantity: '-12.000',
-      lastMovement: '2026-10-01',
-    }),
-    itemRow('Kit', 'ITM-0004', {
-      itemName: 'Brinmoor paper A4',
-      warehouse: 'WH-ASW',
-      quantity: '340.250',
-      unit: 'BOX',
-      reorderLevel: 30,
-      lastMovement: '2026-08-19',
-    }),
+    // One item, three places: its name and group are the item's, on every row.
+    stockRow('Kit', one, PLACES_KIT[0], '1250.500', '62525.00'),
+    stockRow('Kit', one, PLACES_KIT[2], '80.000', '4000.00'),
+    stockRow('Kit', one, PLACES_KIT[3], '12.250', '612.50'),
+    stockRow('Kit', two, PLACES_KIT[2], '540.000', '16200.00'),
+    // Stock may run below zero; a row is kept while either total is not zero.
+    stockRow('Kit', three, PLACES_KIT[0], '-12.000', '0.00'),
+    stockRow('Kit', four, PLACES_KIT[1], '340.250', '10207.50'),
+    stockRow('Kit', four, PLACES_KIT[3], '15.000', '450.00'),
   ];
-  for (let n = kit.length + 1; kit.length < 90; n++) {
-    kit.push(
-      itemRow('Kit', `ITM-${pad(n, 4)}`, {
-        itemName: `${choose(pick, MARKERS.Kit.slice(0, 8))} ${choose(pick, ITEMS)}`,
-        warehouse: choose(pick, ['WH-CAI', 'WH-ALX', 'WH-ASW']),
-        quantity: `${Math.floor(pick() * 5000)}.${pad(Math.floor(pick() * 1000), 3)}`,
-        unit: choose(pick, ['PCS', 'KG', 'BOX', 'LTR']),
-        reorderLevel: pick() < 0.7 ? Math.floor(pick() * 500) : null,
-        lastMovement: pick() < 0.9 ? day(pick) : null,
-      }),
+  for (let n = 5; n <= 60; n++) {
+    const [name, group, unit] = choose(pick, ITEMS);
+    const item = itemOf(
+      `ITM-${pad(n, 4)}`,
+      `${choose(pick, MARKERS.Kit.slice(0, 8))} ${name}`,
+      group,
+      unit,
     );
+    const places = 1 + Math.floor(pick() * 3);
+    const start = Math.floor(pick() * PLACES_KIT.length);
+    for (let p = 0; p < places; p++) {
+      const qty = Math.floor(pick() * 5000);
+      kit.push(
+        stockRow(
+          'Kit',
+          item,
+          PLACES_KIT[(start + p) % PLACES_KIT.length],
+          `${qty}.${pad(Math.floor(pick() * 1000), 3)}`,
+          money(qty * (50 + Math.floor(pick() * 5000))),
+        ),
+      );
+    }
   }
   const dot = [];
   for (let n = 1; dot.length < 8; n++) {
+    const [name, , unit] = choose(pick, ITEMS);
+    const qty = Math.floor(pick() * 900);
     dot.push(
-      itemRow('Dot', `DOT-${pad(n, 3)}`, {
-        itemName: `${choose(pick, MARKERS.Dot)} ${choose(pick, ITEMS)}`,
-        quantity: `${Math.floor(pick() * 900)}.000`,
-        lastMovement: day(pick),
-      }),
+      stockRow(
+        'Dot',
+        itemOf(`DOT-${pad(n, 3)}`, `${choose(pick, MARKERS.Dot)} ${name}`, 'FOOD', unit),
+        ['S-DOT', 'WH-DOT', null],
+        `${qty}.000`,
+        money(qty * 300),
+      ),
     );
   }
   return interleave(kit, dot, null);
@@ -617,10 +809,21 @@ function interleave(kit, dot, firstId) {
 }
 
 /**
- * Every record by connector, in id order, with its version: one 8-byte counter per database, as
- * SQL Server's `rowversion` is.
+ * An Items on hand record's id: the bucket's own key, item, site, warehouse and location, as the
+ * stock lookup keys its rows.
  */
-export function seedRecords({ kitVendors = 150, locks = true } = {}) {
+export const stockId = (row) =>
+  [row.itemId, row.siteId ?? '', row.warehouseId ?? '', row.locationId ?? ''].join('|');
+
+/**
+ * Every record by connector, in id order. Vendors' each with its version: one 8-byte counter per
+ * database, as SQL Server's `rowversion` is; Customers' and Items on hand's versions are made from
+ * the values a user sees when read (server.mjs).
+ *
+ * `kitVendors` and `kitCustomers`: more of Kit's than the seed's 150 and 240, for the review
+ * benches; `locks: false`, no record locked.
+ */
+export function seedRecords({ kitVendors = 150, kitCustomers = 240, locks = true } = {}) {
   const pick = random(20261114);
   let counter = 0x1000n;
   const version = () => {
@@ -631,14 +834,14 @@ export function seedRecords({ kitVendors = 150, locks = true } = {}) {
   const out = {};
   for (const [id, rows] of [
     ['vendors', vendors(pick, kitVendors, locks)],
-    ['customers', customers(pick)],
+    ['customers', customers(pick, kitCustomers)],
     ['itemsOnHand', items(pick)],
   ]) {
     const connector = CONNECTORS[id];
     out[id] = rows.map((row) => ({
       ...row,
-      id: connector.idField ? row[connector.idField] : row[connector.keyField],
-      version: version(),
+      id: id === 'itemsOnHand' ? stockId(row) : row[connector.idField],
+      ...(connector.versions === 'rowversion' ? { version: version() } : {}),
     }));
   }
   return out;

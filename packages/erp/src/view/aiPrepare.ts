@@ -3,8 +3,18 @@
 // as the block holds them in memory, from the person's own session; each proposal is checked with
 // the same local rules as a typed change and lands in the pending list marked as AI's. Nothing
 // here can commit: the person reviews and commits on the usual screen.
+//
+// Phase 10: a field shared by a key (`scope: 'key'`, an item's name across its rows) is marked so
+// in the request, and a proposal for it changes every row of its key on screen, as a typed change
+// does; proposals giving one key two values keep the last, as for one record's field.
 import type { ErpAiField, ErpAiRequest, ErpChangeProposal } from '../ai';
-import type { ConnectorSchema, ErpRecord, Language, WireValue } from '../contract';
+import {
+  sharedByKey,
+  type ConnectorSchema,
+  type ErpRecord,
+  type Language,
+  type WireValue,
+} from '../contract';
 import { localProblem, sameValue, type ErpDraft } from '../drafts';
 import { labelOf } from './settings';
 
@@ -39,6 +49,7 @@ export function buildAiRequest(
         ...(f.min !== undefined ? { min: f.min } : {}),
         ...(f.max !== undefined ? { max: f.max } : {}),
         ...(f.scale !== undefined ? { scale: f.scale } : {}),
+        ...(sharedByKey(f) ? { scope: 'key' as const } : {}),
         ...(items
           ? {
               lookup: items
@@ -92,8 +103,9 @@ export function applyProposals(
       skipped++;
       continue;
     }
-    // A field's name is an identifier, so it holds no `|`.
-    const slot = `${field.name}|${record.id}`;
+    // A field's name is an identifier, so it holds no `|`. A shared field's slot is its key's.
+    const shared = sharedByKey(field);
+    const slot = shared ? `${field.name}|key:${record.key}` : `${field.name}|${record.id}`;
     if (seen.has(slot)) continue;
     seen.add(slot);
     if (localProblem(field, schema, proposal.to) !== null) {
@@ -103,7 +115,8 @@ export function applyProposals(
     const pending = draft.record(record.id)?.changes[field.name];
     const now = pending ? pending.to : (record.values[field.name] ?? null);
     if (sameValue(now, proposal.to)) continue;
-    if (draft.set(record, field.name, proposal.to, true)) applied++;
+    if (draft.apply(schema, record, field.name, proposal.to, { byAi: true, held: records }))
+      applied++;
     else skipped++;
   }
   return { applied, skipped };

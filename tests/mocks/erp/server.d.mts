@@ -7,9 +7,11 @@ export interface MockUser {
   readonly displayName: string;
   readonly connectors: readonly string[];
   readonly admin: boolean;
+  /** The record rules the ERP applies (Customers' ownership rule: `{createdBy: <the user's id>}`). */
   readonly rules?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** The fields the ERP's field rules keep from the user (Customers' national ID from employees). */
   readonly hidden?: Readonly<Record<string, readonly string[]>>;
-  /** Phase 7: a connector's Edit privilege, or Edit and AdvEdit. */
+  /** Phase 7 (Vendors), Phase 10 (Customers, Items on hand): Edit, or Edit and AdvEdit. */
   readonly edit?: Readonly<Record<string, 'edit' | 'advEdit'>>;
 }
 
@@ -96,7 +98,7 @@ export declare class MockErp {
   workspaceOrigins: Set<string>;
   clientOrigins: Set<string>;
   readonly workspaceUrl: string;
-  reset(options?: { kitVendors?: number; locks?: boolean }): void;
+  reset(options?: { kitVendors?: number; kitCustomers?: number; locks?: boolean }): void;
   now(): number;
   state(): MockState;
 }

@@ -269,6 +269,14 @@ export type FieldType = (typeof FIELD_TYPES)[number];
 export const EDIT_REASONS = ['notEditable', 'needsEdit', 'needsAdvEdit'] as const;
 export type EditReason = (typeof EDIT_REASONS)[number];
 
+/**
+ * Whose value a field holds (Phase 10, INTEGRATIONS.md, "A field shared by a key"): its record's
+ * own (`record`), or every record with the same `key` (`key`: Items on hand's item name and group,
+ * across the item's rows).
+ */
+export const FIELD_SCOPES = ['record', 'key'] as const;
+export type FieldScope = (typeof FIELD_SCOPES)[number];
+
 export interface FieldSchema {
   readonly name: string;
   readonly label: Localized;
@@ -276,6 +284,8 @@ export interface FieldSchema {
   readonly editable: boolean;
   /** Why a read-only field is read-only; never on an editable one. */
   readonly editReason?: EditReason;
+  /** Absent: `record`. A `key` field's value belongs to every record of the same key. */
+  readonly scope?: FieldScope;
   readonly required?: boolean;
   readonly maxLength?: number;
   /** A decimal string for a decimal, a number for an integer, `YYYY-MM-DD` for a date. */
@@ -290,6 +300,15 @@ export interface FieldSchema {
   /** `sort` may name it. */
   readonly sortable: boolean;
 }
+
+/** A field's scope, `record` when the schema does not say (as a client before Phase 10 reads it). */
+export function scopeOf(field: Pick<FieldSchema, 'scope'>): FieldScope {
+  return field.scope ?? 'record';
+}
+
+/** Whether `field` is one a record shares with every record of its key. */
+export const sharedByKey = (field: Pick<FieldSchema, 'scope'> | undefined): boolean =>
+  field !== undefined && scopeOf(field) === 'key';
 
 export interface LookupItem {
   readonly code: string;
@@ -413,7 +432,8 @@ export interface CommitResponse {
   readonly committedAt: string | null;
   /**
    * Each changed record as saved (a dry run: as it would be, versions unchanged), every field
-   * the user may see.
+   * the user may see. Phase 10: also every other record of a key whose shared field (`scope:
+   * 'key'`) the commit changes, so it may hold more records than were sent.
    */
   readonly records: readonly ErpRecord[];
 }
@@ -839,6 +859,10 @@ function field(value: unknown, path: string, lookups: Obj): FieldSchema {
     ),
     ...spread('scale', scale),
     ...spread('lookup', lookup),
+    ...spread(
+      'scope',
+      optional(o, 'scope', path, (v, p) => oneOf(FIELD_SCOPES, v, p)),
+    ),
     filterable: boolean(o.filterable, `${path}.filterable`),
     sortable: boolean(o.sortable, `${path}.sortable`),
   };
@@ -1075,6 +1099,21 @@ function checkAgainstSchema(
 
 const sameId = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
+/**
+ * The keys whose shared fields (`scope: 'key'`) a commit changes: the answer holds every record of
+ * them the user may see. Without the schema the scopes are not known, so any key the request names.
+ */
+export function keysSharing(request: CommitRequest, schema?: ConnectorSchema): Set<string> {
+  const shared = schema
+    ? new Set(schema.fields.filter((f) => sharedByKey(f)).map((f) => f.name))
+    : null;
+  return new Set(
+    request.records
+      .filter((r) => !shared || Object.keys(r.changes).some((f) => shared.has(f)))
+      .map((r) => r.key),
+  );
+}
+
 export function parseCommitResponse(
   value: unknown,
   context: CommitContext = {},
@@ -1108,11 +1147,28 @@ export function parseCommitResponse(
   }
   if (request) {
     const asked = new Map(request.records.map((r) => [r.id, r]));
-    if (records.length !== asked.size || records.some((r) => !asked.has(r.id))) {
-      throw new ErpContractError(`${path}.records`, "exactly the request's records", o.records);
+    const answered = new Set(records.map((r) => r.id));
+    if (request.records.some((r) => !answered.has(r.id))) {
+      throw new ErpContractError(
+        `${path}.records`,
+        "every one of the request's records",
+        o.records,
+      );
     }
+    // Phase 10: the other records of a key whose shared field changed, as saved.
+    const shared = keysSharing(request, schema);
     records.forEach((record, i) => {
-      const sent = asked.get(record.id)!;
+      const sent = asked.get(record.id);
+      if (!sent) {
+        if (!shared.has(record.key)) {
+          throw new ErpContractError(
+            `${path}.records[${i}].key`,
+            "a key whose shared field the request changes, or one of the request's records",
+            record.key,
+          );
+        }
+        return;
+      }
       if (record.key !== sent.key) {
         throw new ErpContractError(`${path}.records[${i}].key`, "the record's key", record.key);
       }

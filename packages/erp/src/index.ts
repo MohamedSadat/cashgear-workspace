@@ -30,6 +30,7 @@ export {
   type DraftPhase,
   type DraftPlace,
   type DraftRecord,
+  type DraftSource,
   type ErpCommitAudit,
   type ParsedInput,
 } from './drafts';

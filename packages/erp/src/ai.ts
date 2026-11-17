@@ -15,6 +15,11 @@ export interface ErpAiField {
   readonly min?: string | number;
   readonly max?: string | number;
   readonly scale?: number;
+  /**
+   * Phase 10: the value belongs to every record of the same key (an item's name across its rows),
+   * so one change applies to all of them. Absent for a record's own field.
+   */
+  readonly scope?: 'key';
   /** A lookup's active codes, with their labels: the only values a change may choose. */
   readonly lookup?: readonly { readonly code: string; readonly label: string }[];
 }

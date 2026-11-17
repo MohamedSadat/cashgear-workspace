@@ -80,6 +80,7 @@ const TEXT = {
     'record.notFound': 'The record does not exist.',
     'record.locked': 'The record is locked.',
     'version.missing': 'The record’s version is missing.',
+    shared: 'Every record of one key must get the same value for this field.',
   },
   ar: {
     'ticket.invalid': 'انتهت صلاحية هذا الرابط أو استخدم من قبل. اتصل من جديد.',
@@ -105,6 +106,7 @@ const TEXT = {
     'record.notFound': 'السجل غير موجود.',
     'record.locked': 'السجل مقفل.',
     'version.missing': 'إصدار السجل غير موجود.',
+    shared: 'يجب أن تأخذ سجلات المفتاح الواحد القيمة نفسها لهذا الحقل.',
   },
 };
 
@@ -131,6 +133,17 @@ function canonical(value) {
   }
   return JSON.stringify(value);
 }
+
+/**
+ * A version for a record whose table has no rowversion (Phase 10, Customers and Items on hand): 8
+ * bytes of the SHA-256 of the values the user sees, in base64, as `ConnectorRules.ContentVersion`
+ * makes it. Any change to one of them, by anyone, makes another.
+ */
+const contentVersion = (values) =>
+  createHash('sha256').update(canonical(values)).digest().subarray(0, 8).toString('base64');
+
+/** `""` and `null` are one value for text and lookups, as the ERP takes them. */
+const blank = (value) => (value === '' || value === undefined ? null : value);
 
 function compareDecimal(a, b) {
   const sa = a.startsWith('-') ? -1 : 1;
@@ -228,10 +241,12 @@ export class MockErp {
    */
   reset(options = {}) {
     this.records = seedRecords(options);
-    // Versions after the seed's: one 8-byte counter, as SQL Server's `rowversion` is.
+    // Versions after the seed's: one 8-byte counter, as SQL Server's `rowversion` is (Vendors';
+    // the others' are made from their values).
     this.version = Object.values(this.records)
       .flat()
       .reduce((max, row) => {
+        if (typeof row.version !== 'string') return max;
         const n = Buffer.from(row.version, 'base64').readBigUInt64BE();
         return n > max ? n : max;
       }, 0n);
@@ -286,6 +301,15 @@ export class MockErp {
   fieldsFor(user, connector) {
     const hidden = new Set(user.hidden?.[connector.id] ?? []);
     return connector.fields.filter((f) => !hidden.has(f.name));
+  }
+
+  /**
+   * A record's version as a user reads it: Vendors' rowversion, else the hash of the values the
+   * user sees (`names`), so two users seeing different fields read different versions.
+   */
+  versionOf(connector, row, names) {
+    if (connector.versions === 'rowversion') return row.version;
+    return contentVersion(Object.fromEntries(names.map((n) => [n, row[n] ?? null])));
   }
 
   /** The records `user` may see of `connector`: their company's, under their record rules. */
@@ -686,7 +710,8 @@ export class MockErp {
 
   /**
    * The user's privilege to change `connector`'s records: `edit`, `advEdit` (Edit and AdvEdit),
-   * or null. Only a connector with fields anyone may edit can be granted (Phase 7: Vendors).
+   * or null. Only a connector with fields anyone may edit can be granted (Phase 7: Vendors;
+   * Phase 10: Customers and Items on hand too).
    */
   grant(user, connector) {
     if (connector.maxCommitRecords === 0 || !connector.fields.some((f) => f.edit)) return null;
@@ -721,7 +746,7 @@ export class MockErp {
         type: f.type,
         ...this.fieldEdit(user, connector, f),
       };
-      for (const key of ['required', 'maxLength', 'min', 'max', 'scale', 'lookup']) {
+      for (const key of ['required', 'maxLength', 'min', 'max', 'scale', 'lookup', 'scope']) {
         if (f[key] !== undefined) out[key] = f[key];
       }
       out.filterable = f.filterable;
@@ -752,8 +777,10 @@ export class MockErp {
     const q = readQuery(ctx.body, connector, byName);
 
     const search = q.search?.toLowerCase() ?? '';
+    // What the ERP's own list searches, of the fields this user sees (the customer list searches
+    // the national ID only where it shows it), and what it searches that is never sent.
     const searched = [
-      ...connector.fields.filter((f) => f.search).map((f) => f.name),
+      ...fields.filter((f) => f.search).map((f) => f.name),
       ...connector.searchAlso,
     ];
     let rows = this.rowsFor(user, connector).filter((row) => {
@@ -806,11 +833,13 @@ export class MockErp {
     const page = rows.slice(offset, offset + q.pageSize);
     const next = offset + page.length;
     const names = q.fields ?? fields.map((f) => f.name);
+    // A version is of every field the user sees, whichever the query asked for.
+    const seen = fields.map((f) => f.name);
     return new Reply(200, {
       records: page.map((row) => ({
         id: row.id,
         key: String(row[connector.keyField]),
-        version: row.version,
+        version: this.versionOf(connector, row, seen),
         values: Object.fromEntries(names.map((name) => [name, row[name] ?? null])),
       })),
       nextCursor:
@@ -824,6 +853,9 @@ export class MockErp {
   // -------------------------------------------------------------------------------------------
   // Commit (Phase 7, INTEGRATIONS.md, "`Commit` and `CommitStatus`"): every check in the
   // contract's order, the first that fails answering, and nothing written unless all pass.
+  // Phase 10 ("Customers and Items on hand editable"): the same path for Customers and Items on
+  // hand, with versions made from the values the user sees, the customer list's ownership rule,
+  // and an item's shared name and group written once for every row of the item.
 
   commit(ctx, session, connector) {
     const user = session.userInfo;
@@ -877,6 +909,16 @@ export class MockErp {
         if ('from' in change && !isWire(change.from)) no('`from` is a value.');
       }
     }
+    // 4, Phase 10: the records of one key carry the same `to` for each shared field they change.
+    const mismatched = sharedMismatches(connector, body.records);
+    if (mismatched.length) {
+      const table = TEXT[ctx.language] ?? TEXT.en;
+      return new Reply(400, {
+        message: table['request.invalid'],
+        correlationId: ctx.correlationId,
+        errors: mismatched.map((e) => ({ ...e, code: 'request.invalid', message: table.shared })),
+      });
+    }
     // 5. Size.
     if (body.records.length > connector.maxCommitRecords) refuse(413, 'batch.tooLarge');
     // 6. A commit already stored under this id.
@@ -904,16 +946,18 @@ export class MockErp {
     }
     // 7. The schema.
     if (body.schemaVersion !== connector.schemaVersion) refuse(400, 'schema.changed');
-    // 8. Every record and field, every error listed.
+    // 8. Every record and field, every error listed. A record the user may not see (another's
+    // customer under the ownership rule), or not of the key it was sent with, is not found.
     const visible = new Map(this.fieldsFor(user, connector).map((f) => [f.name, f]));
     const rows = this.rowsFor(user, connector);
     const lists = lookups(user.company);
+    const keyOf = (row) => String(row[connector.keyField]);
     const errors = [];
     const found = [];
     for (const record of body.records) {
       const at = { id: record.id, key: record.key };
       const row = rows.find((r) => r.id === record.id);
-      if (!row) {
+      if (!row || keyOf(row) !== record.key) {
         errors.push({ ...at, code: 'record.notFound' });
         continue;
       }
@@ -942,22 +986,23 @@ export class MockErp {
         errors: errors.map((e) => ({ ...e, message: table[e.code] ?? e.code })),
       });
     }
-    // 9. Versions, every conflict listed.
+    // 9. Versions, every conflict listed: Vendors' rowversion, or the values the user sees read
+    // again now (a stock movement on an item's row is a conflict whose `fields` may be empty).
     const names = [...visible.keys()];
     const valuesOf = (row) => Object.fromEntries(names.map((n) => [n, row[n] ?? null]));
-    const empty = (v) => (v === '' || v === undefined ? null : v);
+    const versionOf = (row) => this.versionOf(connector, row, names);
     const conflicts = found
-      .filter(({ record, row }) => record.version !== row.version)
+      .filter(({ record, row }) => record.version !== versionOf(row))
       .map(({ record, row }) => ({
         id: row.id,
-        key: String(row[connector.keyField]),
-        version: row.version,
+        key: keyOf(row),
+        version: versionOf(row),
         values: valuesOf(row),
         fields: Object.entries(record.changes)
-          .filter(([name, change]) => empty(row[name]) !== empty(change.from))
+          .filter(([name, change]) => blank(row[name]) !== blank(change.from))
           .map(([name]) => name),
-        modifiedBy: row.modifiedBy ?? null,
-        modifiedAt: row.modifiedDate ?? null,
+        modifiedBy: connector.stamps === false ? null : (row.modifiedBy ?? null),
+        modifiedAt: connector.stamps === false ? null : (row.modifiedDate ?? null),
       }));
     if (conflicts.length) {
       const table = TEXT[ctx.language] ?? TEXT.en;
@@ -967,56 +1012,98 @@ export class MockErp {
         conflicts,
       });
     }
-    // 10. Written in one step, with the modified stamps, the audit and the stored commit.
+    // 10. Written in one step, with the modified stamps, the audit and the stored commit. A shared
+    // field (an item's name and group, in InvTable) is written once a key, so every row of that
+    // key changes with it, and the answer holds each of them the user may see.
     const now = this.now();
     const at = iso(now);
-    const written = found.map(({ record, row }) => {
-      const next = { ...row };
+    const all = this.records[connector.id];
+    const shared = new Set(connector.fields.filter((f) => f.scope === 'key').map((f) => f.name));
+    /** Each row touched, by id: its original and its next state. */
+    const touched = new Map();
+    const touch = (row) => {
+      let entry = touched.get(row.id);
+      if (!entry) touched.set(row.id, (entry = { row, next: { ...row } }));
+      return entry.next;
+    };
+    /** Per key, its shared fields' new values and the first record that changes each. */
+    const keyed = new Map();
+    for (const { record, row } of found) {
+      const next = touch(row);
       for (const [name, change] of Object.entries(record.changes)) {
         const field = visible.get(name);
-        next[name] =
+        const to =
           (field.type === 'text' || field.type === 'lookup') && change.to === '' ? null : change.to;
+        next[name] = to;
+        if (!shared.has(name)) continue;
+        const of = keyed.get(keyOf(row)) ?? new Map();
+        if (!of.has(name)) of.set(name, { to, row });
+        keyed.set(keyOf(row), of);
       }
       if (!body.dryRun) {
-        next.version = this.nextVersion();
-        next.modifiedBy = user.displayName;
-        next.modifiedDate = at;
+        if (connector.versions === 'rowversion') next.version = this.nextVersion();
+        if (connector.stamps !== false) {
+          next.modifiedBy = user.displayName;
+          next.modifiedDate = at;
+        }
       }
-      return { record, row, next };
-    });
+    }
+    for (const row of all) {
+      if (row.company !== session.company) continue;
+      const of = keyed.get(keyOf(row));
+      if (!of) continue;
+      const next = touch(row);
+      for (const [name, { to }] of of) next[name] = to;
+    }
+    const sent = new Set(found.map(({ row }) => row.id));
+    const answered = [
+      ...found.map(({ row }) => touched.get(row.id)),
+      // The other rows of a changed key that this user may see, in the connector's order.
+      ...rows
+        .filter((row) => !sent.has(row.id) && touched.has(row.id))
+        .map((r) => touched.get(r.id)),
+    ];
     const response = {
       commitId: body.commitId,
       dryRun: body.dryRun,
       committedAt: body.dryRun ? null : at,
-      records: written.map(({ next }) => ({
+      records: answered.map(({ row, next }) => ({
         id: next.id,
-        key: String(next[connector.keyField]),
-        version: next.version,
+        key: keyOf(next),
+        // A dry run writes nothing: each version is as it is now.
+        version: body.dryRun ? versionOf(row) : versionOf(next),
         values: valuesOf(next),
       })),
     };
     if (body.dryRun) return new Reply(200, response);
-    const table = this.records[connector.id];
-    for (const { record, row, next } of written) {
-      table[table.indexOf(row)] = next;
+    for (const { row, next } of touched.values()) all[all.indexOf(row)] = next;
+    const audit = (row, name, before, after) =>
+      this.audit.push({
+        company: session.company,
+        connector: connector.id,
+        recordId: row.id,
+        key: keyOf(row),
+        field: name,
+        before,
+        after,
+        user: user.id,
+        at,
+        commitId: body.commitId.toLowerCase(),
+        audience: 'workspace',
+        workspaceId: source.workspaceId,
+        pageId: source.pageId,
+        blockId: source.blockId,
+      });
+    for (const { record, row } of found) {
+      const next = touched.get(row.id).next;
       for (const name of Object.keys(record.changes)) {
-        this.audit.push({
-          company: session.company,
-          connector: connector.id,
-          recordId: row.id,
-          key: String(row[connector.keyField]),
-          field: name,
-          before: row[name] ?? null,
-          after: next[name] ?? null,
-          user: user.id,
-          at,
-          commitId: body.commitId.toLowerCase(),
-          audience: 'workspace',
-          workspaceId: source.workspaceId,
-          pageId: source.pageId,
-          blockId: source.blockId,
-        });
+        // A shared field's one row per key is the first record's that changes it.
+        if (shared.has(name)) continue;
+        audit(row, name, row[name] ?? null, next[name] ?? null);
       }
+    }
+    for (const of of keyed.values()) {
+      for (const [name, { to, row }] of of) audit(row, name, row[name] ?? null, to ?? null);
     }
     this.commits.set(key, { hash, body: response });
     return new Reply(200, response);
@@ -1074,10 +1161,16 @@ export class MockErp {
     switch (route) {
       case 'reset':
         // For Phase 7's review bench: `kitVendors`, more of Kit's vendors than the seed's 150;
-        // `locks: false`, no record locked (every change of 500 valid).
+        // `locks: false`, no record locked (every change of 500 valid). Phase 10's:
+        // `kitCustomers`, more of Kit's customers than the seed's 240.
         this.reset({
           ...(Number.isInteger(body.kitVendors) && body.kitVendors >= 7 && body.kitVendors <= 5000
             ? { kitVendors: body.kitVendors }
+            : {}),
+          ...(Number.isInteger(body.kitCustomers) &&
+          body.kitCustomers >= 6 &&
+          body.kitCustomers <= 5000
+            ? { kitCustomers: body.kitCustomers }
             : {}),
           ...(body.locks === false ? { locks: false } : {}),
         });
@@ -1145,30 +1238,63 @@ export class MockErp {
       case 'state':
         return ok(this.state());
       case 'edit-record': {
-        // Another ERP user changes a record behind the page's back: a new version, new stamps.
+        // Another ERP user changes a record behind the page's back: new values, so a new version,
+        // and new stamps where the table has them. Phase 10: `id` names one of a key's records
+        // (an item's stock at one place: a posting moves its quantity); a shared field (the
+        // item's name or group) changes on every record of its key, as InvTable holds it once.
         const connector = Object.hasOwn(CONNECTORS, body.connector)
           ? CONNECTORS[body.connector]
           : undefined;
         if (!connector || !Object.hasOwn(COMPANIES, body.company) || !isObject(body.values)) {
-          return bad('connector, company, key and values are required.');
+          return bad('connector, company, key or id, and values are required.');
         }
         const table = this.records[connector.id];
-        const index = table.findIndex(
-          (row) => row.company === body.company && String(row[connector.keyField]) === body.key,
+        const target = table.find(
+          (row) =>
+            row.company === body.company &&
+            (typeof body.id === 'string'
+              ? row.id === body.id
+              : String(row[connector.keyField]) === body.key),
         );
-        if (index < 0) return bad('No such record.');
+        if (!target) return bad('No such record.');
         const names = new Set(connector.fields.map((f) => f.name));
         for (const name of Object.keys(body.values)) {
           if (!names.has(name)) return bad(`No field ${name}.`);
         }
-        table[index] = {
-          ...table[index],
-          ...body.values,
-          version: this.nextVersion(),
-          modifiedBy: typeof body.by === 'string' ? body.by : 'Another ERP user',
-          modifiedDate: iso(this.now()),
-        };
-        return ok({ id: table[index].id, version: table[index].version });
+        const shared = new Set(
+          connector.fields.filter((f) => f.scope === 'key').map((f) => f.name),
+        );
+        const sharedValues = Object.fromEntries(
+          Object.entries(body.values).filter(([name]) => shared.has(name)),
+        );
+        const key = String(target[connector.keyField]);
+        let edited = target;
+        for (let i = 0; i < table.length; i++) {
+          const row = table[i];
+          if (row === target) {
+            edited = table[i] = {
+              ...row,
+              ...body.values,
+              ...(connector.versions === 'rowversion' ? { version: this.nextVersion() } : {}),
+              ...(connector.stamps === false
+                ? {}
+                : {
+                    modifiedBy: typeof body.by === 'string' ? body.by : 'Another ERP user',
+                    modifiedDate: iso(this.now()),
+                  }),
+            };
+          } else if (
+            row.company === body.company &&
+            String(row[connector.keyField]) === key &&
+            Object.keys(sharedValues).length
+          ) {
+            table[i] = { ...row, ...sharedValues };
+          }
+        }
+        return ok({
+          id: edited.id,
+          version: this.versionOf(connector, edited, [...names]),
+        });
       }
       case 'audit':
         return ok({ audit: this.audit, commits: this.commits.size });
@@ -1229,6 +1355,27 @@ export class MockErp {
 
 function nonEmptyId(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= 100;
+}
+
+/**
+ * Phase 10's addition to check 4: each record of a key that changes a shared field (`scope:
+ * 'key'`), when the records of that key give it different values; `id`, `key` and `field` of each.
+ */
+function sharedMismatches(connector, records) {
+  const errors = [];
+  for (const { name } of connector.fields.filter((f) => f.scope === 'key')) {
+    const byKey = new Map();
+    for (const record of records) {
+      if (!Object.hasOwn(record.changes, name)) continue;
+      byKey.set(record.key, [...(byKey.get(record.key) ?? []), record]);
+    }
+    for (const list of byKey.values()) {
+      const first = blank(list[0].changes[name].to);
+      if (list.every((r) => blank(r.changes[name].to) === first)) continue;
+      for (const r of list) errors.push({ id: r.id, key: r.key, field: name });
+    }
+  }
+  return errors;
 }
 
 /** A query's body, checked as the ERP checks it: anything wrong is 400 `request.invalid`. */

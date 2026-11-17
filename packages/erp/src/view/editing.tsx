@@ -3,18 +3,21 @@
 // old and new value and every error the ERP gave), the conflict screen (theirs beside the
 // person's, per field), and "Prepare changes with AI". What is changed lives in the block's draft
 // (`ErpDraft`), in memory only; the ERP decides what may be changed and checks every value.
+// Phase 10: a field shared by a key (`scope: 'key'`) is changed on every row of its key at once,
+// and the review lists the rows the ERP says change with them that the block does not show.
 import { CgButton } from '@cashgear/ui';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { ErpAiAssist } from '../ai';
-import type {
-  ApiError,
-  CommitConflict,
-  ConnectorSchema,
-  ErpError,
-  ErpRecord,
-  FieldSchema,
-  Language,
-  WireValue,
+import {
+  sharedByKey,
+  type ApiError,
+  type CommitConflict,
+  type ConnectorSchema,
+  type ErpError,
+  type ErpRecord,
+  type FieldSchema,
+  type Language,
+  type WireValue,
 } from '../contract';
 import {
   localProblem,
@@ -42,6 +45,14 @@ const PROBLEM_KEYS: Readonly<Record<string, ErpKey>> = {
   'record.notFound': 'problemNotFound',
   'record.locked': 'problemLocked',
   'version.missing': 'problemVersion',
+  // Phase 10: the only field a request's shape names is a shared one given two values.
+  'request.invalid': 'problemShared',
+};
+
+/** The label of the schema's key field, as a shared field's note names it. */
+export const keyLabel = (schema: ConnectorSchema, language: Language) => {
+  const key = schema.fields.find((f) => f.name === schema.keyField);
+  return key ? labelOf(key, language) : schema.keyField;
 };
 
 /** What an ERP error code on a field or record says; the ERP's own message is never shown. */
@@ -83,6 +94,7 @@ const formatTime = (iso: string | null, locale: string) =>
 export function EditableCell({
   field,
   record,
+  records,
   schema,
   draft,
   locale,
@@ -92,6 +104,8 @@ export function EditableCell({
 }: {
   field: FieldSchema;
   record: ErpRecord;
+  /** The records the block holds, as read: a shared field's edit changes those of its key too. */
+  records: readonly ErpRecord[];
   schema: ConnectorSchema;
   draft: ErpDraft;
   locale: string;
@@ -112,6 +126,9 @@ export function EditableCell({
   const change = draft.record(record.id)?.changes[field.name];
   const value = change ? change.to : (record.values[field.name] ?? null);
   const label = labelOf(field, language);
+  const shared = sharedByKey(field)
+    ? t('sharedField', { field: keyLabel(schema, language) })
+    : null;
   const className =
     [numeric ? 'cgw-erp-num' : '', change ? 'cgw-erp-changed' : ''].filter(Boolean).join(' ') ||
     undefined;
@@ -123,10 +140,12 @@ export function EditableCell({
           schema={schema}
           value={value}
           label={label}
+          note={shared}
           onDone={(next) => {
             refocus.current = true;
             setEditing(false);
-            if (next !== undefined) draft.set(record, field.name, next);
+            if (next !== undefined)
+              draft.apply(schema, record, field.name, next, { held: records });
           }}
         />
       </td>
@@ -157,7 +176,10 @@ export function EditableCell({
         <CellBody field={field} value={value} schema={schema} locale={locale} />
       </button>
       {change && (
-        <span className="cgw-erp-hidden">{` ${t(change.byAi ? 'changedByAi' : 'changed')}`}</span>
+        <span className="cgw-erp-hidden">
+          {` ${t(change.byAi ? 'changedByAi' : 'changed')}`}
+          {shared ? ` ${shared}` : ''}
+        </span>
       )}
     </td>
   );
@@ -168,12 +190,15 @@ function CellEditor({
   schema,
   value,
   label,
+  note,
   onDone,
 }: {
   field: FieldSchema;
   schema: ConnectorSchema;
   value: WireValue;
   label: string;
+  /** What the change does beyond this cell (a shared field's other rows), or null. */
+  note: string | null;
   /** The new value, or undefined when the person left it as it was. */
   onDone: (next: WireValue | undefined) => void;
 }) {
@@ -181,6 +206,7 @@ function CellEditor({
   const [problem, setProblem] = useState<string | null>(null);
   const id = useId();
   const problemId = `${id}-problem`;
+  const noteId = `${id}-note`;
   const finish = (raw: string): boolean => {
     const parsed = parseInput(field, raw);
     if (!parsed.ok) {
@@ -206,12 +232,13 @@ function CellEditor({
       finish(event.currentTarget.value);
     }
   };
+  const described = [problem ? problemId : '', note ? noteId : ''].filter(Boolean).join(' ');
   const common = {
     id,
     className: 'cgw-erp-input cgw-erp-cell-input',
     'aria-label': t('cellEditor', { field: label }),
     'aria-invalid': problem ? true : undefined,
-    'aria-describedby': problem ? problemId : undefined,
+    'aria-describedby': described || undefined,
     autoFocus: true,
     onKeyDown,
   } as const;
@@ -269,6 +296,11 @@ function CellEditor({
   return (
     <span className="cgw-erp-cell-edit">
       {control}
+      {note && (
+        <span id={noteId} className="cgw-erp-muted cgw-erp-shared">
+          {note}
+        </span>
+      )}
       {problem && (
         <span id={problemId} className="cgw-erp-invalid" role="alert">
           {problem}
@@ -389,6 +421,34 @@ interface Row {
   readonly field: string;
   readonly from: WireValue;
   readonly to: WireValue;
+  /** A row the block did not send that the ERP says changes with a shared field (Phase 10). */
+  readonly also?: boolean;
+}
+
+/**
+ * The rows a dry run says change besides those sent: every other record of a key whose shared
+ * field (`scope: 'key'`) the request changes, as the ERP would save it.
+ */
+function alsoChanged(
+  phase: Extract<DraftPhase, { kind: 'reviewed' }>,
+  fields: ReadonlyMap<string, FieldSchema>,
+): Row[] {
+  const sent = new Set(phase.request.records.map((r) => r.id));
+  const firstOfKey = new Map<string, (typeof phase.request.records)[number]>();
+  for (const r of phase.request.records) if (!firstOfKey.has(r.key)) firstOfKey.set(r.key, r);
+  const rows: Row[] = [];
+  for (const record of phase.response.records) {
+    const same = sent.has(record.id) ? undefined : firstOfKey.get(record.key);
+    if (!same) continue;
+    for (const [field, change] of Object.entries(same.changes)) {
+      if (!sharedByKey(fields.get(field))) continue;
+      const to = Object.prototype.hasOwnProperty.call(record.values, field)
+        ? (record.values[field] ?? null)
+        : change.to;
+      rows.push({ id: record.id, key: record.key, field, from: change.from, to, also: true });
+    }
+  }
+  return rows;
 }
 
 export function ReviewPanel({
@@ -405,8 +465,9 @@ export function ReviewPanel({
   const { t, locale } = useErpT();
   const heading = useId();
   const phase = draft.phase();
+  const fields = new Map(schema.fields.map((f) => [f.name, f]));
   const request = 'request' in phase ? phase.request : null;
-  const rows: Row[] = request
+  const own: Row[] = request
     ? request.records.flatMap((r) =>
         Object.entries(r.changes).map(([field, c]) => ({ id: r.id, key: r.key, field, ...c })),
       )
@@ -419,6 +480,10 @@ export function ReviewPanel({
           to: c.to,
         })),
       );
+  const rows = phase.kind === 'reviewed' ? [...own, ...alsoChanged(phase, fields)] : own;
+  // Records sharing a key (an item's rows) are told apart by their ids.
+  const idsOfKey = new Map<string, Set<string>>();
+  for (const row of rows) idsOfKey.set(row.key, (idsOfKey.get(row.key) ?? new Set()).add(row.id));
   const errors: readonly ApiError[] = phase.kind === 'invalid' ? phase.errors : [];
   const byField = new Map<string, string[]>();
   const byRecord = new Map<string, string[]>();
@@ -430,9 +495,8 @@ export function ReviewPanel({
   }
   const saved =
     phase.kind === 'reviewed' ? new Map(phase.response.records.map((r) => [r.id, r.values])) : null;
-  const fields = new Map(schema.fields.map((f) => [f.name, f]));
   const busy = phase.kind === 'reviewing' || phase.kind === 'committing';
-  const count = rows.length;
+  const count = own.length;
 
   let title = t('reviewTitle');
   let intro: string | null = null;
@@ -484,20 +548,29 @@ export function ReviewPanel({
                 ...(byField.get(`${row.field}|${row.id}`) ?? []),
                 ...(byRecord.get(row.id) ?? []),
               ];
-              const byAi = draft.record(row.id)?.changes[row.field]?.byAi;
+              const byAi = !row.also && draft.record(row.id)?.changes[row.field]?.byAi;
               return (
                 <tr
                   key={`${row.field}|${row.id}`}
                   data-key={row.key}
                   data-field={row.field}
                   data-problem={codes[0]}
+                  data-also={row.also ? 'true' : undefined}
                 >
                   <th scope="row">
                     <span dir="auto">{row.key}</span>
+                    {(idsOfKey.get(row.key)?.size ?? 0) > 1 && (
+                      <span className="cgw-erp-tag" dir="ltr">{` ${row.id}`}</span>
+                    )}
                   </th>
                   <td>
                     <span dir="auto">{field ? labelOf(field, language) : row.field}</span>
                     {byAi && <span className="cgw-erp-tag">{` ${t('changedByAi')}`}</span>}
+                    {row.also && (
+                      <span className="cgw-erp-tag">
+                        {` ${t('alsoChanged', { field: keyLabel(schema, language) })}`}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span dir="auto">{plainValue(field, row.from, schema, locale, t)}</span>
@@ -565,10 +638,14 @@ export function ConflictPanel({
   const phase = draft.phase();
   if (phase.kind !== 'conflict') return null;
   const fields = new Map(schema.fields.map((f) => [f.name, f]));
-  const choose = (id: string, field: string, choice: 'mine' | 'theirs') =>
+  // A shared field's choice is its key's: made for one row, it is made for each row of the key.
+  const choose = (conflict: CommitConflict, field: string, choice: 'mine' | 'theirs') =>
     setChoices((now) => {
       const next: Choices = new Map(now);
-      next.set(id, new Map(next.get(id)).set(field, choice));
+      const rows = sharedByKey(fields.get(field))
+        ? phase.conflicts.filter((c) => c.key === conflict.key)
+        : [conflict];
+      for (const c of rows) next.set(c.id, new Map(next.get(c.id)).set(field, choice));
       return next;
     });
   const needed = (c: CommitConflict) =>
@@ -613,6 +690,11 @@ export function ConflictPanel({
                 </span>
               )}
             </legend>
+            {c.fields.length === 0 && (
+              <p className="cgw-erp-muted" data-testid="erp-conflict-other">
+                {t('conflictOther')}
+              </p>
+            )}
             <table className="cgw-erp-table">
               <thead>
                 <tr>
@@ -655,7 +737,7 @@ export function ConflictPanel({
                                 name={group}
                                 value="mine"
                                 checked={choice === 'mine'}
-                                onChange={() => choose(c.id, name, 'mine')}
+                                onChange={() => choose(c, name, 'mine')}
                               />{' '}
                               {t('keepMine')}
                             </label>
@@ -665,7 +747,7 @@ export function ConflictPanel({
                                 name={group}
                                 value="theirs"
                                 checked={choice === 'theirs'}
-                                onChange={() => choose(c.id, name, 'theirs')}
+                                onChange={() => choose(c, name, 'theirs')}
                               />{' '}
                               {t('keepTheirs')}
                             </label>

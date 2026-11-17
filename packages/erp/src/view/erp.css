@@ -381,7 +381,8 @@
   min-inline-size: 8rem;
 }
 
-.cgw-erp-cell-edit .cgw-erp-invalid {
+.cgw-erp-cell-edit .cgw-erp-invalid,
+.cgw-erp-cell-edit .cgw-erp-shared {
   white-space: normal;
 }
 

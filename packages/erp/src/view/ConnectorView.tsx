@@ -307,6 +307,11 @@ function Loaded({
     return () => controller.abort();
   }, [sessions, link.id, connectorId, schema, requestKey, cursor, refresh]);
   const wait = useWait(result.error);
+  // Phase 10: rows read now of a key whose shared field is changed show that change too.
+  const shown = result.key === requestKey ? result.response : null;
+  useEffect(() => {
+    if (draft && shown) draft.adopt(shown.records);
+  }, [draft, shown]);
 
   const editable = host.editable;
   const maxPageSize = schema.maxPageSize;
@@ -336,7 +341,7 @@ function Loaded({
     result.loadedAt && result.key === requestKey
       ? new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(result.loadedAt)
       : null;
-  const response = result.key === requestKey ? result.response : null;
+  const response = shown;
   const pageIndex = cursors.length - 1;
 
   return (

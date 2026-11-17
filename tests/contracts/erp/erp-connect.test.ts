@@ -53,6 +53,7 @@ import {
   resetMock,
   schemaOf,
   send,
+  SHARED_FIELDS,
   expectedEditing,
   grantOf,
   sharedLink,
@@ -416,8 +417,8 @@ describe('connectors', () => {
       };
       const full = await list('full');
       expect(full.map((c) => c.id)).toEqual(expect.arrayContaining(CONNECTORS));
-      // Phase 7: only Vendors may be editable, for a user with its Edit privilege.
-      for (const c of full) if (c.id !== 'vendors') expect(c.access).toBe('view');
+      // The mock's FULL user views every connector and edits none (an editor's access is `edit`
+      // since Phase 7 for Vendors and Phase 10 for Customers and Items on hand: commit.test.ts).
       if (onMock) for (const c of full) expect(c.access).toBe('view');
       const limited = (await list('limited')).map((c) => c.id);
       expect(full.map((c) => c.id)).toEqual(expect.arrayContaining(limited));
@@ -449,7 +450,14 @@ describe('connectors', () => {
           expect(f, f.name).toMatchObject(expectedEditing(id, f.name, grant));
         }
         expect(schema.fields.some((f) => f.name === schema.keyField)).toBe(true);
-        expect(schema.maxCommitRecords).toBe(id === 'vendors' ? 500 : 0);
+        // Phase 10: Customers and Items on hand are editable too, with Vendors' budget.
+        expect(schema.maxCommitRecords).toBe(500);
+        const shared = SHARED_FIELDS[id] ?? [];
+        for (const f of schema.fields) {
+          expect(f.scope ?? 'record', `${f.name}'s scope`).toBe(
+            shared.includes(f.name) ? 'key' : 'record',
+          );
+        }
       },
     );
 
@@ -498,19 +506,30 @@ describe('connectors', () => {
   );
 
   mockOnly('keeps fields from users who may not see them', async () => {
+    // The customer list's national ID only for users who aren't employees, as the ERP shows it.
     const alice = await schemaOf((await sharedSession('full')).token, 'customers');
     const bob = await schemaOf((await sharedSession('limited')).token, 'customers');
-    expect(alice.fields.map((f) => f.name)).toContain('creditLimit');
-    expect(bob.fields.map((f) => f.name)).not.toContain('creditLimit');
+    expect(alice.fields.map((f) => f.name)).toContain('nationalId');
+    expect(bob.fields.map((f) => f.name)).not.toContain('nationalId');
     const answer = await query((await sharedSession('limited')).token, 'customers', {});
     for (const record of parseQueryResponse(answer.json, { schema: bob }).records) {
-      expect(record.values).not.toHaveProperty('creditLimit');
+      expect(record.values).not.toHaveProperty('nationalId');
     }
     refused(
-      await query((await sharedSession('limited')).token, 'customers', { fields: ['creditLimit'] }),
+      await query((await sharedSession('limited')).token, 'customers', { fields: ['nationalId'] }),
       400,
       'request.invalid',
     );
+    // Nor is it searched for them: a national ID alice finds a customer by finds nothing for bob.
+    const full = (await sharedSession('full')).token;
+    const all = parseQueryResponse((await query(full, 'customers', { pageSize: 500 })).json, {
+      schema: alice,
+    }).records;
+    const bobs = all.find((r) => r.values.createdBy === 'u102' && r.values.nationalId !== null)!;
+    const search = { filter: { search: String(bobs.values.nationalId) } };
+    expect(parseQueryResponse((await query(full, 'customers', search)).json).total).toBe(1);
+    const limited = (await sharedSession('limited')).token;
+    expect(parseQueryResponse((await query(limited, 'customers', search)).json).total).toBe(0);
   });
 });
 
@@ -714,8 +733,9 @@ describe('queries', () => {
         for (const record of mine.records) expect(ids.has(record.id), record.id).toBe(true);
       }
       if (onMock) {
+        // The customer list's ownership rule: bob sees only the customers he created.
         expect(mine.records.length).toBeGreaterThan(0);
-        for (const record of mine.records) expect(record.values.salesperson).toBe('S-BOB');
+        for (const record of mine.records) expect(record.values.createdBy).toBe('u102');
       }
     },
   );

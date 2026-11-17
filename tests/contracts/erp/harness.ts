@@ -35,6 +35,8 @@ export const rateLimits = onMock || env.ERP_TEST_RATE_LIMITS === '1';
 /**
  * `full` views every connector, `limited` fewer, `none` none; `admin` links; `other` is another
  * company's. Phase 7: `edit` holds Vendors' Edit privilege, `advEdit` its Edit and AdvEdit.
+ * Phase 10: `edit` also Customers' Edit (and no Items on hand), `advEdit` Customers' Edit and
+ * AdvEdit and Items' Edit (track-e8-brief.md's table of test users).
  */
 export type Role = 'full' | 'limited' | 'none' | 'admin' | 'other' | 'edit' | 'advEdit';
 
@@ -379,12 +381,70 @@ export const VENDOR_EDIT: Readonly<Record<string, 'edit' | 'advEdit' | null>> = 
   modifiedDate: null,
 };
 
+/** Phase 10: the privilege each Customers field needs (INTEGRATIONS.md, `customers.1`'s table). */
+export const CUSTOMER_EDIT: Readonly<Record<string, 'edit' | 'advEdit' | null>> = {
+  customerAccount: null,
+  customerName: 'edit',
+  customerGroup: 'edit',
+  mobile: 'edit',
+  mobile2: 'edit',
+  nationalId: null,
+  currency: 'advEdit',
+  payMethod: 'edit',
+  priceList: 'advEdit',
+  governorate: null,
+  city: null,
+  address: 'edit',
+  taxFile: 'edit',
+  creditLimit: 'advEdit',
+  blocked: 'advEdit',
+  createdBy: null,
+  createdDate: null,
+  modifiedBy: null,
+  modifiedDate: null,
+};
+
+/** Phase 10: the privilege each Items on hand field needs; stock never. */
+export const ITEM_EDIT: Readonly<Record<string, 'edit' | 'advEdit' | null>> = {
+  itemId: null,
+  itemName: 'edit',
+  unit: null,
+  itemGroup: 'edit',
+  siteId: null,
+  warehouseId: null,
+  locationId: null,
+  onHandQty: null,
+  onHandValue: null,
+};
+
+/** Each editable connector's table. */
+export const EDIT_TABLES: Readonly<
+  Record<string, Readonly<Record<string, 'edit' | 'advEdit' | null>>>
+> = { vendors: VENDOR_EDIT, customers: CUSTOMER_EDIT, itemsOnHand: ITEM_EDIT };
+
+/** Phase 10: the fields a record shares with every record of its key (`scope: 'key'`). */
+export const SHARED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  itemsOnHand: ['itemName', 'itemGroup'],
+};
+
+/** Each connector's schema version, as a commit names it. */
+export const SCHEMA_VERSIONS: Readonly<Record<string, string>> = {
+  vendors: 'vendors.1',
+  customers: 'customers.1',
+  itemsOnHand: 'itemsOnHand.1',
+};
+
 export type Grant = 'none' | 'edit' | 'advEdit';
 
-/** What a schema's access says the user holds: AdvEdit shows as an editable `currency`. */
+/**
+ * What a schema's access says the user holds: AdvEdit shows as an editable AdvEdit field (Vendors'
+ * and Customers' `currency`); Items on hand has none, so its `edit` is Edit.
+ */
 export function grantOf(access: 'view' | 'edit', schema: ConnectorSchema): Grant {
   if (access === 'view') return 'none';
-  return schema.fields.find((f) => f.name === 'currency')?.editable ? 'advEdit' : 'edit';
+  const table = EDIT_TABLES[schema.id] ?? {};
+  const advanced = schema.fields.some((f) => table[f.name] === 'advEdit' && f.editable);
+  return advanced ? 'advEdit' : 'edit';
 }
 
 /** A field's `editable` and `editReason` as the contract's table gives them for `grant`. */
@@ -393,7 +453,7 @@ export function expectedEditing(
   field: string,
   grant: Grant,
 ): { editable: boolean; editReason?: string } {
-  const level = connectorId === 'vendors' ? (VENDOR_EDIT[field] ?? null) : null;
+  const level = EDIT_TABLES[connectorId]?.[field] ?? null;
   if (level === null) return { editable: false, editReason: 'notEditable' };
   if (grant === 'none') return { editable: false, editReason: 'needsEdit' };
   if (level === 'advEdit' && grant === 'edit') {

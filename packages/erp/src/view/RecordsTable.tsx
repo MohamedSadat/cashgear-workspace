@@ -109,6 +109,7 @@ export function RecordsTable({
                         key={field.name}
                         field={field}
                         record={record}
+                        records={records}
                         schema={schema}
                         draft={edit.draft}
                         locale={locale}

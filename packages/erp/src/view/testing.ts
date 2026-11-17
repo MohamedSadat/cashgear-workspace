@@ -263,6 +263,86 @@ export const VENDOR_RECORDS: ErpRecord[] = [
   },
 ];
 
+/** Phase 10: Items on hand for a person with the Items unit's Edit. */
+export const ITEMS: ConnectorSummary = {
+  id: 'itemsOnHand',
+  kind: 'entity',
+  label: { en: 'Items on hand', ar: 'أرصدة الأصناف' },
+  schemaVersion: 'itemsOnHand.1',
+  access: 'edit',
+};
+
+const editable = (f: ConnectorSchema['fields'][number]) => {
+  const rest = { ...f, editable: true };
+  delete (rest as { editReason?: string }).editReason;
+  return rest;
+};
+
+export const ITEM_SCHEMA: ConnectorSchema = {
+  id: 'itemsOnHand',
+  schemaVersion: 'itemsOnHand.1',
+  keyField: 'itemId',
+  idField: null,
+  maxPageSize: 1000,
+  maxRecords: 10_000,
+  maxCommitRecords: 500,
+  fields: [
+    field('itemId', 'Item ID', 'كود الصنف', 'text', { filterable: true, sortable: true }),
+    editable(
+      field('itemName', 'Name', 'الاسم', 'text', { required: true, maxLength: 150, scope: 'key' }),
+    ),
+    editable(
+      field('itemGroup', 'Item group', 'مجموعة الصنف', 'lookup', {
+        required: true,
+        lookup: 'itemGroups',
+        scope: 'key',
+      }),
+    ),
+    field('warehouseId', 'Warehouse', 'المخزن', 'text'),
+    field('onHandQty', 'On hand', 'الرصيد', 'decimal', { scale: 3 }),
+  ],
+  lookups: {
+    itemGroups: [
+      { code: 'FOOD', label: 'Food' },
+      { code: 'PAPER', label: 'Paper' },
+      { code: 'ZOLD', label: 'Discontinued', active: false },
+    ],
+  },
+};
+
+/** ITM-0001's stock at one warehouse. */
+const stock = (warehouseId: string, qty: string, version: string): ErpRecord => ({
+  id: `ITM-0001|${warehouseId}`,
+  key: 'ITM-0001',
+  version,
+  values: {
+    itemId: 'ITM-0001',
+    itemName: 'Qorvath olive oil 1 L',
+    itemGroup: 'FOOD',
+    warehouseId,
+    onHandQty: qty,
+  },
+});
+
+/** One item in three places, and another in one. */
+export const ITEM_RECORDS: ErpRecord[] = [
+  stock('WH-CAI', '1250.500', 'AAAAAAAAMAE='),
+  stock('WH-ALX', '80.000', 'AAAAAAAAMAI='),
+  stock('WH-ASW', '12.250', 'AAAAAAAAMAM='),
+  {
+    id: 'ITM-0002|WH-ALX',
+    key: 'ITM-0002',
+    version: 'AAAAAAAAMAQ=',
+    values: {
+      itemId: 'ITM-0002',
+      itemName: 'أرز زمرّدان 5 كجم',
+      itemGroup: 'FOOD',
+      warehouseId: 'WH-ALX',
+      onHandQty: '540.000',
+    },
+  },
+];
+
 /** An ERP in memory behind the client's interface, paging by offset as the mock does. */
 export class FakeErp {
   language: Language = 'en';
@@ -290,6 +370,14 @@ export class FakeErp {
     this.connectorsList = [VENDORS];
     this.schemaValue = VENDOR_SCHEMA;
     this.records = VENDOR_RECORDS.map((r) => ({ ...r, values: { ...r.values } }));
+    return this;
+  }
+
+  /** Phase 10: an editable Items on hand, whose item name and group are shared by an item's rows. */
+  itemsOnHand(): this {
+    this.connectorsList = [ITEMS];
+    this.schemaValue = ITEM_SCHEMA;
+    this.records = ITEM_RECORDS.map((r) => ({ ...r, values: { ...r.values } }));
     return this;
   }
 
@@ -328,10 +416,25 @@ export class FakeErp {
       ];
     });
     if (conflicts.length) return { kind: 'conflict', conflicts, correlationId: 'c' };
-    const records = request.records.map((change) => {
-      const record = this.records.find((r) => r.id === change.id)!;
-      const values = { ...record.values };
-      for (const [f, c] of Object.entries(change.changes)) values[f] = c.to;
+    // Phase 10: a shared field is the key's, so every record of the key changes with it.
+    const shared = new Set(
+      this.schemaValue.fields.filter((f) => f.scope === 'key').map((f) => f.name),
+    );
+    const byKey = new Map<string, Record<string, ErpRecord['values'][string]>>();
+    for (const change of request.records) {
+      for (const [f, c] of Object.entries(change.changes)) {
+        if (shared.has(f)) byKey.set(change.key, { ...byKey.get(change.key), [f]: c.to });
+      }
+    }
+    const sent = new Set(request.records.map((c) => c.id));
+    const touched = [
+      ...request.records.map((change) => this.records.find((r) => r.id === change.id)!),
+      ...this.records.filter((r) => !sent.has(r.id) && byKey.has(r.key)),
+    ];
+    const records = touched.map((record) => {
+      const values = { ...record.values, ...byKey.get(record.key) };
+      const change = request.records.find((c) => c.id === record.id);
+      for (const [f, c] of Object.entries(change?.changes ?? {})) values[f] = c.to;
       return { ...record, values, version: request.dryRun ? record.version : this.nextVersion() };
     });
     const response: CommitResponse = {

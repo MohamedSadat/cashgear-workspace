@@ -6,10 +6,15 @@
 // payload under that id never changes. A conflict (409) is resolved per field by the person:
 // keep theirs, or keep their own on the record's new version. Nothing here grants anything: the
 // ERP checks every privilege and value, and these local checks are only a courtesy.
+//
+// Phase 10: a field shared by a key (`scope: 'key'`, Items on hand's item name and group) is
+// changed, reverted and resolved on every record of that key the block holds at once, so a commit
+// always carries one value per key for it, as the ERP requires.
 import type { CommitOutcome } from './client';
 import {
   ErpError,
   isDecimal,
+  sharedByKey,
   valueProblem,
   type ApiError,
   type CommitConflict,
@@ -30,7 +35,15 @@ export interface DraftChange {
   readonly to: WireValue;
   /** Prepared by AI (`@cgw/erp/ai`), not typed by the person. */
   readonly byAi: boolean;
+  /**
+   * Phase 10: the field's value belongs to every record of the key (`scope: 'key'`), so the change
+   * is on each of them the block holds, and is reverted and resolved for all of them together.
+   */
+  readonly shared?: true;
 }
+
+/** A record as the block read it: what a change is made against. */
+export type DraftSource = Pick<ErpRecord, 'id' | 'key' | 'version' | 'values'>;
 
 export interface DraftRecord {
   readonly id: string;
@@ -232,44 +245,89 @@ export class ErpDraft {
    * Sets a field of a record as read to `to`; a value equal to the one read drops the change.
    * False when the draft is locked.
    */
-  set(
-    record: Pick<ErpRecord, 'id' | 'key' | 'version' | 'values'>,
-    field: string,
-    to: WireValue,
-    byAi = false,
-  ): boolean {
+  set(record: DraftSource, field: string, to: WireValue, byAi = false): boolean {
     if (this.locked()) return false;
-    const existing = this.#records.get(record.id);
-    const values = { ...(existing?.values ?? record.values) };
-    if (!Object.prototype.hasOwnProperty.call(values, field)) {
-      values[field] = record.values[field] ?? null;
-    }
-    const changes = { ...existing?.changes };
-    const from = values[field] ?? null;
-    if (sameValue(from, to)) delete changes[field];
-    else changes[field] = { from, to, byAi };
-    const next: DraftRecord = {
-      id: record.id,
-      key: existing?.key ?? record.key,
-      version: existing?.version ?? record.version,
-      values,
-      changes,
-    };
-    this.#put(next);
+    this.#setOne(record, field, to, byAi, false);
     this.#edited();
     return true;
   }
 
-  /** Drops a field's change, or every change of the record. */
+  /**
+   * An edit as the person (or AI) made it in the block: a field shared by a key (`scope: 'key'`)
+   * is set on every record of `record`'s key that the block holds (`held`, as read) or the draft
+   * already holds, each marked changed; any other field on `record` alone. False when locked.
+   */
+  apply(
+    schema: ConnectorSchema,
+    record: DraftSource,
+    field: string,
+    to: WireValue,
+    options: { readonly byAi?: boolean; readonly held?: readonly DraftSource[] } = {},
+  ): boolean {
+    const byAi = options.byAi ?? false;
+    if (!sharedByKey(schema.fields.find((f) => f.name === field))) {
+      return this.set(record, field, to, byAi);
+    }
+    if (this.locked()) return false;
+    for (const target of this.#ofKey(record, options.held ?? [])) {
+      this.#setOne(target, field, to, byAi, true);
+    }
+    this.#edited();
+    return true;
+  }
+
+  /**
+   * Records the block now holds (a page further, a refresh) of a key whose shared field is
+   * changed take that change too, so every record of the key shows it and the review lists each.
+   * Only while editing: a review or its outcome describes the records it was made of. True when
+   * a record was taken in.
+   */
+  adopt(records: readonly DraftSource[]): boolean {
+    if (this.#phase.kind !== 'editing' || this.#busy) return false;
+    const pending = new Map<string, Map<string, DraftChange>>();
+    for (const r of this.#records.values()) {
+      for (const [field, change] of Object.entries(r.changes)) {
+        if (!change.shared) continue;
+        const of = pending.get(r.key) ?? new Map<string, DraftChange>();
+        if (!of.has(field)) of.set(field, change);
+        pending.set(r.key, of);
+      }
+    }
+    let taken = false;
+    for (const record of records) {
+      const changes = pending.get(record.key);
+      if (!changes) continue;
+      for (const [field, change] of changes) {
+        if (this.#records.get(record.id)?.changes[field]) continue;
+        // A record read after the change already holding its value has nothing to change.
+        if (sameValue(record.values[field] ?? null, change.to)) continue;
+        this.#setOne(record, field, change.to, change.byAi, true);
+        taken = true;
+      }
+    }
+    if (taken) this.#emit();
+    return taken;
+  }
+
+  /**
+   * Drops a field's change, or every change of the record. A shared field's change goes from
+   * every record of its key.
+   */
   revert(id: string, field?: string): boolean {
     if (this.locked()) return false;
     const existing = this.#records.get(id);
     if (!existing) return true;
-    if (field === undefined) this.#put({ ...existing, changes: {} });
-    else {
-      const changes = { ...existing.changes };
-      delete changes[field];
-      this.#put({ ...existing, changes });
+    for (const name of field === undefined ? Object.keys(existing.changes) : [field]) {
+      const targets = existing.changes[name]?.shared
+        ? [...this.#records.values()].filter((r) => r.key === existing.key)
+        : [existing];
+      for (const target of targets) {
+        const now = this.#records.get(target.id);
+        if (!now) continue;
+        const changes = { ...now.changes };
+        delete changes[name];
+        this.#put({ ...now, changes });
+      }
     }
     this.#edited();
     return true;
@@ -342,21 +400,40 @@ export class ErpDraft {
   resolve(choices: ReadonlyMap<string, ReadonlyMap<string, 'mine' | 'theirs'>>): boolean {
     const phase = this.#phase;
     if (phase.kind !== 'conflict' || this.#busy) return false;
-    const next: DraftRecord[] = [];
+    // Phase 10: a shared field's choice is its key's, the first made for any record of the key,
+    // so every record of the key keeps the person's value or every one drops it.
+    const slot = (key: string, field: string) => `${field}|${key}`;
+    const byKey = new Map<string, 'mine' | 'theirs'>();
     for (const conflict of phase.conflicts) {
       const record = this.#records.get(conflict.id);
       if (!record) continue;
+      for (const [field, change] of Object.entries(record.changes)) {
+        const choice = choices.get(conflict.id)?.get(field);
+        if (change.shared && choice && !byKey.has(slot(record.key, field))) {
+          byKey.set(slot(record.key, field), choice);
+        }
+      }
+    }
+    const next: DraftRecord[] = [];
+    const conflicted = new Set<string>();
+    for (const conflict of phase.conflicts) {
+      const record = this.#records.get(conflict.id);
+      if (!record) continue;
+      conflicted.add(record.id);
       const chosen = choices.get(conflict.id);
       const changes: Record<string, DraftChange> = {};
       for (const [field, change] of Object.entries(record.changes)) {
-        const choice = chosen?.get(field) ?? (conflict.fields.includes(field) ? undefined : 'mine');
+        const choice =
+          (change.shared ? byKey.get(slot(record.key, field)) : undefined) ??
+          chosen?.get(field) ??
+          (conflict.fields.includes(field) ? undefined : 'mine');
         if (choice === undefined) return false;
         if (choice === 'theirs') continue;
         const now = Object.prototype.hasOwnProperty.call(conflict.values, field)
           ? (conflict.values[field] ?? null)
           : change.from;
         if (sameValue(now, change.to)) continue;
-        changes[field] = { from: now, to: change.to, byAi: change.byAi };
+        changes[field] = { ...change, from: now };
       }
       next.push({
         ...record,
@@ -364,6 +441,18 @@ export class ErpDraft {
         values: { ...record.values, ...conflict.values },
         changes,
       });
+    }
+    // The other records of a key whose shared field the person gave back to the ERP drop it too.
+    for (const record of this.#records.values()) {
+      if (conflicted.has(record.id)) continue;
+      const changes = Object.fromEntries(
+        Object.entries(record.changes).filter(
+          ([field, change]) => !(change.shared && byKey.get(slot(record.key, field)) === 'theirs'),
+        ),
+      );
+      if (Object.keys(changes).length !== Object.keys(record.changes).length) {
+        next.push({ ...record, changes });
+      }
     }
     for (const record of next) this.#put(record);
     this.#attempt = null;
@@ -373,6 +462,36 @@ export class ErpDraft {
   }
 
   // -------------------------------------------------------------------------------------------
+
+  /** Sets one record's field; a value equal to the one read drops the change. Emits nothing. */
+  #setOne(record: DraftSource, field: string, to: WireValue, byAi: boolean, shared: boolean): void {
+    const existing = this.#records.get(record.id);
+    const values = { ...(existing?.values ?? record.values) };
+    if (!Object.prototype.hasOwnProperty.call(values, field)) {
+      values[field] = record.values[field] ?? null;
+    }
+    const changes = { ...existing?.changes };
+    const from = values[field] ?? null;
+    if (sameValue(from, to)) delete changes[field];
+    else changes[field] = shared ? { from, to, byAi, shared: true } : { from, to, byAi };
+    this.#put({
+      id: record.id,
+      key: existing?.key ?? record.key,
+      version: existing?.version ?? record.version,
+      values,
+      changes,
+    });
+  }
+
+  /** `record` and every other record of its key the block or the draft holds, once each. */
+  #ofKey(record: DraftSource, held: readonly DraftSource[]): DraftSource[] {
+    const out = new Map<string, DraftSource>([[record.id, record]]);
+    for (const r of held) if (r.key === record.key && !out.has(r.id)) out.set(r.id, r);
+    for (const r of this.#records.values()) {
+      if (r.key === record.key && !out.has(r.id)) out.set(r.id, r);
+    }
+    return [...out.values()];
+  }
 
   async #send(
     api: DraftCommitApi,

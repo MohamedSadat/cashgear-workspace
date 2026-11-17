@@ -53,11 +53,11 @@ test.beforeEach(async () => {
 });
 
 /**
- * The customers' field one reader sees and the other does not: the mock's rule is the credit
- * limit; the real ERP sends the national ID only to users who are not Employees (its customer
- * list's sensitive data), and alice's seeded user is an Exec, bob's an Employee.
+ * The customers' field one reader sees and the other does not: the ERP sends the national ID only
+ * to users who are not Employees (its customer list's sensitive data), and alice's seeded user is
+ * an Exec, bob's an Employee; the mock does the same since Phase 10.
  */
-const SENSITIVE_FIELD = REAL_ERP ? 'nationalId' : 'creditLimit';
+const SENSITIVE_FIELD = 'nationalId';
 
 /** The total in "Records 1–50 of 1,250", grouped as the block writes it. */
 const totalOf = (range: string) => Number(range.match(/of ([\d,]+)/)![1]!.replace(/,/g, ''));
@@ -274,7 +274,7 @@ test('an ERP block shows vendors to a user with the privilege, refuses one witho
     await second.close();
     expect(thereErrors).toEqual([]);
 
-    // Customers: alice and bob (who sees only his own salesperson's) see different rows.
+    // Customers: alice and bob (who sees only the customers he created) see different rows.
     await block
       .getByRole('group', { name: 'View settings' })
       .getByLabel('Data')
@@ -305,10 +305,11 @@ test('an ERP block shows vendors to a user with the privilege, refuses one witho
     expect(bobNames).not.toEqual(aliceNames.slice(0, bobNames.length));
     await expect(table(bobBlock).locator(`th[data-field="${SENSITIVE_FIELD}"]`)).toHaveCount(0);
     if (!REAL_ERP) {
-      const his = customers.filter((c) => c.values.salesperson === 'S-BOB');
+      // The customer list's ownership rule: those bob (u102) created.
+      const his = customers.filter((c) => c.values.createdBy === 'u102');
       expect(bobTotal).toBe(his.length);
       expect(bobNames).toEqual(his.slice(0, 50).map((c) => String(c.values.customerName)));
-      // What alice sees that bob does not: another salesperson's customer.
+      // What alice sees that bob does not: a customer someone else created.
       const others = aliceNames.filter((n) => !his.some((c) => c.values.customerName === n));
       expect(others.length).toBeGreaterThan(0);
     }

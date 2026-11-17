@@ -6,9 +6,13 @@ CORS, rate limits, and that `@cgw/erp`'s guards catch an answer that breaks the 
 Phase 7 (`commit.test.ts`) also `Commit` and `CommitStatus`: each user's editing as the
 contract's table says, dry runs that write nothing, a commit written once and its retry by
 `commitId`, `commit.reused`, the checks in order, every field and record error at once, conflicts,
-AdvEdit fields, and no commit for a user without Edit by any request. It speaks raw HTTP, so it
+AdvEdit fields, and no commit for a user without Edit by any request. From Phase 10 also Customers'
+and Items on hand's commits (`docs/INTEGRATIONS.md`, "Customers and Items on hand editable"): the
+privilege matrix per field, every rule's code, a conflict from a change in the ERP, idempotency, the
+audit naming the page, an item's shared name (`scope: 'key'`) applied to every row and two values
+refused, the customer list's ownership rule, and nothing of stock written. It speaks raw HTTP, so it
 tests the wire; one group in each file drives `@cgw/erp`'s client (and a draft) against the server
-too. It is Track E7: Track E runs it against UnifiedAPI on LocalDB.
+too. It is Track E7 (and E9 for Phase 10): Track E runs it against UnifiedAPI on LocalDB.
 
 ```bash
 pnpm contract:erp                      # starts the mock in tests/mocks/erp (also in pnpm test)
@@ -25,8 +29,9 @@ does any case whose key is missing.
 Never against the live database: LocalDB, or a test tenant. The suite makes links (for the
 workspace `ERP_TEST_WORKSPACE_ID` and for fresh workspace ids of its own) and revokes every one it
 made when it ends. The commit cases change Vendors' addresses and mobiles of the first records in
-account order, and put each value back with another commit before the case ends (a case that
-fails half-way may leave one changed). Run its files one after another (`pnpm contract:erp`, or
+account order, Customers' mobiles and addresses, and the name of the first item stored in two
+places, and put each value back with another commit before the case ends (a case that fails
+half-way may leave one changed). Run its files one after another (`pnpm contract:erp`, or
 `--no-file-parallelism`): both link `ERP_TEST_WORKSPACE_ID` to the same company, the ERP answers
 both with the one live link, and a file that ends first revokes it under the other (Track E7
 found it; on the mock each file has its own server).
@@ -39,8 +44,8 @@ found it; on the mock each file has its own server).
 | `ERP_TEST_KEY_NONE`      | A user of the same company with no connector (carol)                                                                                                                                      |
 | `ERP_TEST_KEY_ADMIN`     | An ERP admin of that company, who may link and revoke (dan). Every session needs a link, so nearly every case needs this key too                                                          |
 | `ERP_TEST_KEY_OTHER`     | An ERP admin of another company in the same database who may view Vendors (erin, of Dot): the tenant and cross-company cases                                                              |
-| `ERP_TEST_KEY_EDIT`      | Phase 7: a user of the `ADMIN`'s company with Vendors' View and Edit, not AdvEdit (gina): the commit cases                                                                                |
-| `ERP_TEST_KEY_ADVEDIT`   | Phase 7: a user of that company with Vendors' View, Edit and AdvEdit (faris): the AdvEdit cases                                                                                           |
+| `ERP_TEST_KEY_EDIT`      | Phase 7: a user of the `ADMIN`'s company with Vendors' View and Edit, not AdvEdit (gina): the commit cases. Phase 10: also Customers' Edit (3004), not AdvEdit, and no Items on hand      |
+| `ERP_TEST_KEY_ADVEDIT`   | Phase 7: a user of that company with Vendors' View, Edit and AdvEdit (faris): the AdvEdit cases. Phase 10: also Customers' Edit and AdvEdit, every customer, and Items' Edit (4001)       |
 | `ERP_TEST_CONNECTORS`    | The connectors the server has, comma-separated; `vendors,customers,itemsOnHand` by default. Track E4 builds them in that order. The query cases use the first                             |
 | `ERP_TEST_ORIGIN`        | The Origin sent, `http://127.0.0.1:5273` by default; it must be on the ERP's list of Workspace's origins                                                                                  |
 | `ERP_TEST_WORKSPACE_ID`  | The workspace id the suite links, `01930000-0000-7000-8000-00000000c0de` by default                                                                                                       |
@@ -55,7 +60,10 @@ session per user to spend fewer.
 What a real server must have for the cases to mean something: the `FULL` user sees at least
 two pages of the first connector at a page size of a quarter of its records; that connector has a
 sortable decimal, integer, date or date-time field, a filterable lookup or boolean field and a
-field that is not filterable; the `LIMITED` user's customers are a strict subset of `FULL`'s.
+field that is not filterable; the `LIMITED` user's customers are a strict subset of `FULL`'s. Phase
+10: the `ADVEDIT` user sees an item stored in two places at least, and three customers; the
+ownership case means something when the `EDIT` user sees fewer customers than `FULL` (it checks the
+rule only then; on the mock it always does).
 
 ## The mock
 
@@ -66,17 +74,24 @@ field that is not filterable; the `LIMITED` user's customers are a strict subset
 
 - **Companies:** `Kit` (Kit Trading) and `Dot` (Dot Foods), sharing one database.
 - **Users** (API key `mock-<name>`): `alice` (Kit, every connector), `bob` (Kit, Vendors and
-  Customers; only salesperson `S-BOB`'s customers, without their `creditLimit`), `carol` (Kit, no
-  connector), `dan` (Kit, ERP admin: links), `erin` (Dot, ERP admin and every connector); Phase 7:
-  `gina` (Kit, Vendors and Customers, Vendors' Edit), `faris` (Kit, every connector, Vendors' Edit
-  and AdvEdit).
+  Customers; an employee who sees only the customers he created, `createdBy` `u102`, without their
+  `nationalId`), `carol` (Kit, no connector), `dan` (Kit, ERP admin: links), `erin` (Dot, ERP
+  admin and every connector); Phase 7: `gina` (Kit, Vendors and Customers, Vendors' Edit), `faris`
+  (Kit, every connector, Vendors' Edit and AdvEdit); Phase 10: `gina` also Customers' Edit, and
+  like bob only the customers she created (`u105`), `faris` also Customers' Edit and AdvEdit (every
+  customer) and Items on hand's Edit.
 - **Connectors**: `vendors` (`vendors.1`'s fields, editable as the contract's table says for a user
   with Edit or AdvEdit, `access: edit` for them; 150 for Kit, 12 for Dot; Kit's `V-1005` is locked),
-  read-only for everyone else; `customers` (`customers.1`: account, name, city, credit limit,
-  salesperson, group, blocked, last invoice, modified; 240 and 10), `itemsOnHand`
-  (`itemsOnHand.1`: item, name, warehouse, quantity at scale 3, unit, reorder level, last
-  movement; no id field; 90 and 8). Every record's name holds one of `MARKERS`, made-up words found
-  nowhere else, so a test can search a store or a document for ERP data.
+  read-only for everyone else; `customers` (`customers.1`, the real connector's fields: account,
+  name, group, mobiles, national ID, currency, payment method, price list, governorate, city,
+  address, tax file, credit limit, blocked, created and modified stamps; editable by Phase 10's
+  table; 240 and 10, versions made from the values a user sees), `itemsOnHand` (`itemsOnHand.1`:
+  one record per item and storage place, its id `item|site|warehouse|location`, no id field; item
+  ID, name and group (`scope: 'key'`, the item's), unit, site, warehouse, location, quantity at
+  scale 3, value at scale 2; the name and group editable by Phase 10's table, stock never; 60
+  items of Kit's in 1 to 3 places, `ITM-0001` in three, and 8 of Dot's). Every record's name holds
+  one of `MARKERS`, made-up words found nowhere else, so a test can search a store or a document for
+  ERP data.
 - **Client pages:** `/workspace-connect?workspace=&link=&state=&return=web|desktop` (a user and
   language picker and Connect: it posts `{type: "cgw-erp-connect", ticket, state}` to
   `window.opener` for each Workspace origin on its list, or opens
@@ -94,4 +109,7 @@ linkId, language?}` (a ticket without the pop-up); `/__mock/link-ticket {user}`;
   a record: a new version and stamps); `GET /__mock/audit` (`{audit, commits}`: one row per
   changed field with its `source`, and how many commits are stored); a fault's `drop: 'after'`
   runs the route and loses its answer (a commit that went through). Reset puts the records back
-  too.
+  too. Phase 10: `edit-record` takes `id` in place of `key` (an item's row: a posting moves its
+  `onHandQty`), and an item's `itemName` or `itemGroup` changes on every row of the item; `reset`
+  takes `kitCustomers` (more of Kit's customers than 240, for `bench/phase10-erp.mjs`); a shared
+  field's audit row is one a key, by the first record that changes it.

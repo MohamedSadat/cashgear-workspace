@@ -121,6 +121,12 @@ export const en = {
     changedByAi: 'Prepared by AI',
     wasValue: 'Was: {{value}}',
     cellEditor: 'New {{field}}',
+    // Phase 10: a value shared by every row of a key (Items on hand: an item's name and group).
+    sharedField: 'Every row with the same {{field}} changes too.',
+    alsoChanged: 'Another row with the same {{field}}, not shown here',
+    problemShared: 'Rows that share this value must all get the same one.',
+    conflictOther:
+      'Changed in Cash Gear ERP in a field you did not change. Your changes stay, on its new values.',
     problemRequired: 'A value is needed.',
     problemMaxLength: 'Too long.',
     problemType: 'Not a valid value for this field.',
