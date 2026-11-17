@@ -93,23 +93,33 @@ async function startApp(folder: string, sheetApp: 'installed' | 'missing') {
  * command, as `openExternal` calls it).
  */
 async function catchBrowserLinks(page: Page) {
+  // The opener plugin's call reaches the native side as a fetch to `http://ipc.localhost` (as
+  // `connectErpDesktop` in ecosystem.ts stands in for the system browser): answered here, its URL
+  // kept. Replacing `__TAURI_INTERNALS__.invoke` does not take in WebView2.
   await page.evaluate(() => {
-    const w = window as unknown as {
-      __TAURI_INTERNALS__: { invoke: (cmd: string, args?: unknown, options?: unknown) => unknown };
-      __cgwOpened: string[];
-    };
-    const internals = w.__TAURI_INTERNALS__;
-    const real = internals.invoke.bind(internals);
+    const w = window as unknown as { __cgwOpened?: string[] };
+    if (w.__cgwOpened) return;
     w.__cgwOpened = [];
-    internals.invoke = (cmd, args, options) => {
-      if (cmd === 'plugin:opener|open_url') {
-        w.__cgwOpened.push((args as { url: string }).url);
-        return Promise.resolve();
+    const original = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.startsWith('http://ipc.localhost/plugin%3Aopener%7Copen_url')) {
+        try {
+          w.__cgwOpened!.push((JSON.parse(String(init?.body ?? '{}')) as { url: string }).url);
+        } catch {
+          w.__cgwOpened!.push(String(init?.body ?? ''));
+        }
+        return Promise.resolve(
+          new Response('null', {
+            headers: { 'Content-Type': 'application/json', 'Tauri-Response': 'ok' },
+          }),
+        );
       }
-      return real(cmd, args, options);
+      return original(input, init);
     };
   });
-  return () => page.evaluate(() => (window as unknown as { __cgwOpened: string[] }).__cgwOpened);
+  return () =>
+    page.evaluate(() => (window as unknown as { __cgwOpened: string[] }).__cgwOpened ?? []);
 }
 
 const redeem = (ticket: string, origin: string) =>
@@ -196,12 +206,15 @@ test('with Sheet’s app missing, the click opens Sheet’s web app as before', 
     await signedInWorkspace(page, owner, 'Web desk space', app.authUrlFile, cloud.signer);
     const workspaceId = await workspaceIdOf(api, 'Web desk space');
     const workbookId = await newWorkbook(api, workspaceId, 'Web book', workbookOf([['A', 1]]));
-    const browserLinks = await catchBrowserLinks(page);
     await page.goto('/#/workbooks');
+    const open = page.getByRole('button', { name: 'Open in Cash Gear Sheet: Web book' });
+    await expect(open).toBeVisible({ timeout: 30000 });
+    // Caught once the page is loaded: a navigation of the desktop's own may load it afresh.
+    const browserLinks = await catchBrowserLinks(page);
     const launched = page.waitForResponse((r) =>
       r.url().endsWith(`/workbooks/${workbookId}/launch`),
     );
-    await page.getByRole('button', { name: 'Open in Cash Gear Sheet: Web book' }).click();
+    await open.click();
     const answer = await launched;
     expect(answer.request().postData() ?? '').not.toContain('desktop');
     const { url } = (await answer.json()) as { url: string };
