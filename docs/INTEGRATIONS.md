@@ -649,7 +649,7 @@ Written in full on 2026-11-15 (Phase 7, M7.1), before either side ships it, from
 commit (`cashgear-sheet/docs/erp-contract.md`), which the ERP already runs for Sheet. Track E6
 builds the ERP's side; `tests/mocks/erp` and the suite in `tests/contracts/erp` hold Workspace to
 it. Only Vendors is editable in 0.7.0 (decisions, 2026-11-15); Customers and Items on hand stay
-read-only.
+read-only until Phase 10 (below).
 
 **An editable connector's schema.** `ConnectorSummary.access` is `edit` when the session's user
 holds the connector's Edit privilege (Vendors: the Vendors unit's `EditRec`, as Sheet's), else
@@ -792,6 +792,80 @@ As built in Phase 7 (`packages/erp`: `drafts.ts`, `view/editing.tsx`, `view/aiPr
   with their active codes; each proposal is checked as a typed value, marked "Prepared by AI",
   and goes to the review screen like any change.
 
+### Customers and Items on hand editable (Phase 10, Track E8)
+
+Written in full on 2026-11-18 (Phase 10, M10.1), before either side ships it (decisions,
+2026-11-18). `Commit` and `CommitStatus` above apply unchanged: the checks in their order, all or
+nothing up to `maxCommitRecords`, strict versions, idempotency, the audit naming the page, the
+codes. What follows is what is new.
+
+**A field shared by a key.** `ConnectorSchema.fields[]` gains one optional attribute:
+
+```ts
+scope?: 'record' | 'key';   // absent: 'record'. A 'key' field's value belongs to every record
+                            // with the same `key` (Items on hand: the item, across its rows)
+```
+
+- A client that does not know `scope` reads every field as `record`; `erp-connect.1` stays the
+  contract's name.
+- Workspace applies an edit of a `key` field to every record of that key the block holds (each
+  marked changed), and the review lists each.
+- Check 4 gains: the records of one key in a commit carry the same `to` for each `key` field they
+  change, else 400 `request.invalid` (with `id`, `key` and `field` of each). The ERP writes such a
+  field once a key, with one audit row a key and field (the first such record's id).
+- Every record sent is version-checked (check 9). A record whose own values moved meanwhile (Items
+  on hand: its quantity) is a conflict whose `fields` may be empty.
+- `CommitResponse.records` and `CommitStatus`'s stored body hold every record of each changed key
+  the user may see, as saved, not only those sent.
+
+**Versions without a rowversion.** Neither `CustTable` nor `InvTable` nor `InvSum` has one. A
+record's `version` is the read's own (a hash of the values the user sees,
+`ConnectorRules.ContentVersion`), computed again inside the commit's transaction from the rows
+read under an update lock; any difference is a conflict (409), as for Vendors.
+
+**Customers (`customers.1`).** `access` is `edit` with the Customers unit's (3004) `EditRec` in the
+session's company, besides what it takes to view them (the Sales or Receivable policy and 3004's
+View). The customer list's ownership rule holds for commits too: a user who sees only the
+customers they created can commit only those (`record.notFound` for any other).
+
+| Customers field | Editable with | Rules (check 8) | Otherwise |
+| --- | --- | --- | --- |
+| `customerName` | Edit | required; at most 150 | `needsEdit` |
+| `customerGroup` | Edit | required; an active `customerGroups` code | `needsEdit` |
+| `mobile`, `mobile2` | Edit | at most 50 | `needsEdit` |
+| `payMethod` | Edit | an active `paymentModes` code | `needsEdit` |
+| `address` | Edit | at most 150 (the ERP's update rule; the schema's `maxLength` says so) | `needsEdit` |
+| `taxFile` | Edit | at most 50 | `needsEdit` |
+| `currency` | AdvEdit | required; an active `currencies` code | `needsAdvEdit` (or `needsEdit` without Edit) |
+| `priceList` | AdvEdit | at most 50 | as `currency` |
+| `creditLimit` | AdvEdit | a decimal, scale 2, at least 0 | as `currency` |
+| `blocked` | AdvEdit | required | as `currency` |
+| `customerAccount`, `nationalId`, `governorate`, `city`, `createdBy`, `createdDate`, `modifiedBy`, `modifiedDate` | Never | | `notEditable` |
+
+A commit writes `CustTable` (with `ModifiedBy` and `ModifiedDate`, as the ERP's customer screen
+does) and nothing of the address book: `governorate` and `city` stay the address book's.
+
+**Items on hand (`itemsOnHand.1`).** One record per item and storage place, as read. `access` is
+`edit` with the Items unit's (4001) `EditRec`, besides what it takes to view them (the Inv policy
+and the stock screens' 4006 View).
+
+| Items on hand field | Scope | Editable with | Rules (check 8) | Otherwise |
+| --- | --- | --- | --- | --- |
+| `itemName` | `key` | Edit | required; at most 150 | `needsEdit` |
+| `itemGroup` | `key` | Edit | required; an active `itemGroups` code | `needsEdit` |
+| `itemId`, `unit`, `siteId`, `warehouseId`, `locationId`, `onHandQty`, `onHandValue` | `record` | Never | | `notEditable` |
+
+A commit writes the item's name and group in `InvTable`, as the ERP's item screen does. Stock is
+never written: quantities and values move only by the ERP's own transactions.
+
+`maxCommitRecords` is 500 for both.
+
+**Tests.** The suite's commit cases for both (`tests/contracts/erp/commit.test.ts`) run against
+the mock and against UnifiedAPI on LocalDB (Track E9): the privilege matrix (no Edit, Edit,
+AdvEdit) per field, every check's code, a conflict from a change in the ERP, idempotency, the
+audit naming workspace, page and block, a `key` field applied to every row of its item and two
+different values refused, the ownership rule, and nothing of stock written.
+
 ### Track E: work in the ERP repo
 
 | # | Work | Why |
@@ -803,6 +877,8 @@ As built in Phase 7 (`packages/erp`: `drafts.ts`, `view/editing.tsx`, `view/aiPr
 | E5 | Rate limiting on the connect routes; CORS allow-list for Workspace's origins | UnifiedAPI has neither today |
 | E6 | Editable connectors and the audit column naming the workspace page | Level 2 |
 | E7 | The contract test suite against UnifiedAPI | As Sheet does |
+| E8 | Customers and Items on hand editable (Phase 10): their `Commit` and `CommitStatus` through the one commit path Vendors uses, the `scope` attribute, the audit naming the page | Level 2 for both |
+| E9 | The suite's Phase 10 commit cases against UnifiedAPI on LocalDB | As E7 |
 
 Workspace builds against a mock ERP that behaves as this document says, as Sheet's
 `tests/erp-mock` does, so Phase 5 can start before Track E lands.
