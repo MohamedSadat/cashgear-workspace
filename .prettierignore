@@ -17,3 +17,5 @@ server/**/obj/
 server/openapi/
 packages/api/src/schema.ts
 .cgw-dev/
+# The site renderer's expected HTML, byte for byte (SITE_VECTORS_WRITE=1 rewrites them)
+server/tests/Cgw.Tests/fixtures/sites/

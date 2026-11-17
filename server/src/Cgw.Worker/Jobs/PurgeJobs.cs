@@ -56,6 +56,8 @@ public sealed class PagePurgeJob(DocStates states, BlobStore blob, TimeProvider 
             await db.CommentThreads.Where(t => t.PageId == pageId).ExecuteDeleteAsync(ct);
             await db.Notifications.Where(n => n.PageId == pageId).ExecuteDeleteAsync(ct);
             var now = clock.GetUtcNow();
+            // Phase 9: its live site (no one can reach the page to unpublish it now), so the slug is free.
+            await Cgw.Core.Sites.PublishingService.UnpublishDeletedAsync(db, pageId, now, ct);
             await db.Pages.Where(p => p.Id == pageId).ExecuteUpdateAsync(s => s
                 .SetProperty(p => p.PurgedAt, now)
                 .SetProperty(p => p.Title, "")
@@ -113,6 +115,7 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.Notifications.ExecuteDeleteAsync(ct);
         await db.AiSettings.ExecuteDeleteAsync(ct);
         await db.AiUsage.ExecuteDeleteAsync(ct);
+        await db.PublishedSites.ExecuteDeleteAsync(ct);
         await db.PageDocUpdates.ExecuteDeleteAsync(ct);
         await db.PageDocSnapshots.ExecuteDeleteAsync(ct);
         await db.PageDocDerived.ExecuteDeleteAsync(ct);

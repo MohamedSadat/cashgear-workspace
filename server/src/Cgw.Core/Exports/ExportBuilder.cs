@@ -18,13 +18,16 @@ namespace Cgw.Core.Exports;
 /// row and every property not deleted, title first, in database order);
 /// <c>assets/{id}/{name}</c>; and the manifest <c>cgw-export.json</c> of ids, written last
 /// (version 2: <c>kind</c> on every page, a row's <c>databaseId</c> and <c>values</c>, and
-/// <c>databases</c> with their properties and views). Pages in the trash are left out, and rows
-/// whose database is; the caller passes only what the requester may read.
+/// <c>databases</c> with their properties and views; version 3, Phase 9: <c>workbooks</c>, each
+/// workbook the requester may read that has a version, <c>{id, name, file}</c>, its newest version's
+/// bytes at <c>workbooks/&lt;name&gt;.xlsx</c>, numbered when names repeat, as the app writes them).
+/// Pages in the trash are left out, and rows whose database is; the caller passes only what the
+/// requester may read.
 /// </summary>
 public static class ExportBuilder
 {
     public const string Format = "cash-gear-workspace-export";
-    public const int FormatVersion = 2;
+    public const int FormatVersion = 3;
     public const string Manifest = "cgw-export.json";
 
     public static string Untitled(string? locale) => locale == "ar" ? "بدون عنوان" : "Untitled";
@@ -52,7 +55,11 @@ public static class ExportBuilder
         /// <summary>The databases the requester may read, by page id.</summary>
         IReadOnlyDictionary<Guid, Database>? Databases = null,
         /// <summary>People's names by id, for the CSV files.</summary>
-        IReadOnlyDictionary<string, string>? People = null);
+        IReadOnlyDictionary<string, string>? People = null,
+        /// <summary>Version 3: the workbooks the requester may read that have a version, in the order they are written.</summary>
+        IReadOnlyList<Workbook>? Workbooks = null,
+        /// <summary>A workbook's newest version's bytes; null when they cannot be read (it is left out).</summary>
+        Func<Workbook, Task<byte[]?>>? WorkbookBytes = null);
 
     public static async Task WriteAsync(Stream output, Input input, CancellationToken ct = default)
     {
@@ -212,6 +219,24 @@ public static class ExportBuilder
             });
         }
 
+        // Version 3: each workbook under a name of its own in workbooks/ (the app's rule).
+        var manifestWorkbooks = new List<(Workbook Book, string File)>();
+        var workbookFiles = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var book in input.Workbooks ?? [])
+        {
+            ct.ThrowIfCancellationRequested();
+            if (input.WorkbookBytes is null || await input.WorkbookBytes(book) is not { } bytes) continue;
+            var stem = SafeNames.Name(book.Name, "Workbook");
+            var file = $"workbooks/{stem}.xlsx";
+            for (var n = 2; workbookFiles.Contains(file.ToLowerInvariant()); n++) file = $"workbooks/{stem} ({n}).xlsx";
+            workbookFiles.Add(file.ToLowerInvariant());
+            var entry = zip.CreateEntry(file, CompressionLevel.NoCompression);
+            entry.LastWriteTime = input.Now;
+            await using (var stream = entry.Open())
+                await stream.WriteAsync(bytes, ct);
+            manifestWorkbooks.Add((book, file));
+        }
+
         await WriteJson(zip, Manifest, input.Now, w =>
         {
             w.WriteStartObject();
@@ -265,6 +290,20 @@ public static class ExportBuilder
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            // As the app writes it: present only when a workbook is in the zip.
+            if (manifestWorkbooks.Count > 0)
+            {
+                w.WriteStartArray("workbooks");
+                foreach (var (book, file) in manifestWorkbooks)
+                {
+                    w.WriteStartObject();
+                    w.WriteString("id", Id(book.Id));
+                    w.WriteString("name", book.Name);
+                    w.WriteString("file", file);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+            }
             w.WriteStartArray("assets");
             foreach (var write in manifestAssets) write(w);
             w.WriteEndArray();

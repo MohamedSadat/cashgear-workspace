@@ -179,6 +179,8 @@ public sealed class DatabaseVectorTests(ServerFixture server)
                     Sorts = spec.TryGetProperty("sorts", out var s) ? QuerySpec.ReadSorts(s) : [],
                     Group = spec.TryGetProperty("group", out var g) ? QuerySpec.ReadGroup(g) : null,
                     Search = Str(spec, "search"),
+                    // Phase 9's date window.
+                    Window = spec.TryGetProperty("window", out var w) ? QuerySpec.ReadWindow(w, out _) : null,
                 };
                 var ctx = c.GetProperty("ctx");
                 var people = ctx.TryGetProperty("people", out var p) && p.ValueKind == JsonValueKind.Object

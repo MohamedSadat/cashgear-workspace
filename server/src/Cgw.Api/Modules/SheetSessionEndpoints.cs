@@ -18,11 +18,11 @@ public static class SheetSessionEndpoints
 {
     private static ProblemHttpResult Problem(Failure failure, HttpContext http) => Problems.From(failure, http);
 
-    private static bool IsXlsx(HttpRequest request) =>
+    internal static bool IsXlsx(HttpRequest request) =>
         (request.ContentType ?? "").Split(';')[0].Trim().Equals(Xlsx.ContentType, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A save's or a copy's body: the xlsx content type, at most the cap (413 with <c>limit</c>), a zip.</summary>
-    private static async Task<Result<byte[]>> WorkbookBodyAsync(HttpContext http, Integrations settings)
+    internal static async Task<Result<byte[]>> WorkbookBodyAsync(HttpContext http, Integrations settings)
     {
         if (!IsXlsx(http.Request)) return Failure.Invalid($"Content-Type must be {Xlsx.ContentType}");
         var bytes = await WorkbookEndpoints.ReadBodyAsync(http.Request, settings.MaxSaveBytes, http.RequestAborted);
@@ -32,7 +32,7 @@ public static class SheetSessionEndpoints
     }
 
     /// <summary>The comma-separated entity tags of <c>If-Match</c>.</summary>
-    private static List<string> Tags(string header) =>
+    internal static List<string> Tags(string header) =>
         header.Split(',').Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
 
     public static void MapSheetSessions(this RouteGroupBuilder api)
@@ -40,10 +40,12 @@ public static class SheetSessionEndpoints
         var group = api.MapGroup("/sheet-sessions").WithTags("Sheet sessions").AllowAnonymous().RequireCors(ApiServices.SheetCorsPolicy);
         var max = ((IEndpointRouteBuilder)api).ServiceProvider.GetRequiredService<Integrations>().MaxSaveBytes;
 
-        // The Origin before the ticket: a site not on the list cannot use a ticket up.
+        // The Origin before the ticket: a site not on the lists cannot use a ticket up. Sheet's web
+        // origins and (Phase 9) its desktop app's; a ticket of the other kind is used up and refused.
         group.MapPost("/redeem", async Task<Results<Ok<FileSessionDto>, ProblemHttpResult>> (SheetSessions sessions, HttpContext http) =>
             {
-                if (!sessions.OriginAllowed(http.Request.Headers.Origin.ToString()))
+                var origin = http.Request.Headers.Origin.ToString();
+                if (!sessions.OriginAllowed(origin))
                     return Problem(new Failure(Codes.OriginDenied, 403, "This site may not open Workspace workbooks"), http);
                 string? ticket = null;
                 try
@@ -56,7 +58,7 @@ public static class SheetSessionEndpoints
                 {
                     ticket = null;
                 }
-                var result = await sessions.RedeemAsync(http.Actor(), ticket, http.RequestAborted);
+                var result = await sessions.RedeemAsync(http.Actor(), ticket, origin, http.RequestAborted);
                 return result.Ok ? TypedResults.Ok(result.Value!) : Problem(result.Failure!, http);
             })
             .WithMetadata(new DocumentedBody("application/json", typeof(RedeemRequest)))

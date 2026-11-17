@@ -47,6 +47,13 @@ public sealed record WorkbookExportRequest(Guid? ViewId, string? Name);
 /// <summary>A save's condition: <c>If-Match</c>'s tags, or <c>If-None-Match</c> (only <c>*</c> passes).</summary>
 public sealed record SavePrecondition(IReadOnlyList<string>? IfMatch, string? IfNoneMatch);
 
+/// <summary>One kept version (Phase 9, a workbook's history): its size, hash, when and by whom it was saved, and whether it is the current one.</summary>
+public sealed record WorkbookVersionDto(Guid Id, long Size, string Sha256, DateTimeOffset SavedAt, UserRefDto SavedBy, bool Current);
+public sealed record WorkbookVersionsDto(IReadOnlyList<WorkbookVersionDto> Versions);
+
+/// <summary>A version made by a save, an upload or a restore: its id and the content's new ETag.</summary>
+public sealed record WorkbookSavedDto(Guid VersionId, string Etag);
+
 /// <summary>
 /// Workbooks (M5.2; INTEGRATIONS.md, Workbooks as their own documents): the record, its own access
 /// list by the pages' rules (<see cref="WorkbookAccess"/>), its versions as blobs (a save is a new
@@ -495,6 +502,64 @@ public sealed class WorkbookService(
         return true;
     }
 
+    // History (Phase 9) --------------------------------------------------------------------------------
+
+    /// <summary>The kept versions (at most <see cref="KeepVersions"/>), newest first, with their savers' names as others see them.</summary>
+    public async Task<Result<WorkbookVersionsDto>> VersionsAsync(Workbook book, CancellationToken ct = default)
+    {
+        if (book.TrashedAt is not null) return Gone();
+        var current = await db.Workbooks.AsNoTracking().Where(w => w.Id == book.Id).Select(w => w.CurrentVersionId).FirstOrDefaultAsync(ct);
+        var versions = await db.WorkbookVersions.AsNoTracking().Where(v => v.WorkbookId == book.Id)
+            .OrderByDescending(v => v.SavedAt).ThenByDescending(v => v.Id).Take(KeepVersions).ToListAsync(ct);
+        var names = await NamesAsync(versions.Select(v => v.SavedBy), ct);
+        return new WorkbookVersionsDto(versions
+            .Select(v => new WorkbookVersionDto(v.Id, v.SizeBytes, v.Sha256, v.SavedAt, new UserRefDto(v.SavedBy, names.GetValueOrDefault(v.SavedBy) ?? "Someone"), v.Id == current))
+            .ToList());
+    }
+
+    /// <summary>One kept version's bytes by signed URL (about 5 minutes, that one blob), to open it read-only.</summary>
+    public async Task<Result<WorkbookContentDto>> VersionContentAsync(Workbook book, Guid versionId, CancellationToken ct = default)
+    {
+        if (book.TrashedAt is not null) return Gone();
+        var version = await db.WorkbookVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == versionId && v.WorkbookId == book.Id, ct);
+        if (version is null) return Failure.NotFound("No such version of the workbook");
+        var url = await blob.ReadUrlAsync(version.BlobKey, ct: ct);
+        return new WorkbookContentDto(url.ToString(), Etag(version.Id), version.SizeBytes, version.Id, clock.GetUtcNow() + BlobStore.ReadLifetime);
+    }
+
+    /// <summary>
+    /// A kept version's bytes copied as a new newest version, saved by the restorer now (edit or
+    /// above), audited <c>workbook.restore</c> with the version it came from; no version is removed
+    /// but by the usual pruning of the oldest. <paramref name="ifMatch"/>, when given, must name the
+    /// current version (412 <c>version.conflict</c> with <c>current</c> otherwise).
+    /// </summary>
+    public async Task<Result<WorkbookSavedDto>> RestoreAsync(Actor actor, Member member, Workbook book, string level, Guid versionId, IReadOnlyList<string>? ifMatch, CancellationToken ct = default)
+    {
+        if (!Levels.AtLeast(level, Levels.Edit)) return Failure.Denied("Restoring a version needs edit access to the workbook");
+        if (book.TrashedAt is not null) return Gone();
+        var version = await db.WorkbookVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == versionId && v.WorkbookId == book.Id, ct);
+        if (version is null) return Failure.NotFound("No such version of the workbook");
+        if (await blob.GetAsync(version.BlobKey, ct) is not { } bytes)
+            return new Failure(Codes.ServerError, 503, "The version's file is not available") { RetryAfter = TimeSpan.FromSeconds(30) };
+        var saved = await SaveAsync(actor, book.Id, member.UserId, bytes, new SavePrecondition(ifMatch is { Count: > 0 } tags ? tags : ["*"], null),
+            "workbook.restore", versionId, ct);
+        if (!saved.Ok) return saved.Failure!;
+        return new WorkbookSavedDto(saved.Value!.Id, Etag(saved.Value.Id));
+    }
+
+    /// <summary>
+    /// A new version from the app (Phase 9: an import makes a workbook's version 1 this way), with
+    /// the save's rules: edit or above, <c>If-None-Match: *</c> for the first version or
+    /// <c>If-Match</c> on the current one.
+    /// </summary>
+    public async Task<Result<WorkbookSavedDto>> UploadAsync(Actor actor, Member member, Workbook book, string level, byte[] bytes, SavePrecondition condition, CancellationToken ct = default)
+    {
+        if (!Levels.AtLeast(level, Levels.Edit)) return Failure.Denied("Saving this workbook needs edit access");
+        var saved = await SaveAsync(actor, book.Id, member.UserId, bytes, condition, ct);
+        if (!saved.Ok) return saved.Failure!;
+        return new WorkbookSavedDto(saved.Value!.Id, Etag(saved.Value.Id));
+    }
+
     // Versions ----------------------------------------------------------------------------------------
 
     /// <summary>The body of a 412: the current version, so Sheet can tell whether its own lost save landed (<c>sha256</c>).</summary>
@@ -523,7 +588,15 @@ public sealed class WorkbookService(
     /// there is none. The bytes go to their own blob first; the record moves only if the version
     /// it was checked against is still the current one, so two saves on one ETag cannot both land.
     /// </summary>
-    public async Task<Result<WorkbookVersion>> SaveAsync(Actor actor, Guid workbookId, Guid userId, byte[] bytes, SavePrecondition condition, CancellationToken ct = default)
+    public async Task<Result<WorkbookVersion>> SaveAsync(Actor actor, Guid workbookId, Guid userId, byte[] bytes, SavePrecondition condition, CancellationToken ct = default) =>
+        await SaveAsync(actor, workbookId, userId, bytes, condition, "workbook.save", null, ct);
+
+    /// <summary>
+    /// <see cref="SaveAsync(Actor, Guid, Guid, byte[], SavePrecondition, CancellationToken)"/>,
+    /// audited as <paramref name="action"/> (a restore is <c>workbook.restore</c>) with
+    /// <paramref name="from"/>, the version it copies, in its detail.
+    /// </summary>
+    private async Task<Result<WorkbookVersion>> SaveAsync(Actor actor, Guid workbookId, Guid userId, byte[] bytes, SavePrecondition condition, string action, Guid? from, CancellationToken ct)
     {
         var book = await db.Workbooks.AsNoTracking().FirstOrDefaultAsync(w => w.Id == workbookId, ct);
         if (book is null || book.TrashedAt is not null) return Gone();
@@ -564,7 +637,9 @@ public sealed class WorkbookService(
             if (moved == 1)
             {
                 db.WorkbookVersions.Add(version);
-                audit.Add(actor, "workbook.save", book.WorkspaceId, "workbook", workbookId, new { versionId, size = bytes.Length, sha256 = version.Sha256 });
+                audit.Add(actor, action, book.WorkspaceId, "workbook", workbookId, from is { } source
+                    ? (object)new { versionId, size = bytes.Length, sha256 = version.Sha256, from = source }
+                    : new { versionId, size = bytes.Length, sha256 = version.Sha256 });
                 await db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
                 landed = true;

@@ -60,6 +60,13 @@ public static class Codes
     /// <summary>The model declined the request (an event only).</summary>
     public const string AiRefused = "ai.refused";
 
+    // Phase 9: publishing.
+
+    /// <summary>Another live site has the slug (409).</summary>
+    public const string SlugTaken = "slug.taken";
+    /// <summary>The workspace's publishing switch is off (403): nothing is published.</summary>
+    public const string PublishingOff = "publishing.off";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -69,6 +76,7 @@ public static class Codes
         TicketInvalid, SessionExpired, OriginDenied, WorkbookGone, VersionRequired,
         CommentInvalid,
         AiDisabled, AiKeyMissing, AiKeyInvalid, AiProvider, AiLimit, AiRefused,
+        SlugTaken, PublishingOff,
     ];
 }
 

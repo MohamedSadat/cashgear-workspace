@@ -51,6 +51,37 @@ public sealed class ServerFixture : IAsyncLifetime
     public WebApplicationFactory<Program> Api { get; private set; } = null!;
     public IServiceProvider Worker { get; private set; } = null!;
 
+    private readonly List<IAsyncDisposable> sites = [];
+    private readonly Lazy<WebApplicationFactory<Cgw.Sites.SitesProgram>> sharedSites;
+
+    public ServerFixture() => sharedSites = new(() => NewSites(_ => { }));
+
+    /// <summary>Phase 9: the Sites process on the same database and storage (its own origin in production).</summary>
+    public WebApplicationFactory<Cgw.Sites.SitesProgram> Sites => sharedSites.Value;
+
+    /// <summary>A Sites process of its own (a clock a test moves, say), disposed with the fixture.</summary>
+    public WebApplicationFactory<Cgw.Sites.SitesProgram> NewSites(Action<IWebHostBuilder> configure)
+    {
+        var settings = Settings;
+        var factory = new WebApplicationFactory<Cgw.Sites.SitesProgram>().WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment("Testing");
+            foreach (var (key, value) in settings) b.UseSetting(key, value);
+            b.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Warning));
+            configure(b);
+        });
+        lock (sites) sites.Add(factory);
+        return factory;
+    }
+
+    /// <summary>A reader of a site: no session, its own host (<c>localhost</c>, as in development), no redirects followed.</summary>
+    public static HttpClient SiteClient(WebApplicationFactory<Cgw.Sites.SitesProgram> factory) => factory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("http://localhost:5290"),
+        HandleCookies = false,
+        AllowAutoRedirect = false,
+    });
+
     public Dictionary<string, string?> Settings => new()
     {
         ["ConnectionStrings:Sql"] = SqlConnection,
@@ -134,6 +165,9 @@ public sealed class ServerFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        List<IAsyncDisposable> made;
+        lock (sites) made = [.. sites];
+        foreach (var factory in made) await factory.DisposeAsync();
         await Api.DisposeAsync();
         Microsoft.Data.SqlClient.SqlConnection.ClearAllPools();
         try

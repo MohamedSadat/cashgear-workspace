@@ -1,6 +1,7 @@
 // The server's deploy package (M2.8; docs/OPERATIONS.md): the API for IIS, the worker as a
-// Windows service with its Yjs library, the database migrations as a bundle and as an idempotent
-// SQL script, the install scripts, and a manifest; zipped as target/deploy/cgw-server-<version>.zip.
+// Windows service with its Yjs library, (Phase 9) the Sites process for an IIS site of its own, the
+// database migrations as a bundle and as an idempotent SQL script, the install scripts, and a
+// manifest; zipped as target/deploy/cgw-server-<version>.zip.
 // Nothing in it holds a secret: configuration comes from the host's environment.
 //   node scripts/server-publish.mjs [--out <folder>] [--runtime win-x64]
 import { spawnSync } from 'node:child_process';
@@ -30,6 +31,7 @@ const library = runtime.startsWith('win') ? 'cgw_ydoc.dll' : 'libcgw_ydoc.so';
 for (const [project, folder] of [
   ['Cgw.Api', 'api'],
   ['Cgw.Worker', 'worker'],
+  ['Cgw.Sites', 'sites'],
 ]) {
   run('dotnet', [
     'publish',
@@ -48,9 +50,14 @@ for (const [project, folder] of [
   ]);
 }
 cpSync(join(root, 'target', 'ffi', library), join(out, 'worker', library));
-// The API process loads no Yjs library (D14): its folder must not hold one.
-if (existsSync(join(out, 'api', library)) || existsSync(join(out, 'api', 'Cgw.Ydoc.dll')))
-  throw new Error('The API package holds the Yjs library');
+// The API process loads no Yjs library (D14): its folder must not hold one; nor (Phase 9) the
+// Sites process's, which holds no sign-in code either.
+for (const folder of ['api', 'sites'])
+  if (existsSync(join(out, folder, library)) || existsSync(join(out, folder, 'Cgw.Ydoc.dll')))
+    throw new Error(`The ${folder} package holds the Yjs library`);
+for (const signIn of ['OpenIddict.Server.dll', 'OpenIddict.Server.AspNetCore.dll', 'Cgw.Api.dll'])
+  if (existsSync(join(out, 'sites', signIn)))
+    throw new Error(`The sites package holds ${signIn}: it must have no sign-in code`);
 
 mkdirSync(join(out, 'migrate'), { recursive: true });
 run('dotnet', ['tool', 'restore']);

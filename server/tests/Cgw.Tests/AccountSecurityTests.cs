@@ -466,8 +466,12 @@ public sealed class AccountSecurityTests(ServerFixture server)
         [
             ("Web:Origins:0", "https://workspace.cashgearerp.com"), ("Api:PublicUrl", "https://workspace-api.cashgearerp.com"), ("DataProtection:Dpapi", "true"),
             ("Sheet:Origin", "https://sheet.cashgearerp.com"), ("Sheet:Origins:0", "https://sheet.cashgearerp.com"), ("Erp:ApiBase", "https://api.cashgearerp.com"),
+            ("Sites:PublicUrl", "https://pages.cashgearerp.com"),
         ];
         Assert.Empty(ProductionChecks.Problems(Settings(complete), production, windows: true));
+        // Phase 9: the sites' origin, over https.
+        Assert.Contains(problems, p => p.Contains("Sites__PublicUrl", StringComparison.Ordinal));
+        Assert.Contains(ProductionChecks.Problems(Settings([.. complete, ("Sites:PublicUrl", "http://pages.cashgearerp.com")]), production, windows: true), p => p.Contains("Sites__PublicUrl", StringComparison.Ordinal));
         // Phase 5: Sheet and the ERP are named here, over https, or Production does not start.
         Assert.Contains(problems, p => p.Contains("Sheet__Origin ", StringComparison.Ordinal));
         Assert.Contains(problems, p => p.Contains("Sheet__Origins__0", StringComparison.Ordinal));

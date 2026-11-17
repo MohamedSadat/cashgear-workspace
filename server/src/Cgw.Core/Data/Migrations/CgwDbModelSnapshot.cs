@@ -1324,6 +1324,77 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("PageVisits");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.PublishedSite", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<bool>("Indexing")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTimeOffset>("PublishedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("PublishedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("RootPageId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(63)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(63)");
+
+                    b.Property<string>("UnpublishReason")
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTimeOffset?>("UnpublishedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UnpublishedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RootPageId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PublishedSites_LiveRoot")
+                        .HasFilter("[UnpublishedAt] IS NULL");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PublishedSites_LiveSlug")
+                        .HasFilter("[UnpublishedAt] IS NULL");
+
+                    b.HasIndex("WorkspaceId", "UnpublishedAt");
+
+                    b.ToTable("PublishedSites");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.RealtimeTicket", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -1690,6 +1761,12 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("datetimeoffset(3)");
 
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
                     b.Property<byte[]>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1795,6 +1872,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<byte[]>("OwnerUserId")
                         .IsRequired()
                         .HasColumnType("binary(16)");
+
+                    b.Property<bool>("PublishingEnabled")
+                        .HasColumnType("bit");
 
                     b.Property<long?>("StorageQuotaBytes")
                         .HasColumnType("bigint");

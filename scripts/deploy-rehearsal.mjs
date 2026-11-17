@@ -1,12 +1,15 @@
 // The deployment rehearsal and the restore drill (M2.8; docs/OPERATIONS.md), on this machine:
 //   1. builds the deploy package (scripts/server-publish.mjs) and runs it as an operator would:
-//      the migration bundle against a scratch database, the published API and worker on it;
+//      the migration bundle against a scratch database, the published API, worker and (Phase 9)
+//      Sites process on it;
 //   2. smoke-tests it through HTTP as the apps do: sign-up and the confirmation mail, sign-in on
 //      the API's page, a workspace with pages, documents pushed and validated by the worker, an
-//      image by signed URL, a named version, search;
+//      image by signed URL, a named version, search, and a page published and read on its site
+//      with no account (its headers, no cookie);
 //   3. the drill: backs the database up, copies the blob storage, restores both into a second
 //      scratch environment, starts the package on it, lets the reconcile job run, and opens every
-//      page through the API, comparing each with what was written.
+//      page through the API, comparing each with what was written; the site reads there too, and
+//      an unpublish takes it down within the Sites process's 30 s.
 // Writes bench/results/deploy-rehearsal.json. LocalDB unless CGW_DEV_SQL names a server.
 //   node scripts/deploy-rehearsal.mjs [--skip-publish]
 import { spawn, spawnSync } from 'node:child_process';
@@ -97,8 +100,10 @@ function start(name, command, args, env = {}) {
   return child;
 }
 
-/** The deployed pair (API and worker) on one database and one Blob Storage. */
-async function deploy(label, database, blobPort, apiPort) {
+/** The deployed API, worker and Sites process on one database and one Blob Storage. */
+async function deploy(label, database, blobPort, apiPort, sitesPort) {
+  // The sites on `localhost`, a host of their own beside the API's 127.0.0.1, as in development.
+  const sitesBase = `http://localhost:${sitesPort}`;
   const blobDir = join(work, `blob-${label}`);
   mkdirSync(blobDir, { recursive: true });
   const azurite = start(`azurite-${label}`, process.execPath, [
@@ -124,6 +129,7 @@ async function deploy(label, database, blobPort, apiPort) {
     Blob__ConnectionString: blobConnection(blobPort),
     Smtp__PickupDirectory: mail,
     Api__PublicUrl: `http://127.0.0.1:${apiPort}`,
+    Sites__PublicUrl: sitesBase,
     Web__AppUrl: 'http://127.0.0.1:4273',
     Web__Origins__0: 'http://127.0.0.1:4273',
     // Staging takes no development shortcut unless told: here plain http on 127.0.0.1 (for
@@ -150,7 +156,43 @@ async function deploy(label, database, blobPort, apiPort) {
     [],
     env,
   );
-  return { api, worker, azurite, mail, base: `http://127.0.0.1:${apiPort}`, blobDir };
+  // Phase 9: the sites get the database and the storage, and nothing of the API's.
+  const sites = start(
+    `sites-${label}`,
+    'dotnet',
+    [join(pkg, 'sites', 'Cgw.Sites.dll'), '--urls', sitesBase],
+    {
+      ASPNETCORE_ENVIRONMENT: env.ASPNETCORE_ENVIRONMENT,
+      DOTNET_ENVIRONMENT: env.DOTNET_ENVIRONMENT,
+      ConnectionStrings__Sql: env.ConnectionStrings__Sql,
+      Blob__ConnectionString: env.Blob__ConnectionString,
+      Logging__LogLevel__Default: 'Warning',
+    },
+  );
+  await until('the Sites process', async () => (await fetch(`${sitesBase}/health/live`)).ok, 120);
+  return {
+    api,
+    worker,
+    sites,
+    azurite,
+    mail,
+    base: `http://127.0.0.1:${apiPort}`,
+    sitesBase,
+    blobDir,
+  };
+}
+
+/** A site's page read with no account: its status, its text, and the headers every answer carries. */
+async function readSite(base, path) {
+  const response = await fetch(base + path, { redirect: 'manual' });
+  const text = await response.text();
+  const csp = response.headers.get('content-security-policy') ?? '';
+  if (!csp.startsWith("default-src 'none'; style-src 'sha256-"))
+    throw new Error(`${path}: no strict policy (${csp})`);
+  if (response.headers.get('set-cookie')) throw new Error(`${path}: the site set a cookie`);
+  if (response.headers.get('x-content-type-options') !== 'nosniff')
+    throw new Error(`${path}: no nosniff`);
+  return { status: response.status, text };
 }
 
 /** A browser-like client: a cookie jar and the antiforgery header on writes. */
@@ -271,12 +313,12 @@ try {
     throw new Error(`The migration bundle failed: ${migrate.stdout}${migrate.stderr}`);
   step('migration bundle applied', { tail: migrate.stdout.trim().split('\n').slice(-1)[0] });
 
-  const first = await deploy('a', 'cgw_rehearsal', 10020, 5290);
+  const first = await deploy('a', 'cgw_rehearsal', 10020, 5290, 5295);
   const ready = await until('ready', async () => {
     const r = await fetch(`${first.base}/health/ready`);
     return r.ok ? await r.text() : null;
   });
-  step('published API and worker running', { health: ready.slice(0, 200) });
+  step('published API, worker and Sites process running', { health: ready.slice(0, 200) });
 
   // The smoke test.
   const email = `rehearsal-${Date.now()}@example.test`;
@@ -428,6 +470,30 @@ try {
   } catch (error) {
     step('search not checked', { error: String(error) });
   }
+
+  // Phase 9: a page and its subtree published, read on the site with no account.
+  const slug = `rehearsal-${Date.now().toString(36)}`;
+  const site = await client.json(
+    `/api/v1/pages/${pages[0]}/site`,
+    { slug, indexing: false, language: 'en' },
+    'PUT',
+  );
+  if (site.url !== `${first.sitesBase}/${slug}`) throw new Error(`The site's address: ${site.url}`);
+  const home = await until(
+    'the site to show the derived page',
+    async () => {
+      const read = await readSite(first.sitesBase, `/${slug}`);
+      return read.status === 200 && read.text.includes('Hello world') ? read : null;
+    },
+    60,
+  );
+  if (!home.text.includes('Page 2') || home.text.includes('Page 1'))
+    throw new Error('The site holds the wrong pages');
+  const child = await readSite(first.sitesBase, `/${slug}/${pages[2]}`);
+  const outside = await readSite(first.sitesBase, `/${slug}/${pages[1]}`);
+  if (child.status !== 200 || outside.status !== 404)
+    throw new Error(`The site's scope: child ${child.status}, outside ${outside.status}`);
+  step('a page published and read on its own origin with no account and no cookie', { slug });
   result.rehearsal = 'pass';
 
   // The restore drill.
@@ -435,6 +501,7 @@ try {
   sql('master', `BACKUP DATABASE [cgw_rehearsal] TO DISK = N'${backup}' WITH COPY_ONLY, INIT`);
   kill(first.worker);
   kill(first.api);
+  kill(first.sites);
   // Azurite writes its metadata every 5 s and not when it is killed (on Windows a kill is no
   // signal it can catch): nothing writes now, so wait out one save before stopping it.
   await new Promise((r) => setTimeout(r, 7000));
@@ -452,7 +519,7 @@ try {
   sql('master', `RESTORE DATABASE [cgw_drill] FROM DISK = N'${backup}' WITH ${moves}, RECOVERY`);
   step('database backed up and restored to a new name; blob storage copied');
 
-  const second = await deploy('b', 'cgw_drill', 10021, 5291);
+  const second = await deploy('b', 'cgw_drill', 10021, 5291, 5296);
   await until('ready after restore', async () => (await fetch(`${second.base}/health/ready`)).ok);
   const after = new Client(second.base);
   await after.signIn(email, password);
@@ -469,9 +536,25 @@ try {
     pages: pages.length,
     identical: true,
   });
+  // The site came back with the database, and an unpublish takes it down within 30 s.
+  const restored = await readSite(second.sitesBase, `/${slug}`);
+  if (restored.status !== 200 || !restored.text.includes('Hello world'))
+    throw new Error(`The restored site: ${restored.status}`);
+  const gone = await after.request(`/api/v1/pages/${pages[0]}/site`, { method: 'DELETE' });
+  if (gone.status !== 204) throw new Error(`Unpublish: ${gone.status}`);
+  const unpublishedAt = Date.now();
+  await until(
+    'the site to go after its unpublish',
+    async () => (await readSite(second.sitesBase, `/${slug}`)).status === 404,
+    60,
+  );
+  step('the restored site reads, and is gone after an unpublish', {
+    goneAfterMs: Date.now() - unpublishedAt,
+  });
   result.drill = 'pass';
   kill(second.worker);
   kill(second.api);
+  kill(second.sites);
   kill(second.azurite);
 } catch (error) {
   result.error = String(error?.stack ?? error);

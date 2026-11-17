@@ -56,6 +56,11 @@ public sealed class Workspace
     /// <summary>Recorded and shown, not enforced (Q10).</summary>
     public long? StorageQuotaBytes { get; set; }
     public long StorageUsedBytes { get; set; }
+    /// <summary>
+    /// Phase 9: whether pages of the workspace may be published as sites (on unless an owner or
+    /// admin turns it off; turning it off unpublishes every live site at once).
+    /// </summary>
+    public bool PublishingEnabled { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? DeletedBy { get; set; }
@@ -408,7 +413,7 @@ public sealed class DatabaseView : ITenantOwned
     public Guid WorkspaceId { get; set; }
     public Guid DatabaseId { get; set; }
     public string Name { get; set; } = "";
-    /// <summary><c>table</c>, <c>board</c>, <c>list</c>, <c>calendar</c> or <c>gallery</c>.</summary>
+    /// <summary><c>table</c>, <c>board</c>, <c>list</c>, <c>calendar</c>, <c>gallery</c> or (Phase 9) <c>timeline</c>.</summary>
     public string Type { get; set; } = "table";
     public string OrderKey { get; set; } = "";
     /// <summary>JSON: the <c>ViewConfig</c>.</summary>
@@ -566,10 +571,42 @@ public sealed class WorkbookTicket : ITenantOwned
     public Guid UserId { get; set; }
     /// <summary><c>edit</c> or <c>view</c>.</summary>
     public string Access { get; set; } = "view";
+    /// <summary>
+    /// Phase 9: <c>web</c> (Sheet's web app) or <c>desktop</c> (Sheet's desktop app by its deep
+    /// link): which origins may redeem it.
+    /// </summary>
+    public string Target { get; set; } = "web";
     public byte[] TokenHash { get; set; } = [];
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? UsedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A page published as a site (Phase 9, DATA_MODEL.md, Published sites): its root page and slug,
+/// whether search engines may index it, the language of the site's own words. What the site shows
+/// is decided when it is read, by a share link's rules (<c>SharedReader</c>). <see cref="Version"/>
+/// rises on every change; a site unpublished keeps its row for the audit, and its slug is free again.
+/// </summary>
+public sealed class PublishedSite : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid RootPageId { get; set; }
+    /// <summary>3 to 63 of <c>a-z</c>, <c>0-9</c> and <c>-</c>; unique among live sites of every workspace.</summary>
+    public string Slug { get; set; } = "";
+    public bool Indexing { get; set; }
+    /// <summary><c>en</c> or <c>ar</c>: the site's own words, and its <c>lang</c> and <c>dir</c>.</summary>
+    public string Language { get; set; } = "en";
+    public long Version { get; set; } = 1;
+    public Guid PublishedBy { get; set; }
+    public DateTimeOffset PublishedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    /// <summary>Null while the site is live.</summary>
+    public DateTimeOffset? UnpublishedAt { get; set; }
+    public Guid? UnpublishedBy { get; set; }
+    /// <summary><c>person</c> or <c>publishing.off</c>.</summary>
+    public string? UnpublishReason { get; set; }
 }
 
 /// <summary>

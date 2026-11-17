@@ -90,6 +90,16 @@ public sealed class ExportJob(DocStates states, BlobStore blob, ILogger<ExportJo
         }
         var people = (await db.WorkspaceMembers.AsNoTracking().Join(db.Users, m => m.UserId, u => u.Id, (m, u) => new { u.Id, u.DisplayName }).ToListAsync(ct))
             .ToDictionary(u => u.Id.ToString(), u => u.DisplayName, StringComparer.Ordinal);
+        // Format version 3 (Phase 9): each workbook the requester may read that has a version, its newest bytes.
+        var books = await db.Workbooks.AsNoTracking().Where(w => w.TrashedAt == null && w.CurrentVersionId != null)
+            .OrderByDescending(w => w.UpdatedAt).ThenBy(w => w.Id).ToListAsync(ct);
+        var bookLevels = await new Cgw.Core.Workbooks.WorkbookAccess(db).LevelsAsync(member, books, ct);
+        books = books.Where(b => bookLevels[b.Id] != Levels.None).ToList();
+        async Task<byte[]?> WorkbookBytes(Workbook book)
+        {
+            var key = await db.WorkbookVersions.AsNoTracking().Where(v => v.Id == book.CurrentVersionId).Select(v => v.BlobKey).FirstOrDefaultAsync(ct);
+            return key is null ? null : await blob.GetAsync(key, ct);
+        }
 
         async Task<string> Content(Page page)
         {
@@ -108,7 +118,7 @@ public sealed class ExportJob(DocStates states, BlobStore blob, ILogger<ExportJo
                 await ExportBuilder.WriteAsync(file, new ExportBuilder.Input(
                     workspace, sections, pages, assets, Content,
                     async asset => await blob.GetAsync(asset.BlobKey, ct),
-                    ExportBuilder.Untitled(locale), clock.GetUtcNow(), databases, people), ct);
+                    ExportBuilder.Untitled(locale), clock.GetUtcNow(), databases, people, books, WorkbookBytes), ct);
                 await file.FlushAsync(ct);
                 file.Position = 0;
                 var key = BlobStore.ExportKey(export.WorkspaceId, export.Id);

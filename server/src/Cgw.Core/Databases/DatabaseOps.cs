@@ -26,7 +26,16 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     /// <summary>Rows relating to a changed row recomputed inline; more mark their database for the worker.</summary>
     public static int InlineRelated { get; set; } = 1000;
 
-    public static readonly HashSet<string> ViewTypes = ["table", "board", "list", "calendar", "gallery"];
+    /// <summary>The view types, in the order they were added: a build that knows N types knows the first N.</summary>
+    public static readonly string[] ViewTypeOrder = ["table", "board", "list", "calendar", "gallery", "timeline"];
+
+    public static readonly HashSet<string> ViewTypes = [.. ViewTypeOrder];
+
+    /// <summary>What a build that does not send <c>viewTypes</c> knows: every build before 0.9.0.</summary>
+    public const int OlderViewTypes = 5;
+
+    /// <summary>The view config keys every build before 0.9.0 knows (db/types.ts <c>ViewConfig</c> at 0.8.0).</summary>
+    public static readonly HashSet<string> OlderConfigKeys = ["filter", "sorts", "group", "properties", "calendarBy", "cover", "cardSize", "wrap"];
 
     /// <summary>A row this operation changed, as it will be written.</summary>
     private sealed class RowState(Page page, DatabaseRow record)
@@ -427,6 +436,14 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
 
     // Views -----------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// A view made or changed (<c>view.upsert</c>). From Phase 9 a build sends <c>viewTypes</c>, the
+    /// number of view types it knows; one that does not (every build before 0.9.0) draws a type it
+    /// does not know as a table and may send it back so: such an upsert keeps the stored type when it
+    /// says <c>table</c> for a type it cannot know, and keeps every stored config key it does not know
+    /// and did not send (<c>timeline</c>, and any added later). A real change of type by it (to
+    /// another type it knows) is taken. With <c>viewTypes</c> the view is taken as sent.
+    /// </summary>
     public async Task<DatabaseView> UpsertViewAsync(Member member, Guid id, JsonElement payload, WorkspaceDatabase database, CancellationToken ct)
     {
         actor = member.UserId;
@@ -441,6 +458,10 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         if (config.Length > MaxViewConfigChars) throw Invalid("The view's config is too large");
         var view = await db.DatabaseViews.FirstOrDefaultAsync(v => v.Id == id, ct);
         if (view is not null && view.DatabaseId != database.PageId) throw Invalid("A view stays with its database");
+        var older = !(payload.TryGetProperty("viewTypes", out var known) && known.ValueKind == JsonValueKind.Number && known.TryGetInt32(out var count) && count > 0);
+        if (older && view is not null)
+            (type, config) = KeepWhatOlderBuildsDrop(view, type, config);
+        if (config.Length > MaxViewConfigChars) throw Invalid("The view's config is too large");
         var now = Now;
         if (view is null)
         {
@@ -462,6 +483,27 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         view.Config = config;
         changes.Add("view", view.Id, "upsert", view.Version, member.UserId);
         return view;
+    }
+
+    /// <summary>
+    /// What an upsert from a build without <c>viewTypes</c> leaves of the stored view: its type when
+    /// the build said <c>table</c> for a type it cannot know, and the stored config keys it does not
+    /// know and so could not send.
+    /// </summary>
+    public static (string Type, string Config) KeepWhatOlderBuildsDrop(DatabaseView stored, string type, string config)
+    {
+        var olderKnows = ViewTypeOrder.Take(OlderViewTypes).ToHashSet(StringComparer.Ordinal);
+        if (type == "table" && !olderKnows.Contains(stored.Type)) type = stored.Type;
+        if (JsonNode.Parse(string.IsNullOrEmpty(stored.Config) ? "{}" : stored.Config) is not JsonObject before) return (type, config);
+        if (JsonNode.Parse(config) is not JsonObject after) return (type, config);
+        var kept = false;
+        foreach (var (key, value) in before)
+        {
+            if (OlderConfigKeys.Contains(key) || after.ContainsKey(key)) continue;
+            after[key] = value?.DeepClone();
+            kept = true;
+        }
+        return (type, kept ? after.ToJsonString() : config);
     }
 
     public void DeleteView(Member member, DatabaseView view)

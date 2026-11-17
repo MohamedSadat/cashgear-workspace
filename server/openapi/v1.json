@@ -1657,6 +1657,254 @@
         }
       }
     },
+    "/api/v1/shared/databases/{databaseId}": {
+      "get": {
+        "tags": [
+          "Sharing"
+        ],
+        "operationId": "getSharedDatabase",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Share-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedDatabaseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/shared/databases/{databaseId}/query": {
+      "post": {
+        "tags": [
+          "Sharing"
+        ],
+        "operationId": "querySharedDatabase",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Share-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedQueryRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedQueryResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pages/{pageId}/site": {
+      "get": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "getPageSite",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageSiteDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "publishPage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "unpublishPage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/publishing": {
+      "get": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "getPublishing",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishingDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "setPublishing",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/search": {
       "get": {
         "tags": [
@@ -2509,6 +2757,22 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WorkbookLaunchRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -2516,6 +2780,157 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkbookLaunchDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/versions": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "listWorkbookVersions",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookVersionsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "uploadWorkbookVersion",
+        "parameters": [
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookSavedDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/versions/{versionId}/content": {
+      "get": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "getWorkbookVersionContent",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookContentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workbooks/{workbookId}/versions/{versionId}/restore": {
+      "post": {
+        "tags": [
+          "Workbooks"
+        ],
+        "operationId": "restoreWorkbookVersion",
+        "parameters": [
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbookSavedDto"
                 }
               }
             }
@@ -5284,6 +5699,51 @@
           }
         }
       },
+      "PageSiteDto": {
+        "required": [
+          "site",
+          "publishable",
+          "reason",
+          "pages",
+          "leftOut"
+        ],
+        "type": "object",
+        "properties": {
+          "site": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SiteDto"
+              }
+            ]
+          },
+          "publishable": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SitePageDto"
+            }
+          },
+          "leftOut": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "PermissionEntryDto": {
         "required": [
           "principalType",
@@ -5432,6 +5892,35 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "PublishingDto": {
+        "required": [
+          "enabled",
+          "sites"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "sites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSiteDto"
+            }
+          }
+        }
+      },
+      "PublishingUpdate": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -5648,6 +6137,16 @@
               "string"
             ],
             "format": "int32"
+          },
+          "window": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryWindowDto"
+              }
+            ]
           }
         }
       },
@@ -5684,6 +6183,31 @@
             "format": "int64"
           },
           "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "QueryWindowDto": {
+        "required": [
+          "propertyId",
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "propertyId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "endPropertyId": {
             "type": [
               "null",
               "string"
@@ -6306,6 +6830,51 @@
           }
         }
       },
+      "SharedDatabaseDto": {
+        "required": [
+          "database",
+          "views"
+        ],
+        "type": "object",
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/SharedDatabaseInfoDto"
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewDto"
+            }
+          }
+        }
+      },
+      "SharedDatabaseInfoDto": {
+        "required": [
+          "id",
+          "title",
+          "icon",
+          "properties"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "properties": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
       "SharedPageDto": {
         "required": [
           "id",
@@ -6326,6 +6895,118 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "SharedQueryRequestDto": {
+        "type": "object",
+        "properties": {
+          "viewId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "groupKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "after": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "search": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "context": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryContextDto"
+              }
+            ]
+          },
+          "window": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryWindowDto"
+              }
+            ]
+          },
+          "undated": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "SharedQueryResponseDto": {
+        "required": [
+          "rows",
+          "groups",
+          "total",
+          "next",
+          "titles"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RowDto"
+            }
+          },
+          "groups": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/GroupCountDto"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "next": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "titles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -6353,7 +7034,8 @@
           "title",
           "icon",
           "parentPageId",
-          "orderKey"
+          "orderKey",
+          "kind"
         ],
         "type": "object",
         "properties": {
@@ -6378,6 +7060,9 @@
             "format": "uuid"
           },
           "orderKey": {
+            "type": "string"
+          },
+          "kind": {
             "type": "string"
           }
         }
@@ -6413,6 +7098,112 @@
           "createdBy": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "SiteDto": {
+        "required": [
+          "id",
+          "pageId",
+          "slug",
+          "url",
+          "indexing",
+          "language",
+          "version",
+          "publishedAt",
+          "publishedBy",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "indexing": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publishedBy": {
+            "$ref": "#/components/schemas/UserRefDto"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SitePageDto": {
+        "required": [
+          "id",
+          "title",
+          "icon",
+          "parentPageId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentPageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "SiteRequest": {
+        "required": [
+          "slug",
+          "indexing",
+          "language"
+        ],
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "indexing": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
           }
         }
       },
@@ -7052,6 +7843,17 @@
           }
         }
       },
+      "WorkbookLaunchRequest": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "WorkbookListDto": {
         "required": [
           "workbooks"
@@ -7152,6 +7954,22 @@
           }
         }
       },
+      "WorkbookSavedDto": {
+        "required": [
+          "versionId",
+          "etag"
+        ],
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etag": {
+            "type": "string"
+          }
+        }
+      },
       "WorkbookSheetDto": {
         "required": [
           "name",
@@ -7206,6 +8024,58 @@
               "null",
               "boolean"
             ]
+          }
+        }
+      },
+      "WorkbookVersionDto": {
+        "required": [
+          "id",
+          "size",
+          "sha256",
+          "savedAt",
+          "savedBy",
+          "current"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "savedBy": {
+            "$ref": "#/components/schemas/UserRefDto"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkbookVersionsDto": {
+        "required": [
+          "versions"
+        ],
+        "type": "object",
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkbookVersionDto"
+            }
           }
         }
       },
@@ -7287,6 +8157,73 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "WorkspaceSiteDto": {
+        "required": [
+          "id",
+          "pageId",
+          "slug",
+          "url",
+          "indexing",
+          "language",
+          "version",
+          "publishedAt",
+          "publishedBy",
+          "updatedAt",
+          "pageTitle",
+          "pageIcon"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "indexing": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publishedBy": {
+            "$ref": "#/components/schemas/UserRefDto"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pageTitle": {
+            "type": "string"
+          },
+          "pageIcon": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -7412,6 +8349,9 @@
     },
     {
       "name": "Sharing"
+    },
+    {
+      "name": "Publishing"
     },
     {
       "name": "Search"

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Phase 9: published sites on their own origin (DECISIONS.md, 2026-11-17). Reads SQL and Blob
+       with the API's configuration names; no Identity, OpenIddict, antiforgery, cookies, CORS,
+       session or Data Protection of the API, and no Yjs library (checked when packing). -->
+  <PropertyGroup>
+    <UserSecretsId>cgw-sites-dev-no-secrets</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Cgw.Core/Cgw.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cgw.Tests" />
+  </ItemGroup>
+</Project>

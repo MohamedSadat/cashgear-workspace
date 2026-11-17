@@ -15,9 +15,17 @@ public sealed record RowsPageDto(IReadOnlyList<RowDto> Rows, string? Next, long 
 public sealed record QueryContextDto(string? Today = null, int? OffsetMinutes = null, Guid? Me = null, Dictionary<string, string>? People = null);
 
 /// <summary>
+/// Phase 9: a query's date window (db/types.ts <c>QuerySpec.window</c>): <c>YYYY-MM-DD</c> dates,
+/// both inclusive; the span from <c>propertyId</c>'s start to <c>endPropertyId</c>'s value (else
+/// its own end, else its start).
+/// </summary>
+public sealed record QueryWindowDto(string PropertyId, string From, string To, string? EndPropertyId = null);
+
+/// <summary>
 /// <c>POST /databases/{id}/query</c>. Explicit <c>filter</c>, <c>sorts</c> and <c>group</c>
 /// override the view's (a <c>null</c> group: no groups); the filter is a <c>FilterGroup</c>
-/// (db/types.ts).
+/// (db/types.ts). A <c>window</c> (Phase 9) keeps only rows whose dates meet it; it is never the
+/// view's.
 /// </summary>
 public sealed record QueryRequestDto(
     Guid? ViewId = null,
@@ -28,7 +36,8 @@ public sealed record QueryRequestDto(
     string? Search = null,
     QueryContextDto? Context = null,
     string? After = null,
-    int? Limit = null);
+    int? Limit = null,
+    QueryWindowDto? Window = null);
 
 public sealed record GroupCountDto(string Key, long Count);
 
@@ -163,7 +172,14 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
             spec = new QuerySpec { Filter = spec.Filter, Sorts = QuerySpec.ReadSorts(sorts), Group = spec.Group };
         if (body.TryGetProperty("group", out var group))
             spec = new QuerySpec { Filter = spec.Filter, Sorts = spec.Sorts, Group = QuerySpec.ReadGroup(group) };
-        spec = new QuerySpec { Filter = spec.Filter, Sorts = spec.Sorts, Group = spec.Group, Search = request.Search };
+        // The window is the request's alone; it is in the body, so in the kept result's key below.
+        DateWindow? window = null;
+        if (body.TryGetProperty("window", out var windowJson))
+        {
+            window = QuerySpec.ReadWindow(windowJson, out var valid);
+            if (!valid) return Failure.Invalid("window is {propertyId, endPropertyId?, from, to} with YYYY-MM-DD dates");
+        }
+        spec = new QuerySpec { Filter = spec.Filter, Sorts = spec.Sorts, Group = spec.Group, Search = request.Search, Window = window };
         var size = Math.Clamp(request.Limit ?? DefaultQuery, 1, MaxQuery);
         var ctx = Context(request.Context, member, clock);
 

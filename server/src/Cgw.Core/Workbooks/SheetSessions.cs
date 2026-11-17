@@ -8,6 +8,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Cgw.Core.Workbooks;
 
 public sealed record WorkbookLaunchDto(string Url, DateTimeOffset ExpiresAt);
+
+/// <summary>
+/// <c>POST /workbooks/{id}/launch</c>'s body (Phase 9, Track S6): <c>web</c> (absent: the web
+/// app's link, as before) or <c>desktop</c> (Sheet's desktop app by its deep link).
+/// </summary>
+public sealed record WorkbookLaunchRequest(string? Target = null);
+
 public sealed record RedeemRequest(string? Ticket);
 public sealed record WorkbookRefDto(Guid Id, string Name);
 
@@ -67,11 +74,31 @@ public sealed class SheetSessions(
 
     public static string LanguageOf(string? locale) => locale is { } l && l.StartsWith("ar", StringComparison.OrdinalIgnoreCase) ? "ar" : "en";
 
-    public bool OriginAllowed(string? origin) => origin is { Length: > 0 } o && settings.SheetOrigins.Contains(o, StringComparer.Ordinal);
+    public const string WebTarget = "web";
+    public const string DesktopTarget = "desktop";
 
-    /// <summary><c>POST /workbooks/{id}/launch</c>: a ticket for the caller, at the access their level gives now.</summary>
-    public async Task<Result<WorkbookLaunchDto>> LaunchAsync(Member member, Workbook book, string level, CancellationToken ct = default)
+    /// <summary>
+    /// Whether an <c>Origin</c> may redeem a ticket at all: Sheet's web origins or its desktop app's
+    /// (Phase 9). Which of the two a ticket needs is checked once it is found (<see cref="RedeemAsync"/>).
+    /// </summary>
+    public bool OriginAllowed(string? origin) => origin is { Length: > 0 } o
+        && (settings.SheetOrigins.Contains(o, StringComparer.Ordinal) || settings.SheetDesktopOrigins.Contains(o, StringComparer.Ordinal));
+
+    /// <summary>Whether a ticket made for <paramref name="target"/> may be redeemed from <paramref name="origin"/>.</summary>
+    public bool OriginFits(string target, string? origin) => origin is { Length: > 0 } o
+        && (target == DesktopTarget ? settings.SheetDesktopOrigins : settings.SheetOrigins).Contains(o, StringComparer.Ordinal);
+
+    /// <summary>
+    /// <c>POST /workbooks/{id}/launch</c>: a ticket for the caller, at the access their level gives
+    /// now, for Sheet's web app (<c>https://sheet…/cloud#launch=…</c>) or, with <c>target:
+    /// "desktop"</c>, its desktop app (<c>cashgear-sheet://workspace/launch#ticket=…</c>). The ticket
+    /// records its target: a desktop one is redeemed only from the desktop origins, a web one only
+    /// from Sheet's web origins.
+    /// </summary>
+    public async Task<Result<WorkbookLaunchDto>> LaunchAsync(Member member, Workbook book, string level, string? target = null, CancellationToken ct = default)
     {
+        target ??= WebTarget;
+        if (target is not (WebTarget or DesktopTarget)) return Failure.Invalid("target is web or desktop");
         if (book.TrashedAt is not null) return WorkbookService.Gone();
         if (WorkbookAccess.SessionAccess(level) is not { } sessionAccess) return Failure.NotFound("No such workbook");
         var ticket = NewToken();
@@ -83,20 +110,24 @@ public sealed class SheetSessions(
             WorkbookId = book.Id,
             UserId = member.UserId,
             Access = sessionAccess,
+            Target = target,
             TokenHash = WorkspaceService.Hash(ticket),
             ExpiresAt = now + TicketLifetime,
             CreatedAt = now,
         });
         await db.SaveChangesAsync(ct);
-        return new WorkbookLaunchDto(settings.LaunchUrl(ticket), now + TicketLifetime);
+        var url = target == DesktopTarget ? Integrations.DesktopLaunchUrl(ticket) : settings.LaunchUrl(ticket);
+        return new WorkbookLaunchDto(url, now + TicketLifetime);
     }
 
     /// <summary>
     /// A ticket for a session (the route checks the <c>Origin</c> first, so a refused site cannot use
     /// a ticket up). Unknown, used and expired tickets look the same. The ticket is used up by the
-    /// first request that marks it, race or not; then the workbook and the person's level now decide.
+    /// first request that marks it, race or not; one of the other target than the origin's (a desktop
+    /// ticket from a web origin, or the other way) is used up and answered as an unknown one; then
+    /// the workbook and the person's level now decide.
     /// </summary>
-    public async Task<Result<FileSessionDto>> RedeemAsync(Actor actor, string? ticket, CancellationToken ct = default)
+    public async Task<Result<FileSessionDto>> RedeemAsync(Actor actor, string? ticket, string? origin = null, CancellationToken ct = default)
     {
         if (ticket is not { Length: > 0 }) return Failure.Invalid("ticket is required");
         if (ticket.Length > 200) return TicketInvalid();
@@ -107,6 +138,8 @@ public sealed class SheetSessions(
         if (row is null || row.UsedAt is not null || row.ExpiresAt <= now) return TicketInvalid();
         if (await tickets.Where(t => t.Id == row.Id && t.UsedAt == null).ExecuteUpdateAsync(s => s.SetProperty(t => t.UsedAt, now), ct) != 1)
             return TicketInvalid();
+        // Used up either way: a ticket offered at the wrong kind of app is not offered twice.
+        if (!OriginFits(row.Target, origin)) return TicketInvalid();
 
         scope.Enter(row.WorkspaceId);
         if (await access.MemberAsync(row.WorkspaceId, row.UserId) is not { } member) return Failure.Denied("You no longer have access to this workbook");

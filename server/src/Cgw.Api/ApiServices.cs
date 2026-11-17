@@ -56,8 +56,9 @@ public static class ApiServices
                 .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After", "Location")
                 .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
                 .SetPreflightMaxAge(TimeSpan.FromHours(1)));
+            // Sheet's web origins and (Phase 9, Track S6) its desktop app's.
             o.AddPolicy(SheetCorsPolicy, p => p
-                .WithOrigins([.. integrations.SheetOrigins])
+                .WithOrigins([.. integrations.SheetOrigins.Concat(integrations.SheetDesktopOrigins).Distinct(StringComparer.Ordinal)])
                 .DisallowCredentials()
                 .WithHeaders("Content-Type", SheetSessions.Header, "If-Match", "If-None-Match")
                 .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After", "Location")
@@ -275,7 +276,10 @@ public sealed class CsrfFilter(IAntiforgery antiforgery, CookieNames cookies) : 
         var method = http.Request.Method;
         var safe = HttpMethods.IsGet(method) || HttpMethods.IsHead(method) || HttpMethods.IsOptions(method);
         var bearer = http.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.Ordinal);
-        if (!safe && !bearer && http.Request.Cookies.ContainsKey(cookies.Session))
+        // A share link's reads (Phase 9: a database's query is a POST) never read the session, so a
+        // signed-in browser's cookie on them carries nothing to forge.
+        var shared = http.Request.Path.StartsWithSegments("/api/v1/shared");
+        if (!safe && !bearer && !shared && http.Request.Cookies.ContainsKey(cookies.Session))
         {
             if (!await antiforgery.IsRequestValidAsync(http))
                 return Problems.Of(Codes.RequestInvalid, 400, "The antiforgery token is missing or wrong");

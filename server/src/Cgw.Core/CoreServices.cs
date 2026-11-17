@@ -14,6 +14,22 @@ public static class CoreServices
     /// <summary>What both processes need: the database, the tenant scope, blob storage, mail.</summary>
     public static IServiceCollection AddCgwCore(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddCgwData(configuration);
+        services.AddSingleton<Mailer>();
+        services.AddScoped<Audit>();
+        // Phase 8: notification mail's settings, timing and unsubscribe tokens (both processes).
+        services.AddSingleton<MailSettingsOptions>();
+        services.AddSingleton<MailTokens>();
+        return services;
+    }
+
+    /// <summary>
+    /// The database, the tenant scope, blob storage and the clock, with the API's configuration
+    /// names (<c>ConnectionStrings__Sql</c>, <c>Blob__*</c>): all the Sites process (Phase 9) takes of
+    /// the core, which has no mail, no Data Protection and no sign-in.
+    /// </summary>
+    public static IServiceCollection AddCgwData(this IServiceCollection services, IConfiguration configuration)
+    {
         services.AddScoped<TenantScope>();
         services.AddDbContext<CgwDb>(options =>
         {
@@ -23,12 +39,7 @@ public static class CoreServices
             options.UseOpenIddict<Guid>();
         });
         services.AddSingleton<BlobStore>();
-        services.AddSingleton<Mailer>();
         services.AddSingleton(TimeProvider.System);
-        services.AddScoped<Audit>();
-        // Phase 8: notification mail's settings, timing and unsubscribe tokens (both processes).
-        services.AddSingleton<MailSettingsOptions>();
-        services.AddSingleton<MailTokens>();
         return services;
     }
 

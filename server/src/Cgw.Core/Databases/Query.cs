@@ -18,7 +18,13 @@ public sealed record GroupRule(string PropertyId, string? DateBy, bool HideEmpty
 
 public sealed record GroupCount(string Key, int Count);
 
-/// <summary>A filter, sorts, a group and a search: one definition, evaluated as db/query.ts does.</summary>
+/// <summary>
+/// Phase 9's date window (db/types.ts <c>QuerySpec.window</c>): inclusive calendar dates; a row is
+/// in it when its span meets <c>[From, To]</c>.
+/// </summary>
+public sealed record DateWindow(string PropertyId, string? EndPropertyId, string From, string To);
+
+/// <summary>A filter, sorts, a group, a search and a date window: one definition, evaluated as db/query.ts does.</summary>
 public sealed class QuerySpec
 {
     /// <summary>The filter as raw JSON values (<see cref="Raw"/>), a group or a condition.</summary>
@@ -26,6 +32,33 @@ public sealed class QuerySpec
     public IReadOnlyList<SortRule> Sorts { get; init; } = [];
     public GroupRule? Group { get; init; }
     public string? Search { get; init; }
+    /// <summary>Phase 9: only rows whose span meets these dates (the calendar's and the timeline's range).</summary>
+    public DateWindow? Window { get; init; }
+
+    /// <summary>
+    /// A window as the request names it: <c>{propertyId, endPropertyId?, from, to}</c> with
+    /// <c>YYYY-MM-DD</c> dates. Null for <c>null</c> (no window). Anything else is a window, which
+    /// matches nothing when its parts do not read (the shared vectors' rule, as db/query.ts does);
+    /// <paramref name="valid"/> says whether they did, for the route, which answers 400 when not.
+    /// </summary>
+    public static DateWindow? ReadWindow(JsonElement e, out bool valid)
+    {
+        valid = true;
+        if (e.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return null;
+        string? Str(string name) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        var property = Str("propertyId") ?? "";
+        var from = Str("from") ?? "";
+        var to = Str("to") ?? "";
+        string? end = null;
+        var endShape = true;
+        if (e.ValueKind == JsonValueKind.Object && e.TryGetProperty("endPropertyId", out var endValue))
+        {
+            if (endValue.ValueKind == JsonValueKind.String) end = endValue.GetString();
+            else if (endValue.ValueKind is not JsonValueKind.Null) endShape = false;
+        }
+        valid = e.ValueKind == JsonValueKind.Object && property.Length > 0 && DbDates.IsDay(from) && DbDates.IsDay(to) && endShape;
+        return new DateWindow(property, end is { Length: > 0 } ? end : null, from, to);
+    }
 
     public static IReadOnlyList<SortRule> ReadSorts(JsonElement e) =>
         e.ValueKind != JsonValueKind.Array ? [] : e.EnumerateArray()
@@ -272,6 +305,38 @@ public static class Query
     public static bool Matches(Schema schema, RowData row, object? filter, QueryContext ctx, Func<RowData, IReadOnlyDictionary<string, object?>?>? computed = null) =>
         filter is null || Evaluate(schema, row, filter, ctx, computed) != Outcome.False;
 
+    // The date window (Phase 9) -----------------------------------------------------------------------
+
+    /// <summary>A date cell's point at <paramref name="field"/> (<c>start</c> or <c>end</c>) as a calendar date in the query's offset; null when it has none.</summary>
+    private static string? WindowDate(object? cell, string field, QueryContext ctx) =>
+        cell is not null && Raw.Field(cell, field) is string point && DbDates.IsPoint(point) ? DbDates.CalendarDate(point, ctx.OffsetMinutes) : null;
+
+    /// <summary>
+    /// Whether a row's span meets the window: it starts at the property's start and ends at the end
+    /// property's value (its end, else its start) when that property is given and the row has a value
+    /// there, else at the property's own end, else its start; an end before the start is the start.
+    /// By calendar date in the query's offset, as the filters' date operators read dates. A row with
+    /// no start is never in a window; a window on a property that is not a date (or not there)
+    /// matches nothing.
+    /// </summary>
+    public static bool InWindow(Schema schema, RowData row, DateWindow window, QueryContext ctx, Func<RowData, IReadOnlyDictionary<string, object?>?>? computed = null)
+    {
+        // Dates that are not days, or a window that ends before it starts, hold nothing.
+        if (!DbDates.IsDay(window.From) || !DbDates.IsDay(window.To) || string.CompareOrdinal(window.From, window.To) > 0) return false;
+        if (schema[window.PropertyId] is not { Trashed: false } def || KindOf(schema, def) != "date") return false;
+        var cell = CellFor(def, "date", row, computed);
+        if (WindowDate(cell, "start", ctx) is not { } start) return false;
+        string? end = null;
+        if (window.EndPropertyId is { } endId && schema[endId] is { Trashed: false } endDef && KindOf(schema, endDef) == "date")
+        {
+            var endCell = CellFor(endDef, "date", row, computed);
+            end = WindowDate(endCell, "end", ctx) ?? WindowDate(endCell, "start", ctx);
+        }
+        end ??= WindowDate(cell, "end", ctx) ?? start;
+        if (string.CompareOrdinal(end, start) < 0) end = start;
+        return string.CompareOrdinal(start, window.To) <= 0 && string.CompareOrdinal(end, window.From) >= 0;
+    }
+
     // Sorts -----------------------------------------------------------------------------------------
 
     // A key: a double, a string, or an object[] of keys.
@@ -459,9 +524,9 @@ public static class Query
 
     /// <summary>
     /// Rows of a database as a view shows them: templates and trashed rows never; then the search,
-    /// the filter, the sorts; then, with a group rule on a groupable property, the groups and their
-    /// counts (rows whose every group is hidden are left out; with <paramref name="groupKey"/>, the
-    /// rows of that group).
+    /// the filter, the date window (Phase 9), the sorts; then, with a group rule on a groupable
+    /// property, the groups and their counts (rows whose every group is hidden are left out; with
+    /// <paramref name="groupKey"/>, the rows of that group). Group counts count rows in the window.
     /// </summary>
     public static Result Run(Schema schema, IEnumerable<RowData> rows, QuerySpec spec, QueryContext ctx, string? groupKey = null,
         Func<RowData, IReadOnlyDictionary<string, object?>?>? computed = null)
@@ -475,7 +540,8 @@ public static class Query
                 var words = row.NormalTitle.Split(' ');
                 if (!terms.All(term => words.Any(word => word.StartsWith(term, StringComparison.Ordinal)))) return false;
             }
-            return Matches(schema, row, spec.Filter, ctx, computed);
+            if (!Matches(schema, row, spec.Filter, ctx, computed)) return false;
+            return spec.Window is not { } window || InWindow(schema, row, window, ctx, computed);
         }
         var rules = Rules(schema, spec.Sorts);
         // Each row's keys once, then one sort over the pairs. Many rows are filtered and keyed on

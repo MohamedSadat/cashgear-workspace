@@ -720,7 +720,9 @@ public sealed class DatabaseTests(ServerFixture server)
         }
         using var manifest = JsonDocument.Parse(Read("cgw-export.json"));
         var root = manifest.RootElement;
-        Assert.Equal(2, root.GetProperty("version").GetInt32());
+        // Version 3 from Phase 9 (workbooks); a workspace with none has no workbooks key, as the app writes it.
+        Assert.Equal(3, root.GetProperty("version").GetInt32());
+        Assert.False(root.TryGetProperty("workbooks", out _));
         var pages = root.GetProperty("pages").EnumerateArray().ToDictionary(p => p.GetProperty("id").GetGuid());
         Assert.Equal("database", pages[database].GetProperty("kind").GetString());
         var row = pages[first];

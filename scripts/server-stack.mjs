@@ -1,5 +1,7 @@
 // The server as a local stack, for development and the end-to-end tests: Azurite for Blob
-// Storage, the API on http://127.0.0.1:5280 and the worker, against a SQL Server database
+// Storage, the API on http://127.0.0.1:5280, the worker, and (Phase 9) the Sites process on
+// http://localhost:5290 (CGW_SITES_PORT; `localhost`, not 127.0.0.1: cookies are per host, so the
+// published sites' host must differ from the API's and the web app's), against a SQL Server database
 // (LocalDB unless CGW_DEV_SQL names a server). Migrations run at the API's start, which only
 // development does; a real deployment runs the migration bundle (docs/OPERATIONS.md).
 //   pnpm dev:server                 the development stack: database cgw_dev, data in .cgw-dev
@@ -20,6 +22,8 @@ import { root } from './lib.mjs';
 const e2e = process.argv.includes('--e2e');
 const port = Number(process.env.CGW_API_PORT ?? 5280);
 const blobPort = Number(process.env.CGW_BLOB_PORT ?? 10000);
+const sitesPort = Number(process.env.CGW_SITES_PORT ?? 5290);
+const sitesUrl = `http://localhost:${sitesPort}`;
 const data = join(root, e2e ? '.cgw-dev/e2e' : '.cgw-dev');
 const mail = join(data, 'mail');
 const database = e2e ? 'cgw_e2e' : 'cgw_dev';
@@ -39,12 +43,14 @@ const origins = [
   'http://tauri.localhost',
   'tauri://localhost',
   // The old web builds that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs): v0.2.0,
-  // v0.3.0, v0.4.0, v0.5.0 and v0.6.0.
+  // v0.3.0, v0.4.0, v0.5.0, v0.6.0, v0.7.0 and v0.8.0.
   'http://127.0.0.1:4279',
   'http://127.0.0.1:4278',
   'http://127.0.0.1:4277',
   'http://127.0.0.1:4276',
   'http://127.0.0.1:4275',
+  'http://127.0.0.1:4274',
+  'http://127.0.0.1:4272',
 ];
 
 const children = [];
@@ -162,7 +168,7 @@ if (build.status !== 0) process.exit(1);
 // test run) is not blocked by the DLLs it holds open.
 const run = join(data, 'run');
 rmSync(run, { recursive: true, force: true });
-for (const project of ['Cgw.Api', 'Cgw.Worker'])
+for (const project of ['Cgw.Api', 'Cgw.Worker', 'Cgw.Sites'])
   cpSync(join(root, `server/src/${project}/bin/Debug/net10.0`), join(run, project), {
     recursive: true,
   });
@@ -176,6 +182,8 @@ const env = {
   Blob__ConnectionString: blob,
   Smtp__PickupDirectory: mail,
   Api__PublicUrl: `http://127.0.0.1:${port}`,
+  // Phase 9: where the sites are, for the addresses the API gives out (SiteDto.url).
+  Sites__PublicUrl: sitesUrl,
   // Plain http on 127.0.0.1: OpenIddict answers it, and the cookies are Secure on https only.
   Api__AllowHttp: 'true',
   Web__AppUrl: web,
@@ -232,6 +240,27 @@ function startApi() {
 startApi();
 await waitFor(healthy, 'The API', 180);
 start('worker', 'dotnet', [bin('Cgw.Worker')], env);
+// Phase 9: the Sites process, with the database and storage settings only (it has no sign-in,
+// mail or session of the API's to be given).
+start('sites', 'dotnet', [bin('Cgw.Sites'), '--urls', sitesUrl], {
+  ASPNETCORE_ENVIRONMENT: env.ASPNETCORE_ENVIRONMENT,
+  DOTNET_ENVIRONMENT: env.DOTNET_ENVIRONMENT,
+  ConnectionStrings__Sql: sql,
+  Blob__ConnectionString: blob,
+  Logging__LogLevel__Default: 'Warning',
+  Logging__LogLevel__Microsoft: 'Warning',
+});
+await waitFor(
+  async () => {
+    try {
+      return (await fetch(`${sitesUrl}/health/live`)).ok;
+    } catch {
+      return false;
+    }
+  },
+  'The Sites process',
+  120,
+);
 
 if (e2e) {
   // The control port (see the header): the API recycled as an app pool's worker process is, here
@@ -271,4 +300,6 @@ if (e2e) {
   }).listen(controlPort, '127.0.0.1');
   console.log(`Stack control on http://127.0.0.1:${controlPort} (e2e only)`);
 }
-console.log(`Server stack ready: API http://127.0.0.1:${port}, Blob ${blobPort}, mail in ${mail}`);
+console.log(
+  `Server stack ready: API http://127.0.0.1:${port}, sites ${sitesUrl}, Blob ${blobPort}, mail in ${mail}`,
+);

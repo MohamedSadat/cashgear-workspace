@@ -61,6 +61,9 @@ public static class ProductionChecks
             problems.Add("Set Sheet__Origins__0 (and __1, ...) to Sheet's https origins (they redeem tickets and read workbooks).");
         if (!Https(configuration[Cgw.Core.Workbooks.Integrations.ErpApiBaseKey]))
             problems.Add("Set Erp__ApiBase to the ERP API's https base (the only ERP a link may name).");
+        // Phase 9: a site's address is built from here alone, never from a request.
+        if (!Https(configuration[Cgw.Core.Sites.SitesOptions.PublicUrlKey]))
+            problems.Add("Set Sites__PublicUrl to the sites' https origin (https://pages.cashgearerp.com).");
         foreach (var key in Shortcuts.Keys)
             if (string.Equals(configuration[key], "true", StringComparison.OrdinalIgnoreCase))
                 problems.Add($"{key.Replace(":", "__", StringComparison.Ordinal)} is for a developer's machine and is refused in Production.");

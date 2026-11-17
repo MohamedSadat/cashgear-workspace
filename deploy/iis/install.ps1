@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
   Installs or updates the Cash Gear Workspace server on a Windows host with IIS (Q6): the API as
-  its own IIS site and app pool, the worker as a Windows service, and the database migrations.
+  its own IIS site and app pool, the worker as a Windows service, (Phase 9) the Sites process as a
+  third IIS site and app pool on the published sites' own host name, and the database migrations.
   Run as an administrator from the unpacked deploy package. docs/OPERATIONS.md is the runbook.
 
 .DESCRIPTION
@@ -72,7 +73,13 @@ param(
   # reads these three from the environment).
   [string] $AzureClientId = '',
   [string] $AzureTenantId = '',
-  [string] $AzureCertificatePath = ''
+  [string] $AzureCertificatePath = '',
+  # Phase 9: the published sites, on an origin of their own (never the API's or the web app's, so a
+  # published page can read neither's session), in an IIS site and app pool of their own. The
+  # certificate defaults to the API's (a *.cashgearerp.com certificate covers both names).
+  [string] $SitesHostName = 'pages.cashgearerp.com',
+  [string] $SitesSiteName = 'CashGearWorkspaceSites',
+  [string] $SitesCertificateThumbprint = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -86,6 +93,8 @@ $connection = "Server=$SqlServer;Database=$Database;Integrated Security=true;Enc
 $builtIn = -not $ServiceAccount
 $poolIdentity = if ($builtIn) { "IIS AppPool\$SiteName" } else { $ServiceAccount }
 $workerIdentity = if ($builtIn) { "NT SERVICE\$ServiceName" } else { $ServiceAccount }
+$sitesIdentity = if ($builtIn) { "IIS AppPool\$SitesSiteName" } else { $ServiceAccount }
+if (-not $SitesCertificateThumbprint) { $SitesCertificateThumbprint = $CertificateThumbprint }
 $environment = [ordered]@{
   ASPNETCORE_ENVIRONMENT = 'Production'
   DOTNET_ENVIRONMENT = 'Production'
@@ -99,6 +108,8 @@ $environment = [ordered]@{
   Web__Origins__2 = 'tauri://localhost'
   Sheet__Origin = $SheetOrigin
   Erp__ApiBase = $ErpApiBase
+  # Phase 9: the sites' origin, for the addresses the API gives out; required in Production.
+  Sites__PublicUrl = "https://$SitesHostName"
   OpenIddict__SigningCertificateThumbprint = $SigningThumbprint
   OpenIddict__EncryptionCertificateThumbprint = $EncryptionThumbprint
   DataProtection__Dpapi = 'true'
@@ -123,8 +134,26 @@ if ($AzureClientId) {
 # The SMTP password comes from this session's environment, never from a parameter or a file.
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
 
-# The event log sources the API and the worker write to; registering one needs an administrator.
-foreach ($source in 'Cash Gear Workspace API', 'Cash Gear Workspace worker') {
+# Phase 9: the Sites process reads the database and Blob Storage with the same names, and is given
+# nothing else: no SMTP password, no OpenID Connect certificates, no Data Protection, no origins.
+$sitesEnvironment = [ordered]@{
+  ASPNETCORE_ENVIRONMENT = 'Production'
+  DOTNET_ENVIRONMENT = 'Production'
+  ConnectionStrings__Sql = $connection
+  Blob__ServiceUri = $BlobServiceUri
+  Blob__Container = 'workspace'
+  Logging__Format = 'json'
+  'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
+  Logging__EventLog__Enabled = 'true'
+}
+if ($AzureClientId) {
+  $sitesEnvironment['AZURE_CLIENT_ID'] = $AzureClientId
+  $sitesEnvironment['AZURE_TENANT_ID'] = $AzureTenantId
+  $sitesEnvironment['AZURE_CLIENT_CERTIFICATE_PATH'] = $AzureCertificatePath
+}
+
+# The event log sources the API, the worker and the sites write to; registering one needs an administrator.
+foreach ($source in 'Cash Gear Workspace API', 'Cash Gear Workspace worker', 'Cash Gear Workspace sites') {
   if (-not [System.Diagnostics.EventLog]::SourceExists($source)) { New-EventLog -LogName Application -Source $source }
 }
 
@@ -151,20 +180,22 @@ Write-Host 'Migrating the database...'
 & (Join-Path $package 'migrate\efbundle.exe') --connection $connection
 if ($LASTEXITCODE -ne 0) { throw "The migration failed ($LASTEXITCODE); nothing else was changed." }
 
-# 2. Stop the worker and the site, copy the new files.
+# 2. Stop the worker and the sites, copy the new files.
 if (Get-Service $ServiceName -ErrorAction SilentlyContinue) { Stop-Service $ServiceName -Force }
-if (Test-Path "IIS:\Sites\$SiteName") { Stop-WebSite $SiteName }
-# A stopped site leaves its app pool's process running with the old files loaded: stop the pool
-# too, and wait for it, or the copy meets locked files.
-if (Test-Path "IIS:\AppPools\$SiteName") {
-  if ((Get-WebAppPoolState $SiteName).Value -ne 'Stopped') { Stop-WebAppPool $SiteName }
-  $deadline = (Get-Date).AddSeconds(60)
-  while ((Get-WebAppPoolState $SiteName).Value -ne 'Stopped') {
-    if ((Get-Date) -gt $deadline) { throw "The app pool $SiteName did not stop within a minute" }
-    Start-Sleep -Seconds 1
+foreach ($site in $SiteName, $SitesSiteName) {
+  if (Test-Path "IIS:\Sites\$site") { Stop-WebSite $site }
+  # A stopped site leaves its app pool's process running with the old files loaded: stop the pool
+  # too, and wait for it, or the copy meets locked files.
+  if (Test-Path "IIS:\AppPools\$site") {
+    if ((Get-WebAppPoolState $site).Value -ne 'Stopped') { Stop-WebAppPool $site }
+    $deadline = (Get-Date).AddSeconds(60)
+    while ((Get-WebAppPoolState $site).Value -ne 'Stopped') {
+      if ((Get-Date) -gt $deadline) { throw "The app pool $site did not stop within a minute" }
+      Start-Sleep -Seconds 1
+    }
   }
 }
-foreach ($part in 'api', 'worker') {
+foreach ($part in 'api', 'worker', 'sites') {
   $target = Join-Path $Root $part
   New-Item -ItemType Directory -Force $target | Out-Null
   # A few short retries, not robocopy's default of a million 30-second waits.
@@ -201,6 +232,31 @@ if (-not (Test-Path "IIS:\Sites\$SiteName")) {
 Set-ItemProperty "IIS:\Sites\$SiteName" -Name logFile.logExtFileFlags `
   -Value 'Date,Time,ClientIP,UserName,ServerIP,Method,UriStem,HttpStatus,Win32Status,TimeTaken,ServerPort,UserAgent,Referer,HttpSubStatus'
 
+# 3b. Phase 9: the sites' app pool and site, on their own host name, as the API's are made.
+if (-not (Test-Path "IIS:\AppPools\$SitesSiteName")) { New-WebAppPool $SitesSiteName | Out-Null }
+Set-ItemProperty "IIS:\AppPools\$SitesSiteName" -Name managedRuntimeVersion -Value ''
+if ($builtIn) {
+  Set-ItemProperty "IIS:\AppPools\$SitesSiteName" -Name processModel.identityType -Value ApplicationPoolIdentity
+} else {
+  Set-ItemProperty "IIS:\AppPools\$SitesSiteName" -Name processModel -Value @{ identityType = 3; userName = $ServiceAccount; password = '' }
+}
+Set-ItemProperty "IIS:\AppPools\$SitesSiteName" -Name processModel.loadUserProfile -Value $true
+Set-ItemProperty "IIS:\AppPools\$SitesSiteName" -Name startMode -Value AlwaysRunning
+& "$env:windir\system32\inetsrv\appcmd.exe" clear config -section:system.applicationHost/applicationPools "/[name='$SitesSiteName'].environmentVariables" | Out-Null
+foreach ($name in $sitesEnvironment.Keys) {
+  & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools "/+[name='$SitesSiteName'].environmentVariables.[name='$name',value='$($sitesEnvironment[$name])']" | Out-Null
+}
+if (-not (Test-Path "IIS:\Sites\$SitesSiteName")) {
+  New-WebSite -Name $SitesSiteName -PhysicalPath (Join-Path $Root 'sites') -ApplicationPool $SitesSiteName -HostHeader $SitesHostName -Port 443 -Ssl -SslFlags 1 | Out-Null
+  $binding = Get-WebBinding -Name $SitesSiteName -Protocol https
+  $binding.AddSslCertificate($SitesCertificateThumbprint, $CertificateStore)
+} else {
+  Set-ItemProperty "IIS:\Sites\$SitesSiteName" -Name physicalPath -Value (Join-Path $Root 'sites')
+}
+# A site's page addresses carry no secret, but its log keeps the same fields as the API's.
+Set-ItemProperty "IIS:\Sites\$SitesSiteName" -Name logFile.logExtFileFlags `
+  -Value 'Date,Time,ClientIP,UserName,ServerIP,Method,UriStem,HttpStatus,Win32Status,TimeTaken,ServerPort,UserAgent,Referer,HttpSubStatus'
+
 # 4. The worker as a service, with its environment in the service's own registry key.
 $exe = Join-Path $Root 'worker\Cgw.Worker.exe'
 if (-not (Get-Service $ServiceName -ErrorAction SilentlyContinue)) {
@@ -231,6 +287,14 @@ ALTER ROLE db_ddladmin ADD MEMBER [$identity];
 "@
       $command.ExecuteNonQuery() | Out-Null
     }
+    # Phase 9: the Sites process only reads.
+    $command = $sql.CreateCommand()
+    $command.CommandText = @"
+IF SUSER_ID(N'$sitesIdentity') IS NULL CREATE LOGIN [$sitesIdentity] FROM WINDOWS;
+IF USER_ID(N'$sitesIdentity') IS NULL CREATE USER [$sitesIdentity] FOR LOGIN [$sitesIdentity];
+ALTER ROLE db_datareader ADD MEMBER [$sitesIdentity];
+"@
+    $command.ExecuteNonQuery() | Out-Null
   } finally { $sql.Close() }
 
   $keyFiles = foreach ($thumbprint in $SigningThumbprint, $EncryptionThumbprint) {
@@ -247,12 +311,22 @@ ALTER ROLE db_ddladmin ADD MEMBER [$identity];
       if ($LASTEXITCODE -ne 0) { throw "Granting $identity read on $file failed ($LASTEXITCODE)" }
     }
   }
+  # The sites read Blob Storage through the same service principal: its certificate file only,
+  # never the OpenID Connect keys.
+  if ($AzureCertificatePath) {
+    & icacls.exe $AzureCertificatePath /grant "${sitesIdentity}:R" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Granting $sitesIdentity read on $AzureCertificatePath failed ($LASTEXITCODE)" }
+  }
 }
 
 # 6. Start, then check.
-if ((Get-WebAppPoolState $SiteName).Value -ne 'Started') { Start-WebAppPool $SiteName }
-Start-WebSite $SiteName
+foreach ($site in $SiteName, $SitesSiteName) {
+  if ((Get-WebAppPoolState $site).Value -ne 'Started') { Start-WebAppPool $site }
+  Start-WebSite $site
+}
 Start-Service $ServiceName
 Start-Sleep -Seconds 5
 $ready = Invoke-WebRequest "https://$HostName/health/ready" -UseBasicParsing -TimeoutSec 30
 Write-Host "Health: $($ready.StatusCode) $($ready.Content)"
+$sites = Invoke-WebRequest "https://$SitesHostName/health/live" -UseBasicParsing -TimeoutSec 30
+Write-Host "Sites: $($sites.StatusCode) $($sites.Content)"

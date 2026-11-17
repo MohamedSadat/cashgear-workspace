@@ -66,6 +66,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<AiUsage> AiUsage => Set<AiUsage>();
     public DbSet<MailSettings> MailSettings => Set<MailSettings>();
     public DbSet<MailOutbox> MailOutbox => Set<MailOutbox>();
+    public DbSet<PublishedSite> PublishedSites => Set<PublishedSite>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -352,6 +353,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             // The clean-up's queue.
             e.HasIndex(x => x.ExpiresAt);
             e.Property(x => x.Access).HasMaxLength(10);
+            e.Property(x => x.Target).HasMaxLength(10).IsUnicode(false);
             e.Property(x => x.TokenHash).HasMaxLength(32);
         });
         b.Entity<FileSession>(e =>
@@ -459,6 +461,24 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.LastError).HasMaxLength(200).IsUnicode(false);
         });
 
+        // Phase 9: published sites.
+        b.Entity<PublishedSite>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // A live slug is unique across every workspace (the Sites process finds a site by it);
+            // an unpublished row keeps its slug for the audit and frees it.
+            e.HasIndex(x => x.Slug).IsUnique().HasFilter("[UnpublishedAt] IS NULL").HasDatabaseName("IX_PublishedSites_LiveSlug");
+            // At most one live site a page.
+            e.HasIndex(x => x.RootPageId).IsUnique().HasFilter("[UnpublishedAt] IS NULL").HasDatabaseName("IX_PublishedSites_LiveRoot");
+            // A workspace's sites, live first.
+            e.HasIndex(x => new { x.WorkspaceId, x.UnpublishedAt });
+            e.Property(x => x.Slug).HasMaxLength(63).IsUnicode(false);
+            e.Property(x => x.Language).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.UnpublishReason).HasMaxLength(30).IsUnicode(false);
+            // Two changes to one site that race: the second is a conflict, not a lost update.
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -496,6 +516,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<Notification>(b);
         Filter<AiSettings>(b);
         Filter<AiUsage>(b);
+        Filter<PublishedSite>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

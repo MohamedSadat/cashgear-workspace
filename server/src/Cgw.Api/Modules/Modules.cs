@@ -11,6 +11,7 @@ using Cgw.Core.Notifications;
 using Cgw.Core.Previews;
 using Cgw.Core.Search;
 using Cgw.Core.Sharing;
+using Cgw.Core.Sites;
 using Cgw.Core.Sync;
 using Cgw.Core.Workbooks;
 using Cgw.Core.Workspaces;
@@ -33,6 +34,10 @@ public static class Modules
         services.AddSingleton<SafeFetcher>();
         services.AddScoped<SharingService>();
         services.AddScoped<SharedReader>();
+        services.AddScoped<SharedDatabases>();
+        // Phase 9: publishing (the sites themselves are the Sites process's).
+        services.AddSingleton(sp => SitesOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddScoped<PublishingService>();
         services.AddSingleton<FullText>();
         services.AddScoped<SearchService>();
         services.AddScoped<VersionService>();
@@ -65,6 +70,7 @@ public static class Modules
         api.MapDocs();
         api.MapAssets();
         api.MapSharing();
+        api.MapPublishing();
         api.MapHistory();
         api.MapDatabases();
         api.MapWorkbooks();

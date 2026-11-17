@@ -609,6 +609,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pages/{pageId}/site': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getPageSite'];
+    put: operations['publishPage'];
+    post?: never;
+    delete: operations['unpublishPage'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pages/{pageId}/versions': {
     parameters: {
       query?: never;
@@ -699,6 +715,38 @@ export interface paths {
     get: operations['getSharedAssetUrl'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/databases/{databaseId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getSharedDatabase'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/shared/databases/{databaseId}/query': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['querySharedDatabase'];
     delete?: never;
     options?: never;
     head?: never;
@@ -945,6 +993,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workbooks/{workbookId}/versions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listWorkbookVersions'];
+    put?: never;
+    post: operations['uploadWorkbookVersion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/versions/{versionId}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getWorkbookVersionContent'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workbooks/{workbookId}/versions/{versionId}/restore': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['restoreWorkbookVersion'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces': {
     parameters: {
       query?: never;
@@ -1163,6 +1259,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['pushOps'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/publishing': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getPublishing'];
+    put: operations['setPublishing'];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1714,6 +1826,14 @@ export interface components {
       /** Format: uuid */
       workspaceId: string;
     };
+    PageSiteDto: {
+      /** Format: int32 */
+      leftOut: number | string;
+      pages: components['schemas']['SitePageDto'][];
+      publishable: boolean;
+      reason: null | string;
+      site: null | components['schemas']['SiteDto'];
+    };
     PermissionEntryDto: {
       displayName: null | string;
       email: null | string;
@@ -1749,6 +1869,13 @@ export interface components {
       status?: null | number | string;
       title?: null | string;
       type?: null | string;
+    };
+    PublishingDto: {
+      enabled: boolean;
+      sites: components['schemas']['WorkspaceSiteDto'][];
+    };
+    PublishingUpdate: {
+      enabled: boolean;
     };
     PullResponse: {
       /** Format: int64 */
@@ -1798,6 +1925,7 @@ export interface components {
       sorts?: unknown;
       /** Format: uuid */
       viewId?: null | string;
+      window?: null | components['schemas']['QueryWindowDto'];
     };
     QueryResponseDto: {
       groups: null | components['schemas']['GroupCountDto'][];
@@ -1805,6 +1933,12 @@ export interface components {
       rows: components['schemas']['RowDto'][];
       /** Format: int64 */
       total: number | string;
+    };
+    QueryWindowDto: {
+      endPropertyId?: null | string;
+      from: string;
+      propertyId: string;
+      to: string;
     };
     ReadNotificationsRequest: {
       all: null | boolean;
@@ -1958,11 +2092,44 @@ export interface components {
       /** Format: int64 */
       size: null | number | string;
     };
+    SharedDatabaseDto: {
+      database: components['schemas']['SharedDatabaseInfoDto'];
+      views: components['schemas']['ViewDto'][];
+    };
+    SharedDatabaseInfoDto: {
+      icon: null | string;
+      /** Format: uuid */
+      id: string;
+      properties: components['schemas']['JsonElement'];
+      title: string;
+    };
     SharedPageDto: {
       icon: null | string;
       /** Format: uuid */
       id: string;
       title: string;
+    };
+    SharedQueryRequestDto: {
+      after?: null | string;
+      context?: null | components['schemas']['QueryContextDto'];
+      groupKey?: null | string;
+      /** Format: int32 */
+      limit?: null | number | string;
+      search?: null | string;
+      undated?: null | boolean;
+      /** Format: uuid */
+      viewId?: null | string;
+      window?: null | components['schemas']['QueryWindowDto'];
+    };
+    SharedQueryResponseDto: {
+      groups: null | components['schemas']['GroupCountDto'][];
+      next: null | string;
+      rows: components['schemas']['RowDto'][];
+      titles: {
+        [key: string]: string;
+      };
+      /** Format: int64 */
+      total: number | string;
     };
     SharedTreeDto: {
       page: components['schemas']['SharedPageDto'];
@@ -1972,6 +2139,7 @@ export interface components {
       icon: null | string;
       /** Format: uuid */
       id: string;
+      kind: string;
       orderKey: string;
       /** Format: uuid */
       parentPageId: null | string;
@@ -1987,6 +2155,36 @@ export interface components {
       /** Format: uuid */
       id: string;
       level: string;
+    };
+    SiteDto: {
+      /** Format: uuid */
+      id: string;
+      indexing: boolean;
+      language: string;
+      /** Format: uuid */
+      pageId: string;
+      /** Format: date-time */
+      publishedAt: string;
+      publishedBy: components['schemas']['UserRefDto'];
+      slug: string;
+      /** Format: date-time */
+      updatedAt: string;
+      url: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    SitePageDto: {
+      icon: null | string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      parentPageId: null | string;
+      title: string;
+    };
+    SiteRequest: {
+      indexing: boolean;
+      language: string;
+      slug: string;
     };
     SnapshotRef: {
       /** Format: int64 */
@@ -2146,6 +2344,9 @@ export interface components {
       expiresAt: string;
       url: string;
     };
+    WorkbookLaunchRequest: {
+      target?: null | string;
+    };
     WorkbookListDto: {
       workbooks: components['schemas']['WorkbookDto'][];
     };
@@ -2173,6 +2374,11 @@ export interface components {
       id: string;
       name: string;
     };
+    WorkbookSavedDto: {
+      etag: string;
+      /** Format: uuid */
+      versionId: string;
+    };
     WorkbookSheetDto: {
       hidden: boolean;
       name: string;
@@ -2184,6 +2390,20 @@ export interface components {
     WorkbookUpdate: {
       name: null | string;
       trashed: null | boolean;
+    };
+    WorkbookVersionDto: {
+      current: boolean;
+      /** Format: uuid */
+      id: string;
+      /** Format: date-time */
+      savedAt: string;
+      savedBy: components['schemas']['UserRefDto'];
+      sha256: string;
+      /** Format: int64 */
+      size: number | string;
+    };
+    WorkbookVersionsDto: {
+      versions: components['schemas']['WorkbookVersionDto'][];
     };
     WorkspaceDto: {
       /** Format: int64 */
@@ -2202,6 +2422,25 @@ export interface components {
       storageQuotaBytes: null | number | string;
       /** Format: int64 */
       storageUsedBytes: number | string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    WorkspaceSiteDto: {
+      /** Format: uuid */
+      id: string;
+      indexing: boolean;
+      language: string;
+      pageIcon: null | string;
+      /** Format: uuid */
+      pageId: string;
+      pageTitle: string;
+      /** Format: date-time */
+      publishedAt: string;
+      publishedBy: components['schemas']['UserRefDto'];
+      slug: string;
+      /** Format: date-time */
+      updatedAt: string;
+      url: string;
       /** Format: int64 */
       version: number | string;
     };
@@ -3298,6 +3537,74 @@ export interface operations {
       };
     };
   };
+  getPageSite: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PageSiteDto'];
+        };
+      };
+    };
+  };
+  publishPage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SiteRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SiteDto'];
+        };
+      };
+    };
+  };
+  unpublishPage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   listVersions: {
     parameters: {
       query?: never;
@@ -3458,6 +3765,58 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['AssetUrlDto'];
+        };
+      };
+    };
+  };
+  getSharedDatabase: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Share-Token'?: string;
+      };
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedDatabaseDto'];
+        };
+      };
+    };
+  };
+  querySharedDatabase: {
+    parameters: {
+      query?: never;
+      header?: {
+        'X-Share-Token'?: string;
+      };
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SharedQueryRequestDto'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SharedQueryResponseDto'];
         };
       };
     };
@@ -3747,7 +4106,11 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': null | components['schemas']['WorkbookLaunchRequest'];
+      };
+    };
     responses: {
       /** @description OK */
       200: {
@@ -3899,6 +4262,100 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorkbookSheetsDto'];
+        };
+      };
+    };
+  };
+  listWorkbookVersions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookVersionsDto'];
+        };
+      };
+    };
+  };
+  uploadWorkbookVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': string;
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookSavedDto'];
+        };
+      };
+    };
+  };
+  getWorkbookVersionContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        versionId: string;
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookContentDto'];
+        };
+      };
+    };
+  };
+  restoreWorkbookVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        versionId: string;
+        workbookId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkbookSavedDto'];
         };
       };
     };
@@ -4390,6 +4847,54 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['OpsResponse'];
+        };
+      };
+    };
+  };
+  getPublishing: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublishingDto'];
+        };
+      };
+    };
+  };
+  setPublishing: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PublishingUpdate'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PublishingDto'];
         };
       };
     };

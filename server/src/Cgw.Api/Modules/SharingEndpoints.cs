@@ -12,7 +12,8 @@ namespace Cgw.Api.Modules;
 
 /// <summary>
 /// Sharing (M2.6): a page's access list and its share links, for members with the right level;
-/// and the three reads a share link allows, with no account, by its token in a header.
+/// and the reads a share link allows, with no account, by its token in a header (the tree, a
+/// page's JSON, its files, and from Phase 9 its databases through their views).
 /// </summary>
 public static class SharingEndpoints
 {
@@ -90,12 +91,33 @@ public static class SharingEndpoints
             })
             .WithName("getSharedDocJson");
 
+        // From Phase 9 also a file in a shown file cell, or a row's cover, of a database the link holds.
         shared.MapGet("/assets/{assetId:guid}/url", async Task<Results<Ok<AssetUrlDto>, ProblemHttpResult>> (
-                Guid assetId, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader) =>
+                Guid assetId, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader, SharedDatabases databases) =>
             {
                 if (await reader.OpenAsync(shareToken) is not { } scope) return Missing();
-                return await reader.AssetUrlAsync(scope, assetId) is { } url ? TypedResults.Ok(url) : Problems.From(Failure.NotFound("No such file"));
+                return await reader.AssetUrlAsync(scope, assetId, databases) is { } url ? TypedResults.Ok(url) : Problems.From(Failure.NotFound("No such file"));
             })
             .WithName("getSharedAssetUrl");
+
+        // Phase 9: a database the link holds, and its rows through one of its views (SharedDatabases).
+        shared.MapGet("/databases/{databaseId:guid}", async Task<Results<Ok<SharedDatabaseDto>, ProblemHttpResult>> (
+                Guid databaseId, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader, SharedDatabases databases, HttpContext http) =>
+            {
+                if (await reader.OpenAsync(shareToken, http.RequestAborted) is not { } scope) return Missing();
+                var result = await databases.DatabaseAsync(scope, databaseId, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("getSharedDatabase");
+
+        shared.MapPost("/databases/{databaseId:guid}/query", async Task<Results<Ok<SharedQueryResponseDto>, ProblemHttpResult>> (
+                Guid databaseId, SharedQueryRequestDto body, [FromHeader(Name = SharedReader.Header)] string? shareToken, SharedReader reader, SharedDatabases databases, HttpContext http) =>
+            {
+                if (await reader.OpenAsync(shareToken, http.RequestAborted) is not { } scope) return Missing();
+                var result = await databases.QueryAsync(scope, databaseId, body, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithMetadata(new RequestSizeLimitAttribute(64 * 1024))
+            .WithName("querySharedDatabase");
     }
 }

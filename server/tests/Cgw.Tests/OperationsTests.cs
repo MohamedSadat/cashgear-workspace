@@ -42,6 +42,12 @@ public sealed class OperationsTests(ServerFixture server)
         var picture = await AssetTests.Upload(ws, AssetTests.Png, "image/png", "cover: one.png");
         await server.RunJob<AssetCheckJob>();
         await ws.Push(ws.Op("page.update", child, new { coverAssetId = picture, icon = "📄" }));
+        // Phase 9: workbooks with a version go in (two of one name numbered); one in the trash, or with none, does not.
+        var budget = await Books.WithVersion(server, ws, "Budget", Books.Simple("first budget"));
+        var budgetTwo = await Books.WithVersion(server, ws, "Budget", Books.Simple("second budget"));
+        var trashedBook = await Books.WithVersion(server, ws, "Trashed book");
+        Assert.Equal(HttpStatusCode.NoContent, (await ws.Client.DeleteAsync($"/api/v1/workbooks/{trashedBook}")).StatusCode);
+        await Books.Create(ws, "Never saved");
 
         Assert.Equal(HttpStatusCode.Forbidden, (await member.Client.PostAsync($"/api/v1/workspaces/{ws.Id}/exports", null)).StatusCode);
         var requested = await Kit.Json(await ws.Client.PostAsync($"/api/v1/workspaces/{ws.Id}/exports", null));
@@ -68,8 +74,19 @@ public sealed class OperationsTests(ServerFixture server)
         using var manifest = JsonDocument.Parse(Read("cgw-export.json"));
         var root = manifest.RootElement;
         Assert.Equal("cash-gear-workspace-export", root.GetProperty("format").GetString());
-        Assert.Equal(2, root.GetProperty("version").GetInt32());
+        Assert.Equal(3, root.GetProperty("version").GetInt32());
         Assert.Equal(ws.Id, root.GetProperty("workspace").GetProperty("id").GetGuid());
+        var workbooks = root.GetProperty("workbooks").EnumerateArray().ToDictionary(w => w.GetProperty("id").GetGuid());
+        Assert.Equal(new[] { budget, budgetTwo }.Order(), workbooks.Keys.Order());
+        Assert.Equal(["workbooks/Budget (2).xlsx", "workbooks/Budget.xlsx"], workbooks.Values.Select(w => w.GetProperty("file").GetString()).Order(StringComparer.Ordinal));
+        Assert.All(workbooks.Values, w => Assert.Equal("Budget", w.GetProperty("name").GetString()));
+        foreach (var (book, text) in new[] { (budget, "first budget"), (budgetTwo, "second budget") })
+        {
+            using var stream = zip.GetEntry(workbooks[book].GetProperty("file").GetString()!)!.Open();
+            var bytes = new MemoryStream();
+            stream.CopyTo(bytes);
+            Assert.Contains(text, Cgw.Core.Workbooks.Xlsx.Range(bytes.ToArray(), null, null).Csv);
+        }
         Assert.Equal(["Shared", "Private"], root.GetProperty("sections").EnumerateArray().Select(s => s.GetProperty("name").GetString()));
         var pages = root.GetProperty("pages").EnumerateArray().ToDictionary(p => p.GetProperty("id").GetGuid());
         Assert.Equal(new[] { parent, child, twin, mine }.Order(), pages.Keys.Order());

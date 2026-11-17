@@ -169,13 +169,65 @@ public static class WorkbookEndpoints
             .WithMetadata(new DocumentedBody(Png.ContentType))
             .WithName("putWorkbookPreview");
 
-        one.MapPost("/launch", async Task<Results<Ok<WorkbookLaunchDto>, ProblemHttpResult>> (SheetSessions sessions, HttpContext http) =>
+        // {} or {target: "web"}: Sheet's web app; {target: "desktop"}: its desktop app by deep link (Phase 9).
+        one.MapPost("/launch", async Task<Results<Ok<WorkbookLaunchDto>, ProblemHttpResult>> (WorkbookLaunchRequest? body, SheetSessions sessions, HttpContext http) =>
             {
                 var caller = http.Workbook();
-                var result = await sessions.LaunchAsync(caller.Member, caller.Workbook, caller.Level, http.RequestAborted);
+                var result = await sessions.LaunchAsync(caller.Member, caller.Workbook, caller.Level, body?.Target, http.RequestAborted);
                 return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
             })
             .WithName("launchWorkbook");
+
+        // A workbook's history (Phase 9): its kept versions, one opened read-only, a restore as a new version.
+        one.MapGet("/versions", async Task<Results<Ok<WorkbookVersionsDto>, ProblemHttpResult>> (WorkbookService workbooks, HttpContext http) =>
+            {
+                var result = await workbooks.VersionsAsync(http.Workbook().Workbook, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("listWorkbookVersions");
+
+        one.MapGet("/versions/{versionId:guid}/content", async Task<Results<Ok<WorkbookContentDto>, ProblemHttpResult>> (Guid versionId, WorkbookService workbooks, HttpContext http) =>
+            {
+                var result = await workbooks.VersionContentAsync(http.Workbook().Workbook, versionId, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!, http);
+            })
+            .WithName("getWorkbookVersionContent");
+
+        // If-Match, when sent, names the current version (412 version.conflict with current otherwise).
+        one.MapPost("/versions/{versionId:guid}/restore", async Task<Results<Created<WorkbookSavedDto>, ProblemHttpResult>> (Guid versionId, WorkbookService workbooks, HttpContext http) =>
+            {
+                var caller = http.Workbook();
+                var ifMatch = http.Request.Headers.IfMatch.ToString();
+                var result = await workbooks.RestoreAsync(http.Actor(), caller.Member, caller.Workbook, caller.Level, versionId,
+                    string.IsNullOrWhiteSpace(ifMatch) ? null : SheetSessionEndpoints.Tags(ifMatch), http.RequestAborted);
+                if (!result.Ok) return Problems.From(result.Failure!, http);
+                http.Response.Headers.ETag = result.Value!.Etag;
+                return TypedResults.Created($"/api/v1/workbooks/{caller.Workbook.Id}/versions/{result.Value.VersionId}/content", result.Value);
+            })
+            .WithName("restoreWorkbookVersion");
+
+        // A new version from the app (an import's version 1): the xlsx body, with Sheet's save's rules.
+        var maxSave = ((IEndpointRouteBuilder)api).ServiceProvider.GetRequiredService<Integrations>().MaxSaveBytes;
+        one.MapPost("/versions", async Task<Results<Created<WorkbookSavedDto>, ProblemHttpResult>> (WorkbookService workbooks, Integrations settings, HttpContext http) =>
+            {
+                var caller = http.Workbook();
+                if (!Levels.AtLeast(caller.Level, Levels.Edit)) return Problems.From(Failure.Denied("Saving this workbook needs edit access"));
+                if (!SheetSessionEndpoints.IsXlsx(http.Request)) return Problems.From(Failure.Invalid($"Content-Type must be {Xlsx.ContentType}"));
+                var ifMatch = http.Request.Headers.IfMatch.ToString();
+                var ifNoneMatch = http.Request.Headers.IfNoneMatch.ToString();
+                if (string.IsNullOrWhiteSpace(ifMatch) && string.IsNullOrWhiteSpace(ifNoneMatch))
+                    return Problems.From(new Failure(Codes.VersionRequired, 428, "Send If-Match, or If-None-Match: * for the first version"));
+                var body = await SheetSessionEndpoints.WorkbookBodyAsync(http, settings);
+                if (!body.Ok) return Problems.From(body.Failure!);
+                var condition = string.IsNullOrWhiteSpace(ifMatch) ? new SavePrecondition(null, ifNoneMatch) : new SavePrecondition(SheetSessionEndpoints.Tags(ifMatch), null);
+                var result = await workbooks.UploadAsync(http.Actor(), caller.Member, caller.Workbook, caller.Level, body.Value!, condition, http.RequestAborted);
+                if (!result.Ok) return Problems.From(result.Failure!, http);
+                http.Response.Headers.ETag = result.Value!.Etag;
+                return TypedResults.Created($"/api/v1/workbooks/{caller.Workbook.Id}/versions/{result.Value.VersionId}/content", result.Value);
+            })
+            .WithMetadata(new DocumentedBody(Xlsx.ContentType))
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(maxSave + 64 * 1024))
+            .WithName("uploadWorkbookVersion");
 
         one.MapGet("/sheets", async Task<Results<Ok<WorkbookSheetsDto>, ProblemHttpResult>> (WorkbookService workbooks, HttpContext http) =>
             {
