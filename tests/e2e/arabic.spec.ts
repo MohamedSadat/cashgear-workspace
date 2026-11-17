@@ -258,7 +258,8 @@ test('the Arabic workbook and ERP screens have no English of their own', async (
     await block.locator('.cgw-sheet-icon').click();
     await expect(page.getByRole('menu')).toBeVisible();
     found.push(...(await english(page, 'workbook menu', theirs)));
-    await page.getByRole('menuitem').nth(2).click();
+    // "Change view" by its name: Phase 9 put "Version history" before it.
+    await page.getByRole('menuitem', { name: 'تغيير العرض' }).click();
     await expect(block.locator('form.cgw-sheet-picker')).toBeVisible();
     found.push(...(await english(page, 'view picker', theirs)));
     await block.locator('form.cgw-sheet-picker button[type="button"]').click();
