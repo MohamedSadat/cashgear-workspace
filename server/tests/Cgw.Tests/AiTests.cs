@@ -274,7 +274,7 @@ public sealed class AiTests(ServerFixture server)
 
         await using var db = server.NewDb(ws.Id);
         var usage = await db.AiUsage.SingleAsync();
-        Assert.Equal(("rewrite", "ok", member.Id, page), (usage.Action, usage.Outcome, usage.UserId, usage.PageId));
+        Assert.Equal(("rewrite", "ok", (Guid?)member.Id, (Guid?)page), (usage.Action, usage.Outcome, usage.UserId, usage.PageId));
         Assert.Equal(outputTokens, usage.OutputTokens);
         Assert.True(usage.InputTokens > 0);
         var audit = await db.AuditLog.SingleAsync(a => a.Action == "ai.complete");
@@ -526,9 +526,9 @@ public sealed class AiTests(ServerFixture server)
             .SelectMany(t => t.IsGenericType ? t.GetGenericArguments().Append(t) : [t])
             .ToList();
         Assert.DoesNotContain(named, t => t.Namespace == "Cgw.Core.Workbooks");
-        // The service's only collaborators: the database, access, search, its key store and settings, audit and a clock.
+        // The service's only collaborators: the database, access, search (by words and, Phase 10, by meaning), its key store and settings, the embeddings settings, audit and a clock.
         Assert.Equal(
-            ["Access", "AiKeys", "AiOptions", "Audit", "CgwDb", "SearchService", "TenantScope", "TimeProvider"],
+            ["Access", "AiKeys", "AiOptions", "Audit", "CgwDb", "EmbeddingsService", "MeaningSearch", "SearchService", "TenantScope", "TimeProvider"],
             typeof(AiService).GetConstructors().Single().GetParameters().Select(p => p.ParameterType.Name).Order(StringComparer.Ordinal));
         // And no source of the module or its routes names the ERP's address, links or sessions.
         foreach (var file in Directory.EnumerateFiles(Path.Combine(server.Root, "server", "src", "Cgw.Core", "Ai"), "*.cs")

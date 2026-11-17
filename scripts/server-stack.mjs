@@ -1,7 +1,8 @@
 // The server as a local stack, for development and the end-to-end tests: Azurite for Blob
 // Storage, the API on http://127.0.0.1:5280, the worker, and (Phase 9) the Sites process on
 // http://localhost:5290 (CGW_SITES_PORT; `localhost`, not 127.0.0.1: cookies are per host, so the
-// published sites' host must differ from the API's and the web app's), against a SQL Server database
+// published sites' host must differ from the API's and the web app's), and (Phase 10) its second
+// host, the plugins origin, on http://localhost:5291 (CGW_PLUGINS_PORT), against a SQL Server database
 // (LocalDB unless CGW_DEV_SQL names a server). Migrations run at the API's start, which only
 // development does; a real deployment runs the migration bundle (docs/OPERATIONS.md).
 //   pnpm dev:server                 the development stack: database cgw_dev, data in .cgw-dev
@@ -24,6 +25,13 @@ const port = Number(process.env.CGW_API_PORT ?? 5280);
 const blobPort = Number(process.env.CGW_BLOB_PORT ?? 10000);
 const sitesPort = Number(process.env.CGW_SITES_PORT ?? 5290);
 const sitesUrl = `http://localhost:${sitesPort}`;
+// Phase 10: third-party plugins' files, on an origin of their own (the Sites process's second host).
+const pluginsPort = Number(process.env.CGW_PLUGINS_PORT ?? 5291);
+const pluginsUrl = `http://localhost:${pluginsPort}`;
+// Phase 10: embeddings go to the mock provider too (its `/v1/embeddings`), unless
+// CGW_VOYAGE_BASE_URL names another (`https://api.voyageai.com` to try a real key).
+const voyageUrl =
+  process.env.CGW_VOYAGE_BASE_URL ?? `http://127.0.0.1:${process.env.CGW_MOCK_AI_PORT ?? 4286}`;
 const data = join(root, e2e ? '.cgw-dev/e2e' : '.cgw-dev');
 const mail = join(data, 'mail');
 const database = e2e ? 'cgw_e2e' : 'cgw_dev';
@@ -184,6 +192,8 @@ const env = {
   Api__PublicUrl: `http://127.0.0.1:${port}`,
   // Phase 9: where the sites are, for the addresses the API gives out (SiteDto.url).
   Sites__PublicUrl: sitesUrl,
+  // Phase 10: where plugin frames are, for the addresses the API gives out (the frames route).
+  Plugins__PublicUrl: pluginsUrl,
   // Plain http on 127.0.0.1: OpenIddict answers it, and the cookies are Secure on https only.
   Api__AllowHttp: 'true',
   Web__AppUrl: web,
@@ -194,6 +204,7 @@ const env = {
   // to Anthropic, unless CGW_AI_BASE_URL names another (`https://api.anthropic.com` to try a real key).
   Ai__AnthropicBaseUrl:
     process.env.CGW_AI_BASE_URL ?? `http://127.0.0.1:${process.env.CGW_MOCK_AI_PORT ?? 4286}`,
+  Ai__VoyageBaseUrl: voyageUrl,
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   ...(e2e
     ? {
@@ -217,6 +228,11 @@ const env = {
         // Phase 6: the hub's relay times for bench/phase6.mjs (GET /api/v1/realtime/metrics;
         // never mapped in Production).
         Realtime__Metrics: 'true',
+        // Phase 10: pages are embedded once still for a second, not 30 (tests/e2e/meaning.spec.ts),
+        // and the specs search by meaning and open plugin frames many times a minute.
+        Ai__EmbeddingsSettleSeconds: '1',
+        RateLimits__meaning: '10000',
+        RateLimits__frames: '10000',
       }
     : {}),
 };
@@ -241,12 +257,16 @@ startApi();
 await waitFor(healthy, 'The API', 180);
 start('worker', 'dotnet', [bin('Cgw.Worker')], env);
 // Phase 9: the Sites process, with the database and storage settings only (it has no sign-in,
-// mail or session of the API's to be given).
-start('sites', 'dotnet', [bin('Cgw.Sites'), '--urls', sitesUrl], {
+// mail or session of the API's to be given). Phase 10: on two hosts, the sites' and the plugins'
+// (frame tickets are found by their hash in the database; the Web origins are the frames' allowed
+// ancestors).
+start('sites', 'dotnet', [bin('Cgw.Sites'), '--urls', `${sitesUrl};${pluginsUrl}`], {
   ASPNETCORE_ENVIRONMENT: env.ASPNETCORE_ENVIRONMENT,
   DOTNET_ENVIRONMENT: env.DOTNET_ENVIRONMENT,
   ConnectionStrings__Sql: sql,
   Blob__ConnectionString: blob,
+  Plugins__PublicUrl: pluginsUrl,
+  ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   Logging__LogLevel__Default: 'Warning',
   Logging__LogLevel__Microsoft: 'Warning',
 });
@@ -301,5 +321,5 @@ if (e2e) {
   console.log(`Stack control on http://127.0.0.1:${controlPort} (e2e only)`);
 }
 console.log(
-  `Server stack ready: API http://127.0.0.1:${port}, sites ${sitesUrl}, Blob ${blobPort}, mail in ${mail}`,
+  `Server stack ready: API http://127.0.0.1:${port}, sites ${sitesUrl}, plugins ${pluginsUrl}, Blob ${blobPort}, mail in ${mail}`,
 );

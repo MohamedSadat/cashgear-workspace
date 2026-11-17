@@ -1265,6 +1265,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/plugins': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listPlugins'];
+    put?: never;
+    post: operations['addPlugin'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/plugins/{pluginId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['removePlugin'];
+    options?: never;
+    head?: never;
+    patch: operations['updatePlugin'];
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/plugins/{pluginId}/frames': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['createPluginFrame'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/publishing': {
     parameters: {
       query?: never;
@@ -1289,6 +1337,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations['search'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/search/meaning': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['searchByMeaning'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1374,6 +1438,7 @@ export interface components {
       name: string;
     };
     AiSettingsDto: {
+      embeddings: components['schemas']['EmbeddingsSettingsDto'];
       enabled: boolean;
       hasKey?: null | boolean;
       /** Format: date-time */
@@ -1386,6 +1451,7 @@ export interface components {
     };
     AiSettingsUpdate: {
       apiKey?: components['schemas']['JsonElement'];
+      embeddings?: null | components['schemas']['EmbeddingsUpdate'];
       enabled?: null | boolean;
       model?: null | string;
     };
@@ -1542,6 +1608,36 @@ export interface components {
       /** Format: uuid */
       updateId: string;
     };
+    EmbeddingsProgressDto: {
+      /** Format: int32 */
+      embedded: number | string;
+      /** Format: int32 */
+      pages: number | string;
+    };
+    EmbeddingsSettingsDto: {
+      enabled: boolean;
+      hasKey?: null | boolean;
+      /** Format: date-time */
+      keySetAt?: null | string;
+      keySetBy?: null | components['schemas']['AiPersonDto'];
+      model: string;
+      models: string[];
+      progress?: null | components['schemas']['EmbeddingsProgressDto'];
+      provider: string;
+      usage?: null | components['schemas']['EmbeddingsUsageDto'];
+    };
+    EmbeddingsUpdate: {
+      apiKey?: components['schemas']['JsonElement'];
+      enabled?: null | boolean;
+      model?: null | string;
+    };
+    EmbeddingsUsageDto: {
+      month: string;
+      /** Format: int32 */
+      requests: number | string;
+      /** Format: int64 */
+      tokens: number | string;
+    };
     EntityDto: {
       database?: null | components['schemas']['DatabaseDto'];
       favourite?: null | components['schemas']['FavouriteDto'];
@@ -1663,6 +1759,9 @@ export interface components {
       id: string;
       locale: string;
       signInUrl: string;
+    };
+    MeaningResultDto: {
+      hits: components['schemas']['SearchHitDto'][];
     };
     MemberDto: {
       displayName: string;
@@ -1861,6 +1960,21 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+    };
+    PluginFrameDto: {
+      /** Format: date-time */
+      expiresAt: string;
+      url: string;
+    };
+    PluginPatch: {
+      enabled: null | boolean;
+    };
+    PluginReads: {
+      rows: boolean;
+    };
+    PluginText: {
+      ar: string;
+      en: string;
     };
     ProblemDetails: {
       detail?: null | string;
@@ -2424,6 +2538,30 @@ export interface components {
       storageUsedBytes: number | string;
       /** Format: int64 */
       version: number | string;
+    };
+    WorkspacePluginDto: {
+      /** Format: date-time */
+      addedAt: string;
+      addedBy: components['schemas']['UserRefDto'];
+      description: null | components['schemas']['PluginText'];
+      enabled: boolean;
+      /** Format: int32 */
+      height: number | string;
+      /** Format: uuid */
+      id: string;
+      keywords: string[];
+      name: components['schemas']['PluginText'];
+      reads: components['schemas']['PluginReads'];
+      /** Format: int64 */
+      sizeBytes: number | string;
+      type: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: int32 */
+      version: number | string;
+    };
+    WorkspacePluginsDto: {
+      plugins: components['schemas']['WorkspacePluginDto'][];
     };
     WorkspaceSiteDto: {
       /** Format: uuid */
@@ -4851,6 +4989,170 @@ export interface operations {
       };
     };
   };
+  listPlugins: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspacePluginsDto'];
+        };
+      };
+    };
+  };
+  addPlugin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/zip': string;
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspacePluginDto'];
+        };
+      };
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspacePluginDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Payload Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  removePlugin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pluginId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  updatePlugin: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pluginId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': null | components['schemas']['PluginPatch'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspacePluginDto'];
+        };
+      };
+    };
+  };
+  createPluginFrame: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pluginId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PluginFrameDto'];
+        };
+      };
+    };
+  };
   getPublishing: {
     parameters: {
       query?: never;
@@ -4921,6 +5223,67 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SearchResultDto'];
+        };
+      };
+    };
+  };
+  searchByMeaning: {
+    parameters: {
+      query?: {
+        limit?: number | string;
+        q?: string;
+      };
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MeaningResultDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Bad Gateway */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
         };
       };
     };

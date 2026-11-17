@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <!-- Phase 9: published sites on their own origin (DECISIONS.md, 2026-11-17). Reads SQL and Blob
-       with the API's configuration names; no Identity, OpenIddict, antiforgery, cookies, CORS,
-       session or Data Protection of the API, and no Yjs library (checked when packing). -->
+       with the API's configuration names; no Identity, OpenIddict, antiforgery, cookies, CORS or
+       session of the API, and no Yjs library (checked when packing). Phase 10: a second host, the
+       plugins origin, finding frame tickets by their hash; still no Data Protection (its identity
+       is denied the key ring's table). -->
   <PropertyGroup>
     <UserSecretsId>cgw-sites-dev-no-secrets</UserSecretsId>
   </PropertyGroup>

@@ -34,13 +34,39 @@ public sealed record AiSettingsDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTimeOffset? KeySetAt { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiPersonDto? KeySetBy { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiUsageDto? Usage { get; init; }
+    /// <summary>Phase 10: embeddings (search by meaning), a switch and a key of their own.</summary>
+    public required EmbeddingsSettingsDto Embeddings { get; init; }
 }
 
 /// <summary>Who set the key: a workspace member's id and name.</summary>
 public sealed record AiPersonDto(Guid Id, string Name);
 
-/// <summary>This calendar month's use (UTC), for owners and admins.</summary>
+/// <summary>This calendar month's use (UTC) of completions, for owners and admins.</summary>
 public sealed record AiUsageDto(string Month, int Requests, long InputTokens, long OutputTokens);
+
+/// <summary>
+/// The workspace's embeddings (Phase 10): on (with a key, and AI on for this server), the
+/// provider and model; to owners and admins the key's details, the month's use and how far the
+/// worker has come (pages to embed, and those with vectors of this model).
+/// </summary>
+public sealed record EmbeddingsSettingsDto
+{
+    public required bool Enabled { get; init; }
+    public required string Provider { get; init; }
+    public required string Model { get; init; }
+    public required IReadOnlyList<string> Models { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? HasKey { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DateTimeOffset? KeySetAt { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiPersonDto? KeySetBy { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public EmbeddingsUsageDto? Usage { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public EmbeddingsProgressDto? Progress { get; init; }
+}
+
+/// <summary>This calendar month's embeddings calls (the worker's and the questions') and their tokens.</summary>
+public sealed record EmbeddingsUsageDto(string Month, int Requests, long Tokens);
+
+/// <summary>Pages (and rows) to embed, not trashed; and of them, those with vectors of the current model.</summary>
+public sealed record EmbeddingsProgressDto(int Pages, int Embedded);
 
 /// <summary>
 /// <c>PUT /workspaces/{id}/ai-settings</c>: each field absent keeps what is set. <c>apiKey</c> is a
@@ -48,6 +74,19 @@ public sealed record AiUsageDto(string Month, int Requests, long InputTokens, lo
 /// null differ).
 /// </summary>
 public sealed record AiSettingsUpdate
+{
+    public bool? Enabled { get; init; }
+    public string? Model { get; init; }
+    public JsonElement ApiKey { get; init; }
+    /// <summary>Phase 10: absent keeps the embeddings' settings as they are.</summary>
+    public EmbeddingsUpdate? Embeddings { get; init; }
+}
+
+/// <summary>
+/// The embeddings' part of the settings' <c>PUT</c>: <c>apiKey</c> a string sets the Voyage key,
+/// <c>null</c> removes it (turning embeddings off), absent keeps it.
+/// </summary>
+public sealed record EmbeddingsUpdate
 {
     public bool? Enabled { get; init; }
     public string? Model { get; init; }

@@ -56,6 +56,12 @@ public sealed class PagePurgeJob(DocStates states, BlobStore blob, TimeProvider 
             await db.CommentThreads.Where(t => t.PageId == pageId).ExecuteDeleteAsync(ct);
             await db.Notifications.Where(n => n.PageId == pageId).ExecuteDeleteAsync(ct);
             var now = clock.GetUtcNow();
+            // Phase 10: its vectors, with the change that tells the API's copies.
+            if (await db.PageEmbeddings.Where(e => e.PageId == pageId).ExecuteDeleteAsync(ct) > 0)
+            {
+                db.EmbeddingChanges.Add(new EmbeddingChange { WorkspaceId = workspaceId, PageId = pageId, CreatedAt = now });
+                await db.SaveChangesAsync(ct);
+            }
             // Phase 9: its live site (no one can reach the page to unpublish it now), so the slug is free.
             await Cgw.Core.Sites.PublishingService.UnpublishDeletedAsync(db, pageId, now, ct);
             await db.Pages.Where(p => p.Id == pageId).ExecuteUpdateAsync(s => s
@@ -116,6 +122,11 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.AiSettings.ExecuteDeleteAsync(ct);
         await db.AiUsage.ExecuteDeleteAsync(ct);
         await db.PublishedSites.ExecuteDeleteAsync(ct);
+        // Phase 10: vectors and their changes; plugins (their files go with the workspace's blobs below).
+        await db.PageEmbeddings.ExecuteDeleteAsync(ct);
+        await db.EmbeddingChanges.ExecuteDeleteAsync(ct);
+        await db.PluginFrameTickets.ExecuteDeleteAsync(ct);
+        await db.WorkspacePlugins.ExecuteDeleteAsync(ct);
         await db.PageDocUpdates.ExecuteDeleteAsync(ct);
         await db.PageDocSnapshots.ExecuteDeleteAsync(ct);
         await db.PageDocDerived.ExecuteDeleteAsync(ct);

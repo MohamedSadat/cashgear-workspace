@@ -24,6 +24,8 @@ public sealed class SiteWords
     public required string BlockHidden { get; init; }
     public required string ChartHidden { get; init; }
     public required string BoardHidden { get; init; }
+    /// <summary>Phase 10: a third-party plugin's block, named by its type (<c>{0}</c>): it runs only in the app.</summary>
+    public required string PluginHidden { get; init; }
     public required string NoRows { get; init; }
     public required string NoValue { get; init; }
     public required string Checked { get; init; }
@@ -62,6 +64,7 @@ public sealed class SiteWords
         BlockHidden = "This block cannot be shown here",
         ChartHidden = "This chart is not published",
         BoardHidden = "This board is not published",
+        PluginHidden = "The plugin {0} is shown in Cash Gear Workspace only",
         NoRows = "No rows",
         NoValue = "No value",
         Checked = "Checked",
@@ -99,6 +102,7 @@ public sealed class SiteWords
         BlockHidden = "لا يمكن عرض هذه الكتلة هنا",
         ChartHidden = "هذا المخطط غير منشور",
         BoardHidden = "هذه اللوحة غير منشورة",
+        PluginHidden = "تظهر الإضافة {0} في Cash Gear Workspace فقط",
         NoRows = "لا توجد صفوف",
         NoValue = "بلا قيمة",
         Checked = "محدد",

@@ -11,7 +11,7 @@ the hosting choices are in `DECISIONS.md` (2026-11-12: Phase 2: Q5, Q6, Q8, Q11,
 | Web app | Azure Static Web Apps at `https://workspace.cashgearerp.com` | `pnpm build` (`apps/web/dist`), built with `VITE_CGW_API=https://workspace-api.cashgearerp.com`; the build writes `staticwebapp.config.json`, whose headers (the Content Security Policy among them) name that API, so build with the variable set |
 | API | IIS beside UnifiedAPI, its own site and app pool, at `https://workspace-api.cashgearerp.com` | The deploy package's `api` folder |
 | Worker | A Windows service on the same host, `CashGearWorkspaceWorker` | The deploy package's `worker` folder (with `cgw_ydoc.dll`) |
-| Sites (Phase 9) | IIS on the same host, a site and app pool of their own, `CashGearWorkspaceSites`, at `https://pages.cashgearerp.com`: published pages as HTML, an origin of its own so a published page can read neither the app's nor the API's session | The deploy package's `sites` folder: no sign-in code, no cookies, no Yjs library (checked when packing); it reads the database and Blob Storage only |
+| Sites (Phase 9) | IIS on the same host, a site and app pool of their own, `CashGearWorkspaceSites`, at `https://pages.cashgearerp.com`: published pages as HTML, an origin of its own so a published page can read neither the app's nor the API's session. From 0.10.0 the same site also answers `https://plugins.cashgearerp.com` (a second host-name binding): third-party plugins' files, only under a frame ticket the API made for a member | The deploy package's `sites` folder: no sign-in code, no cookies, no Yjs library (checked when packing), no Data Protection; it reads the database and Blob Storage only, and (0.10.0) its identity is denied the Data Protection key ring's table |
 | Database | SQL Server, a database of its own (never the ERP's), full-text search installed if available (Q7) | The migration bundle |
 | Blob Storage | One Azure Storage account in the ERP storage account's region, one private container `workspace` | Created once (below) |
 | Desktop app | The signed installer from a GitHub release | The release workflow, built with `VITE_CGW_API` and `CGW_API_BASES` |
@@ -75,7 +75,9 @@ API's host and no token is in JavaScript (Q5).
    465), user and password.
 6. **DNS.** `workspace-api.cashgearerp.com` to the IIS host; `workspace.cashgearerp.com` to Static
    Web Apps (its custom-domain wizard); from 0.9.0 `pages.cashgearerp.com` to the IIS host too,
-   with a certificate for it (the host's `*.cashgearerp.com` covers it).
+   with a certificate for it (the host's `*.cashgearerp.com` covers it); from 0.10.0
+   `plugins.cashgearerp.com` to the IIS host as well, with its certificate (the same wildcard
+   covers it). The DNS records and the certificates are the owner's to make.
 7. **Install.** Unpack the package, then in an elevated PowerShell, with the SMTP password in the
    session's environment only:
 
@@ -91,6 +93,8 @@ API's host and no token is in JavaScript (Q5).
    #   -ErpApiBase https://api.cashgearerp.com
    # Phase 9's sites, shown with their defaults (the certificate is the API's unless given):
    #   -SitesHostName pages.cashgearerp.com -SitesSiteName CashGearWorkspaceSites -SitesCertificateThumbprint <https>
+   # Phase 10's plugins host, a second binding of the sites' site (the certificate is the sites' unless given):
+   #   -PluginsHostName plugins.cashgearerp.com -PluginsCertificateThumbprint <https>
    Remove-Item Env:\CGW_SMTP_PASSWORD
    ```
 
@@ -104,9 +108,12 @@ API's host and no token is in JavaScript (Q5).
    environment below, binds HTTPS, installs the worker service with the same environment in its
    own registry key, starts both, and prints `/health/ready`. From 0.9.0 it also makes the sites'
    app pool and site (`CashGearWorkspaceSites`, bound by SNI to `-SitesHostName`), with only the
-   database's and storage's settings (no SMTP password, no OpenID Connect certificates, no Data
-   Protection), gives a built-in identity `db_datareader` alone and read on the Azure certificate
-   file, and prints the sites' `/health/live`.
+   database's and storage's settings (no SMTP password, no OpenID Connect certificates), gives a
+   built-in identity `db_datareader` alone and read on the Azure certificate file, and prints the
+   sites' `/health/live`. From 0.10.0 it adds the site's second binding, `-PluginsHostName` (by SNI
+   too), gives the sites' app pool `Plugins__PublicUrl` and the Web origins (a plugin frame's
+   allowed ancestors), denies a built-in sites identity `SELECT` on `DataProtectionKeys` (below),
+   and checks the plugins host answers its 404 page.
 8. **Web app.** Deploy `apps/web/dist` to Static Web Apps (its GitHub Action with the deployment
    token as a repository secret, as Sheet does), built with
    `VITE_CGW_API=https://workspace-api.cashgearerp.com`, and from 0.5.0
@@ -147,17 +154,23 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `OpenIddict__SigningCertificateThumbprint`, `OpenIddict__EncryptionCertificateThumbprint` | Certificates in `LocalMachine\My`; the API refuses to issue tokens without them in production |
 | `DataProtection__Dpapi` | `true`: the cookie and token keys (kept in the database) are encrypted with the machine's DPAPI |
 | `Smtp__Host`, `__Port`, `__User`, `__Password`, `__From` | Mail (Q8); `Smtp__PickupDirectory` writes mail to a folder instead, for development and tests only |
-| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import`, `__ticket`, `__sheet`, `__realtime`, `__ai` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person; `ticket` Sheet's Redeem, 30 a minute an address; `sheet` Sheet's session routes, 600 a minute an address; `realtime` hub tickets, 60 a minute a person; the hub's pushes count against a budget the size of `push`, apart from HTTP; `ai` AI completions, 30 a minute a person); leave unset in production |
+| `RateLimits__anonymous`, `__signin`, `__token`, `__user`, `__push`, `__search`, `__preview`, `__import`, `__ticket`, `__sheet`, `__realtime`, `__ai`, `__meaning`, `__frames` | Requests per minute (DECISIONS.md, defaults; `import` is a database's CSV import, 20 a minute a person; `ticket` Sheet's Redeem, 30 a minute an address; `sheet` Sheet's session routes, 600 a minute an address; `realtime` hub tickets, 60 a minute a person; the hub's pushes count against a budget the size of `push`, apart from HTTP; `ai` AI completions, 30 a minute a person; Phase 10: `meaning` searches by meaning, 30 a minute a person; `frames` plugin frame tickets, 120 a minute a person); leave unset in production |
 | `Realtime__RelayMs`, `__RecheckSeconds`, `__SweepSeconds`, `__ChangesMs` | Phase 6, the hub: how often the relay reads joined pages' and followed workspaces' heads (20 ms); the longest a connection's access is trusted unchecked (60 s) and how often the sweep looks (10 s); `ChangesAvailable` at most this often a workspace (250 ms). Leave unset in production |
 | `Realtime__Metrics` | `true` maps `GET`/`DELETE /api/v1/realtime/metrics` (relay times, connections) for the bench; ignored in Production |
 | `Sheet__Origin`, `Sheet__Origins__N` | Phase 5: Cash Gear Sheet's origin for launch links (`{origin}/cloud#launch=…`), and the origins allowed to redeem them, to call the sheet-session routes (CORS without credentials) and, outside production, to read Azurite. Required, https, in production |
 | `Sheet__DesktopOrigins__N` | Phase 9 (Track S6): the origins of Sheet's desktop app, which alone redeem a desktop launch ticket (`cashgear-sheet://workspace/launch#ticket=…`) and are allowed by the sheet-session routes' CORS. Default `http://tauri.localhost` and `tauri://localhost`, in production too; leave unset |
-| `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*` and `Logging__*` |
+| `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*`, `Logging__*` and (Phase 10) the two below |
+| `Plugins__PublicUrl` | Phase 10, the API and the Sites process: the plugins' origin (`https://plugins.cashgearerp.com`). The API builds a frame's address from it (`{origin}/f/{ticket}/{entry}`) and refuses to start in production without an https one; the Sites process answers that host name alone with plugins' files (`install.ps1` sets both from `-PluginsHostName`). Development and e2e: `http://localhost:5291` |
+| `Web__Origins__N` (Sites) | Phase 10, the Sites process: the origins a plugin's frame may be framed by (its CSP's `frame-ancestors`): the web app's and the desktop's (`install.ps1` sets the same three as the API's) |
 | `Workbooks__MaxSaveBytes` | The largest version Sheet may save (100 MB; 413 `limit.size` above it). The API's `web.config` lets IIS take bodies up to 110 MB, so the API's own limit answers first |
 | `Erp__ApiBase` | The one ERP API an ERP link may name (`https://api.cashgearerp.com`). Required, https, in production. The server never calls it |
 | `Ai__Enabled` | Phase 7: `false` turns AI off for every workspace on this server, whatever their settings say (on by default; each workspace is off until an owner or admin turns it on with the workspace's own Anthropic key) |
 | `Ai__Models__N` | The Claude models an admin may choose, the first the default (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`) |
 | `Ai__AnthropicBaseUrl` | Development and tests only: where the provider is (the mock in `tests/mocks/ai`). Ignored in Production, where a workspace's key goes only to Anthropic's API. For AI, the API host must reach `https://api.anthropic.com` on 443 |
+| `Ai__VoyageBaseUrl` | Phase 10, development and tests only: where the embeddings provider is (the mock's `/v1/embeddings`). Ignored in Production, where a workspace's Voyage key goes only to Voyage's API: for search by meaning the API host and the worker's must reach `https://api.voyageai.com` on 443 |
+| `Ai__EmbeddingsCacheMb` | Phase 10, the API: the most memory its copies of workspaces' vectors take together (1,024; about 1 KB a chunk, so a million chunks); the least recently used workspace's copy goes first and loads again on its next search. Each API instance has its own |
+| `Ai__EmbeddingsFloor`, `Ai__EmbeddingsFloors__<model>` | Phase 10, the API: the least cosine similarity a page found by meaning must have (0.3, for every model unless one has its own); a question with no page above it finds none. Raise it if unrelated pages show under "Related by meaning"; lower it if related ones are missed |
+| `Ai__EmbeddingsSettleSeconds` | Phase 10, the worker: how long a page is left unchanged before it is embedded (30; the e2e stack sets 1, the server's tests 0). Leave unset in production |
 | `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
 | `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
 | `Mail__NotificationDelaySeconds` | Phase 8: a mention, a mention in a comment or a reply is mailed once it has been unread this long, and a person gets at most one such mail in this long (900, 15 minutes; a daily summary once a day). The e2e stack sets 5. Leave unset in production |
@@ -248,6 +261,39 @@ The worker's purge of a page deleted for good unpublishes its site (`page.delete
 slug. The export the worker writes is format version 3: each workbook the requester may read
 that has a version, as `workbooks/<name>.xlsx`.
 
+Version 0.10.0's migration (`Phase10`) adds `PageEmbeddings` (clustered by workspace and page),
+`EmbeddingChanges` and `WorkspacePlugins`, the embeddings' columns of `AiSettings` (off for every
+workspace, `voyage-4` named) with a filtered index, and makes `AiUsage.UserId` nullable (the
+worker's own calls), in a transaction like the others. Before installing it, point
+`plugins.cashgearerp.com` at the host with its certificate (First installation, step 6);
+`install.ps1 -PluginsHostName` then adds the sites' second binding and sets `Plugins__PublicUrl` for
+the API (which refuses to start in production without it) and the Sites process. The worker gains
+`embed` (a loop of its own, every 2 s: each workspace with embeddings on, pages unchanged for 30 s
+embedded with the workspace's own Voyage key, at most 128 texts a call; a provider failure backs the
+workspace off for 1, 5, then 30 minutes) and `embeddingsAndPluginsCleanup` (hourly: changes older
+than a day, frame tickets a day after they expired, removed plugins' files a day after). The API keeps each searched workspace's vectors in
+memory (`Ai__EmbeddingsCacheMb`), loaded on its first search by meaning (about a second for 100,000
+chunks on the reference machine) and brought up to date on each search. Nothing is sent to Voyage
+until an owner or admin turns embeddings on with the workspace's own key. The plugins host answers
+only `GET`/`HEAD /f/{ticket}/{path}`: a plugin's file under a 10-minute ticket (32 random bytes the
+API made for a member, kept only as their SHA-256 in `PluginFrameTickets`), with
+`Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src
+https://plugins.cashgearerp.com; …; connect-src 'none'; …; frame-ancestors <the Web origins>`,
+`nosniff`, `no-referrer`, `Cache-Control: private, max-age=600`, `Access-Control-Allow-Origin: *`
+(a sandboxed frame's origin is null), never `Set-Cookie`; anything else on it, and `/f/` on the
+pages host, is the 404 page. It keeps a ticket and a plugin's row at most 30 s (never past the
+ticket's expiry; a plugin turned off or removed stops within 30 s) and files in memory by their hash
+(at most 64 MB).
+
+The Sites process holds no Data Protection (as in 0.9.0) and must never be able to read the key
+ring: a process that serves the public must not be able to open a workspace's AI key's cipher (both
+keys' ciphers are in `AiSettings`, which it can read). `install.ps1` gives a built-in sites identity
+`db_datareader` and `DENY SELECT ON dbo.DataProtectionKeys` (a deny outweighs the role). A host that
+runs all three under one service account (`-ServiceAccount`) cannot deny it without denying the API:
+`install.ps1` warns; give the sites' app pool an account of its own, with `db_datareader` and the
+same deny. The server's tests serve a site and a plugin as such a user
+(`PluginTests.The_sites_process_serves_sites_and_plugins_as_a_reader_denied_the_key_rings_table`).
+
 The ERP's side (Track E, in its repositories, deployed by you): run
 `CashGear.IdentitySystem/DbScripts/Create_WorkspaceConnect.sql` on CGService before deploying a
 UnifiedAPI built with Track E (Sheet's sessions read its columns too), deploy UnifiedAPI, then add
@@ -286,6 +332,8 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 | Database results | `JobStates` for `recompute`; `Databases.ComputePending` rows waiting | Formula and rollup results of big databases lag while it is behind; filters on them use the last results |
 | Notification mail | `JobStates` for `notificationMail` and `mailSend`; `MailOutbox` rows with `Outcome` null (waiting) and their `LastError`; the worker's event log: "A notification mail was not sent (attempt N of 6)" with the failure's type and SMTP status only, "The daily mail cap (N) is reached" | Failures: the SMTP account (as for account mail). The cap reached day after day: raise `Mail__DailyCap` if the account allows it, or ask people to choose the daily summary |
 | Published sites | `https://pages.cashgearerp.com/health/live`; Event Viewer, source "Cash Gear Workspace sites"; `AuditLog` `site.publish`, `site.unpublish`, `workspace.publishing`; live sites: `PublishedSites` with `UnpublishedAt` null | A site that must go now: unpublish it in the app (or turn the workspace's publishing off); it is gone within 30 s. A page that should not be public: its share-link rules decide (restrict it, and it leaves every site within 30 s) |
+| Search by meaning | `JobStates` for `embed`; the worker's event log: "Embedding a workspace's pages failed (<code>); trying again in N minutes"; `AiUsage` rows of `embed` and `search` with their outcomes; each workspace's progress in Settings, AI (pages and those embedded) | `ai.keyInvalid`: the workspace's Voyage key was refused (an owner or admin enters it again). `ai.limit` day after day: the key's own limit at Voyage. Turning embeddings off deletes the workspace's vectors at once |
+| Plugins | `AuditLog` `plugin.add`, `plugin.update`, `plugin.enable`, `plugin.disable`, `plugin.remove`; live plugins: `WorkspacePlugins` with `RemovedAt` null; the plugins host answers only its 404 page at `https://plugins.cashgearerp.com/` | A plugin that must stop now: turn it off or remove it in Settings (owners and admins); its frames stop loading within 30 s and no new ticket is given |
 | Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its

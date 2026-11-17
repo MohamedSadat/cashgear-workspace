@@ -1,4 +1,5 @@
 using Cgw.Core;
+using Cgw.Core.Ai;
 using Cgw.Core.Data;
 using Cgw.Core.Sync;
 using Cgw.Worker.Jobs;
@@ -50,6 +51,15 @@ public static class WorkerServices
         // Phase 8: notification mail (queued per person, then sent on a loop of its own).
         services.AddSingleton<IJob, NotificationMailJob>();
         services.AddSingleton<IJob, MailSendJob>();
+        // Phase 10: pages embedded with the workspace's own Voyage key (on a loop of its own), and
+        // the clean-up of embeddings' changes and removed plugins' files.
+        services.AddSingleton(sp => EmbeddingsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton<EmbeddingKeys>();
+        services.AddSingleton<IEmbeddingProvider>(sp => new VoyageProvider(
+            sp.GetRequiredService<EmbeddingsOptions>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        services.AddSingleton<IJob, EmbedJob>();
+        services.AddSingleton<IJob, Phase10CleanupJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

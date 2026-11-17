@@ -48,13 +48,32 @@ export interface MockAiFault {
   readonly keyId?: string;
   readonly status?: number;
   readonly latencyMs?: number;
-  /** Drop the connection before answering, or halfway through the stream. */
+  /** Drop the connection before answering, or halfway through the stream (Messages only). */
   readonly drop?: 'before' | 'after';
   readonly times?: number;
+  /** Phase 10: `embeddings` queues the failure for `POST /v1/embeddings`; absent, for Messages. */
+  readonly endpoint?: 'messages' | 'embeddings';
+}
+
+/** Phase 10: one `POST /v1/embeddings` call, as `GET /__mock/embeddings` lists it. */
+export interface MockEmbeddingCall {
+  readonly id: string;
+  readonly at: string;
+  readonly keyId: string | null;
+  readonly model: string | null;
+  readonly inputType: 'query' | 'document' | null;
+  readonly outputDimension: number | null;
+  readonly outputDtype: string | null;
+  readonly truncation: boolean | null;
+  readonly count: number;
+  readonly inputs: readonly string[];
+  /** The headers' names, never their values. */
+  readonly headers: readonly string[];
 }
 
 export declare class MockAi {
   readonly requests: MockAiRequest[];
+  readonly embeddings: MockEmbeddingCall[];
   reset(): void;
 }
 

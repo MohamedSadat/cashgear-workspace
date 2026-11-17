@@ -168,6 +168,10 @@ public static class RateLimits
     public const string Realtime = "realtime";
     /// <summary>AI completions, per person (Phase 7): each one spends the workspace's own key.</summary>
     public const string Ai = "ai";
+    /// <summary>Search by meaning, per person (Phase 10): each one embeds the question with the workspace's own key.</summary>
+    public const string Meaning = "meaning";
+    /// <summary>Plugin frame tickets, per person (Phase 10).</summary>
+    public const string Frames = "frames";
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -210,6 +214,8 @@ public static class RateLimits
             options.AddPolicy(Sheet, c => Window("sheet:" + Ip(c), Limit(Sheet, 600)));
             options.AddPolicy(Realtime, c => Window("realtime:" + Who(c), Limit(Realtime, 60)));
             options.AddPolicy(Ai, c => Window("ai:" + Who(c), Limit(Ai, 30)));
+            options.AddPolicy(Meaning, c => Window("meaning:" + Who(c), Limit(Meaning, 30)));
+            options.AddPolicy(Frames, c => Window("frames:" + Who(c), Limit(Frames, 120)));
         });
     }
 }

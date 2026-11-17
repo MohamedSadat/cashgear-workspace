@@ -67,6 +67,10 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<MailSettings> MailSettings => Set<MailSettings>();
     public DbSet<MailOutbox> MailOutbox => Set<MailOutbox>();
     public DbSet<PublishedSite> PublishedSites => Set<PublishedSite>();
+    public DbSet<PageEmbedding> PageEmbeddings => Set<PageEmbedding>();
+    public DbSet<EmbeddingChange> EmbeddingChanges => Set<EmbeddingChange>();
+    public DbSet<WorkspacePlugin> WorkspacePlugins => Set<WorkspacePlugin>();
+    public DbSet<PluginFrameTicket> PluginFrameTickets => Set<PluginFrameTicket>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -430,6 +434,12 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Provider).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.Model).HasMaxLength(64).IsUnicode(false);
             e.Property(x => x.KeyCipher).HasMaxLength(4000).IsUnicode(false);
+            // Phase 10: embeddings.
+            e.Property(x => x.EmbeddingsProvider).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.EmbeddingsModel).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.EmbeddingsKeyCipher).HasMaxLength(4000).IsUnicode(false);
+            // The worker's queue: workspaces with embeddings on.
+            e.HasIndex(x => x.EmbeddingsEnabled).HasFilter("[EmbeddingsEnabled] = 1").HasDatabaseName("IX_AiSettings_Embeddings");
         });
         b.Entity<AiUsage>(e =>
         {
@@ -479,6 +489,48 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Version).IsConcurrencyToken();
         });
 
+        // Phase 10: embeddings and plugins.
+        b.Entity<PageEmbedding>(e =>
+        {
+            e.HasKey(x => x.Id).IsClustered(false);
+            // Clustered by workspace and page: a workspace's vectors load as one range, a page's
+            // rows are found and replaced together.
+            e.HasIndex(x => new { x.WorkspaceId, x.PageId, x.Model, x.Chunk }).IsUnique().IsClustered()
+                .HasDatabaseName("IX_PageEmbeddings_Page");
+            e.Property(x => x.Id).UseIdentityColumn();
+            e.Property(x => x.Model).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.TextHash).HasMaxLength(32);
+            e.Property(x => x.Vector).HasMaxLength(1024);
+        });
+        b.Entity<EmbeddingChange>(e =>
+        {
+            e.HasKey(x => new { x.WorkspaceId, x.Seq });
+            e.Property(x => x.Seq).UseIdentityColumn();
+            // The retention job's queue: older than a day goes.
+            e.HasIndex(x => x.CreatedAt);
+        });
+        b.Entity<WorkspacePlugin>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // One live plugin a type a workspace; removed rows stay for the audit.
+            e.HasIndex(x => new { x.WorkspaceId, x.Type }).IsUnique().HasFilter("[RemovedAt] IS NULL").HasDatabaseName("IX_WorkspacePlugins_LiveType");
+            // The clean-up's queue: removed plugins whose blobs are still there.
+            e.HasIndex(x => x.RemovedAt).HasFilter("[RemovedAt] IS NOT NULL AND [BlobsDeletedAt] IS NULL").HasDatabaseName("IX_WorkspacePlugins_Removed");
+            e.Property(x => x.Type).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.BundleHash).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.BlobPrefix).HasMaxLength(300).IsUnicode(false);
+        });
+        b.Entity<PluginFrameTicket>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // The plugins host finds a ticket by its hash, across workspaces.
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            // The clean-up's queue.
+            e.HasIndex(x => x.ExpiresAt);
+            e.Property(x => x.TokenHash).HasMaxLength(32);
+            e.Property(x => x.BundleHash).HasMaxLength(64).IsUnicode(false);
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -517,6 +569,10 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<AiSettings>(b);
         Filter<AiUsage>(b);
         Filter<PublishedSite>(b);
+        Filter<PageEmbedding>(b);
+        Filter<EmbeddingChange>(b);
+        Filter<WorkspacePlugin>(b);
+        Filter<PluginFrameTicket>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

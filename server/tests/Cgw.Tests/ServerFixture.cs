@@ -106,8 +106,28 @@ public sealed class ServerFixture : IAsyncLifetime
         ["RateLimits:sheet"] = "100000",
         ["RateLimits:realtime"] = "100000",
         ["RateLimits:ai"] = "100000",
+        ["RateLimits:meaning"] = "100000",
+        ["RateLimits:frames"] = "100000",
         ["Ai:AnthropicBaseUrl"] = AiMockUrl,
+        // Phase 10: embeddings go to the same mock (its /v1/embeddings); pages are embedded as soon
+        // as they are derived, and a provider's busy answer is tried again after 50 ms, not 500.
+        ["Ai:VoyageBaseUrl"] = AiMockUrl,
+        ["Ai:EmbeddingsSettleSeconds"] = "0",
+        ["Ai:EmbeddingsRetryMs"] = "50",
+        // Phase 10: the plugins' host (the Sites process's second one).
+        ["Plugins:PublicUrl"] = PluginsUrl,
     };
+
+    /// <summary>Phase 10: the plugins origin, as development has it.</summary>
+    public const string PluginsUrl = "http://localhost:5291";
+
+    /// <summary>A client of the plugins host: no session, its own host, no redirects followed.</summary>
+    public static HttpClient PluginClient(WebApplicationFactory<Cgw.Sites.SitesProgram> factory) => factory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri(PluginsUrl),
+        HandleCookies = false,
+        AllowAutoRedirect = false,
+    });
 
     public async ValueTask InitializeAsync()
     {

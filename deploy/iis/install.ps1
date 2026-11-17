@@ -2,7 +2,8 @@
 .SYNOPSIS
   Installs or updates the Cash Gear Workspace server on a Windows host with IIS (Q6): the API as
   its own IIS site and app pool, the worker as a Windows service, (Phase 9) the Sites process as a
-  third IIS site and app pool on the published sites' own host name, and the database migrations.
+  third IIS site and app pool on the published sites' own host name and (Phase 10) on the plugins'
+  host name too, and the database migrations.
   Run as an administrator from the unpacked deploy package. docs/OPERATIONS.md is the runbook.
 
 .DESCRIPTION
@@ -79,7 +80,12 @@ param(
   # certificate defaults to the API's (a *.cashgearerp.com certificate covers both names).
   [string] $SitesHostName = 'pages.cashgearerp.com',
   [string] $SitesSiteName = 'CashGearWorkspaceSites',
-  [string] $SitesCertificateThumbprint = ''
+  [string] $SitesCertificateThumbprint = '',
+  # Phase 10: third-party plugins' files, on an origin of their own (never the API's, the web app's
+  # or the sites'), served by the same Sites site under a second host-name binding. The certificate
+  # defaults to the sites' (a *.cashgearerp.com certificate covers it).
+  [string] $PluginsHostName = 'plugins.cashgearerp.com',
+  [string] $PluginsCertificateThumbprint = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -95,6 +101,7 @@ $poolIdentity = if ($builtIn) { "IIS AppPool\$SiteName" } else { $ServiceAccount
 $workerIdentity = if ($builtIn) { "NT SERVICE\$ServiceName" } else { $ServiceAccount }
 $sitesIdentity = if ($builtIn) { "IIS AppPool\$SitesSiteName" } else { $ServiceAccount }
 if (-not $SitesCertificateThumbprint) { $SitesCertificateThumbprint = $CertificateThumbprint }
+if (-not $PluginsCertificateThumbprint) { $PluginsCertificateThumbprint = $SitesCertificateThumbprint }
 $environment = [ordered]@{
   ASPNETCORE_ENVIRONMENT = 'Production'
   DOTNET_ENVIRONMENT = 'Production'
@@ -110,6 +117,8 @@ $environment = [ordered]@{
   Erp__ApiBase = $ErpApiBase
   # Phase 9: the sites' origin, for the addresses the API gives out; required in Production.
   Sites__PublicUrl = "https://$SitesHostName"
+  # Phase 10: the plugins' origin, for the frames' addresses the API gives out; required in Production.
+  Plugins__PublicUrl = "https://$PluginsHostName"
   OpenIddict__SigningCertificateThumbprint = $SigningThumbprint
   OpenIddict__EncryptionCertificateThumbprint = $EncryptionThumbprint
   DataProtection__Dpapi = 'true'
@@ -135,13 +144,19 @@ if ($AzureClientId) {
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
 
 # Phase 9: the Sites process reads the database and Blob Storage with the same names, and is given
-# nothing else: no SMTP password, no OpenID Connect certificates, no Data Protection, no origins.
+# nothing else: no SMTP password, no OpenID Connect certificates, no Data Protection. Phase 10: the
+# plugins' origin and the Workspace origins that may frame a plugin (it finds frame tickets by their
+# hash in the database: no key of any kind).
 $sitesEnvironment = [ordered]@{
   ASPNETCORE_ENVIRONMENT = 'Production'
   DOTNET_ENVIRONMENT = 'Production'
   ConnectionStrings__Sql = $connection
   Blob__ServiceUri = $BlobServiceUri
   Blob__Container = 'workspace'
+  Plugins__PublicUrl = "https://$PluginsHostName"
+  Web__Origins__0 = $WebOrigin
+  Web__Origins__1 = 'http://tauri.localhost'
+  Web__Origins__2 = 'tauri://localhost'
   Logging__Format = 'json'
   'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
   Logging__EventLog__Enabled = 'true'
@@ -248,10 +263,16 @@ foreach ($name in $sitesEnvironment.Keys) {
 }
 if (-not (Test-Path "IIS:\Sites\$SitesSiteName")) {
   New-WebSite -Name $SitesSiteName -PhysicalPath (Join-Path $Root 'sites') -ApplicationPool $SitesSiteName -HostHeader $SitesHostName -Port 443 -Ssl -SslFlags 1 | Out-Null
-  $binding = Get-WebBinding -Name $SitesSiteName -Protocol https
+  $binding = Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $SitesHostName
   $binding.AddSslCertificate($SitesCertificateThumbprint, $CertificateStore)
 } else {
   Set-ItemProperty "IIS:\Sites\$SitesSiteName" -Name physicalPath -Value (Join-Path $Root 'sites')
+}
+# Phase 10: the plugins' host name, a second binding of the same site (by SNI, as the first).
+if (-not (Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $PluginsHostName)) {
+  New-WebBinding -Name $SitesSiteName -Protocol https -Port 443 -HostHeader $PluginsHostName -SslFlags 1 | Out-Null
+  $binding = Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $PluginsHostName
+  $binding.AddSslCertificate($PluginsCertificateThumbprint, $CertificateStore)
 }
 # A site's page addresses carry no secret, but its log keeps the same fields as the API's.
 Set-ItemProperty "IIS:\Sites\$SitesSiteName" -Name logFile.logExtFileFlags `
@@ -287,12 +308,14 @@ ALTER ROLE db_ddladmin ADD MEMBER [$identity];
 "@
       $command.ExecuteNonQuery() | Out-Null
     }
-    # Phase 9: the Sites process only reads.
+    # Phase 9: the Sites process only reads. Phase 10: and never the Data Protection key ring: a
+    # process that serves the public must not be able to open a workspace's AI key's cipher.
     $command = $sql.CreateCommand()
     $command.CommandText = @"
 IF SUSER_ID(N'$sitesIdentity') IS NULL CREATE LOGIN [$sitesIdentity] FROM WINDOWS;
 IF USER_ID(N'$sitesIdentity') IS NULL CREATE USER [$sitesIdentity] FOR LOGIN [$sitesIdentity];
 ALTER ROLE db_datareader ADD MEMBER [$sitesIdentity];
+DENY SELECT ON [dbo].[DataProtectionKeys] TO [$sitesIdentity];
 "@
     $command.ExecuteNonQuery() | Out-Null
   } finally { $sql.Close() }
@@ -319,6 +342,12 @@ ALTER ROLE db_datareader ADD MEMBER [$sitesIdentity];
   }
 }
 
+# Phase 10: with one service account for all three, the sites' identity is the API's and cannot be
+# denied the key ring's table. Say so: run the sites' app pool as an account of its own, and deny it.
+if (-not $builtIn) {
+  Write-Warning "The sites' app pool runs as $ServiceAccount, as the API does: it can read the Data Protection key ring (DataProtectionKeys). Give it an account of its own with db_datareader and DENY SELECT ON dbo.DataProtectionKeys (docs/OPERATIONS.md)."
+}
+
 # 6. Start, then check.
 foreach ($site in $SiteName, $SitesSiteName) {
   if ((Get-WebAppPoolState $site).Value -ne 'Started') { Start-WebAppPool $site }
@@ -330,3 +359,13 @@ $ready = Invoke-WebRequest "https://$HostName/health/ready" -UseBasicParsing -Ti
 Write-Host "Health: $($ready.StatusCode) $($ready.Content)"
 $sites = Invoke-WebRequest "https://$SitesHostName/health/live" -UseBasicParsing -TimeoutSec 30
 Write-Host "Sites: $($sites.StatusCode) $($sites.Content)"
+# Phase 10: the plugins' host answers nothing but a plugin's file under a ticket: its 404 page says
+# the binding and the certificate work.
+try {
+  Invoke-WebRequest "https://$PluginsHostName/" -UseBasicParsing -TimeoutSec 30 | Out-Null
+  Write-Host 'Plugins: answered (expected 404)'
+} catch [System.Net.WebException] {
+  $status = [int]$_.Exception.Response.StatusCode
+  if ($status -ne 404) { throw "The plugins host answered $status, not its 404 page" }
+  Write-Host 'Plugins: 404 page (as it should be)'
+}

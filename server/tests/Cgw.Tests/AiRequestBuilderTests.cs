@@ -95,6 +95,39 @@ public sealed class AiRequestBuilderTests
     }
 
     [Fact]
+    public void Erp_changes_send_a_fields_scope_so_a_keys_field_is_changed_alike_for_every_record_of_it()
+    {
+        // Phase 10: Items on hand's item name and group belong to every row of the item.
+        var request = Build("erpChanges", new
+        {
+            instruction = "Rename the item",
+            connector = new { id = "itemsOnHand", schemaVersion = "itemsOnHand.1" },
+            fields = new object[]
+            {
+                new { name = "itemName", label = "Item", type = "text", maxLength = 100, scope = "key" },
+                new { name = "note", label = "Note", type = "text", scope = "record" },
+                new { name = "plain", label = "Plain", type = "text" },
+            },
+            records = new object[]
+            {
+                new { id = "1", key = "IT-1", values = new { itemName = "Bolt" } },
+                new { id = "2", key = "IT-1", values = new { itemName = "Bolt" } },
+            },
+        });
+        Assert.Contains("""[{"name":"itemName","label":"Item","type":"text","scope":"key","maxLength":100},{"name":"note","label":"Note","type":"text","scope":"record"},{"name":"plain","label":"Plain","type":"text"}]""", request.User);
+        Assert.Contains("A field whose scope is key holds one value for every record of the same key", request.System);
+        var refused = AiRequestBuilder.Read("erpChanges", Json(new
+        {
+            instruction = "x",
+            connector = new { id = "itemsOnHand", schemaVersion = "itemsOnHand.1" },
+            fields = new[] { new { name = "itemName", label = "Item", type = "text", scope = "everything" } },
+            records = new[] { new { id = "1", key = "IT-1", values = new { itemName = "Bolt" } } },
+        }));
+        Assert.False(refused.Ok);
+        Assert.Equal("request.invalid", refused.Failure!.Code);
+    }
+
+    [Fact]
     public void Inputs_that_break_the_rules_are_refused_and_long_ones_are_too_large()
     {
         void Refused(string action, object input, int status)

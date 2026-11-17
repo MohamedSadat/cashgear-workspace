@@ -126,6 +126,7 @@ public static class AiRequestBuilder
                 + "(for a lookup, the only codes it may take), and the records. Propose only the changes the instruction asks for, only to those fields and records, "
                 + "each value valid for its field: text within its length, an integer as a number, a decimal as a string with at most its scale of decimals, "
                 + "a date as YYYY-MM-DD, a boolean as true or false, a lookup as one of its codes, null to empty a field that is not required. "
+                + "A field whose scope is key holds one value for every record of the same key: propose the same value for each record of that key, or none. "
                 + "Propose nothing else. A person reviews every change before anything is saved, and only they can save.",
                 Tag("instruction", e.Instruction) + "\n" + Tag("connector", $"{e.ConnectorId} ({e.SchemaVersion})")
                 + "\n" + Tag("fields", e.FieldsJson) + "\n" + Tag("records", e.RecordsJson), "medium", ErpChangesSchema),
@@ -199,6 +200,14 @@ public static class AiRequestBuilder
             var type = String(f, "type");
             if (type is null || !ErpFieldTypes.Contains(type)) return Failure.Invalid("a field's type is one of " + string.Join(", ", ErpFieldTypes));
             var field = new JsonObject { ["name"] = name, ["label"] = Clip(String(f, "label") ?? name, 200), ["type"] = type };
+            // Phase 10 (erp-connect.1, Customers and Items on hand): a field of a key's (an item's
+            // name and group) holds one value for every record of that key.
+            if (f.TryGetProperty("scope", out var scope) && scope.ValueKind != JsonValueKind.Null)
+            {
+                if (scope.ValueKind != JsonValueKind.String || scope.GetString() is not ("record" or "key"))
+                    return Failure.Invalid("a field's scope is record or key");
+                field["scope"] = scope.GetString();
+            }
             if (f.TryGetProperty("required", out var required) && required.ValueKind is JsonValueKind.True or JsonValueKind.False) field["required"] = required.GetBoolean();
             foreach (var n in new[] { "maxLength", "scale" })
                 if (f.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) && i >= 0) field[n] = i;

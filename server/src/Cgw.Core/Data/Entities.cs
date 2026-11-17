@@ -836,14 +836,28 @@ public sealed class AiSettings : ITenantOwned
     public Guid? KeySetBy { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public Guid? UpdatedBy { get; set; }
+
+    // Phase 10: embeddings (search by meaning), a switch and a key of their own, beside completions'.
+
+    /// <summary>Off until an owner or admin turns it on with a key; off deletes every <see cref="PageEmbedding"/> of the workspace.</summary>
+    public bool EmbeddingsEnabled { get; set; }
+    public string EmbeddingsProvider { get; set; } = "voyage";
+    public string EmbeddingsModel { get; set; } = "voyage-4";
+    /// <summary>The workspace's Voyage key as Data Protection's output (purpose <c>Cgw.Ai.EmbeddingsKey.v1</c>, bound to the workspace); null with none.</summary>
+    public string? EmbeddingsKeyCipher { get; set; }
+    public DateTimeOffset? EmbeddingsKeySetAt { get; set; }
+    public Guid? EmbeddingsKeySetBy { get; set; }
+    /// <summary>Rises when embeddings are turned on again or the model changes: a copy of the vectors of another generation is loaded whole.</summary>
+    public long EmbeddingsGeneration { get; set; }
 }
 
-/// <summary>One AI completion, for metering (Phase 7): who, what, which model, the tokens, how it ended. Never its content.</summary>
+/// <summary>One AI provider call, for metering (Phase 7): who, what, which model, the tokens, how it ended. Never its content.</summary>
 public sealed class AiUsage : ITenantOwned
 {
     public Guid Id { get; set; }
     public Guid WorkspaceId { get; set; }
-    public Guid UserId { get; set; }
+    /// <summary>Null for the worker's own calls (Phase 10: <c>embed</c>).</summary>
+    public Guid? UserId { get; set; }
     public string Action { get; set; } = "";
     public string Model { get; set; } = "";
     public Guid? PageId { get; set; }
@@ -852,5 +866,98 @@ public sealed class AiUsage : ITenantOwned
     /// <summary><c>ok</c>, <c>length</c>, <c>refused</c>, <c>cancelled</c>, or the error code it ended with.</summary>
     public string Outcome { get; set; } = "";
     public int DurationMs { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// One chunk of a page's (or a row's) title and derived text as a vector (Phase 10, M10.2): 1,024
+/// int8 values from the workspace's embeddings model, never sent to any client. Written and deleted
+/// by the worker's <c>embed</c> job only, each change with an <see cref="EmbeddingChange"/> in the
+/// same transaction; deleted with the page's purge, the workspace's, and all at once when the
+/// workspace turns embeddings off. A page with nothing to embed (no title and no text) holds one
+/// row with an empty vector, so it is known to be done.
+/// </summary>
+public sealed class PageEmbedding : ITenantOwned
+{
+    public long Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid PageId { get; set; }
+    /// <summary>0-based, in the text's order.</summary>
+    public int Chunk { get; set; }
+    public string Model { get; set; } = "";
+    /// <summary>SHA-256 of the chunk's text: a chunk whose text and model already have a vector keeps it.</summary>
+    public byte[] TextHash { get; set; } = [];
+    /// <summary>1,024 int8 values; empty for a page with nothing to embed.</summary>
+    public byte[] Vector { get; set; } = [];
+    /// <summary>The derived text's version embedded (<see cref="PageDocDerived.UpToSeq"/>, 0 with none).</summary>
+    public long TextVersion { get; set; }
+    /// <summary>The page's metadata version embedded (<see cref="Page.Version"/>: its title's changes raise it).</summary>
+    public long PageVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// That a page's <see cref="PageEmbedding"/> rows changed (Phase 10): written in the same
+/// transaction as any insert or delete of them, one row a page touched, kept a day. The API's
+/// in-memory copy of a workspace's vectors reads the ones after its last <see cref="Seq"/>.
+/// </summary>
+public sealed class EmbeddingChange : ITenantOwned
+{
+    public Guid WorkspaceId { get; set; }
+    /// <summary>An identity column: the order the API reads them in.</summary>
+    public long Seq { get; set; }
+    public Guid PageId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A third-party plugin added to a workspace (Phase 10, M10.5): its manifest as validated, its
+/// bundle's files (each a private blob under <see cref="BlobPrefix"/>), on or off. One live row a
+/// type a workspace; a removed row stays for the audit, and the worker deletes its blobs a day later.
+/// </summary>
+public sealed class WorkspacePlugin : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>Dotted lower-case words, at most 64; never <c>cashgear.*</c>.</summary>
+    public string Type { get; set; } = "";
+    /// <summary>A whole number from 1; an update keeps it or raises it.</summary>
+    public int Version { get; set; }
+    /// <summary>The manifest as validated, JSON, at most 16 KB.</summary>
+    public string Manifest { get; set; } = "{}";
+    /// <summary>JSON: <c>[{path, contentType, size, sha256}]</c>.</summary>
+    public string Files { get; set; } = "[]";
+    /// <summary>SHA-256 hex (lower case) of the zip as uploaded.</summary>
+    public string BundleHash { get; set; } = "";
+    /// <summary><c>workspaces/{workspaceId}/plugins/{id}/{bundleHash}/</c>.</summary>
+    public string BlobPrefix { get; set; } = "";
+    /// <summary>The files' unpacked sizes together.</summary>
+    public long SizeBytes { get; set; }
+    public bool Enabled { get; set; } = true;
+    public Guid AddedBy { get; set; }
+    public DateTimeOffset AddedAt { get; set; }
+    public Guid UpdatedBy { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? RemovedAt { get; set; }
+    public Guid? RemovedBy { get; set; }
+    /// <summary>When the worker deleted a removed plugin's blobs.</summary>
+    public DateTimeOffset? BlobsDeletedAt { get; set; }
+}
+
+/// <summary>
+/// A plugin frame's ticket (Phase 10): 32 random bytes kept only as their SHA-256, 10 minutes, bound
+/// to the workspace, the plugin and the bundle it was made for. Not one use: the bundle's own files
+/// are fetched under it while it lasts. The Sites process's plugins host finds it by its hash, as
+/// the hub finds its ticket (<see cref="RealtimeTicket"/>); deleted a day after it expires.
+/// </summary>
+public sealed class PluginFrameTicket : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid PluginId { get; set; }
+    public string BundleHash { get; set; } = "";
+    public byte[] TokenHash { get; set; } = [];
+    public DateTimeOffset ExpiresAt { get; set; }
+    public Guid CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

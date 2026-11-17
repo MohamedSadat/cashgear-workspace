@@ -8,6 +8,7 @@ using Cgw.Core.Documents;
 using Cgw.Core.Exports;
 using Cgw.Core.History;
 using Cgw.Core.Notifications;
+using Cgw.Core.Plugins;
 using Cgw.Core.Previews;
 using Cgw.Core.Search;
 using Cgw.Core.Sharing;
@@ -61,6 +62,19 @@ public static class Modules
         services.AddSingleton<IAiProvider>(sp => new AnthropicProvider(
             sp.GetRequiredService<AiOptions>(),
             new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        // Phase 10: embeddings (search by meaning) with the workspace's own Voyage key, and the
+        // in-memory copies of the vectors (one set an API process).
+        services.AddSingleton(sp => EmbeddingsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton<EmbeddingKeys>();
+        services.AddSingleton<EmbeddingsCache>();
+        services.AddScoped<EmbeddingsService>();
+        services.AddScoped<MeaningSearch>();
+        services.AddSingleton<IEmbeddingProvider>(sp => new VoyageProvider(
+            sp.GetRequiredService<EmbeddingsOptions>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        // Phase 10: third-party plugins (served by the Sites process's second host).
+        services.AddSingleton(sp => PluginsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddScoped<PluginService>();
         return services;
     }
 
@@ -79,6 +93,7 @@ public static class Modules
         api.MapRealtimeTickets();
         api.MapErpCommits();
         api.MapAi();
+        api.MapPlugins();
         return api;
     }
 }

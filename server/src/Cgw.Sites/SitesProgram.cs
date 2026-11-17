@@ -5,6 +5,7 @@ using Cgw.Core.Blob;
 using Cgw.Core.Data;
 using Cgw.Core.Databases;
 using Cgw.Core.Documents;
+using Cgw.Core.Plugins;
 using Cgw.Core.Sharing;
 using Cgw.Core.Sites;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -21,6 +22,14 @@ namespace Cgw.Sites;
 /// Content Security Policy (one hashed stylesheet; images from the site and the blob account only).
 /// Routes: <c>GET /{slug}</c>, <c>/{slug}/{pageId}</c>, <c>/{slug}/files/{assetId}</c>,
 /// <c>/robots.txt</c>, <c>/health/live</c>; anything else is the 404 page.
+/// <para>
+/// Phase 10: a second host, the plugins origin (<c>Plugins__PublicUrl</c>:
+/// <c>plugins.cashgearerp.com</c>; <c>http://localhost:5291</c> on a developer's machine), answers
+/// only <c>GET</c>/<c>HEAD /f/{ticket}/{*path}</c>: a third-party plugin's file, under a frame ticket
+/// the API made for a member (stored hashed, found by its hash), with a sandboxing Content Security
+/// Policy that allows no network. The process loads no Data Protection, as in 0.9.0. <c>/f/</c> on the pages host, and
+/// anything else on the plugins host, is the 404 page.
+/// </para>
 /// </summary>
 public sealed class SitesProgram
 {
@@ -59,6 +68,7 @@ public sealed class SitesProgram
                 await context.Response.WriteAsync("Something went wrong.");
             },
         });
+        app.UsePluginsHost(app.Services.GetRequiredService<PluginsOptions>(), hsts: !local);
         app.MapSites();
         return app;
     }
@@ -79,6 +89,10 @@ public static class SitesHost
         services.AddSingleton<DatabaseRowCache>();
         services.AddSingleton<SiteCache>();
         services.AddScoped<SiteReader>();
+        // Phase 10: the plugins host. Frame tickets are stored hashed (found by their hash): this
+        // process holds no Data Protection, and its identity is denied the key ring's table.
+        services.AddSingleton(sp => PluginsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton<PluginFiles>();
         return services;
     }
 
@@ -92,6 +106,9 @@ public static class SitesHost
         + "serial=(), usb=(), xr-spatial-tracking=()";
 
     public const string IndexedKey = "cgw.indexed";
+
+    /// <summary>Set on an answer of a plugin's file: it carries the plugin's own headers, not a site's.</summary>
+    public const string PluginFileKey = "cgw.pluginFile";
 
     /// <summary>The policy: nothing but the one stylesheet, and images from the site and the blob account.</summary>
     public static string ContentSecurityPolicy(BlobStore blob)
@@ -110,6 +127,7 @@ public static class SitesHost
             {
                 var headers = context.Response.Headers;
                 headers.Remove("Set-Cookie");
+                if (context.Items[PluginFileKey] is true) return Task.CompletedTask;
                 headers.ContentSecurityPolicy = csp;
                 headers.XContentTypeOptions = "nosniff";
                 headers["Referrer-Policy"] = "no-referrer";
@@ -125,6 +143,68 @@ public static class SitesHost
     }
 
     private static readonly string Missing = SiteRenderer.NotFound();
+
+    /// <summary>
+    /// The plugins host (Phase 10), ahead of the sites' routes: on that host, a plugin's file or the
+    /// 404 page; on any other, <c>/f/</c> is the 404 page and everything else goes on to the sites.
+    /// </summary>
+    public static IApplicationBuilder UsePluginsHost(this IApplicationBuilder app, PluginsOptions options, bool hsts)
+    {
+        var host = options.Host;
+        var csp = PluginFiles.ContentSecurityPolicy(options);
+        return app.Use(async (context, next) =>
+        {
+            var onPlugins = host is not null && string.Equals(context.Request.Host.Value, host, StringComparison.OrdinalIgnoreCase);
+            if (!onPlugins)
+            {
+                if (context.Request.Path.StartsWithSegments("/f")) await NotFound(context).ExecuteAsync(context);
+                else await next();
+                return;
+            }
+            if (!Readable(context) || !await PluginFileAsync(context, csp, hsts)) await NotFound(context).ExecuteAsync(context);
+        });
+    }
+
+    /// <summary>
+    /// <c>/f/{ticket}/{*path}</c>: the ticket opened, the plugin live, on and of the ticket's bundle,
+    /// the path one of the bundle's files; false (the 404 page) for anything else.
+    /// </summary>
+    private static async Task<bool> PluginFileAsync(HttpContext context, string csp, bool hsts)
+    {
+        var path = context.Request.Path.Value ?? "";
+        if (!path.StartsWith("/f/", StringComparison.Ordinal)) return false;
+        var rest = path[3..];
+        var slash = rest.IndexOf('/');
+        if (slash <= 0 || slash == rest.Length - 1) return false;
+        var services = context.RequestServices;
+        var files = services.GetRequiredService<PluginFiles>();
+        var ct = context.RequestAborted;
+        var db = services.GetRequiredService<CgwDb>();
+        var ticket = await files.TicketAsync(db, rest[..slash], ct);
+        if (ticket is null) return false;
+        var plugin = await files.PluginAsync(db, ticket.PluginId, ct);
+        if (plugin is not { Live: true, Enabled: true } || plugin.WorkspaceId != ticket.WorkspaceId || plugin.BundleHash != ticket.BundleHash) return false;
+        if (!plugin.Files.TryGetValue(rest[(slash + 1)..], out var file)) return false;
+        var bytes = await files.BytesAsync(plugin, file, ct);
+        if (bytes is null) return false;
+        context.Items[PluginFileKey] = true;
+        var response = context.Response;
+        var headers = response.Headers;
+        response.StatusCode = 200;
+        response.ContentType = file.ContentType;
+        response.ContentLength = bytes.LongLength;
+        headers.ContentSecurityPolicy = csp;
+        headers.XContentTypeOptions = "nosniff";
+        headers["Referrer-Policy"] = "no-referrer";
+        headers.CacheControl = "private, max-age=600";
+        // A sandboxed frame's origin is null: its module scripts are read with CORS.
+        headers.AccessControlAllowOrigin = "*";
+        headers["Permissions-Policy"] = PermissionsPolicy;
+        headers["X-Robots-Tag"] = "noindex";
+        if (hsts && context.Request.IsHttps) headers.StrictTransportSecurity = "max-age=31536000";
+        if (HttpMethods.IsGet(context.Request.Method)) await response.Body.WriteAsync(bytes, ct);
+        return true;
+    }
 
     private static IResult NotFound(HttpContext http)
     {

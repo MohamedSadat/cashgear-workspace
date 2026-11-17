@@ -28,6 +28,35 @@ namespace Cgw.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("binary(16)");
 
+                    b.Property<bool>("EmbeddingsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("EmbeddingsGeneration")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EmbeddingsKeyCipher")
+                        .HasMaxLength(4000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<DateTimeOffset?>("EmbeddingsKeySetAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("EmbeddingsKeySetBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("EmbeddingsModel")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("EmbeddingsProvider")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<bool>("Enabled")
                         .HasColumnType("bit");
 
@@ -61,6 +90,10 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("binary(16)");
 
                     b.HasKey("WorkspaceId");
+
+                    b.HasIndex("EmbeddingsEnabled")
+                        .HasDatabaseName("IX_AiSettings_Embeddings")
+                        .HasFilter("[EmbeddingsEnabled] = 1");
 
                     b.ToTable("AiSettings");
                 });
@@ -105,7 +138,6 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("binary(16)");
 
                     b.Property<byte[]>("UserId")
-                        .IsRequired()
                         .HasColumnType("binary(16)");
 
                     b.Property<byte[]>("WorkspaceId")
@@ -506,6 +538,31 @@ namespace Cgw.Core.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Devices");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.EmbeddingChange", b =>
+                {
+                    b.Property<byte[]>("WorkspaceId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("Seq")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Seq"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("PageId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("WorkspaceId", "Seq");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("EmbeddingChanges");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.ErpLink", b =>
@@ -1248,6 +1305,63 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("PageDocUpdates");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.PageEmbedding", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Chunk")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("PageId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("PageVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("TextHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<long>("TextVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("Vector")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("varbinary(1024)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasIndex("WorkspaceId", "PageId", "Model", "Chunk")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PageEmbeddings_Page");
+
+                    SqlServerIndexBuilderExtensions.IsClustered(b.HasIndex("WorkspaceId", "PageId", "Model", "Chunk"));
+
+                    b.ToTable("PageEmbeddings");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.PageLink", b =>
                 {
                     b.Property<byte[]>("FromPageId")
@@ -1322,6 +1436,51 @@ namespace Cgw.Core.Data.Migrations
                     b.HasIndex("WorkspaceId", "UserId");
 
                     b.ToTable("PageVisits");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.PluginFrameTicket", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("BundleHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("PluginId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("PluginFrameTickets");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.PublishedSite", b =>
@@ -2093,6 +2252,88 @@ namespace Cgw.Core.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("WorkspaceMembers");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkspacePlugin", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("AddedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("BlobPrefix")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(300)");
+
+                    b.Property<DateTimeOffset?>("BlobsDeletedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("BundleHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Files")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Manifest")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("RemovedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RemovedAt")
+                        .HasDatabaseName("IX_WorkspacePlugins_Removed")
+                        .HasFilter("[RemovedAt] IS NOT NULL AND [BlobsDeletedAt] IS NULL");
+
+                    b.HasIndex("WorkspaceId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkspacePlugins_LiveType")
+                        .HasFilter("[RemovedAt] IS NULL");
+
+                    b.ToTable("WorkspacePlugins");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.YjsClient", b =>

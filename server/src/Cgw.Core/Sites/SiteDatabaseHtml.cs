@@ -277,7 +277,15 @@ public static class SiteDatabaseHtml
         var type = SiteRenderer.Attr(body, "type");
         if (type is not (ChartType or KanbanType))
         {
-            SiteRenderer.Placeholder(h, words.BlockHidden);
+            // Phase 10: a third-party plugin runs only in its sandboxed frame in the app; its block
+            // is named by its type (isolated, as a Latin name in Arabic words), nothing of its props.
+            if (type is { Length: > 0 and <= 64 } named && named.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '.' or '-'))
+            {
+                var at = words.PluginHidden.IndexOf("{0}", StringComparison.Ordinal);
+                h.Raw("<div class=\"placeholder\" role=\"note\">").Text(words.PluginHidden[..at]).Raw("<bdi>").Text(named).Raw("</bdi>")
+                    .Text(words.PluginHidden[(at + 3)..]).Raw("</div>\n");
+            }
+            else SiteRenderer.Placeholder(h, words.BlockHidden);
             return;
         }
         var props = SiteRenderer.Props(body);

@@ -17,11 +17,22 @@
 // Unscripted, it answers each action (read from the system prompt's first line, "Cash Gear
 // Workspace AI task: <action>.") with something made from what it was sent, so a test can tell
 // that the answer reached the page: `[rewritten] <text>`, `Summary: …`, JSON for the JSON actions.
+//
+// Phase 10: Voyage AI's embeddings API as well (`Ai__VoyageBaseUrl` points the server at it):
+// `POST /v1/embeddings` in Voyage's shape (`{input, model, input_type, output_dimension: 1024,
+// output_dtype: "int8", truncation}` in; `{object: "list", data: [{object: "embedding", embedding,
+// index}], model, usage: {total_tokens}}` out), the vectors made from the concept lexicon in
+// `embeddings.mjs`, deterministic. Each call is recorded with the key as its `keyId`, the model, the
+// input type, how many inputs and the inputs themselves: `GET /__mock/embeddings[?keyId=…]`.
+// `POST /__mock/fault` with `endpoint: "embeddings"` queues a failure for it (`status` 401, 429,
+// 500, or `latencyMs`); a key starting `pa-mock-invalid` or `sk-mock-invalid` is refused (401).
+// `POST /__mock/reset` forgets these too.
 
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DIMENSIONS, MODELS, embedFloat, embedInt8, tokensOf } from './embeddings.mjs';
 
 export const DEFAULT_PORT = 4286;
 const MAX_BODY = 2 * 1024 * 1024;
@@ -163,6 +174,9 @@ export class MockAi {
     /** Queued answers and faults, each for one key (`keyId`) or any (`null`). */
     this.scripts = [];
     this.faults = [];
+    /** Phase 10: the embeddings calls, and the faults queued for them. */
+    this.embeddings = [];
+    this.embeddingFaults = [];
   }
 
   take(list, id) {
@@ -177,7 +191,73 @@ export class MockAi {
       requests: this.requests.length,
       scripts: this.scripts.length,
       faults: this.faults.length,
+      embeddings: this.embeddings.length,
+      embeddingFaults: this.embeddingFaults.length,
     };
+  }
+
+  /** `POST /v1/embeddings`, as Voyage answers it. */
+  async embed(req, res, send) {
+    const raw = await readBody(req);
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return send(400, { detail: 'The request body is not valid JSON.' });
+    }
+    const bearer = /^Bearer\s+(.+)$/i.exec(String(req.headers.authorization ?? ''));
+    const key = bearer ? bearer[1].trim() : null;
+    const id = key ? keyId(key) : null;
+    const inputs = typeof body?.input === 'string' ? [body.input] : body?.input;
+    const record = {
+      id: randomUUID(),
+      at: new Date().toISOString(),
+      keyId: id,
+      model: body?.model ?? null,
+      inputType: body?.input_type ?? null,
+      outputDimension: body?.output_dimension ?? null,
+      outputDtype: body?.output_dtype ?? null,
+      truncation: body?.truncation ?? null,
+      count: Array.isArray(inputs) ? inputs.length : 0,
+      inputs: Array.isArray(inputs) ? inputs.map(String) : [],
+      /** The headers' names, never their values. */
+      headers: Object.keys(req.headers).sort(),
+    };
+    this.embeddings.push(record);
+    if (this.embeddings.length > MAX_KEPT) this.embeddings.shift();
+    if (!key) return send(401, { detail: 'Provide an API key.' });
+    if (/^(pa|sk)-mock-invalid/.test(key))
+      return send(401, { detail: 'Provided API key is invalid.' });
+    const fault = this.take(this.embeddingFaults, id);
+    if (fault?.latencyMs) await sleep(fault.latencyMs);
+    if (fault?.status)
+      return send(
+        fault.status,
+        { detail: 'Mock fault' },
+        fault.status === 429 ? { 'retry-after': '1' } : {},
+      );
+    if (!Array.isArray(inputs) || inputs.length === 0 || inputs.length > 1000)
+      return send(400, { detail: 'input is a string or a list of 1 to 1,000 strings.' });
+    if (!MODELS.includes(body.model))
+      return send(400, { detail: `Model ${body.model} is not supported.` });
+    if (![null, undefined, 'query', 'document'].includes(body.input_type))
+      return send(400, { detail: 'input_type is query, document or null.' });
+    if (
+      body.output_dimension !== undefined &&
+      body.output_dimension !== null &&
+      body.output_dimension !== DIMENSIONS
+    )
+      return send(400, { detail: 'The mock gives 1,024 dimensions only.' });
+    const dtype = body.output_dtype ?? 'float';
+    if (!['float', 'int8'].includes(dtype))
+      return send(400, { detail: 'The mock gives float or int8.' });
+    const data = inputs.map((text, index) => ({
+      object: 'embedding',
+      embedding: dtype === 'int8' ? embedInt8(text) : Array.from(embedFloat(text)),
+      index,
+    }));
+    const tokens = inputs.reduce((sum, text) => sum + tokensOf(text), 0);
+    return send(200, { object: 'list', data, model: body.model, usage: { total_tokens: tokens } });
   }
 
   async handle(req, res) {
@@ -187,6 +267,8 @@ export class MockAi {
       res.end(body === undefined ? '' : JSON.stringify(body));
     };
     if (url.pathname.startsWith('/__mock/')) return this.admin(req, res, url, send);
+    if (req.method === 'POST' && url.pathname === '/v1/embeddings')
+      return this.embed(req, res, send);
     if (req.method !== 'POST' || url.pathname !== '/v1/messages')
       return send(404, {
         type: 'error',
@@ -351,6 +433,10 @@ export class MockAi {
       });
     }
     if (req.method === 'GET' && name === 'state') return send(200, this.state());
+    if (req.method === 'GET' && name === 'embeddings') {
+      const id = url.searchParams.get('keyId');
+      return send(200, { calls: this.embeddings.filter((c) => !id || c.keyId === id) });
+    }
     if (req.method !== 'POST') return send(405, { error: 'method' });
     if (name === 'reset') {
       this.reset();
@@ -371,7 +457,13 @@ export class MockAi {
         status: body.status ? Number(body.status) : undefined,
         drop: body.drop,
       };
-      for (let i = 0; i < times; i++) (name === 'script' ? this.scripts : this.faults).push(item);
+      const list =
+        name === 'script'
+          ? this.scripts
+          : body.endpoint === 'embeddings'
+            ? this.embeddingFaults
+            : this.faults;
+      for (let i = 0; i < times; i++) list.push(item);
       return send(204);
     }
     return send(404, { error: 'unknown' });

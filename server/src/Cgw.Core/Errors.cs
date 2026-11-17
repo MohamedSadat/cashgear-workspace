@@ -67,6 +67,13 @@ public static class Codes
     /// <summary>The workspace's publishing switch is off (403): nothing is published.</summary>
     public const string PublishingOff = "publishing.off";
 
+    // Phase 10: plugins.
+
+    /// <summary>A plugin's bundle refused (400), with <c>errors: [{code, path?}]</c>.</summary>
+    public const string PluginInvalid = "plugin.invalid";
+    /// <summary>A bundle of a lower version than the workspace's (400).</summary>
+    public const string PluginOlder = "plugin.older";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -77,6 +84,7 @@ public static class Codes
         CommentInvalid,
         AiDisabled, AiKeyMissing, AiKeyInvalid, AiProvider, AiLimit, AiRefused,
         SlugTaken, PublishingOff,
+        PluginInvalid, PluginOlder,
     ];
 }
 

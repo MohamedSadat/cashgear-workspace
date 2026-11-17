@@ -49,7 +49,7 @@ public sealed record AiPrepared(Member Member, Guid RequestId, string Action, Gu
 /// for this server and the workspace and a key is set. The module calls no other system than its
 /// provider, and has no route to the ERP.
 /// </summary>
-public sealed class AiService(CgwDb db, Access access, TenantScope scope, SearchService search, AiKeys keys, AiOptions options, Audit audit, TimeProvider clock)
+public sealed class AiService(CgwDb db, Access access, TenantScope scope, SearchService search, MeaningSearch meaning, EmbeddingsService embeddings, AiKeys keys, AiOptions options, Audit audit, TimeProvider clock)
 {
     public const string Provider = AnthropicProvider.ProviderId;
 
@@ -62,13 +62,22 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
     {
         var row = await RowAsync(ct);
         var model = row?.Model is { } m && options.Models.Contains(m) ? m : options.DefaultModel;
-        var dto = new AiSettingsDto { Enabled = On(row), Provider = Provider, Model = model, Models = options.Models };
+        var dto = new AiSettingsDto
+        {
+            Enabled = On(row),
+            Provider = Provider,
+            Model = model,
+            Models = options.Models,
+            Embeddings = await embeddings.SettingsAsync(member, row, ct),
+        };
         if (!member.IsAdmin) return dto;
         AiPersonDto? setBy = null;
         if (row?.KeyCipher is not null && row.KeySetBy is { } by)
             setBy = new AiPersonDto(by, await db.Users.AsNoTracking().Where(u => u.Id == by).Select(u => u.DisplayName).FirstOrDefaultAsync(ct) ?? "Someone");
         var month = new DateTimeOffset(clock.GetUtcNow().Year, clock.GetUtcNow().Month, 1, 0, 0, 0, TimeSpan.Zero);
-        var used = await db.AiUsage.AsNoTracking().Where(u => u.CreatedAt >= month)
+        // Completions only: the embeddings provider's calls are counted in their own part (Phase 10).
+        var embedding = EmbeddingActions.All;
+        var used = await db.AiUsage.AsNoTracking().Where(u => u.CreatedAt >= month && !embedding.Contains(u.Action))
             .GroupBy(_ => 1)
             .Select(g => new { Requests = g.Count(), Input = g.Sum(u => u.InputTokens), Output = g.Sum(u => u.OutputTokens) })
             .FirstOrDefaultAsync(ct);
@@ -100,7 +109,14 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             default:
                 return Failure.Invalid("apiKey is the provider's key (20 to 500 characters, no spaces) or null to remove it");
         }
+        var embeddingsChange = embeddings.Read(body.Embeddings);
+        if (!embeddingsChange.Ok) return embeddingsChange.Failure!;
 
+        // Under the settings row's lock, which the worker's writes of vectors take too: vectors are
+        // never written after the switch went off, and off deletes them with the change.
+        await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, ct);
+        await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM [AiSettings] WITH (UPDLOCK, HOLDLOCK) WHERE [WorkspaceId] = @ws",
+            [new Microsoft.Data.SqlClient.SqlParameter("@ws", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(member.WorkspaceId) }], ct);
         var row = await RowAsync(ct);
         var now = clock.GetUtcNow();
         if (row is null)
@@ -129,6 +145,13 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             if (body.Enabled == true) return new Failure(Codes.AiKeyMissing, 400, "Set the provider's key before turning AI on");
             row.Enabled = false;
         }
+        EmbeddingsService.Applied? applied = null;
+        if (embeddingsChange.Value is { } change)
+        {
+            var result = embeddings.Apply(row, member, change);
+            if (!result.Ok) return result.Failure!;
+            applied = result.Value;
+        }
         row.UpdatedAt = now;
         row.UpdatedBy = member.UserId;
         audit.Add(actor, "ai.settings", member.WorkspaceId, "workspace", member.WorkspaceId, new
@@ -137,8 +160,13 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             model = row.Model,
             key = newKey is not null ? "set" : removeKey ? (before.HasKey ? "removed" : "none") : "kept",
             was = before,
+            embeddings = applied?.Detail,
         });
         await db.SaveChangesAsync(ct);
+        // Off deletes every vector of the workspace in this same transaction (decisions, 2026-11-18).
+        if (applied is { TurnedOff: true }) await embeddings.DeleteVectorsAsync(member.WorkspaceId, ct);
+        await tx.CommitAsync(ct);
+        if (applied is { Changed: true }) embeddings.Forget(member.WorkspaceId);
         return await SettingsAsync(member, ct);
     }
 
@@ -181,12 +209,47 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             sources?.Select(s => new AiSourceDto(s.PageId, s.Title)).ToList());
     }
 
+    /// <summary>Reciprocal rank fusion's constant (decisions, 2026-11-18).</summary>
+    public const int FusionK = 60;
+
     /// <summary>
     /// The pages <c>ask</c> sends: the server's own search, under the person's permission filter, for
     /// the question's words together, then for each word alone, at most eight, each with its derived
-    /// text. A page the person cannot read is never found, so never sent.
+    /// text. A page the person cannot read is never found, so never sent. With embeddings on too
+    /// (Phase 10), those pages and the pages search by meaning finds, fused by reciprocal rank
+    /// (k = 60), the top eight; with them off, exactly as in 0.9.0.
     /// </summary>
     public async Task<IReadOnlyList<AiSource>> SourcesAsync(Member member, string question, CancellationToken ct = default)
+    {
+        var words = await WordSourcesAsync(member, question, ct);
+        var meant = await meaning.ForAskAsync(member, question, AiRequestBuilder.MaxSources, ct);
+        var top = meant.Count == 0 ? words : Fuse(words, meant.Select(h => (h.PageId, h.Title)).ToList());
+        var ids = top.Select(t => t.PageId).ToList();
+        if (ids.Count == 0) return [];
+        var texts = await db.PageDocDerived.AsNoTracking().Where(d => ids.Contains(d.PageId))
+            .Select(d => new { d.PageId, Text = d.PlainText.Substring(0, AiRequestBuilder.MaxSourceText) })
+            .ToDictionaryAsync(d => d.PageId, d => d.Text, ct);
+        return top.Select((t, i) => new AiSource(i + 1, t.PageId, t.Title, texts.GetValueOrDefault(t.PageId) ?? "")).ToList();
+    }
+
+    /// <summary>Two ranked lists as one: each page's sum of 1 / (k + rank) over the lists that hold it, the top eight.</summary>
+    public static List<(Guid PageId, string Title)> Fuse(IReadOnlyList<(Guid PageId, string Title)> words, IReadOnlyList<(Guid PageId, string Title)> meant)
+    {
+        var scores = new Dictionary<Guid, (double Score, int First, string Title)>();
+        var order = 0;
+        foreach (var list in new[] { words, meant })
+            for (var rank = 0; rank < list.Count; rank++)
+            {
+                var (id, title) = list[rank];
+                var add = 1.0 / (FusionK + rank + 1);
+                scores[id] = scores.TryGetValue(id, out var seen) ? (seen.Score + add, seen.First, seen.Title) : (add, order++, title);
+            }
+        return scores.OrderByDescending(s => s.Value.Score).ThenBy(s => s.Value.First).Take(AiRequestBuilder.MaxSources)
+            .Select(s => (s.Key, s.Value.Title)).ToList();
+    }
+
+    /// <summary>0.9.0's retrieval: the word search's pages, best first, at most eight.</summary>
+    private async Task<List<(Guid PageId, string Title)>> WordSourcesAsync(Member member, string question, CancellationToken ct)
     {
         var all = TextNormaliser.Terms(TextNormaliser.Normalise(question)).Distinct(StringComparer.Ordinal).ToList();
         var words = all.Where(t => t.Length >= 3).OrderByDescending(t => t.Length).Take(6).ToList();
@@ -206,12 +269,8 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
         if (found.Count < AiRequestBuilder.MaxSources && words.Count > 1)
             foreach (var word in words)
                 await FindAsync(word, 1);
-        var top = found.OrderByDescending(f => f.Value.Score).ThenBy(f => f.Value.Order).Take(AiRequestBuilder.MaxSources).ToList();
-        var ids = top.Select(t => t.Key).ToList();
-        var texts = await db.PageDocDerived.AsNoTracking().Where(d => ids.Contains(d.PageId))
-            .Select(d => new { d.PageId, Text = d.PlainText.Substring(0, AiRequestBuilder.MaxSourceText) })
-            .ToDictionaryAsync(d => d.PageId, d => d.Text, ct);
-        return top.Select((t, i) => new AiSource(i + 1, t.Key, t.Value.Title, texts.GetValueOrDefault(t.Key) ?? "")).ToList();
+        return found.OrderByDescending(f => f.Value.Score).ThenBy(f => f.Value.Order).Take(AiRequestBuilder.MaxSources)
+            .Select(f => (f.Key, f.Value.Title)).ToList();
     }
 
     /// <summary>One <c>AiUsage</c> row and one <c>ai.complete</c> audit row, without content, however the completion ended.</summary>
