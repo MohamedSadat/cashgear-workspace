@@ -17,6 +17,10 @@ import { AiSettingsSection } from '../ai/AiSettings';
 const PublishingSettings = lazy(() =>
   import('../cloud/PublishingSettings').then((m) => ({ default: m.PublishingSettings })),
 );
+/** Phase 10: the plugins section, loaded the same way. */
+const PluginsSettings = lazy(() =>
+  import('../plugins/PluginsSettings').then((m) => ({ default: m.PluginsSettings })),
+);
 
 export function Settings({
   onLanguage,
@@ -68,6 +72,11 @@ export function Settings({
       {session.workspaceId && <DataPanel session={session} />}
       {cloud && session.workspaceId && <ErpSettingsSection session={session} />}
       {cloud && session.workspaceId && <AiSettingsSection session={session} />}
+      {cloud && session.workspaceId && (
+        <Suspense fallback={null}>
+          <PluginsSettings cloud={cloud} session={session} />
+        </Suspense>
+      )}
       {cloud && session.workspaceId && (
         <>
           <h2>{t('sheets.screenTitle')}</h2>

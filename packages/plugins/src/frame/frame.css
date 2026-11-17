@@ -1,0 +1,47 @@
+/* A third-party plugin's block (`@cgw/plugins/frame-view`): the bar naming the view it is shown,
+   the placeholders, and the frame. Classes are `cgw-plugin-frame-*`; logical properties only, so
+   right to left needs nothing of its own; colours from the theme's tokens. The frame draws its own
+   content in the theme it is told (plugin-frame.1's `theme`). */
+
+.cgw-plugin-frame {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 4px;
+  color: var(--cg-text);
+}
+
+.cgw-plugin-frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 32px;
+  font-size: var(--cg-font-size-sm);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-plugin-frame-source {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cgw-plugin-frame-holder {
+  display: block;
+}
+
+.cgw-plugin-frame-holder[hidden] {
+  display: none;
+}
+
+.cgw-plugin-frame-holder > iframe {
+  display: block;
+  inline-size: 100%;
+  border: 1px solid var(--cg-border);
+  border-radius: 6px;
+  background: transparent;
+  /* The page's own scheme: a frame of another one would be drawn on an opaque backdrop. */
+  color-scheme: normal;
+}

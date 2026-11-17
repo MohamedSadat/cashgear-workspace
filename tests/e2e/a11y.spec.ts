@@ -23,7 +23,10 @@ import {
   workspaceIdOf,
 } from './ecosystem';
 import { commentScene, select } from './collab';
+import { pluginScene, pluginScreens } from './plugins';
 import { phase7Scene, phase7Screens } from './phase7';
+import { erp10Scene, erp10Screens } from './erp10';
+import { meaningScene, meaningScreens } from './meaning';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -443,6 +446,69 @@ test.describe('accessibility of Phase 7', () => {
   });
 });
 
+// Phase 10: Axe on an ERP block editing Items on hand (a shared field's editor and note, every row
+// of the item changed, the review of each row, a conflict that needs no choice), and on search by
+// meaning (the palette's "Related by meaning", Settings' part of it), in both themes and both
+// languages, against the server stack and the mocks (erp10.ts's and meaning.ts's scenes, made in
+// English, then loaded again in each language and theme).
+test.describe('accessibility of Phase 10’s ERP editing and search by meaning', () => {
+  const cloud = signers();
+  test.afterEach(() => cloud.close());
+  test('Axe finds nothing on Items on hand editing, its review and conflict (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop || REAL_ERP, 'A browser against the mocks');
+    test.setTimeout(480000);
+    const scene = await erp10Scene(page, 'Axe ten', cloud.signer);
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await erp10Screens(page, language, async (screen) => {
+            problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+          });
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.api.dispose();
+    }
+  });
+
+  test('Axe finds nothing on the palette’s related by meaning and its settings (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop, 'A browser against the mock providers');
+    test.setTimeout(480000);
+    const scene = await meaningScene(page, 'Axe meaning', cloud.signer);
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await meaningScreens(page, language, async (screen) => {
+            problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+          });
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.api.dispose();
+    }
+  });
+});
+
 // Phase 6: Axe on the comments panel (open threads, a reply, a draft, a resolved thread shown),
 // the inbox and the presence bar, in both themes and both languages, against the server stack:
 // two people on a page (collab.ts's scene, made in English), then the language and theme set and
@@ -498,5 +564,46 @@ test.describe('accessibility of comments, the inbox and presence', () => {
       }
     }
     expect(problems, problems.join('\n')).toEqual([]);
+  });
+});
+
+// Phase 10: Axe on a third-party plugin block's bar and Settings → Plugins (the list and the Add
+// review dialog), in both themes and both languages, against the server stack (plugins.ts's scene,
+// made in English, then loaded again in each language and theme). The plugin's frame is a sandbox
+// of another origin, excluded: its contents are the author's.
+test.describe('accessibility of Phase 10’s plugins', () => {
+  test('Axe finds nothing on a plugin block and Settings → Plugins (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop, 'The plugins origin is framed by the web build; run in a browser');
+    test.setTimeout(480000);
+    const scene = await pluginScene(page, 'Axe plugins');
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    const axeOut = async (screen: string) => {
+      const result = await new AxeBuilder({ page })
+        .withTags(WCAG)
+        .exclude('[data-body="pluginBlock"] iframe')
+        .analyze();
+      for (const v of result.violations)
+        problems.push(`${screen}: ${v.id} (${v.impact}) ${v.help}`);
+    };
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await pluginScreens(page, language, (screen) =>
+            axeOut(`${screen} (${theme}, ${language})`),
+          );
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.api.dispose();
+    }
   });
 });

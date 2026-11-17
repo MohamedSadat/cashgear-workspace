@@ -71,7 +71,8 @@ export function slashItems(services: ShellServices, t: TFunction, query: string)
       return {
         id: command.id,
         label: command.label(),
-        glyph: definition?.slash.icon ?? '',
+        // Phase 10: a third-party plugin (plugins/commands.ts) has no definition here.
+        glyph: definition?.slash.icon ?? 'embed',
         group: t('commands.group.insert'),
       };
     }

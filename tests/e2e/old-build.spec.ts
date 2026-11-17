@@ -40,7 +40,15 @@
 // `view.upsert` of type `table` without `viewTypes`, and the server keeps the stored type and the
 // timeline's settings (the older-build rule): this build shows a timeline again, with its
 // settings and the new filter.
-import { readFileSync } from 'node:fs';
+//
+// Phase 10 (v0.9.0 on :4271, schema 6 and `pluginBlock`, but no third-party plugins): a page
+// holding a third-party plugin block (`pluginBlock` of a type v0.9.0 has no definition for, and
+// for which it has no frame host) opens there with the block drawn as the editor's own placeholder
+// ("needs a newer version", naming the type), the rest of the page editable (the schema is the
+// same, so the page is not read-only); nothing of that block is sent, the server's bytes are kept,
+// and this build draws the block's frame again with its props exactly as it wrote them.
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
@@ -48,6 +56,7 @@ import { editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import { oldBuild, originOf, serveOldBuild } from '../../scripts/old-build.mjs';
+import { writePluginBundles } from '../fixtures/plugins/make.mjs';
 import { addView, chooseOptions, fullPage, grid, newDatabase, openRow, showView } from './database';
 import {
   ERP_API,
@@ -76,6 +85,12 @@ test.skip(desktop, 'The old builds are web builds, in a browser');
 
 const servers: { kill(): void }[] = [];
 test.afterAll(() => servers.splice(0).forEach((s) => s.kill()));
+
+// The reference plugin's bundle (tests/fixtures/plugins), for the v0.9.0 case; the preview this
+// build is run under must be made with VITE_CGW_PLUGINS so the slash menu lists it.
+const PLUGIN_BUNDLE = desktop
+  ? ''
+  : writePluginBundles(mkdtempSync(`${tmpdir()}/cgw-old-plugins-`)).reference;
 async function serve(tag: string) {
   test.skip(!oldBuild(tag), `No ${tag} build: run node scripts/old-build.mjs first`);
   const child = await serveOldBuild(tag);
@@ -908,3 +923,113 @@ for (const tag of ['v0.8.0', 'v0.7.0'] as const)
     await again.close();
     await api.dispose();
   });
+
+test('the v0.9.0 build shows a third-party plugin block as a placeholder, sends nothing of it, and the server keeps its bytes', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.9.0');
+  const account = await newAccount('Plugins and v0.9.0');
+  const api = await apiSession(account);
+
+  // This build: a page with text and a third-party plugin block (the reference plugin installed
+  // first). The build Playwright previews is made with VITE_CGW_PLUGINS, so the slash menu lists it.
+  const current = await browser.newContext();
+  const now = await current.newPage();
+  const nowErrors = watchAppErrors(now);
+  await now.goto('/');
+  await signIn(now, account);
+  await signedIn(now, account);
+  await now.getByLabel('Workspace name').fill('Plugins v0.9.0');
+  await now.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(now)).toBeVisible();
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  const workspaceId = (
+    (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+  ).find((w) => w.name === 'Plugins v0.9.0')!.id;
+
+  // Install the reference plugin in Settings.
+  await now.goto('/#/settings');
+  const section = now.getByTestId('plugins-settings');
+  await expect(section).toBeVisible({ timeout: 30000 });
+  const chooser = now.waitForEvent('filechooser');
+  await section.getByTestId('plugins-add').click();
+  await (await chooser).setFiles(PLUGIN_BUNDLE);
+  await expect(now.getByTestId('plugins-review')).toBeVisible({ timeout: 30000 });
+  await now.getByTestId('plugins-confirm').click();
+  await expect(section.getByTestId('plugins-list')).toContainText('Notes', { timeout: 30000 });
+
+  await newPage(now, 'A third-party plugin');
+  await now.keyboard.type('Written by version ten');
+  await now.keyboard.press('Enter');
+  await now.keyboard.type('/Notes');
+  await expect(now.getByRole('option', { name: 'Notes', exact: true })).toBeVisible();
+  await now.keyboard.press('Enter');
+  await expect(editor(now).locator('[data-body="pluginBlock"]')).toHaveCount(1);
+  await waitSaved(now);
+  const pageId = pageIdOf(now);
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  await expect
+    .poll(async () => (await pageRecord(api, workspaceId, pageId))?.docSchemaVersion, {
+      timeout: 60000,
+    })
+    .toBe(CURRENT);
+  const before = await serverState(api, pageId);
+  await current.close();
+
+  // v0.9.0, the same person on its own copy: the block is the editor's own placeholder, the page
+  // is not read-only (the schema is the same), nothing of the block is sent.
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const pushes: string[] = [];
+  old.on('request', (request) => {
+    const url = request.url();
+    if (request.method() !== 'POST') return;
+    if (/\/doc\/(updates|repair)$/.test(url)) pushes.push(url);
+    if (/\/ops$/.test(url))
+      for (const op of (request.postDataJSON()?.ops ?? []) as { type: string }[])
+        if (op.type !== 'visit.record') pushes.push(`${op.type} ${url}`);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await old
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /A third-party plugin/ })
+    .click({ timeout: 30000 });
+  await expect(editor(old)).toContainText('Written by version ten', { timeout: 20000 });
+  // The block names the type it does not know; no frame is drawn there.
+  await expect(
+    editor(old).getByText(
+      'This block needs a newer version of Cash Gear Workspace (vendor.notes).',
+    ),
+  ).toBeVisible({ timeout: 20000 });
+  await expect(editor(old).locator('[data-body="pluginBlock"] iframe')).toHaveCount(0);
+  // The page is the same schema, so it is not read-only there (no "newer version" banner).
+  await expect(old.getByText(NEWER)).toHaveCount(0);
+  await old.waitForTimeout(5000);
+  expect(pushes, 'what the old build sent').toEqual([]);
+  expect(await serverState(api, pageId)).toEqual(before);
+  expect(oldErrors).toEqual([]);
+  expect(nowErrors).toEqual([]);
+  await oldContext.close();
+
+  // This build again: the block's frame is drawn, with its props exactly as written.
+  const again = await browser.newContext();
+  const back = await again.newPage();
+  const backErrors = watchAppErrors(back);
+  await back.goto('/');
+  await signIn(back, account);
+  await signedIn(back, account);
+  await back
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /A third-party plugin/ })
+    .click();
+  await expect(back.locator('[data-body="pluginBlock"] iframe')).toHaveCount(1, { timeout: 30000 });
+  expect(backErrors).toEqual([]);
+  await again.close();
+  await api.dispose();
+});

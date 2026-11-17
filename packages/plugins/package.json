@@ -3,12 +3,14 @@
   "version": "0.9.0",
   "private": true,
   "type": "module",
-  "description": "Plugin blocks (INTEGRATIONS.md, Plugin blocks): the BlockDefinition interface, props read and merged so unknown props survive, the first-party chart and kanban over a database view, drawn into a plugin block's frame. Given a host; never saves, loads or calls the network.",
+  "description": "Plugin blocks (INTEGRATIONS.md, Plugin blocks): the BlockDefinition interface, props read and merged so unknown props survive, the first-party chart and kanban over a database view, drawn into a plugin block's frame; from Phase 10 plugin-frame.1 and third-party plugins in sandboxed frames. Given a host; never saves, loads or calls the network.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
     "./view": "./src/view.tsx",
+    "./frame": "./src/frame/index.ts",
+    "./frame-view": "./src/frame/view.tsx",
     "./i18n": "./src/i18n/catalogues.ts"
   },
   "scripts": {

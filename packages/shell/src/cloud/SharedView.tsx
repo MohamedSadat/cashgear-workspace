@@ -12,7 +12,7 @@ import { BlockEditorView, type EditorHost, type EditorStrings } from '@cgw/edito
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mountDatabase } from '../database/mount';
-import { pluginsHost } from '../plugins/host';
+import { SHARED_THIRD_PARTY, pluginsHost } from '../plugins/host';
 import { navigate } from '../route';
 import { noAccessWorkbooks } from '../sheet/shared';
 import { SharedDatabaseHost, sharedDatabaseApi } from './sharedDatabase';
@@ -117,7 +117,10 @@ export function SharedView({
       }),
     [apiBase, token, scope, assetUrl],
   );
-  const plugins = useMemo(() => pluginsHost({ databases, i18n }), [databases, i18n]);
+  const plugins = useMemo(
+    () => pluginsHost({ databases, i18n, thirdParty: SHARED_THIRD_PARTY }),
+    [databases, i18n],
+  );
 
   const host: EditorHost = {
     strings: t('editor', { returnObjects: true }) as unknown as EditorStrings,

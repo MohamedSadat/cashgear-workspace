@@ -1,0 +1,6684 @@
+{
+  "about": "plugin-frame.1 validator vectors (Phase 10; docs/INTEGRATIONS.md, \"Contract `plugin-frame.1`\"). `host`: messages a Workspace page sends (init on the window, the rest on the port), run through parseHostMessage; `plugin`: messages a plugin sends, through parsePluginMessage; `valid` is the verdict. `props`: what a setProps carries, through checkProps: `ok` with `kept` (what is written: top-level keys starting with \"$\" dropped) or the refused code. `manifest`: manifest.json through parseManifest, with the errors the server lists. `bundlePaths` and `bundleTypes`: a bundle's file names and the types files are served as. An object whose \"$vector\" key names a value JSON cannot hold stands for it: \"undefined\"; \"number\" (value \"NaN\", \"Infinity\" or \"-Infinity\"); \"date\" (a Date); \"map\" (a Map of a to 1); \"bytes\" (a Uint8Array of 1, 2, 3); \"sparse\" (an array of `length` with only its last index set, to 0); \"text\" (`repeat` repeated `count` times); \"list\" (`count` copies of `item`, each with \"{{i}}\" in its strings replaced by its index); \"nest\" (`leaf` inside `depth` arrays). Keys such as \"__proto__\" are own properties (as JSON.parse and a structured clone make them): decode with defineProperty, never assignment.",
+  "contract": "plugin-frame.1",
+  "host": [
+    {
+      "name": "null",
+      "message": null,
+      "valid": false
+    },
+    {
+      "name": "a string",
+      "message": "init",
+      "valid": false
+    },
+    {
+      "name": "a number",
+      "message": 1,
+      "valid": false
+    },
+    {
+      "name": "true",
+      "message": true,
+      "valid": false
+    },
+    {
+      "name": "an array holding a valid init",
+      "message": [
+        {
+          "type": "init",
+          "contract": "plugin-frame.1",
+          "plugin": {
+            "type": "vendor.notes",
+            "version": 1
+          },
+          "block": {
+            "version": 1,
+            "editable": true,
+            "newer": false
+          },
+          "props": {
+            "title": "Q3 notes",
+            "count": 3,
+            "tags": ["a", "b"],
+            "nested": {
+              "on": true,
+              "none": null
+            }
+          },
+          "theme": "light",
+          "direction": "ltr",
+          "language": "en",
+          "rows": null
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "no type",
+      "message": {
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "type is not a string",
+      "message": {
+        "type": 1,
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "an unknown type",
+      "message": {
+        "type": "save",
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "type in another case",
+      "message": {
+        "type": "Init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "a plugin message (ready) sent by the host",
+      "message": {
+        "type": "ready",
+        "contracts": ["plugin-frame.1"]
+      },
+      "valid": false
+    },
+    {
+      "name": "init",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: no props yet (an empty object)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {},
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: with rows",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "init: dark, right to left, Arabic",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "dark",
+        "direction": "rtl",
+        "language": "ar",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: a block a later version wrote (read-only)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 3,
+          "editable": false,
+          "newer": true
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: a reader who cannot edit",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": false,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: a block never written (version null)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": null,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: editable and newer at once (a newer block is never editable)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 3,
+          "editable": true,
+          "newer": true
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: block version 0",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 0,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: block version a fraction",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1.5,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: block editable as text",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": "true",
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: block without newer",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: block with an extra field",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false,
+          "pageId": "p1"
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a reserved type (cashgear.*)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "cashgear.chart",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a type in capitals",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "Vendor.Notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a type without a dot",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: a type of 64 characters",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: a type of 65 characters",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: plugin version 0",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 0
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: plugin version 2,147,483,647",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 2147483647
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: plugin version 2,147,483,648",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 2147483648
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: plugin version as text",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": "1"
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: another contract",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.2",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: the Sheet contract",
+      "message": {
+        "type": "init",
+        "contract": "sheet-embed.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no contract",
+      "message": {
+        "type": "init",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: no rows field (null when there are none)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: an extra field",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null,
+        "session": "abc"
+      },
+      "valid": false
+    },
+    {
+      "name": "init: an own \"__proto__\" key",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null,
+        "__proto__": {
+          "editable": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "init: props null",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": null,
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: props an array",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": [1, 2],
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: props as JSON text",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": "{\"title\":\"Q3\"}",
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: props holding a host key ($view)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "$view": {
+            "databaseId": "0193a1c0-0000-7000-8000-00000000d001"
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: props with a \"$\" key inside (only top-level keys are the host's)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "a": {
+            "$b": 1
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: props holding an own \"__proto__\" key (data, kept as a key)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "__proto__": {
+            "x": 1
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: props of exactly 16,384 bytes as JSON",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "t": {
+            "$vector": "text",
+            "repeat": "x",
+            "count": 16376
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "init: props of 16,385 bytes as JSON",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "t": {
+            "$vector": "text",
+            "repeat": "x",
+            "count": 16377
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: props holding undefined",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "a": {
+            "$vector": "undefined"
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: an unknown theme",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "sepia",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: direction auto",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "auto",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: language fr",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "fr",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: language en-US (two languages only)",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en-US",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "init: rows not an object",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": []
+      },
+      "valid": false
+    },
+    {
+      "name": "props",
+      "message": {
+        "type": "props",
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "props: empty",
+      "message": {
+        "type": "props",
+        "props": {}
+      },
+      "valid": true
+    },
+    {
+      "name": "props: a host key",
+      "message": {
+        "type": "props",
+        "props": {
+          "$view": null
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "props: missing",
+      "message": {
+        "type": "props"
+      },
+      "valid": false
+    },
+    {
+      "name": "props: null",
+      "message": {
+        "type": "props",
+        "props": null
+      },
+      "valid": false
+    },
+    {
+      "name": "props: an extra field",
+      "message": {
+        "type": "props",
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "version": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "theme",
+      "message": {
+        "type": "theme",
+        "theme": "dark",
+        "direction": "rtl",
+        "language": "ar"
+      },
+      "valid": true
+    },
+    {
+      "name": "theme: no language",
+      "message": {
+        "type": "theme",
+        "theme": "dark",
+        "direction": "rtl"
+      },
+      "valid": false
+    },
+    {
+      "name": "theme: an extra field",
+      "message": {
+        "type": "theme",
+        "theme": "dark",
+        "direction": "rtl",
+        "language": "ar",
+        "accent": "blue"
+      },
+      "valid": false
+    },
+    {
+      "name": "editable: editable",
+      "message": {
+        "type": "editable",
+        "editable": true,
+        "newer": false
+      },
+      "valid": true
+    },
+    {
+      "name": "editable: read-only",
+      "message": {
+        "type": "editable",
+        "editable": false,
+        "newer": false
+      },
+      "valid": true
+    },
+    {
+      "name": "editable: newer",
+      "message": {
+        "type": "editable",
+        "editable": false,
+        "newer": true
+      },
+      "valid": true
+    },
+    {
+      "name": "editable: editable and newer",
+      "message": {
+        "type": "editable",
+        "editable": true,
+        "newer": true
+      },
+      "valid": false
+    },
+    {
+      "name": "editable: as text",
+      "message": {
+        "type": "editable",
+        "editable": "yes",
+        "newer": false
+      },
+      "valid": false
+    },
+    {
+      "name": "editable: no newer",
+      "message": {
+        "type": "editable",
+        "editable": true
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: null (no view, or the database went away)",
+      "message": {
+        "type": "rows",
+        "rows": null
+      },
+      "valid": true
+    },
+    {
+      "name": "rows",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: none, incomplete (the view holds rows the reader has not been shown)",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [],
+          "total": 1200,
+          "complete": false
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: 500 rows",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": {
+            "$vector": "list",
+            "item": {
+              "id": "0193a1c0-0000-7000-8000-00000000{{i}}",
+              "title": "Row {{i}}",
+              "values": {}
+            },
+            "count": 500
+          },
+          "total": 500,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: 501 rows",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": {
+            "$vector": "list",
+            "item": {
+              "id": "0193a1c0-0000-7000-8000-00000000{{i}}",
+              "title": "Row {{i}}",
+              "values": {}
+            },
+            "count": 501
+          },
+          "total": 501,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: two rows of one id",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a person property",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Pe12Pe34",
+              "name": "Owner",
+              "type": "person"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a created-by property",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Cb12Cb34",
+              "name": "Created by",
+              "type": "createdBy"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: an edited-by property",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Eb12Eb34",
+              "name": "Edited by",
+              "type": "lastEditedBy"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: an unknown property type",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Bu12Bu34",
+              "name": "Go",
+              "type": "button"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a property id with a space",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Ab 12",
+              "name": "A",
+              "type": "text"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: two properties of one id",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: options on a number property",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number",
+              "options": []
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: an option of an unknown colour",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Teal",
+                  "colour": "teal"
+                }
+              ]
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a status option of an unknown group",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "done"
+                }
+              ]
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a select option with a group (only status options have one)",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red",
+                  "group": "todo"
+                }
+              ]
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a status option without a group",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray"
+                }
+              ]
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: a value of null (an empty value is absent)",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": null
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a value NaN",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": {
+                  "$vector": "number",
+                  "value": "NaN"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a value undefined",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": {
+                  "$vector": "undefined"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a value a Date",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Dt12Dt34": {
+                  "$vector": "date"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a value key with a space",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab 12": 1
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: values an array",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": [1]
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a value nested 4 deep",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": {
+                  "$vector": "nest",
+                  "depth": 4,
+                  "leaf": 0
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: a value nested 5 deep",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": {
+                  "$vector": "nest",
+                  "depth": 5,
+                  "leaf": 0
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a value list of 1,000",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Re12Re34": {
+                  "$vector": "list",
+                  "item": "r{{i}}",
+                  "count": 1000
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: a value list of 1,001",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Re12Re34": {
+                  "$vector": "list",
+                  "item": "r{{i}}",
+                  "count": 1001
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a row without a title",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "values": {}
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a title of 10,000 characters",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": {
+                "$vector": "text",
+                "repeat": "t",
+                "count": 10000
+              },
+              "values": {}
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "rows: a title of 10,001 characters",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": {
+                "$vector": "text",
+                "repeat": "t",
+                "count": 10001
+              },
+              "values": {}
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a row with an extra field",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              },
+              "createdBy": "u1"
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: fewer in total than shown",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 1,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a negative total",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": -1,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: a total that is a fraction",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2.5,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: complete as text",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": "yes"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: no view id",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: an extra field (people)",
+      "message": {
+        "type": "rows",
+        "rows": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001",
+          "properties": [
+            {
+              "id": "title",
+              "name": "Name",
+              "type": "title"
+            },
+            {
+              "id": "Ab12Cd34",
+              "name": "Amount",
+              "type": "number"
+            },
+            {
+              "id": "St12St34",
+              "name": "Status",
+              "type": "status",
+              "options": [
+                {
+                  "id": "Op000001",
+                  "name": "Not started",
+                  "colour": "gray",
+                  "group": "todo"
+                },
+                {
+                  "id": "Op000003",
+                  "name": "Done",
+                  "colour": "green",
+                  "group": "complete"
+                }
+              ]
+            },
+            {
+              "id": "Ta12Ta34",
+              "name": "Tags",
+              "type": "multiSelect",
+              "options": [
+                {
+                  "id": "Op000002",
+                  "name": "Red",
+                  "colour": "red"
+                }
+              ]
+            },
+            {
+              "id": "Dt12Dt34",
+              "name": "Due",
+              "type": "date"
+            },
+            {
+              "id": "Fo12Fo34",
+              "name": "Double",
+              "type": "formula"
+            },
+            {
+              "id": "Ct12Ct34",
+              "name": "Created",
+              "type": "createdTime"
+            }
+          ],
+          "rows": [
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0001",
+              "title": "First",
+              "values": {
+                "Ab12Cd34": 12.5,
+                "St12St34": "Op000001",
+                "Ta12Ta34": ["Op000002"],
+                "Dt12Dt34": {
+                  "start": "2026-11-18",
+                  "end": "2026-11-20"
+                },
+                "Fo12Fo34": 25,
+                "Ct12Ct34": {
+                  "start": "2026-11-17T09:30:00Z"
+                }
+              }
+            },
+            {
+              "id": "0193a1c0-0000-7000-8000-0000000f0002",
+              "title": "",
+              "values": {
+                "Fo12Fo34": {
+                  "error": "formula.type"
+                }
+              }
+            }
+          ],
+          "total": 2,
+          "complete": true,
+          "people": []
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "rows: missing",
+      "message": {
+        "type": "rows"
+      },
+      "valid": false
+    },
+    {
+      "name": "saved",
+      "message": {
+        "type": "saved"
+      },
+      "valid": true
+    },
+    {
+      "name": "saved: an extra field",
+      "message": {
+        "type": "saved",
+        "version": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "refused: props.readOnly",
+      "message": {
+        "type": "refused",
+        "code": "props.readOnly"
+      },
+      "valid": true
+    },
+    {
+      "name": "refused: props.invalid",
+      "message": {
+        "type": "refused",
+        "code": "props.invalid"
+      },
+      "valid": true
+    },
+    {
+      "name": "refused: props.tooLarge",
+      "message": {
+        "type": "refused",
+        "code": "props.tooLarge"
+      },
+      "valid": true
+    },
+    {
+      "name": "refused: an unknown code",
+      "message": {
+        "type": "refused",
+        "code": "props.rate"
+      },
+      "valid": false
+    },
+    {
+      "name": "refused: no code",
+      "message": {
+        "type": "refused"
+      },
+      "valid": false
+    },
+    {
+      "name": "refused: an extra message",
+      "message": {
+        "type": "refused",
+        "code": "props.invalid",
+        "message": "x"
+      },
+      "valid": false
+    }
+  ],
+  "plugin": [
+    {
+      "name": "null",
+      "message": null,
+      "valid": false
+    },
+    {
+      "name": "a string",
+      "message": "ready",
+      "valid": false
+    },
+    {
+      "name": "an array holding a valid ready",
+      "message": [
+        {
+          "type": "ready",
+          "contracts": ["plugin-frame.1"]
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "an unknown type",
+      "message": {
+        "type": "navigate",
+        "url": "https://example.com"
+      },
+      "valid": false
+    },
+    {
+      "name": "type in another case",
+      "message": {
+        "type": "Ready",
+        "contracts": ["plugin-frame.1"]
+      },
+      "valid": false
+    },
+    {
+      "name": "a host message (init) sent by the plugin",
+      "message": {
+        "type": "init",
+        "contract": "plugin-frame.1",
+        "plugin": {
+          "type": "vendor.notes",
+          "version": 1
+        },
+        "block": {
+          "version": 1,
+          "editable": true,
+          "newer": false
+        },
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "theme": "light",
+        "direction": "ltr",
+        "language": "en",
+        "rows": null
+      },
+      "valid": false
+    },
+    {
+      "name": "a host message (saved) sent by the plugin",
+      "message": {
+        "type": "saved"
+      },
+      "valid": false
+    },
+    {
+      "name": "ready",
+      "message": {
+        "type": "ready",
+        "contracts": ["plugin-frame.1"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: several contracts",
+      "message": {
+        "type": "ready",
+        "contracts": ["plugin-frame.2", "plugin-frame.1"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: only a contract this build does not speak (the host then stops the frame)",
+      "message": {
+        "type": "ready",
+        "contracts": ["plugin-frame.2"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: no contracts",
+      "message": {
+        "type": "ready",
+        "contracts": []
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: 16 contracts",
+      "message": {
+        "type": "ready",
+        "contracts": {
+          "$vector": "list",
+          "item": "plugin-frame.{{i}}",
+          "count": 16
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: 17 contracts",
+      "message": {
+        "type": "ready",
+        "contracts": {
+          "$vector": "list",
+          "item": "plugin-frame.{{i}}",
+          "count": 17
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: an empty name",
+      "message": {
+        "type": "ready",
+        "contracts": [""]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: a name of 64 characters",
+      "message": {
+        "type": "ready",
+        "contracts": ["pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ready: a name of 65 characters",
+      "message": {
+        "type": "ready",
+        "contracts": ["ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: a name that is a number",
+      "message": {
+        "type": "ready",
+        "contracts": [1]
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: contracts as text",
+      "message": {
+        "type": "ready",
+        "contracts": "plugin-frame.1"
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: missing contracts",
+      "message": {
+        "type": "ready"
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: an extra field",
+      "message": {
+        "type": "ready",
+        "contracts": ["plugin-frame.1"],
+        "origin": "*"
+      },
+      "valid": false
+    },
+    {
+      "name": "ready: an own \"__proto__\" key",
+      "message": {
+        "type": "ready",
+        "contracts": ["plugin-frame.1"],
+        "__proto__": {
+          "contracts": []
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "resize",
+      "message": {
+        "type": "resize",
+        "height": 240
+      },
+      "valid": true
+    },
+    {
+      "name": "resize: 0 (the host makes it 48)",
+      "message": {
+        "type": "resize",
+        "height": 0
+      },
+      "valid": true
+    },
+    {
+      "name": "resize: 100,000 (the host makes it 1,200)",
+      "message": {
+        "type": "resize",
+        "height": 100000
+      },
+      "valid": true
+    },
+    {
+      "name": "resize: 100,001",
+      "message": {
+        "type": "resize",
+        "height": 100001
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: negative",
+      "message": {
+        "type": "resize",
+        "height": -1
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: a fraction",
+      "message": {
+        "type": "resize",
+        "height": 240.5
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: as text",
+      "message": {
+        "type": "resize",
+        "height": "240"
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: missing",
+      "message": {
+        "type": "resize"
+      },
+      "valid": false
+    },
+    {
+      "name": "resize: an extra width",
+      "message": {
+        "type": "resize",
+        "height": 240,
+        "width": 600
+      },
+      "valid": false
+    },
+    {
+      "name": "setProps",
+      "message": {
+        "type": "setProps",
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "setProps: empty props",
+      "message": {
+        "type": "setProps",
+        "props": {}
+      },
+      "valid": true
+    },
+    {
+      "name": "setProps: props null (the message is whole; checkProps refuses the props)",
+      "message": {
+        "type": "setProps",
+        "props": null
+      },
+      "valid": true
+    },
+    {
+      "name": "setProps: props too large (the message is whole; checkProps refuses the props)",
+      "message": {
+        "type": "setProps",
+        "props": {
+          "t": {
+            "$vector": "text",
+            "repeat": "x",
+            "count": 19992
+          }
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "setProps: missing props",
+      "message": {
+        "type": "setProps"
+      },
+      "valid": false
+    },
+    {
+      "name": "setProps: an extra version",
+      "message": {
+        "type": "setProps",
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "version": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "setProps: an own \"__proto__\" key",
+      "message": {
+        "type": "setProps",
+        "props": {
+          "title": "Q3 notes",
+          "count": 3,
+          "tags": ["a", "b"],
+          "nested": {
+            "on": true,
+            "none": null
+          }
+        },
+        "__proto__": {}
+      },
+      "valid": false
+    },
+    {
+      "name": "error",
+      "message": {
+        "type": "error",
+        "code": "data.missing",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: with a message",
+      "message": {
+        "type": "error",
+        "code": "data.missing",
+        "message": "No database view to show"
+      },
+      "valid": true
+    },
+    {
+      "name": "error: a message of 500 characters",
+      "message": {
+        "type": "error",
+        "code": "data.missing",
+        "message": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+      },
+      "valid": true
+    },
+    {
+      "name": "error: a message of 501 characters",
+      "message": {
+        "type": "error",
+        "code": "data.missing",
+        "message": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+      },
+      "valid": false
+    },
+    {
+      "name": "error: no message (reading: the field is always there, possibly empty)",
+      "message": {
+        "type": "error",
+        "code": "data.missing"
+      },
+      "valid": false
+    },
+    {
+      "name": "error: message a number",
+      "message": {
+        "type": "error",
+        "code": "data.missing",
+        "message": 404
+      },
+      "valid": false
+    },
+    {
+      "name": "error: a code with a space",
+      "message": {
+        "type": "error",
+        "code": "data missing",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: a code of 64 characters",
+      "message": {
+        "type": "error",
+        "code": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "message": ""
+      },
+      "valid": true
+    },
+    {
+      "name": "error: a code of 65 characters",
+      "message": {
+        "type": "error",
+        "code": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: an empty code",
+      "message": {
+        "type": "error",
+        "code": "",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: no code",
+      "message": {
+        "type": "error",
+        "message": ""
+      },
+      "valid": false
+    },
+    {
+      "name": "error: an extra field",
+      "message": {
+        "type": "error",
+        "code": "data.missing",
+        "message": "",
+        "stack": "at main.js:1"
+      },
+      "valid": false
+    }
+  ],
+  "props": [
+    {
+      "name": "an empty object",
+      "props": {},
+      "verdict": "ok",
+      "kept": {}
+    },
+    {
+      "name": "text, numbers, lists, objects, true, false and null",
+      "props": {
+        "title": "Q3 notes",
+        "count": 3,
+        "tags": ["a", "b"],
+        "nested": {
+          "on": true,
+          "none": null
+        },
+        "off": false,
+        "ratio": -0.25,
+        "big": 1e21
+      },
+      "verdict": "ok",
+      "kept": {
+        "title": "Q3 notes",
+        "count": 3,
+        "tags": ["a", "b"],
+        "nested": {
+          "on": true,
+          "none": null
+        },
+        "off": false,
+        "ratio": -0.25,
+        "big": 1e21
+      }
+    },
+    {
+      "name": "a host key ($view) is dropped",
+      "props": {
+        "$view": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001"
+        },
+        "note": "a"
+      },
+      "verdict": "ok",
+      "kept": {
+        "note": "a"
+      }
+    },
+    {
+      "name": "only host keys: nothing is kept",
+      "props": {
+        "$view": null,
+        "$other": 1
+      },
+      "verdict": "ok",
+      "kept": {}
+    },
+    {
+      "name": "a \"$\" key inside is kept (only top-level keys are the host's)",
+      "props": {
+        "a": {
+          "$b": 1
+        }
+      },
+      "verdict": "ok",
+      "kept": {
+        "a": {
+          "$b": 1
+        }
+      }
+    },
+    {
+      "name": "an own \"__proto__\" key is kept as a key",
+      "props": {
+        "__proto__": {
+          "x": 1
+        }
+      },
+      "verdict": "ok",
+      "kept": {
+        "__proto__": {
+          "x": 1
+        }
+      }
+    },
+    {
+      "name": "null",
+      "props": null,
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "an array",
+      "props": [1, 2],
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a string",
+      "props": "props",
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a number",
+      "props": 1,
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a value undefined",
+      "props": {
+        "a": {
+          "$vector": "undefined"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a value NaN",
+      "props": {
+        "a": {
+          "$vector": "number",
+          "value": "NaN"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a value Infinity",
+      "props": {
+        "a": {
+          "$vector": "number",
+          "value": "Infinity"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a value -Infinity",
+      "props": {
+        "a": {
+          "$vector": "number",
+          "value": "-Infinity"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a Date",
+      "props": {
+        "a": {
+          "$vector": "date"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "a Map",
+      "props": {
+        "a": {
+          "$vector": "map"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "bytes",
+      "props": {
+        "a": {
+          "$vector": "bytes"
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "an array with holes",
+      "props": {
+        "a": {
+          "$vector": "sparse",
+          "length": 3
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "the props themselves a Map",
+      "props": {
+        "$vector": "map"
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "nested 32 deep (the object and 31 arrays)",
+      "props": {
+        "a": {
+          "$vector": "nest",
+          "depth": 31,
+          "leaf": 0
+        }
+      },
+      "verdict": "ok",
+      "kept": {
+        "a": {
+          "$vector": "nest",
+          "depth": 31,
+          "leaf": 0
+        }
+      }
+    },
+    {
+      "name": "nested 33 deep",
+      "props": {
+        "a": {
+          "$vector": "nest",
+          "depth": 32,
+          "leaf": 0
+        }
+      },
+      "verdict": "props.invalid"
+    },
+    {
+      "name": "exactly 16,384 bytes as JSON",
+      "props": {
+        "t": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 16376
+        }
+      },
+      "verdict": "ok",
+      "kept": {
+        "t": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 16376
+        }
+      }
+    },
+    {
+      "name": "16,385 bytes as JSON",
+      "props": {
+        "t": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 16377
+        }
+      },
+      "verdict": "props.tooLarge"
+    },
+    {
+      "name": "Arabic text counted in UTF-8 bytes: 8,188 letters are 16,384 bytes",
+      "props": {
+        "t": {
+          "$vector": "text",
+          "repeat": "ب",
+          "count": 8188
+        }
+      },
+      "verdict": "ok",
+      "kept": {
+        "t": {
+          "$vector": "text",
+          "repeat": "ب",
+          "count": 8188
+        }
+      }
+    },
+    {
+      "name": "Arabic text counted in UTF-8 bytes: 8,189 letters are 16,386 bytes",
+      "props": {
+        "t": {
+          "$vector": "text",
+          "repeat": "ب",
+          "count": 8189
+        }
+      },
+      "verdict": "props.tooLarge"
+    },
+    {
+      "name": "a host key does not count toward the size once dropped",
+      "props": {
+        "$view": {
+          "databaseId": "0193a1c0-0000-7000-8000-00000000d001",
+          "viewId": "0193a1c0-0000-7000-8000-00000000e001"
+        },
+        "t": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 16376
+        }
+      },
+      "verdict": "ok",
+      "kept": {
+        "t": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 16376
+        }
+      }
+    },
+    {
+      "name": "a host key holding a text past the bound (everything is walked within the bounds first)",
+      "props": {
+        "$big": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 20000
+        },
+        "a": 1
+      },
+      "verdict": "props.tooLarge"
+    },
+    {
+      "name": "one text of 16,385 characters",
+      "props": {
+        "t": {
+          "$vector": "text",
+          "repeat": "x",
+          "count": 16385
+        }
+      },
+      "verdict": "props.tooLarge"
+    },
+    {
+      "name": "a list of 20,000 numbers",
+      "props": {
+        "a": {
+          "$vector": "list",
+          "item": 0,
+          "count": 20000
+        }
+      },
+      "verdict": "props.tooLarge"
+    }
+  ],
+  "manifest": [
+    {
+      "name": "a whole manifest",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "the fewest fields (entry index.html, height 240, no rows, no keywords)",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "unknown fields are left out",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "homepage": "https://example.com"
+      },
+      "valid": true
+    },
+    {
+      "name": "description null",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": null,
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "reads with nothing asked",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {},
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "height 48",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 48,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "height 1,200",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 1200,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "height 47",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 47,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "height"
+        }
+      ]
+    },
+    {
+      "name": "height 1,201",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 1201,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "height"
+        }
+      ]
+    },
+    {
+      "name": "height a fraction",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240.5,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "height"
+        }
+      ]
+    },
+    {
+      "name": "a reserved type (cashgear.*)",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "cashgear.chart",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "type.reserved",
+          "path": "type"
+        }
+      ]
+    },
+    {
+      "name": "a type in capitals",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "Vendor.Notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "type"
+        }
+      ]
+    },
+    {
+      "name": "a type without a dot",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "type"
+        }
+      ]
+    },
+    {
+      "name": "a type of 64 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "a type of 65 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "a.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "type"
+        }
+      ]
+    },
+    {
+      "name": "version 0",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 0,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "version"
+        }
+      ]
+    },
+    {
+      "name": "version as text",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": "1",
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "version"
+        }
+      ]
+    },
+    {
+      "name": "version a fraction",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1.5,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "version"
+        }
+      ]
+    },
+    {
+      "name": "another contract",
+      "manifest": {
+        "contract": "plugin-frame.2",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "contract"
+        }
+      ]
+    },
+    {
+      "name": "no contract",
+      "manifest": {
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "contract"
+        }
+      ]
+    },
+    {
+      "name": "an empty English name",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "name.en"
+        }
+      ]
+    },
+    {
+      "name": "an Arabic name of 80 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "بببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببب"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "an Arabic name of 81 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببب"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "name.ar"
+        }
+      ]
+    },
+    {
+      "name": "no Arabic name",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "name.ar"
+        }
+      ]
+    },
+    {
+      "name": "the name as text",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": "Notes",
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "name"
+        }
+      ]
+    },
+    {
+      "name": "a description of 300 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "ar": "بببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببببب"
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "a description of 301 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "ar": "وصف"
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "description.en"
+        }
+      ]
+    },
+    {
+      "name": "another entry",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "app.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "an entry in a folder, .htm",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "pages/index.htm",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "an entry out of the bundle",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "../index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "entry"
+        }
+      ]
+    },
+    {
+      "name": "an absolute entry",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "/index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "entry"
+        }
+      ]
+    },
+    {
+      "name": "an entry that is a script",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.js",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "entry"
+        }
+      ]
+    },
+    {
+      "name": "an entry with a backslash",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "pages\\index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "entry"
+        }
+      ]
+    },
+    {
+      "name": "reads.rows as text",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": "yes"
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "reads.rows"
+        }
+      ]
+    },
+    {
+      "name": "reads as a list",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": ["rows"],
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "reads"
+        }
+      ]
+    },
+    {
+      "name": "10 keywords",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": [
+          "word0",
+          "word1",
+          "word2",
+          "word3",
+          "word4",
+          "word5",
+          "word6",
+          "word7",
+          "word8",
+          "word9"
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "11 keywords",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": [
+          "word0",
+          "word1",
+          "word2",
+          "word3",
+          "word4",
+          "word5",
+          "word6",
+          "word7",
+          "word8",
+          "word9",
+          "word10"
+        ]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "keywords"
+        }
+      ]
+    },
+    {
+      "name": "an empty keyword",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": [""]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "keywords"
+        }
+      ]
+    },
+    {
+      "name": "a keyword of spaces only",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["   "]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "keywords"
+        }
+      ]
+    },
+    {
+      "name": "an English name of spaces only",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "  ",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "name.en"
+        }
+      ]
+    },
+    {
+      "name": "an empty description (descriptions may be empty)",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "",
+          "ar": ""
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": true
+    },
+    {
+      "name": "an entry with a colon",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "c:index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "entry"
+        }
+      ]
+    },
+    {
+      "name": "a keyword of 31 characters",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "keywords"
+        }
+      ]
+    },
+    {
+      "name": "not an object",
+      "manifest": [
+        {
+          "contract": "plugin-frame.1",
+          "type": "vendor.notes",
+          "version": 1,
+          "name": {
+            "en": "Notes",
+            "ar": "ملاحظات"
+          },
+          "description": {
+            "en": "A note and a counter.",
+            "ar": "ملاحظة وعدّاد."
+          },
+          "entry": "index.html",
+          "reads": {
+            "rows": true
+          },
+          "height": 240,
+          "keywords": ["notes", "ملاحظات"]
+        }
+      ],
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid"
+        }
+      ]
+    },
+    {
+      "name": "null",
+      "manifest": null,
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid"
+        }
+      ]
+    },
+    {
+      "name": "every problem listed",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "cashgear.notes",
+        "version": 0,
+        "name": {
+          "en": "Notes",
+          "ar": ""
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "type.reserved",
+          "path": "type"
+        },
+        {
+          "code": "manifest.invalid",
+          "path": "version"
+        },
+        {
+          "code": "manifest.invalid",
+          "path": "name.ar"
+        }
+      ]
+    }
+  ],
+  "bundlePaths": [
+    {
+      "name": "a file at the root",
+      "path": "index.html",
+      "valid": true
+    },
+    {
+      "name": "a file in a folder",
+      "path": "scripts/main.js",
+      "valid": true
+    },
+    {
+      "name": "a name of 200 characters",
+      "path": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.html",
+      "valid": true
+    },
+    {
+      "name": "a name of 201 characters",
+      "path": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.html",
+      "valid": false
+    },
+    {
+      "name": "out of the bundle",
+      "path": "../index.html",
+      "valid": false
+    },
+    {
+      "name": "a folder out of the bundle",
+      "path": "a/../../b.js",
+      "valid": false
+    },
+    {
+      "name": "absolute",
+      "path": "/index.html",
+      "valid": false
+    },
+    {
+      "name": "a drive",
+      "path": "C:/index.html",
+      "valid": false
+    },
+    {
+      "name": "a backslash",
+      "path": "scripts\\main.js",
+      "valid": false
+    },
+    {
+      "name": "a \".\" part",
+      "path": "a/./b.js",
+      "valid": false
+    },
+    {
+      "name": "an empty part",
+      "path": "a//b.js",
+      "valid": false
+    },
+    {
+      "name": "a control character",
+      "path": "a\u0001b.js",
+      "valid": false
+    },
+    {
+      "name": "DEL",
+      "path": "ab.js",
+      "valid": false
+    },
+    {
+      "name": "a C1 control character (NEL)",
+      "path": "ab.js",
+      "valid": false
+    },
+    {
+      "name": "a line separator",
+      "path": "a b.js",
+      "valid": false
+    },
+    {
+      "name": "a lone surrogate",
+      "path": "a\ud800b.js",
+      "valid": false
+    },
+    {
+      "name": "a pair of surrogates (one character)",
+      "path": "a😀b.js",
+      "valid": true
+    },
+    {
+      "name": "Arabic letters",
+      "path": "صفحة/main.js",
+      "valid": true
+    },
+    {
+      "name": "a colon",
+      "path": "a:b.js",
+      "valid": false
+    },
+    {
+      "name": "a space",
+      "path": "my page/main.js",
+      "valid": true
+    },
+    {
+      "name": "empty",
+      "path": "",
+      "valid": false
+    }
+  ],
+  "bundleTypes": [
+    {
+      "path": "index.html",
+      "contentType": "text/html"
+    },
+    {
+      "path": "page.HTM",
+      "contentType": "text/html"
+    },
+    {
+      "path": "main.js",
+      "contentType": "text/javascript"
+    },
+    {
+      "path": "main.mjs",
+      "contentType": "text/javascript"
+    },
+    {
+      "path": "style.css",
+      "contentType": "text/css"
+    },
+    {
+      "path": "data.json",
+      "contentType": "application/json"
+    },
+    {
+      "path": "logo.svg",
+      "contentType": "image/svg+xml"
+    },
+    {
+      "path": "logo.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "photo.jpg",
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "photo.jpeg",
+      "contentType": "image/jpeg"
+    },
+    {
+      "path": "moving.gif",
+      "contentType": "image/gif"
+    },
+    {
+      "path": "photo.webp",
+      "contentType": "image/webp"
+    },
+    {
+      "path": "favicon.ico",
+      "contentType": "image/x-icon"
+    },
+    {
+      "path": "font.woff",
+      "contentType": "font/woff"
+    },
+    {
+      "path": "font.woff2",
+      "contentType": "font/woff2"
+    },
+    {
+      "path": "LICENSE.txt",
+      "contentType": "text/plain"
+    },
+    {
+      "path": "main.js.map",
+      "contentType": "application/json"
+    },
+    {
+      "path": "worker.wasm",
+      "contentType": null
+    },
+    {
+      "path": "run.exe",
+      "contentType": null
+    },
+    {
+      "path": "page.xhtml",
+      "contentType": null
+    },
+    {
+      "path": "README",
+      "contentType": null
+    },
+    {
+      "path": ".htaccess",
+      "contentType": null
+    },
+    {
+      "path": "x.constructor",
+      "contentType": null
+    },
+    {
+      "path": "x.__proto__",
+      "contentType": null
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UpdateInfo, WorkspacePlatform } from '@cgw/shell';
 import { DesktopStore } from '@cgw/store-desktop';
 import { erpFor } from './erp';
+import { pluginsOriginFor } from './plugins';
 import { sheetOriginFor } from './sheet';
 
 const bytes = (answer: ArrayBuffer | Uint8Array | number[]) =>
@@ -52,6 +53,9 @@ export const desktopPlatform: WorkspacePlatform = {
   apiBase,
   // The embed loads from Sheet's web origin; the window's CSP lists it in `frame-src`.
   sheetOrigin: sheetOriginFor(apiBase),
+  // Phase 10: third-party plugins' frames, from their own origin; the window's CSP lists it in
+  // `frame-src`.
+  pluginsOrigin: pluginsOriginFor(apiBase),
   // Phase 9 (Track S6): Sheet's desktop app, when the system has something for its scheme
   // (apps/desktop/src-tauri/src/sheet.rs): its launch link goes to the system, never a browser.
   sheetApp: {

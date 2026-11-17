@@ -1,0 +1,68 @@
+/* The reference plugin's look, in the theme it is told (html[data-theme]); logical properties, so
+   right to left needs nothing of its own. Colours keep 4.5:1 in both themes. */
+:root {
+  color-scheme: light;
+  --text: #1f2328;
+  --muted: #57606a;
+  --surface: #ffffff;
+  --accent: #0b5cad;
+  --on-accent: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --text: #e6edf3;
+  --muted: #b1bac4;
+  --surface: #0d1117;
+  --accent: #58a6ff;
+  --on-accent: #0d1117;
+}
+
+body {
+  margin: 0;
+  padding: 8px 12px;
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+  color: var(--text);
+  background: var(--surface);
+}
+
+main > p {
+  margin-block: 4px;
+}
+
+#status {
+  color: var(--muted);
+}
+
+button {
+  min-block-size: 28px;
+  margin-inline-start: 8px;
+  padding-inline: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+table {
+  border-collapse: collapse;
+  margin-block-start: 6px;
+}
+
+caption {
+  text-align: start;
+  color: var(--muted);
+}
+
+td {
+  padding-block: 2px;
+  padding-inline: 0 12px;
+  text-align: start;
+}

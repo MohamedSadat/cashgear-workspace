@@ -175,8 +175,9 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
   // ERP views (Phase 5): the block's frame, from the reader's own ERP session; from Phase 7 the
   // page it is on, so changes to ERP data name it.
   const erp = useErpHost(session, page.id);
-  // Plugin blocks (Phase 7): chart and kanban over the workspace's databases.
-  const plugins = usePluginsHost();
+  // Plugin blocks (Phase 7): chart and kanban over the workspace's databases; from Phase 10 the
+  // workspace's third-party plugins too.
+  const plugins = usePluginsHost(session, page);
   // People (Phase 6): mentions drawn with names, and the "@" menu's people, for the members of a
   // workspace in the account only.
   const collab = useCollab();

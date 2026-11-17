@@ -1,0 +1,21 @@
+<!doctype html>
+<!--
+  A hostile plugin for the plugin-frame.1 tests (tests/fixtures/plugins): on load, before it even
+  speaks the contract, it tries everything a plugin must not be able to do, and records what each
+  attempt did. The results are in #attempts for a spec to read from outside, and are also sent
+  back through the contract as this plugin's own props (so a spec can read them without the frame
+  too). It never reaches the page, the session, storage, the network or another frame: the sandbox
+  (allow-scripts only, an opaque origin), the CSP (no network) and no pop-up or navigation grant see
+  to that.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Prober</title>
+  </head>
+  <body>
+    <p id="summary" role="status">Trying…</p>
+    <ul id="attempts"></ul>
+    <script src="main.js"></script>
+  </body>
+</html>

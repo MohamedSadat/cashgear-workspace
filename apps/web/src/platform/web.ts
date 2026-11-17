@@ -1,6 +1,7 @@
 import type { WorkspacePlatform } from '@cgw/shell';
 import { DATABASE, IndexedDbStore, workerIndex, workerJournal } from '@cgw/store-web';
 import { erpFor } from './erp';
+import { pluginsOriginFor } from './plugins';
 import { sheetOriginFor } from './sheet';
 
 /** The API's origin, from the build (`VITE_CGW_API`); a sibling host of the web app (Q5). */
@@ -11,6 +12,8 @@ export const webPlatform: WorkspacePlatform = {
   kind: 'web',
   apiBase,
   sheetOrigin: sheetOriginFor(apiBase),
+  // Phase 10: third-party plugins' frames, from their own origin only.
+  pluginsOrigin: pluginsOriginFor(apiBase),
   // Cash Gear ERP's API and client; its connect page opens in a pop-up with its opener.
   erp: erpFor(apiBase),
   // The API's sign-in pages set an HttpOnly cookie; nothing here holds a credential.

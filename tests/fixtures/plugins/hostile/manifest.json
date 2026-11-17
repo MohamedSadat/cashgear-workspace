@@ -1,0 +1,14 @@
+{
+  "contract": "plugin-frame.1",
+  "type": "vendor.hostile",
+  "version": 1,
+  "name": { "en": "Prober", "ar": "المُستكشِف" },
+  "description": {
+    "en": "Tries to reach the page, the session, storage, the network and other frames, and records that each failed.",
+    "ar": "يحاول الوصول إلى الصفحة والجلسة والتخزين والشبكة والإطارات الأخرى، ويسجّل فشل كل محاولة."
+  },
+  "entry": "index.html",
+  "reads": { "rows": false },
+  "height": 120,
+  "keywords": ["prober", "hostile"]
+}

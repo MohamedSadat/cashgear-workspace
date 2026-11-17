@@ -1,0 +1,69 @@
+/* Settings → Plugins (PluginsSettings.tsx): the list, its actions, the bundle's review and its
+   problems. Classes are `cgw-plugins-*`; logical properties only, so right to left needs nothing
+   of its own; colours from the theme's tokens. */
+
+.cgw-plugins-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  margin-block: 8px;
+}
+
+.cgw-plugins-table th,
+.cgw-plugins-table td {
+  padding-block: 6px;
+  padding-inline: 8px;
+  text-align: start;
+  vertical-align: top;
+  border-block-end: 1px solid var(--cg-border);
+}
+
+.cgw-plugins-name {
+  display: block;
+  font-weight: 600;
+}
+
+.cgw-plugins-type {
+  display: block;
+  font-size: var(--cg-font-size-sm);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-plugins-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cgw-plugins-problem {
+  padding-block: 6px;
+  padding-inline: 12px;
+  border-inline-start: 3px solid var(--cg-danger-text, #b42318);
+  background: var(--cg-surface-subtle);
+}
+
+.cgw-plugins-problem ul,
+.cgw-plugins-problem p {
+  margin: 0;
+  padding-inline-start: 16px;
+}
+
+.cgw-plugins-review dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+}
+
+.cgw-plugins-review dt {
+  font-weight: 600;
+}
+
+.cgw-plugins-review dd {
+  margin: 0;
+}
+
+.cgw-plugins-warning {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--cg-surface-subtle);
+}

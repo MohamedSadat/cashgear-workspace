@@ -1,0 +1,33 @@
+<!doctype html>
+<!--
+  The reference plugin for plugin-frame.1 (tests/fixtures/plugins): draws its block's props (a
+  count it raises by a button), the theme, direction and language it is told, and a view's rows
+  when its block names one. Everything it knows is in #state, for the specs to read. Scripts come
+  from the bundle only: the plugins origin's CSP allows no inline script.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notes</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <p id="status" role="status">Starting…</p>
+      <p>
+        <span id="count-label">Count</span>:
+        <output id="count" aria-labelledby="count-label">0</output>
+        <button type="button" id="add" disabled>Add one</button>
+      </p>
+      <p id="note"></p>
+      <table id="rows" hidden>
+        <caption id="rows-caption">
+          Rows
+        </caption>
+        <tbody></tbody>
+      </table>
+      <pre id="state" hidden></pre>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>

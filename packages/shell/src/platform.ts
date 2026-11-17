@@ -53,6 +53,12 @@ export interface WorkspacePlatform {
    */
   sheetOrigin?: string;
   /**
+   * Phase 10: the one origin third-party plugins' frames are served from (`VITE_CGW_PLUGINS`;
+   * live `https://plugins.cashgearerp.com`, local-API builds `http://localhost:5291`): the only
+   * address a plugin's frame may have. Without it plugin blocks show their placeholder.
+   */
+  pluginsOrigin?: string;
+  /**
    * Phase 9 (Track S6): Cash Gear Sheet's desktop app, on the desktop only. `installed` asks the
    * system whether anything opens `cashgear-sheet` links (it never starts a program to ask);
    * `open` hands it a launch link from `POST /workbooks/{id}/launch` with `{target: "desktop"}`,

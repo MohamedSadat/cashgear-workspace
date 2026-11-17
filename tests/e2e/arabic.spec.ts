@@ -5,6 +5,9 @@ import { newAccount } from './cloud';
 import { signedInWorkspace, signers } from './database';
 import { commentScene, select } from './collab';
 import { phase7Scene, phase7Screens } from './phase7';
+import { pluginScene, pluginScreens } from './plugins';
+import { ERP10_THEIRS, erp10Scene, erp10Screens } from './erp10';
+import { meaningScene, meaningScreens } from './meaning';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -31,18 +34,20 @@ import {
 // CSV format's name (Phase 4: "Import a CSV file…"), which Arabic writes as it is, and from Phase 5
 // the Cash Gear products' names («فتح في Cash Gear Sheet», «بيانات ERP»), which are not translated;
 // from Phase 7 also the AI provider's and its models' names (Anthropic, Claude Opus 5.5), shown in
-// Settings' AI section on every screen walked there.
+// Settings' AI section on every screen walked there; from Phase 10 the embeddings provider's and
+// its models' names (Voyage AI, voyage-4), in the same section. The palette's "Related by meaning"
+// group lists pages, as its others do.
 
 /**
  * Groups whose options are what the person wrote, by their names: the palette's page results and
  * recent pages (a title, and a line of the page's text): `search.pages`, `workspace.recent`.
  */
-const OWN_GROUPS = ['الصفحات', 'الأخيرة'];
+const OWN_GROUPS = ['الصفحات', 'الأخيرة', 'ذات صلة بالمعنى'];
 /** The breadcrumb's landmark (`page.breadcrumbs`). */
 const BREADCRUMBS = 'موقع هذه الصفحة';
 
 const KEYS =
-  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?)\b/g;
+  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite)?)\b/g;
 
 /**
  * What the person wrote or another system holds, beyond the main screens' own (Phase 5): names
@@ -385,5 +390,114 @@ test('the Arabic chart, ERP editing, AI panel and AI settings have no English of
   } finally {
     await scene.api.dispose();
     await cloud.close();
+  }
+});
+
+// Phase 10's screens in Arabic: an ERP block editing Items on hand (a shared field's editor and
+// note, every row changed, the review of each row, a conflict that needs no choice); against the
+// server stack and the mock ERP (erp10.ts's scene, made in English).
+test('the Arabic Items on hand editing, its review and conflict have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop || REAL_ERP, 'A browser against the mocks');
+  test.setTimeout(300000);
+  const cloud = signers();
+  const errors = watchAppErrors(page, [
+    /status of 409 .*\/api\/connect\/Connectors\/[^/ ]+\/Commit$/,
+  ]);
+  const scene = await erp10Scene(page, 'Samir', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const theirs = {
+      within: ERP10_THEIRS,
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await erp10Screens(page, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.api.dispose();
+    await cloud.close();
+  }
+});
+
+// Phase 10's search by meaning in Arabic: the palette's "Related by meaning" for an Arabic
+// question, and Settings' part of it; against the server stack and the mock providers (meaning.ts's
+// scene, made in English).
+test('the Arabic related by meaning and its settings have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop, 'A browser against the mock providers');
+  test.setTimeout(300000);
+  const cloud = signers();
+  const errors = watchAppErrors(page);
+  const scene = await meaningScene(page, 'Salma', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const theirs = {
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await meaningScreens(page, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.api.dispose();
+    await cloud.close();
+  }
+});
+
+// Phase 10's plugin screens in Arabic: a third-party plugin block's bar on the page, and
+// Settings → Plugins (the list and the Add review dialog); against the server stack (plugins.ts's
+// scene, made in English). The plugin's own name ("Notes") and type ("vendor.notes") are the
+// author's, allowed as their content; the plugin frame itself is another origin's, not walked.
+test('the Arabic plugin block and Settings → Plugins have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop, 'The plugins origin is framed by the web build; run in a browser');
+  test.setTimeout(300000);
+  const errors = watchAppErrors(page);
+  const scene = await pluginScene(page, 'Sahar');
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const theirs = {
+      within: ['.cgw-plugin-frame-bar', '.cgw-plugins-name', '.cgw-plugins-type'],
+      names: [...scene.names, 'Notes', 'vendor.notes', 'Workspace', 'Private'].sort(
+        (a, b) => b.length - a.length,
+      ),
+    };
+    const found: string[] = [];
+    await pluginScreens(page, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.api.dispose();
   }
 });

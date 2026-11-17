@@ -32,6 +32,12 @@ const sheet =
 // opened as a pop-up, which no fetch directive covers. A build against a local API calls the mock.
 const erpApi =
   process.env.VITE_CGW_ERP_API || (local ? 'http://127.0.0.1:4282' : 'https://api.cashgearerp.com');
+// Phase 10: the one origin third-party plugins' frames come from (`VITE_CGW_PLUGINS`,
+// src/platform/plugins.ts reads the same); a build against a local API frames the Sites process's
+// second host.
+const plugins =
+  process.env.VITE_CGW_PLUGINS ??
+  (local ? 'http://localhost:5291' : 'https://plugins.cashgearerp.com');
 const csp = [
   "default-src 'self'",
   "script-src 'self'",
@@ -40,7 +46,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   `connect-src 'self' ${api} ${apiSocket} ${blob} ${erpApi}`,
-  `frame-src ${sheet}`,
+  `frame-src ${sheet} ${plugins}`,
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",

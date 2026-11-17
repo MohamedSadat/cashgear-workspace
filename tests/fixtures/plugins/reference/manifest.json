@@ -1,0 +1,14 @@
+{
+  "contract": "plugin-frame.1",
+  "type": "vendor.notes",
+  "version": 1,
+  "name": { "en": "Notes", "ar": "ملاحظات" },
+  "description": {
+    "en": "A counter and the rows of a view: the reference plugin for plugin-frame.1.",
+    "ar": "عدّاد وصفوف عرض: الإضافة المرجعية للعقد."
+  },
+  "entry": "index.html",
+  "reads": { "rows": true },
+  "height": 160,
+  "keywords": ["notes", "counter", "ملاحظات"]
+}
