@@ -283,6 +283,23 @@ public sealed class WorkbookHistoryTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task The_app_may_send_a_versions_conditions_across_origins()
+    {
+        // The web app is on another origin than the API: an import's first version is sent with
+        // If-None-Match, a later one with If-Match, and the browser asks first.
+        foreach (var header in new[] { "if-none-match", "if-match" })
+        {
+            var preflight = new HttpRequestMessage(HttpMethod.Options, $"/api/v1/workbooks/{Guid.CreateVersion7()}/versions");
+            preflight.Headers.Add("Origin", "http://localhost:5273");
+            preflight.Headers.Add("Access-Control-Request-Method", "POST");
+            preflight.Headers.Add("Access-Control-Request-Headers", $"content-type,x-csrf-token,{header}");
+            var response = await server.Anonymous().SendAsync(preflight);
+            Assert.True(response.Headers.TryGetValues("Access-Control-Allow-Headers", out var allowed), $"{header}: {response.StatusCode}");
+            Assert.Contains(header, string.Join(',', allowed!).ToLowerInvariant().Split(',').Select(h => h.Trim()));
+        }
+    }
+
+    [Fact]
     public void Desktop_origins_read_only_as_origins()
     {
         Assert.Equal("tauri://localhost", Integrations.DesktopOrigin("tauri://localhost"));

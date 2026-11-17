@@ -52,7 +52,8 @@ public static class ApiServices
             o.AddPolicy(CorsPolicy, p => p
                 .WithOrigins(origins)
                 .AllowCredentials()
-                .WithHeaders("Content-Type", "Authorization", CsrfHeader, Correlation.Header, "If-Match", Cgw.Core.Sharing.SharedReader.Header, WorkbookEndpoints.PreviewVersionHeader)
+                // If-None-Match: a workbook's first version uploaded by the app (an import, Phase 9).
+                .WithHeaders("Content-Type", "Authorization", CsrfHeader, Correlation.Header, "If-Match", "If-None-Match", Cgw.Core.Sharing.SharedReader.Header, WorkbookEndpoints.PreviewVersionHeader)
                 .WithExposedHeaders(Correlation.Header, "ETag", "Retry-After", "Location")
                 .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
                 .SetPreflightMaxAge(TimeSpan.FromHours(1)));
