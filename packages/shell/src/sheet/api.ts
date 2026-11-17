@@ -1,9 +1,10 @@
 // Workspace's workbook routes (Phase 5, docs/INTEGRATIONS.md "Workbooks as their own documents"),
 // over the app's typed API client: a workbook's record, its content's signed URL, its pictures,
-// its launch link for Cash Gear Sheet, its sheets and ranges, and the view export. Workbooks are
+// its launch link for Cash Gear Sheet (Phase 9: its web app's or its desktop app's), its sheets
+// and ranges, the view export, and (Phase 9) its history and an upload. Workbooks are
 // not in the change feed: the app reads them by route, online. A refusal is a SyncHttpError with
 // the server's code; no answer at all is the client's NetworkError (`unreachable` says which).
-import type { ApiClient } from '@cgw/api';
+import type { ApiClient, Schemas } from '@cgw/api';
 import { SyncHttpError, type Id } from '@cgw/workspace';
 
 export type WorkbookAccess = 'full' | 'edit' | 'comment' | 'view';
@@ -64,6 +65,34 @@ export interface WorkbookPermissions {
   yourLevel: string;
   entries: PermissionEntry[];
 }
+
+/** One kept version of a workbook (Phase 9: its history, the newest 10), newest first. */
+export interface WorkbookVersion {
+  id: Id;
+  size: number;
+  sha256: string;
+  savedAt: string;
+  savedBy: { id: Id; name: string } | null;
+  /** The workbook's current version. */
+  current: boolean;
+}
+
+/** Where "Open in Cash Gear Sheet" goes: Sheet's web app, or its desktop app by deep link. */
+export type LaunchTarget = 'web' | 'desktop';
+
+/** The xlsx content type, as Sheet's own save sends it. */
+export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+type VersionDto = Schemas['WorkbookVersionDto'];
+
+const versionOf = (dto: VersionDto): WorkbookVersion => ({
+  id: dto.id,
+  size: Number(dto.size),
+  sha256: dto.sha256,
+  savedAt: dto.savedAt,
+  savedBy: dto.savedBy ? { id: dto.savedBy.id, name: dto.savedBy.name } : null,
+  current: !!dto.current,
+});
 
 /** May change the workbook's content and pictures (Sheet's edit session, `PUT …/previews`). */
 export const canEditWorkbook = (access: string | null | undefined) =>
@@ -222,15 +251,72 @@ export function workbookApi(api: ApiClient) {
         }),
       );
     },
-    /** A launch link for Cash Gear Sheet: `{Sheet}/cloud#launch=<ticket>`, two minutes, one use. */
-    launch: async (workbookId: Id) =>
+    /**
+     * A launch link for Cash Gear Sheet, two minutes, one use: `{Sheet}/cloud#launch=<ticket>` for
+     * its web app; with `desktop` (Phase 9, Track S6) `cashgear-sheet://workspace/launch#ticket=…`
+     * for its desktop app.
+     */
+    launch: async (workbookId: Id, target: LaunchTarget = 'web') =>
       (
         await data(
-          api.POST('/api/v1/workbooks/{workbookId}/launch', {
-            params: { path: { workbookId } },
-          }),
+          target === 'web'
+            ? api.POST('/api/v1/workbooks/{workbookId}/launch', {
+                params: { path: { workbookId } },
+              })
+            : api.POST('/api/v1/workbooks/{workbookId}/launch', {
+                params: { path: { workbookId } },
+                body: { target },
+              }),
         )
       ).url,
+    // ---- Phase 9: a workbook's history ----------------------------------------------------------
+    /** Its kept versions, newest first, each with when and by whom it was saved. */
+    versions: async (workbookId: Id): Promise<WorkbookVersion[]> =>
+      (
+        await data(api.GET('/api/v1/workbooks/{workbookId}/versions', path(workbookId)))
+      ).versions.map(versionOf),
+    /** One version's bytes by a short signed URL (read access), for the embed. */
+    versionContent: async (workbookId: Id, versionId: Id): Promise<WorkbookContent> => {
+      const answer = await data(
+        api.GET('/api/v1/workbooks/{workbookId}/versions/{versionId}/content', {
+          params: { path: { workbookId, versionId } },
+        }),
+      );
+      return {
+        readUrl: answer.readUrl ?? null,
+        etag: answer.etag ?? null,
+        versionId: answer.versionId ?? null,
+        size: num(answer.size),
+        expiresAt: answer.expiresAt ?? null,
+      };
+    },
+    /**
+     * An older version copied as the newest, saved by the restorer now (`edit` or above). `etag`,
+     * the current content's, makes it refuse (`version.conflict`) when someone saved meanwhile.
+     */
+    restoreVersion: async (workbookId: Id, versionId: Id, etag?: string | null) =>
+      data(
+        api.POST('/api/v1/workbooks/{workbookId}/versions/{versionId}/restore', {
+          params: { path: { workbookId, versionId } },
+          ...(etag ? { headers: { 'If-Match': etag } } : {}),
+        }),
+      ),
+    /**
+     * A new version from xlsx bytes (`edit`): the first with `If-None-Match: *` (`etag` null), a
+     * later one with `If-Match` on the current content's entity tag, as Sheet's own save.
+     */
+    uploadVersion: async (workbookId: Id, bytes: Uint8Array, etag: string | null = null) =>
+      data(
+        api.POST('/api/v1/workbooks/{workbookId}/versions', {
+          params: { path: { workbookId } },
+          body: bytes as unknown as string,
+          bodySerializer: (body: unknown) => body as BodyInit,
+          headers: {
+            'Content-Type': XLSX_TYPE,
+            ...(etag ? { 'If-Match': etag } : { 'If-None-Match': '*' }),
+          },
+        }),
+      ),
     sheets: async (workbookId: Id): Promise<WorkbookSheet[]> =>
       (await data(api.GET('/api/v1/workbooks/{workbookId}/sheets', path(workbookId)))).sheets.map(
         (sheet) => ({

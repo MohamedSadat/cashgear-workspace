@@ -52,6 +52,12 @@ export const desktopPlatform: WorkspacePlatform = {
   apiBase,
   // The embed loads from Sheet's web origin; the window's CSP lists it in `frame-src`.
   sheetOrigin: sheetOriginFor(apiBase),
+  // Phase 9 (Track S6): Sheet's desktop app, when the system has something for its scheme
+  // (apps/desktop/src-tauri/src/sheet.rs): its launch link goes to the system, never a browser.
+  sheetApp: {
+    installed: () => invoke<boolean>('sheet_app_installed').catch(() => false),
+    open: (url) => invoke<void>('sheet_app_open', { url }),
+  },
   // Cash Gear ERP's API (in the window's CSP) and its client, whose connect page opens in the
   // system browser and comes back by deep link (`onDeepLink`, crates/cgw-native).
   erp: erpFor(apiBase),

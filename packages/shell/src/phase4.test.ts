@@ -693,7 +693,8 @@ describe('the export and import of a workspace with databases', () => {
 
   it('writes version 2: databases, rows with values, every entry’s kind, a CSV beside each database', async () => {
     const { files, manifest, db, view, rows } = await exported();
-    expect(manifest).toMatchObject({ format: FORMAT, version: 2 });
+    // Version 3 (Phase 9) is version 2 with workbooks: everything here is as version 2 wrote it.
+    expect(manifest).toMatchObject({ format: FORMAT, version: 3 });
     expect(manifest.pages.every((p) => p.kind)).toBe(true);
     const database = manifest.databases!.find((d) => d.id === db.id)!;
     expect(database.views.map((v) => v.id)).toEqual([view.id]);

@@ -10,7 +10,17 @@
 // rows for people (`rowsToCsv` of every row and property). Import reads the JSON, never the CSV,
 // and takes versions 1 and 2, as this device or the server writes them (the server's export
 // writes the same format, every row's body included).
-import { remapRefs, toMarkdown, type DocJSON } from '@cgw/doc';
+//
+// Format version 3 (Phase 9) adds workbooks: each workbook the exporter can read that has a
+// version, its newest version's bytes as `workbooks/<name>.xlsx`, its id and name in the
+// manifest's `workbooks` (a sheet block's view is already in the page that holds it). A workbook
+// lives in the account, not on this device, so the shell reads them from the server
+// (`ExportOptions.workbooks`, exchange/workbooks.ts). Import makes them again only in a workspace
+// that goes to the account (`ImportOptions.workbooks: 'make'`): each gets a new id, every sheet
+// block is pointed at it, and the caller makes it on the server once the workspace is there; a
+// local import keeps the blocks as they are and counts what it skipped. Versions 1 and 2 still
+// read.
+import { remapRefs, toMarkdown, workbookRefs, type DocJSON } from '@cgw/doc';
 import { FIRST_PARTY, pluginText } from '@cgw/plugins';
 import {
   STORED_TYPES,
@@ -39,7 +49,7 @@ import type { WorkspaceSession } from '../session';
 import type { ZipRequest } from './zip.worker';
 
 export const FORMAT = 'cash-gear-workspace-export';
-export const FORMAT_VERSION = 2;
+export const FORMAT_VERSION = 3;
 export const MANIFEST = 'cgw-export.json';
 
 /** A page, a database's page or a row, as the manifest lists it. */
@@ -78,6 +88,16 @@ export interface ManifestDatabase {
   views: (Pick<ViewRecord, 'id' | 'name' | 'type' | 'orderKey' | 'config'> & Partial<ViewRecord>)[];
 }
 
+/**
+ * Version 3: a workbook the exporter could read, with its newest version's bytes at `file`
+ * (`workbooks/<name>.xlsx`, unique in the zip). The server's export writes the same entries.
+ */
+export interface ManifestWorkbook {
+  id: Id;
+  name: string;
+  file: string;
+}
+
 export interface ExportManifest {
   format: typeof FORMAT;
   version: number;
@@ -87,7 +107,31 @@ export interface ExportManifest {
   pages: ManifestPage[];
   /** Version 2; absent in version 1. */
   databases?: ManifestDatabase[];
+  /** Version 3; absent before, and in an export that holds no workbook. */
+  workbooks?: ManifestWorkbook[];
   assets: (AssetRecord & { file: string })[];
+}
+
+/** A workbook's newest version, as the shell read it from the server for an export. */
+export interface ExportWorkbook {
+  id: Id;
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** What the shell's reader found: the bytes it read, and how many it could not read. */
+export interface ExportWorkbooks {
+  workbooks: ExportWorkbook[];
+  /** Workbooks it could read the list of but not the bytes of (refused, gone, the network). */
+  failed: number;
+}
+
+/** What an export did with workbooks: written, not read, or none asked for (a local workspace). */
+export interface ExportWorkbookReport {
+  written: number;
+  failed: number;
+  /** The list itself could not be read (offline, refused): none is in the export. */
+  unreadable: boolean;
 }
 
 interface PageFile {
@@ -159,13 +203,25 @@ export interface ExportOptions {
   userName?: (userId: Id) => string | undefined;
   /** Phase 7: the language a plugin block's line is written in (its definition's `toPlainText`). */
   language?: 'en' | 'ar';
+  /**
+   * Phase 9: the workbooks to put in the export, read from the server: every one the exporter can
+   * read with `null` (a workspace's export), else those of the ids given (the workbooks the
+   * exported pages show). Absent for a workspace on this device only. A reader that throws (the
+   * list could not be read) leaves every workbook out, and the report says so.
+   */
+  workbooks?: (wanted: ReadonlySet<Id> | null) => Promise<ExportWorkbooks>;
 }
 
 /** The export's files (the manifest among them) and the zip's name. */
 export async function buildExport(
   session: WorkspaceSession,
   options: ExportOptions,
-): Promise<{ files: Record<string, Uint8Array>; name: string; manifest: ExportManifest }> {
+): Promise<{
+  files: Record<string, Uint8Array>;
+  name: string;
+  manifest: ExportManifest;
+  workbooks: ExportWorkbookReport;
+}> {
   const workspaceId = session.workspaceId!;
   const workspace = session.mirror.workspaces.get(workspaceId)!;
   const { mirror } = session;
@@ -233,10 +289,13 @@ export async function buildExport(
     [...rowsOf.values()].flat().find((r) => r.id === id)?.title ??
     mirror.rowRecords.get(id)?.title;
 
+  /** Workbooks the exported pages' sheet blocks show (an export of some pages brings those). */
+  const shownWorkbooks = new Set<Id>();
   /** A page's (or a row's) Markdown and JSON files. */
   const writeDocument = async (page: PageRecord | RowRecord) => {
     const base = paths.get(page.id)!;
     const content = await session.pageContent(page.id);
+    for (const id of workbookRefs(content)) shownWorkbooks.add(id);
     const pageFile: PageFile = {
       id: page.id,
       title: page.title,
@@ -327,6 +386,28 @@ export async function buildExport(
     const bytes = await session.store.getAssetBytes(asset.id);
     if (bytes) files[asset.file] = bytes;
   }
+  // Workbooks (version 3), from the server: each under a name of its own in `workbooks/`.
+  const manifestWorkbooks: ManifestWorkbook[] = [];
+  const report: ExportWorkbookReport = { written: 0, failed: 0, unreadable: false };
+  if (options.workbooks && (!options.pageIds || shownWorkbooks.size)) {
+    try {
+      const read = await options.workbooks(options.pageIds ? shownWorkbooks : null);
+      report.failed = read.failed;
+      const names = new Set<string>();
+      for (const workbook of read.workbooks) {
+        const base = safeName(workbook.name, 'Workbook');
+        let file = `workbooks/${base}.xlsx`;
+        for (let n = 2; names.has(file.toLowerCase()); n++) file = `workbooks/${base} (${n}).xlsx`;
+        names.add(file.toLowerCase());
+        files[file] = workbook.bytes;
+        manifestWorkbooks.push({ id: workbook.id, name: workbook.name, file });
+      }
+      report.written = manifestWorkbooks.length;
+    } catch (error) {
+      console.warn('The workbooks could not be read for the export:', error);
+      report.unreadable = true;
+    }
+  }
   const sectionIds = new Set(pages.map((p) => p.sectionId));
   const manifest: ExportManifest = {
     format: FORMAT,
@@ -339,6 +420,7 @@ export async function buildExport(
       .map(({ id, name, orderKey, visibility }) => ({ id, name, orderKey, visibility })),
     pages: manifestPages,
     databases: manifestDatabases,
+    ...(manifestWorkbooks.length ? { workbooks: manifestWorkbooks } : {}),
     assets: [...assets.values()],
   };
   files[MANIFEST] = utf8.encode(JSON.stringify(manifest, null, 1));
@@ -347,7 +429,7 @@ export async function buildExport(
     options.pageIds && pages[0]
       ? safeName(pages[0].title, options.untitled)
       : safeName(workspace.name, 'workspace');
-  return { files, name: `${label} ${stamp}.zip`, manifest };
+  return { files, name: `${label} ${stamp}.zip`, manifest, workbooks: report };
 }
 
 /** What a database's CSV writes for people, related rows, files and computed cells. */
@@ -386,10 +468,10 @@ function csvLookups(
 export async function exportZip(
   session: WorkspaceSession,
   options: ExportOptions,
-): Promise<{ bytes: Uint8Array; name: string }> {
-  const { files, name } = await buildExport(session, options);
+): Promise<{ bytes: Uint8Array; name: string; workbooks: ExportWorkbookReport }> {
+  const { files, name, workbooks } = await buildExport(session, options);
   const bytes = await runZip<Uint8Array>({ kind: 'zip', files });
-  return { bytes, name };
+  return { bytes, name, workbooks };
 }
 
 export class ImportError extends Error {}
@@ -399,12 +481,47 @@ export async function importZip(
   session: WorkspaceSession,
   bytes: Uint8Array,
   nameSuffix: string,
-): Promise<Id> {
+  options: ImportOptions = {},
+): Promise<ImportResult> {
   const files = await runZip<Record<string, Uint8Array>>({ kind: 'unzip', bytes }, [bytes.buffer]);
-  return readExport(session, files, nameSuffix);
+  return readExportWith(session, files, nameSuffix, options);
 }
 
-const VIEW_TYPES: readonly ViewRecord['type'][] = ['table', 'board', 'list', 'calendar', 'gallery'];
+export interface ImportOptions {
+  /**
+   * Phase 9: `make` when the new workspace goes to the account (an import while signed in):
+   * every workbook gets a new id, its sheet blocks point at it, and the result lists what the
+   * caller makes on the server (`makeWorkbooks`, exchange/workbooks.ts) once the workspace is
+   * there. `skip` (the default): the blocks stay as they are and the result counts the workbooks.
+   */
+  workbooks?: 'make' | 'skip';
+}
+
+/** A workbook an import is to make in the account, with the new id its blocks were given. */
+export interface PendingWorkbook {
+  id: Id;
+  name: string;
+  bytes: Uint8Array;
+}
+
+export interface ImportResult {
+  /** The first page's new id ('' when the export held none). */
+  first: Id;
+  workspaceId: Id;
+  /** Workbooks to make in the account (`workbooks: 'make'`). */
+  pendingWorkbooks: PendingWorkbook[];
+  /** Workbooks left out: every one with `skip`, and with `make` those whose bytes are missing. */
+  skippedWorkbooks: number;
+}
+
+const VIEW_TYPES: readonly ViewRecord['type'][] = [
+  'table',
+  'board',
+  'list',
+  'calendar',
+  'gallery',
+  'timeline',
+];
 
 /** Rows per `apply` while importing (each a transaction of the store). */
 const ROW_BATCH = 500;
@@ -419,6 +536,30 @@ export async function readExport(
   files: Record<string, Uint8Array>,
   nameSuffix: string,
 ): Promise<Id> {
+  return (await readExportWith(session, files, nameSuffix)).first;
+}
+
+/** A manifest's workbooks that can be made: each named once, its bytes in the zip. */
+function workbooksOf(manifest: ExportManifest, files: Record<string, Uint8Array>) {
+  const seen = new Set<Id>();
+  const ready: ManifestWorkbook[] = [];
+  let missing = 0;
+  for (const workbook of Array.isArray(manifest.workbooks) ? manifest.workbooks : []) {
+    if (!workbook || typeof workbook.id !== 'string' || seen.has(workbook.id)) continue;
+    seen.add(workbook.id);
+    if (typeof workbook.file === 'string' && files[workbook.file]) ready.push(workbook);
+    else missing++;
+  }
+  return { ready, missing };
+}
+
+/** `readExport`, with what the import did with the export's workbooks (Phase 9). */
+export async function readExportWith(
+  session: WorkspaceSession,
+  files: Record<string, Uint8Array>,
+  nameSuffix: string,
+  options: ImportOptions = {},
+): Promise<ImportResult> {
   const text = new TextDecoder();
   const manifestBytes = files[MANIFEST];
   if (!manifestBytes) throw new ImportError('missing manifest');
@@ -479,6 +620,10 @@ export async function readExport(
   for (const a of manifest.assets) fresh(a.id);
   for (const d of databases.values()) for (const v of d.views) fresh(v.id);
   const assetIds = new Map(manifest.assets.map((a) => [a.id, ids.get(a.id)!]));
+  // Workbooks (version 3): new ids for those an import into the account makes again.
+  const { ready: workbooks, missing } = workbooksOf(manifest, files);
+  const making = options.workbooks === 'make';
+  const workbookIds = new Map<Id, Id>(making ? workbooks.map((w) => [w.id, uuidv7()]) : []);
   const defaultSection = ids.get(sections[0].id)!;
   const record = (p: ManifestPage, sectionId: Id, parent: Id | null): PageRecord => ({
     id: ids.get(p.id)!,
@@ -647,8 +792,9 @@ export async function readExport(
     const data = files[p.json];
     if (!data) continue;
     const page = JSON.parse(text.decode(data)) as PageFile;
-    // Pages, rows, databases and views by their new ids: links and database blocks follow.
-    const content = remapRefs(page.content, ids, assetIds);
+    // Pages, rows, databases and views by their new ids: links and database blocks follow, and
+    // sheet blocks when their workbooks are made again.
+    const content = remapRefs(page.content, ids, assetIds, workbookIds);
     const newId = ids.get(p.id)!;
     await session.store.appendDocUpdates(newId, [
       { updateId: uuidv7(), data: newDocumentUpdate(newId, content) },
@@ -657,5 +803,16 @@ export async function readExport(
   }
   session.switchTo(workspace.id);
   const first = ordered.find((p) => !p.parentPageId) ?? ordered[0];
-  return first ? ids.get(first.id)! : '';
+  return {
+    first: first ? ids.get(first.id)! : '',
+    workspaceId: workspace.id,
+    pendingWorkbooks: making
+      ? workbooks.map((w) => ({
+          id: workbookIds.get(w.id)!,
+          name: typeof w.name === 'string' && w.name.trim() ? w.name : 'Workbook',
+          bytes: files[w.file],
+        }))
+      : [],
+    skippedWorkbooks: making ? missing : workbooks.length + missing,
+  };
 }

@@ -684,9 +684,9 @@ describe('the workbook list', { timeout: 30_000 }, () => {
     expect(rows()).toHaveLength(2);
     expect(rows()[0]).toContain('Budget 2026');
     expect(rows()[0]).toContain('Can edit');
-    // A reader may open and see the access list, but not rename or trash.
+    // A reader may open it, see its history and its access list, but not rename or trash.
     const stock = element.querySelector('[data-workbook="01936f6e-0000-7000-8000-00000000a003"]')!;
-    expect(stock.querySelectorAll('button')).toHaveLength(2);
+    expect(stock.querySelectorAll('button')).toHaveLength(3);
     const byLabel = (label: string) =>
       element.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
     await act(async () => byLabel('Move to the trash: Budget 2026').click());

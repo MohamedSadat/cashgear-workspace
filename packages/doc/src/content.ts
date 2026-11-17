@@ -166,12 +166,15 @@ export function withoutIds(node: DocJSON): DocJSON {
 /**
  * Rewrites page references (child pages, mentions, database views) and asset ids, for a copied
  * subtree. A database view whose database is not in the map keeps pointing at the same one; the
- * map may also hold view ids, for a copy that copied the database with its views.
+ * map may also hold view ids, for a copy that copied the database with its views. Phase 9: a
+ * sheet block's workbook by `workbooks` alone (an import that made its workbooks again); a copy
+ * gives none, so its blocks keep showing the same workbook.
  */
 export function remapRefs(
   node: DocJSON,
   pages: ReadonlyMap<string, string>,
   assets: ReadonlyMap<string, string> = new Map(),
+  workbooks: ReadonlyMap<string, string> = new Map(),
 ): DocJSON {
   const copy: DocJSON = { ...node };
   const attrs = node.attrs;
@@ -185,6 +188,12 @@ export function remapRefs(
       next.viewId = pages.get(attrs.viewId);
     if (typeof attrs.assetId === 'string' && assets.has(attrs.assetId))
       next.assetId = assets.get(attrs.assetId);
+    if (
+      node.type === 'sheetEmbed' &&
+      typeof attrs.workbookId === 'string' &&
+      workbooks.has(attrs.workbookId)
+    )
+      next.workbookId = workbooks.get(attrs.workbookId);
     // A plugin block (schema version 6) names a database by `databaseId` and `viewId` in its
     // props, by the convention the first-party definitions keep: those follow the copy too, and
     // every other prop is kept as it was.
@@ -201,7 +210,8 @@ export function remapRefs(
         ? { ...mark, attrs: { ...mark.attrs, href: `#/p/${pages.get(match[1])}${match[2]}` } }
         : mark;
     });
-  if (node.content) copy.content = node.content.map((child) => remapRefs(child, pages, assets));
+  if (node.content)
+    copy.content = node.content.map((child) => remapRefs(child, pages, assets, workbooks));
   return copy;
 }
 
@@ -237,6 +247,18 @@ export function references(doc: DocJSON): { pages: Set<string>; assets: Set<stri
   };
   walk(doc);
   return { pages, assets };
+}
+
+/** Every workbook a document's sheet blocks show (Phase 9: what an export of pages brings). */
+export function workbookRefs(doc: DocJSON): Set<string> {
+  const workbooks = new Set<string>();
+  const walk = (node: DocJSON) => {
+    if (node.type === 'sheetEmbed' && typeof node.attrs?.workbookId === 'string')
+      workbooks.add(node.attrs.workbookId);
+    node.content?.forEach(walk);
+  };
+  walk(doc);
+  return workbooks;
 }
 
 /**

@@ -3,12 +3,12 @@
 // theme (the document's) and direction. The editor mounts again when the block points at another
 // view; the root drawn for that block a moment before is moved into the new element rather than
 // made again, so the view does not flash or lose its place.
+import type { DatabaseHost } from '@cgw/database';
 import type { DatabaseMountOptions } from '@cgw/editor';
 import type { i18n as I18n } from 'i18next';
 import { lazy, Suspense, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { I18nextProvider, useTranslation } from 'react-i18next';
-import type { ShellDatabaseHost } from './host';
 
 // The views load with the first database on screen, not with the editor.
 const DatabaseView = lazy(() => import('@cgw/database').then((m) => ({ default: m.DatabaseView })));
@@ -23,7 +23,8 @@ interface Mounted {
 const mounted = new Map<string, Mounted>();
 
 export interface MountDeps {
-  host: ShellDatabaseHost;
+  /** The workspace's (database/host.ts), or a page shared by link's (cloud/sharedDatabase.ts). */
+  host: DatabaseHost;
   i18n: I18n;
 }
 

@@ -2,13 +2,23 @@
 // request header (it is in the address's hash, which browsers never send), and the page is drawn
 // read-only from the worker's JSON of its document (never its Yjs updates, which still hold text
 // deleted since the last compaction); nothing is stored on this device.
+//
+// Phase 9: databases are read by the link too (DECISIONS.md, "2026-11-17: Phase 9"): a database
+// block, a chart or a board block, and a database's own page (by its first view) are drawn
+// read-only over the link's database routes (sharedDatabase.ts), through the view the block
+// names; row pages stay closed. People are never named: a mention reads "@" and "someone".
 import { knownTypes, readableJSON, type DocJSON } from '@cgw/doc';
 import { BlockEditorView, type EditorHost, type EditorStrings } from '@cgw/editor';
-import { FIRST_PARTY } from '@cgw/plugins';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { mountDatabase } from '../database/mount';
+import { pluginsHost } from '../plugins/host';
 import { navigate } from '../route';
 import { noAccessWorkbooks } from '../sheet/shared';
+import { SharedDatabaseHost, sharedDatabaseApi } from './sharedDatabase';
+
+// The database views load with the first database page shown, not with the shared page.
+const DatabaseView = lazy(() => import('@cgw/database').then((m) => ({ default: m.DatabaseView })));
 
 interface SharedPage {
   id: string;
@@ -16,6 +26,8 @@ interface SharedPage {
   icon: string | null;
   parentPageId?: string | null;
   orderKey?: string;
+  /** Phase 9: `database` for a database's own page (drawn by its first view); else a page. */
+  kind?: string;
 }
 
 class SharedError extends Error {
@@ -73,55 +85,65 @@ export function SharedView({
   const [content, setContent] = useState<{ id: string; json: DocJSON } | null>(null);
   const [failed, setFailed] = useState(false);
   const shown = pageId ?? tree?.page.id ?? null;
-  // Images of the shared pages, by the link's own signed URLs; titles of linked pages if shared.
+  const page = tree?.pages.find((p) => p.id === shown) ?? tree?.page;
+  const isDatabase = page?.kind === 'database';
+
+  /** Images of the shared pages, and files in their databases, by the link's own signed URLs. */
+  const assetUrl = useMemo(
+    () => async (assetId: string) => {
+      try {
+        const answer = await call<{ url: string }>(apiBase, token, `/assets/${assetId}/url`);
+        return answer.url;
+      } catch {
+        return null;
+      }
+    },
+    [apiBase, token],
+  );
+
+  // The pages of the link's scope, as the database views and the editor look them up.
+  const scope = useMemo(() => new Map((tree?.pages ?? []).map((p) => [p.id, p])), [tree]);
+  const openExternal = (url: string) => void window.open(url, '_blank', 'noopener,noreferrer');
+  const databases = useMemo(
+    () =>
+      new SharedDatabaseHost(sharedDatabaseApi(apiBase, token), {
+        pageTitle: (id) => scope.get(id)?.title,
+        pageIcon: (id) => scope.get(id)?.icon,
+        openPage: (id) => {
+          if (scope.has(id)) navigate({ kind: 'shared', token, pageId: id });
+        },
+        openExternal,
+        assetUrl,
+      }),
+    [apiBase, token, scope, assetUrl],
+  );
+  const plugins = useMemo(() => pluginsHost({ databases, i18n }), [databases, i18n]);
+
   const host: EditorHost = {
     strings: t('editor', { returnObjects: true }) as unknown as EditorStrings,
     locale: i18n.language,
-    openExternal: (url) => window.open(url, '_blank', 'noopener,noreferrer'),
+    openExternal,
     assets: {
-      url: async (assetId) => {
-        try {
-          const answer = await call<{ url: string }>(apiBase, token, `/assets/${assetId}/url`);
-          return answer.url;
-        } catch {
-          return null;
-        }
-      },
+      url: assetUrl,
       info: () => undefined,
       store: async () => null,
       pick: async () => [],
       open: () => undefined,
     },
-    // A database block: no shared route for databases in Phase 4, so it says where it is shown.
+    // A database block: its view's rows, read only, by the link (Phase 9).
     databases: {
-      mount: (element) => {
-        const note = document.createElement('p');
-        note.className = 'cgw-db-shared-note';
-        note.setAttribute('role', 'note');
-        note.textContent = t('databases.sharedPlaceholder');
-        element.appendChild(note);
-        return () => note.remove();
-      },
+      mount: (element, options) => mountDatabase(element, options, { host: databases, i18n }),
     },
     // A workbook is never shared outside its workspace: no picture, only that (Phase 5).
     workbooks: noAccessWorkbooks(t('sheets.noAccess')),
-    // A chart or a board draws a database's rows: shown where the database is (Phase 7). A type
+    // A chart or a board draws its view's rows as the app does, read only (Phase 9). A type
     // this build does not know is still the editor's own placeholder.
-    plugins: {
-      has: (type) => FIRST_PARTY.has(type),
-      mount: (element) => {
-        const note = document.createElement('p');
-        note.className = 'cgw-db-shared-note';
-        note.setAttribute('role', 'note');
-        note.textContent = t('databases.sharedPlaceholder');
-        element.appendChild(note);
-        return { update: () => {}, destroy: () => note.remove() };
-      },
-    },
+    plugins,
+    // No `people`: a person's mention reads "@" and "someone" (names are never shared).
     pages: {
-      title: (id) => tree?.pages.find((p) => p.id === id)?.title,
-      icon: (id) => tree?.pages.find((p) => p.id === id)?.icon,
-      exists: (id) => !!tree?.pages.some((p) => p.id === id),
+      title: (id) => scope.get(id)?.title,
+      icon: (id) => scope.get(id)?.icon,
+      exists: (id) => scope.has(id),
       open: (id) => navigate({ kind: 'shared', token, pageId: id }),
       create: async () => null,
       search: () => [],
@@ -135,7 +157,8 @@ export function SharedView({
     );
   }, [apiBase, token]);
   useEffect(() => {
-    if (!shown) return;
+    // A database's page has no document: its first view is drawn instead.
+    if (!shown || !tree || isDatabase) return;
     let live = true;
     // Unknown blocks (a newer document) are drawn as a note, as a newer page is in the app.
     void loadDoc(apiBase, token, shown, () => live).then(
@@ -150,7 +173,7 @@ export function SharedView({
     return () => {
       live = false;
     };
-  }, [apiBase, token, shown, t]);
+  }, [apiBase, token, shown, tree, isDatabase, t]);
 
   if (failed)
     return (
@@ -158,7 +181,6 @@ export function SharedView({
         <h1>{t('share.sharedGone')}</h1>
       </main>
     );
-  const page = tree?.pages.find((p) => p.id === shown) ?? tree?.page;
   const children = tree?.pages.filter((p) => p.parentPageId === shown) ?? [];
   return (
     <main className="cgw-shared" aria-labelledby="cgw-shared-title">
@@ -167,9 +189,15 @@ export function SharedView({
       </p>
       <h1 id="cgw-shared-title" className="cgw-shared-title">
         {page?.icon ? `${page.icon} ` : ''}
-        {page?.title || t('page.untitled')}
+        {page?.title || t(isDatabase ? 'database.untitledDatabase' : 'page.untitled')}
       </h1>
-      {content && content.id === shown ? (
+      {isDatabase && shown ? (
+        <Suspense fallback={<p aria-busy="true">{t('app.loading')}</p>}>
+          <div className="cgw-shared-database" data-testid="shared-database">
+            <DatabaseView key={shown} host={databases} databaseId={shown} editable={false} />
+          </div>
+        </Suspense>
+      ) : content && content.id === shown ? (
         <BlockEditorView
           host={host}
           key={content.id}

@@ -53,6 +53,17 @@ export interface WorkspacePlatform {
    */
   sheetOrigin?: string;
   /**
+   * Phase 9 (Track S6): Cash Gear Sheet's desktop app, on the desktop only. `installed` asks the
+   * system whether anything opens `cashgear-sheet` links (it never starts a program to ask);
+   * `open` hands it a launch link from `POST /workbooks/{id}/launch` with `{target: "desktop"}`,
+   * and the native side refuses any other link. Without it, or when it is not installed, "Open in
+   * Cash Gear Sheet" opens Sheet's web app as before.
+   */
+  sheetApp?: {
+    installed(): Promise<boolean>;
+    open(url: string): Promise<void>;
+  };
+  /**
    * Cash Gear ERP's two origins for this build, and no other ever (decisions, 2026-11-14): its
    * API (`VITE_CGW_ERP_API`; live `https://api.cashgearerp.com`, local-API builds the mock on
    * `http://127.0.0.1:4282`) and its client, whose connect page opens in a pop-up or the system

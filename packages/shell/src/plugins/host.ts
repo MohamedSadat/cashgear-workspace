@@ -2,6 +2,7 @@
 // the first-party definitions (`@cgw/plugins`), drawn into a block's frame over the open
 // workspace's database host. The views load with the first plugin block on screen: `mount`
 // answers at once with a frame that draws when they have loaded.
+import type { DatabaseHost } from '@cgw/database';
 import type { EditorHost, MountedFrame, PluginMountOptions } from '@cgw/editor';
 import { FIRST_PARTY, type PluginData, type PluginRegistry } from '@cgw/plugins';
 import type { i18n as I18n } from 'i18next';
@@ -9,11 +10,13 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDatabaseHost } from '../database/context';
 import { canAsk, requestDatabasePick } from '../database/dialogs';
-import type { ShellDatabaseHost } from '../database/host';
 
 export interface PluginsHostDeps {
-  /** The open workspace's databases; null where there are none (a shared page). */
-  databases: ShellDatabaseHost | null;
+  /**
+   * The open workspace's databases, or a page shared by link's (read only, Phase 9:
+   * cloud/sharedDatabase.ts); null where there are none.
+   */
+  databases: DatabaseHost | null;
   /** The linked-view picker, when the frame can ask. */
   pickDatabase?: PluginData['pickDatabase'];
   i18n: I18n;

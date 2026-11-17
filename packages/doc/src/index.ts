@@ -72,7 +72,14 @@ export {
   type ClockRange,
 } from './stateHash';
 export * as build from './content';
-export { readableJSON, references, remapRefs, withNewIds, withoutIds } from './content';
+export {
+  readableJSON,
+  references,
+  remapRefs,
+  withNewIds,
+  withoutIds,
+  workbookRefs,
+} from './content';
 export {
   MAX_NESTING,
   MAX_PAGE_BLOCKS,

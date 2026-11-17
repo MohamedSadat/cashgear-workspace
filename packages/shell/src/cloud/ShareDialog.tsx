@@ -1,12 +1,15 @@
 // Page sharing (M2.6): who may open the page and at what level, whether it is restricted to the
 // people listed, and view links. The server decides access on every request; this dialog only
-// shows and asks (ARCHITECTURE.md: hiding a control is never the check).
+// shows and asks (ARCHITECTURE.md: hiding a control is never the check). Phase 9: for someone with
+// full access, a second view of the dialog, "Publish to the web" (PublishSection.tsx).
 import { CgCheckBox } from '@cashgear/ui';
 import type { Id, PageRecord } from '@cgw/workspace';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../Dialog';
 import type { Cloud } from './cloud';
+import { PublishSection } from './PublishSection';
+import { publishingApi } from './publishing';
 
 type Level = 'full' | 'edit' | 'comment' | 'view' | 'none';
 const LEVELS: Level[] = ['full', 'edit', 'comment', 'view', 'none'];
@@ -54,6 +57,10 @@ export function ShareDialog({
   const [message, setMessage] = useState<string | null>(null);
   const format = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium' });
   const full = mine === 'full';
+  const publishing = useMemo(() => publishingApi(cloud.api), [cloud]);
+  const canPublish = full && page.kind !== 'row';
+  const [view, setView] = useState<'share' | 'publish'>('share');
+  const shown = canPublish ? view : 'share';
 
   useEffect(() => {
     void cloud.permissions(page.id).then(
@@ -104,160 +111,193 @@ export function ShareDialog({
 
   return (
     <Dialog title={t('share.title', { title: page.title || t('page.untitled') })} onClose={onClose}>
-      {!full && entries && <p className="cgw-muted">{t('share.readOnly')}</p>}
-      <CgCheckBox
-        label={t('share.restricted')}
-        checked={restricted}
-        disabled={!full}
-        onCheckedChange={(checked) => setRestricted(checked === true)}
-      />
-      <ul className="cgw-list cgw-share-entries" data-testid="share-entries">
-        {(entries ?? []).map((entry, i) => (
-          <li key={`${entry.principalType}:${entry.principalId}`} className="cgw-list-row">
-            <span>{entry.name}</span>
-            <select
-              className="cgw-input"
-              aria-label={t('share.levelFor', { name: entry.name })}
-              value={entry.level}
-              disabled={!full}
-              onChange={(e) =>
-                setEntries((list) =>
-                  list!.map((x, j) => (j === i ? { ...x, level: e.target.value as Level } : x)),
-                )
-              }
-            >
-              {LEVELS.map((level) => (
-                <option key={level} value={level}>
-                  {t(levelKey(level))}
-                </option>
-              ))}
-            </select>
-            {full && (
-              <button
-                type="button"
-                className="cgw-button"
-                onClick={() => setEntries((list) => list!.filter((_, j) => j !== i))}
-              >
-                {t('share.remove')}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {full && (
-        <div className="cgw-inline-form">
-          <label htmlFor="cgw-share-person">{t('share.person')}</label>
-          <select
-            id="cgw-share-person"
-            className="cgw-input"
-            value={adding}
-            onChange={(e) => setAdding(e.target.value)}
-          >
-            <option value="" />
-            {!everyone && <option value="*">{t('share.everyone')}</option>}
-            {candidates.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.displayName} ({m.email})
-              </option>
-            ))}
-          </select>
+      {canPublish && (
+        <div role="group" aria-label={t('publish.views')} className="cgw-share-views">
           <button
             type="button"
-            className="cgw-button"
-            disabled={!adding}
-            onClick={() => {
-              const member = members.find((m) => m.userId === adding);
-              setEntries((list) => [
-                ...(list ?? []),
-                adding === '*'
-                  ? {
-                      principalType: 'workspace',
-                      principalId: page.workspaceId,
-                      level: 'view',
-                      name: t('share.everyone'),
-                    }
-                  : {
-                      principalType: 'user',
-                      principalId: adding as Id,
-                      level: 'view',
-                      name: member?.displayName ?? '',
-                    },
-              ]);
-              setAdding('');
-            }}
+            className={`cgw-button${shown === 'share' ? ' is-primary' : ''}`}
+            aria-pressed={shown === 'share'}
+            onClick={() => setView('share')}
           >
-            {t('share.add')}
+            {t('publish.viewShare')}
+          </button>
+          <button
+            type="button"
+            className={`cgw-button${shown === 'publish' ? ' is-primary' : ''}`}
+            aria-pressed={shown === 'publish'}
+            data-testid="publish-view"
+            onClick={() => setView('publish')}
+          >
+            {t('publish.viewPublish')}
           </button>
         </div>
       )}
-      {full && (
-        <section aria-labelledby="cgw-share-links">
-          <h3 id="cgw-share-links">{t('share.links')}</h3>
-          <p className="cgw-muted">{t('share.linkNote')}</p>
-          <ul className="cgw-list">
-            {links.map((l) => (
-              <li key={l.id} className="cgw-list-row">
-                <span>
-                  {l.expiresAt
-                    ? t('share.expires', { when: format.format(new Date(l.expiresAt)) })
-                    : ''}
-                </span>
-                <button
-                  type="button"
-                  className="cgw-button"
-                  onClick={() =>
-                    void cloud
-                      .revokeShareLink(page.id, l.id)
-                      .then(() => setLinks((list) => list.filter((x) => x.id !== l.id)))
+      {shown === 'publish' && (
+        <div className="cgw-publish-scroll">
+          <PublishSection api={publishing} page={page} />
+        </div>
+      )}
+      {shown === 'share' && (
+        <>
+          {!full && entries && <p className="cgw-muted">{t('share.readOnly')}</p>}
+          <CgCheckBox
+            label={t('share.restricted')}
+            checked={restricted}
+            disabled={!full}
+            onCheckedChange={(checked) => setRestricted(checked === true)}
+          />
+          <ul className="cgw-list cgw-share-entries" data-testid="share-entries">
+            {(entries ?? []).map((entry, i) => (
+              <li key={`${entry.principalType}:${entry.principalId}`} className="cgw-list-row">
+                <span>{entry.name}</span>
+                <select
+                  className="cgw-input"
+                  aria-label={t('share.levelFor', { name: entry.name })}
+                  value={entry.level}
+                  disabled={!full}
+                  onChange={(e) =>
+                    setEntries((list) =>
+                      list!.map((x, j) => (j === i ? { ...x, level: e.target.value as Level } : x)),
+                    )
                   }
                 >
-                  {t('share.revoke')}
-                </button>
+                  {LEVELS.map((level) => (
+                    <option key={level} value={level}>
+                      {t(levelKey(level))}
+                    </option>
+                  ))}
+                </select>
+                {full && (
+                  <button
+                    type="button"
+                    className="cgw-button"
+                    onClick={() => setEntries((list) => list!.filter((_, j) => j !== i))}
+                  >
+                    {t('share.remove')}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
-          {made && (
-            <div className="cgw-inline-form" role="status">
-              <span className="cgw-share-link" data-testid="share-link">
-                {made}
-              </span>
+          {full && (
+            <div className="cgw-inline-form">
+              <label htmlFor="cgw-share-person">{t('share.person')}</label>
+              <select
+                id="cgw-share-person"
+                className="cgw-input"
+                value={adding}
+                onChange={(e) => setAdding(e.target.value)}
+              >
+                <option value="" />
+                {!everyone && <option value="*">{t('share.everyone')}</option>}
+                {candidates.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.displayName} ({m.email})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="cgw-button"
+                disabled={!adding}
+                onClick={() => {
+                  const member = members.find((m) => m.userId === adding);
+                  setEntries((list) => [
+                    ...(list ?? []),
+                    adding === '*'
+                      ? {
+                          principalType: 'workspace',
+                          principalId: page.workspaceId,
+                          level: 'view',
+                          name: t('share.everyone'),
+                        }
+                      : {
+                          principalType: 'user',
+                          principalId: adding as Id,
+                          level: 'view',
+                          name: member?.displayName ?? '',
+                        },
+                  ]);
+                  setAdding('');
+                }}
+              >
+                {t('share.add')}
+              </button>
+            </div>
+          )}
+          {full && (
+            <section aria-labelledby="cgw-share-links">
+              <h3 id="cgw-share-links">{t('share.links')}</h3>
+              <p className="cgw-muted">{t('share.linkNote')}</p>
+              <ul className="cgw-list">
+                {links.map((l) => (
+                  <li key={l.id} className="cgw-list-row">
+                    <span>
+                      {l.expiresAt
+                        ? t('share.expires', { when: format.format(new Date(l.expiresAt)) })
+                        : ''}
+                    </span>
+                    <button
+                      type="button"
+                      className="cgw-button"
+                      onClick={() =>
+                        void cloud
+                          .revokeShareLink(page.id, l.id)
+                          .then(() => setLinks((list) => list.filter((x) => x.id !== l.id)))
+                      }
+                    >
+                      {t('share.revoke')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {made && (
+                <div className="cgw-inline-form" role="status">
+                  <span className="cgw-share-link" data-testid="share-link">
+                    {made}
+                  </span>
+                  <button
+                    type="button"
+                    className="cgw-button"
+                    onClick={() =>
+                      void navigator.clipboard?.writeText(made).then(() => setCopied(true))
+                    }
+                  >
+                    {copied ? t('share.copied') : t('share.copy')}
+                  </button>
+                  <p className="cgw-muted">{t('share.linkCreated')}</p>
+                </div>
+              )}
               <button
                 type="button"
                 className="cgw-button"
                 onClick={() =>
-                  void navigator.clipboard?.writeText(made).then(() => setCopied(true))
+                  void cloud.createShareLink(page.id).then((link) => {
+                    setMade(cloud.shareUrl(link.token));
+                    setCopied(false);
+                    setLinks((list) => [
+                      ...list,
+                      { id: link.id, expiresAt: link.expiresAt ?? null },
+                    ]);
+                  })
                 }
               >
-                {copied ? t('share.copied') : t('share.copy')}
+                {t('share.createLink')}
               </button>
-              <p className="cgw-muted">{t('share.linkCreated')}</p>
-            </div>
+            </section>
           )}
-          <button
-            type="button"
-            className="cgw-button"
-            onClick={() =>
-              void cloud.createShareLink(page.id).then((link) => {
-                setMade(cloud.shareUrl(link.token));
-                setCopied(false);
-                setLinks((list) => [...list, { id: link.id, expiresAt: link.expiresAt ?? null }]);
-              })
-            }
-          >
-            {t('share.createLink')}
-          </button>
-        </section>
-      )}
-      {message && (
-        <p role="status" className="cgw-muted">
-          {message}
-        </p>
+          {message && (
+            <p role="status" className="cgw-muted">
+              {message}
+            </p>
+          )}
+        </>
       )}
       <div className="cgw-dialog-buttons">
         <button type="button" className="cgw-button" onClick={onClose}>
           {t('frame.close')}
         </button>
-        {full && (
+        {full && shown === 'share' && (
           <button type="button" className="cgw-button is-primary" onClick={save}>
             {t('share.save')}
           </button>

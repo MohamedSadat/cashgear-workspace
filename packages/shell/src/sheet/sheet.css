@@ -281,3 +281,79 @@
   align-items: center;
   gap: 6px;
 }
+
+/* A workbook's history (Phase 9, WorkbookHistory.tsx): its versions, one shown read-only. */
+.cgw-workbook-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.cgw-workbook-versions {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-workbook-version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding-block: 6px;
+  border-block-end: 1px solid var(--cg-border);
+}
+
+.cgw-workbook-version-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-workbook-current {
+  padding: 1px 6px;
+  border: 1px solid var(--cg-border);
+  border-radius: 999px;
+  color: var(--cg-text-secondary);
+  font-size: 0.75rem;
+}
+
+.cgw-workbook-confirm {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-workbook-preview p {
+  margin: 0;
+}
+
+/* The version's embed loads out of sight and takes its height once it has drawn. */
+.cgw-workbook-frame {
+  block-size: 1px;
+  overflow: hidden;
+}
+
+.cgw-workbook-frame[hidden] {
+  display: none;
+}
+
+.cgw-workbook-frame[data-shown] {
+  min-block-size: 120px;
+}
+
+.cgw-workbook-frame iframe {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  border: 0;
+  border-radius: 4px;
+}

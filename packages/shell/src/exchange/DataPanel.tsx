@@ -1,15 +1,23 @@
 // Settings → Your data: export the workspace (from this device, or from the account as the server
 // makes it), import an export, import from Markdown, Notion or Word (Phase 8, the import panel),
 // and what the browser keeps.
+//
+// Phase 9 (M9.3): a synced workspace's export holds its workbooks, read from the account
+// (exchange/workbooks.ts). An export imported while signed in goes to the account as a new synced
+// workspace, and its workbooks are made again there; imported signed out, it stays on this device
+// and its workbooks are skipped, which the message says.
 import { CgFilePicker } from '@cashgear/ui';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { Cloud } from '../cloud/cloud';
 import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useShell } from '../context';
 import { collaborates, useCollab } from '../collab/context';
 import { useDatabaseHost } from '../database/context';
 import { navigate } from '../route';
 import type { WorkspaceSession } from '../session';
+import { workbookApi } from '../sheet/api';
+import type { ExportOptions, ExportWorkbookReport } from './exchange';
 
 /** The import panel and what it reads with load when it is opened, not with Settings. */
 const ImportPanel = lazy(() =>
@@ -25,19 +33,29 @@ export async function exportAndSave(
   people?: { id: string; name: string }[],
   /** A mentioned person's name, for the pages' Markdown (the workspace's people directory). */
   userName?: (userId: string) => string | undefined,
-) {
+  /** Phase 9: the workspace's workbooks, read from the account (`workbookReader`). */
+  workbooks?: ExportOptions['workbooks'],
+): Promise<ExportWorkbookReport> {
   const { exportZip } = await import('./exchange');
   await session.flushAll();
-  const { bytes, name } = await exportZip(session, {
+  const result = await exportZip(session, {
     pageIds,
     untitled,
     people: people && Object.fromEntries(people.map((p) => [p.id, p.name])),
     ...(userName ? { userName } : {}),
+    ...(workbooks ? { workbooks } : {}),
     // A chart's or a board's line in the Markdown, in the interface language (Phase 7).
     language: document.documentElement.lang.startsWith('ar') ? 'ar' : 'en',
   });
-  await save(name, bytes, 'application/zip');
+  await save(result.name, result.bytes, 'application/zip');
+  return result.workbooks;
 }
+
+/** Someone is signed in and the server is not known to be out of reach. */
+const reachable = (cloud: Cloud | null) => {
+  const state = cloud?.status.state;
+  return !!cloud?.account && state !== 'offline' && state !== 'signedOut';
+};
 
 export function DataPanel({ session }: { session: WorkspaceSession }) {
   const { t } = useTranslation();
@@ -60,7 +78,26 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [importing, setImporting] = useState(false);
 
-  /** Reads a workspace export and imports it, then opens its first page. */
+  /** What the export says about the workbooks it holds, or could not read. */
+  const exported = (report: ExportWorkbookReport) =>
+    [
+      t('exchange.exported'),
+      report.unreadable
+        ? t('exchange.workbooksUnreadable')
+        : report.written
+          ? t('exchange.workbooksWritten', { count: report.written })
+          : '',
+      !report.unreadable && report.failed
+        ? t('exchange.workbooksFailed', { count: report.failed })
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+  /**
+   * Reads a workspace export and imports it, then opens its first page. Signed in, the new
+   * workspace goes to the account and its workbooks are made there; else they are skipped.
+   */
   const importExport = (chosen: File) => {
     setBusy('import');
     setMessage(null);
@@ -68,13 +105,40 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
       .arrayBuffer()
       .then(async (buffer) => {
         const { importZip } = await import('./exchange');
-        const first = await importZip(
+        const toAccount = reachable(cloud);
+        const result = await importZip(
           session,
           new Uint8Array(buffer),
           t('exchange.importedSuffix'),
+          { workbooks: toAccount ? 'make' : 'skip' },
         );
-        setMessage(t('exchange.imported'));
-        if (first) navigate({ kind: 'page', pageId: first });
+        const parts: string[] = [];
+        if (toAccount && cloud) {
+          try {
+            await cloud.upload(result.workspaceId);
+            parts.push(t('exchange.importedToAccount'));
+            if (result.pendingWorkbooks.length) {
+              const { makeWorkbooks } = await import('./workbooks');
+              const made = await makeWorkbooks(
+                workbookApi(cloud.api),
+                result.workspaceId,
+                result.pendingWorkbooks,
+              );
+              if (made.made) parts.push(t('exchange.workbooksMade', { count: made.made }));
+              if (made.failed) parts.push(t('exchange.workbooksNotMade', { count: made.failed }));
+            }
+          } catch (error) {
+            // Still on this device, whole: it can be uploaded later. Its workbooks were not made.
+            console.warn('The imported workspace did not reach the account:', error);
+            parts.push(t('exchange.imported'), t('exchange.uploadFailed'));
+            if (result.pendingWorkbooks.length)
+              parts.push(t('exchange.workbooksNotMade', { count: result.pendingWorkbooks.length }));
+          }
+        } else parts.push(t('exchange.imported'));
+        if (result.skippedWorkbooks)
+          parts.push(t('exchange.workbooksSkipped', { count: result.skippedWorkbooks }));
+        setMessage(parts.join(' '));
+        if (result.first) navigate({ kind: 'page', pageId: result.first });
       })
       .catch((error: unknown) => {
         console.error(error);
@@ -104,6 +168,11 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
           onClick={() => {
             setBusy('export');
             setMessage(null);
+            // A synced workspace's workbooks are in the account: read from there, when it can be.
+            const workbooks =
+              cloud && workspace && !workspace.localOnly && reachable(cloud)
+                ? workbookReaderFor(cloud, workspace.id)
+                : undefined;
             exportAndSave(
               session,
               (n, b, ty) => platform.saveFile(n, b, ty),
@@ -113,8 +182,9 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
               workspace && collaborates(collab, session, workspace.id)
                 ? collab!.people(workspace.id).name
                 : undefined,
+              workbooks,
             )
-              .then(() => setMessage(t('exchange.exported')))
+              .then((report) => setMessage(exported(report)))
               .catch((error: unknown) => {
                 console.error(error);
                 setMessage(t('exchange.exportFailed'));
@@ -179,10 +249,29 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
         </Suspense>
       )}
       {message && (
-        <p role="status" className="cgw-data-message">
+        <p role="status" className="cgw-data-message" data-testid="data-message">
           {message}
         </p>
       )}
     </section>
   );
+}
+
+/**
+ * A synced workspace's workbooks for an export, read from the account while it can be reached;
+ * undefined otherwise (the export then holds none, and says nothing is missing).
+ */
+export function accountWorkbooks(
+  cloud: Cloud | null,
+  workspaceId: string,
+): ExportOptions['workbooks'] | undefined {
+  return cloud && reachable(cloud) ? workbookReaderFor(cloud, workspaceId) : undefined;
+}
+
+/** The export's workbook reader over the connection, loaded with the first export that needs it. */
+function workbookReaderFor(cloud: Cloud, workspaceId: string): ExportOptions['workbooks'] {
+  return async (wanted) => {
+    const { workbookReader } = await import('./workbooks');
+    return workbookReader(workbookApi(cloud.api), workspaceId)(wanted);
+  };
 }

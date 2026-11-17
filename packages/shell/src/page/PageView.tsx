@@ -38,7 +38,7 @@ import {
 } from '../session';
 import { registerBlockCommands, slashItems } from './blockCommands';
 import { assetsOf, editorHost, ToggleState } from './editorHost';
-import { exportAndSave } from '../exchange/DataPanel';
+import { accountWorkbooks, exportAndSave } from '../exchange/DataPanel';
 import { HistoryDialog } from './HistoryDialog';
 import { PageHeader } from './PageHeader';
 import { pageEvents, takeHistoryRequest } from './PageMenu';
@@ -336,7 +336,8 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   const editorRef = useRef<BlockEditor | null>(null);
   const plainHost = usePageHost(session, page);
   const collab = useCollab();
-  const account = useAccount(useCloud());
+  const cloud = useCloud();
+  const account = useAccount(cloud);
   // Comments and presence (Phase 6) are for the members of a workspace in the account; a page
   // shared by link never comes here (SharedView), and shows neither.
   const together = !!account && collaborates(collab, session, page.workspaceId);
@@ -518,6 +519,8 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         databases?.people(),
         // Mentions in the Markdown are written with names (Phase 6).
         together && collab ? collab.people(page.workspaceId).name : undefined,
+        // The workbooks its sheet blocks show, from the account (Phase 9).
+        together ? accountWorkbooks(cloud, page.workspaceId) : undefined,
       ).catch((error: unknown) => console.error('Export failed:', error));
     };
     pageEvents.addEventListener('history', onHistory);
@@ -526,7 +529,7 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
       pageEvents.removeEventListener('history', onHistory);
       pageEvents.removeEventListener('export', onExport);
     };
-  }, [page.id, page.workspaceId, session, platform, t, databases, together, collab]);
+  }, [page.id, page.workspaceId, session, platform, t, databases, together, collab, cloud]);
 
   // Saved text goes into the search index a moment after typing stops (M1.8).
   useEffect(() => doc.onSaved(() => session.scheduleIndex(page.id)), [doc, session, page.id]);

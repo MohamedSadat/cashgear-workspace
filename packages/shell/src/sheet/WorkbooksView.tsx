@@ -1,21 +1,25 @@
 // `#/workbooks`: the open workspace's workbooks the person may read (the server's list, which
 // checks each one), found by name; each opens in Cash Gear Sheet, and may be renamed, moved to the
 // trash and restored, and given its own access list by the pages' rules (WorkbookPermissions).
+// Phase 9: each one's history (WorkbookHistory: its versions, one shown read-only, a restore).
 // Workbooks are not in the change feed: the list is read by route, online, and read again after
 // each change. The server decides every action; a refused one says so.
 import { normaliseText, searchTerms, type Id } from '@cgw/workspace';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Cloud } from '../cloud/cloud';
 import { useShell } from '../context';
 import { Dialog } from '../Dialog';
 import type { WorkspaceSession } from '../session';
 import { canEditWorkbook, failureCode, workbookApi, type Workbook } from './api';
-import { openInSheet } from './launch';
+import { openInSheet, sheetOriginOf } from './launch';
 import { requestNewWorkbook } from './requests';
 import { useUnavailable } from './WorkbookPicker';
+import { WorkbookHistory } from './WorkbookHistory';
 import { WorkbookPermissions } from './WorkbookPermissions';
 import './sheet.css';
+
+const noSubscription = () => () => {};
 
 const accessKey = (access: string) =>
   access === 'full'
@@ -34,7 +38,11 @@ export function WorkbooksView({
   cloud: Cloud | null;
 }) {
   const { t, i18n } = useTranslation();
-  const { platform } = useShell();
+  const { platform, theme } = useShell();
+  const look = useSyncExternalStore(
+    theme?.subscribe ?? noSubscription,
+    () => theme?.theme ?? 'light',
+  );
   const unavailable = useUnavailable(session, cloud);
   const api = useMemo(() => (cloud ? workbookApi(cloud.api) : null), [cloud]);
   const workspaceId = session.workspaceId;
@@ -44,6 +52,7 @@ export function WorkbooksView({
   const [message, setMessage] = useState<{ text: string; alert: boolean } | null>(null);
   const [renaming, setRenaming] = useState<Workbook | null>(null);
   const [sharing, setSharing] = useState<Workbook | null>(null);
+  const [history, setHistory] = useState<Workbook | null>(null);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((n) => n + 1), []);
 
@@ -238,6 +247,16 @@ export function WorkbooksView({
                               >
                                 {t('sheets.open')}
                               </button>
+                              {w.versionId ? (
+                                <button
+                                  type="button"
+                                  className="cgw-button cgw-sheet-button"
+                                  aria-label={t('sheets.historyNamed', { name: w.name })}
+                                  onClick={() => setHistory(w)}
+                                >
+                                  {t('sheets.history')}
+                                </button>
+                              ) : null}
                               {editor && (
                                 <button
                                   type="button"
@@ -295,6 +314,16 @@ export function WorkbooksView({
               t('sheets.renamed', { name }),
             );
           }}
+        />
+      ) : null}
+      {history && api ? (
+        <WorkbookHistory
+          api={api}
+          workbook={history}
+          sheetOrigin={sheetOriginOf(platform)}
+          theme={look}
+          onClose={() => setHistory(null)}
+          onRestored={reload}
         />
       ) : null}
       {sharing && cloud && workspaceId ? (

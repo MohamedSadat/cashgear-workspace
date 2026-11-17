@@ -6,6 +6,7 @@
 // workbook's own check. Every other state says what it is: no access (no picture), in the trash,
 // deleted, empty, each embed error, offline, a local workspace. An editor of the workbook asks the
 // embed for a picture of each new version or view and sends it; this device keeps the last one.
+// Phase 9: the block's menu opens the workbook's history (WorkbookHistory).
 import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
 import { getSigned } from '@cgw/api';
 import {
@@ -43,6 +44,7 @@ import {
 import type { WorkbookPictures } from './pictures';
 import { openInSheet, sheetOriginOf } from './launch';
 import { requestRangeImport } from './requests';
+import { WorkbookHistory } from './WorkbookHistory';
 import {
   DEFAULT_HEIGHT,
   MAX_HEIGHT,
@@ -507,6 +509,7 @@ export function SheetBlock({
   };
 
   const [picking, setPicking] = useState(false);
+  const [history, setHistory] = useState(false);
   const notFound = live.kind === 'error' && live.code === 'view.notFound';
   const rangeTooLarge = live.kind === 'error' && live.code === 'range.tooLarge';
   const canPick = options.editable && !!workbook && hasVersion && !trashed;
@@ -524,6 +527,12 @@ export function SheetBlock({
       text: t('sheets.open'),
       disabled: !workbook || trashed || reach !== 'online',
       command: () => void launchSheet.current(),
+    },
+    {
+      key: 'history',
+      text: t('sheets.history'),
+      disabled: !workbook || !hasVersion || trashed || reach !== 'online',
+      command: () => setHistory(true),
     },
     {
       key: 'view',
@@ -745,6 +754,17 @@ export function SheetBlock({
         />
       </div>
       <CgContextMenu<null> items={items} actionsRef={menu} ariaLabel={t('sheets.menu')} />
+      {history && workbook && api ? (
+        <WorkbookHistory
+          api={api}
+          workbook={workbook}
+          sheetOrigin={origin}
+          theme={theme}
+          onClose={() => setHistory(false)}
+          onRestored={() => void refresh()}
+          {...(deps.embed ? { embed: deps.embed } : {})}
+        />
+      ) : null}
     </div>
   );
 }

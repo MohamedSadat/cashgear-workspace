@@ -1,0 +1,98 @@
+/* Publishing (Phase 9): the share dialog's "Publish to the web" (PublishSection.tsx) and the
+   workspace's switch in Settings (PublishingSettings.tsx). Logical properties only, so right to
+   left needs nothing of its own; colours from the theme's variables, so dark needs nothing either. */
+
+/* The share dialog's two views, and the publish view scrolling inside the dialog's height. */
+.cgw-share-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cgw-publish-scroll {
+  min-block-size: 0;
+  overflow: auto;
+}
+
+.cgw-publish {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cgw-publish h3,
+.cgw-publish p {
+  margin: 0;
+}
+
+.cgw-publish-live {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-publish-url {
+  color: var(--cg-accent);
+  overflow-wrap: anywhere;
+}
+
+.cgw-publish-pages ul {
+  max-block-size: 10rem;
+  margin: 4px 0;
+  padding-inline-start: 18px;
+  overflow: auto;
+}
+
+.cgw-publish-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.cgw-publish-fields p {
+  grid-column: 2;
+  font-size: 0.8125rem;
+}
+
+.cgw-publish-problem {
+  color: var(--cg-danger-text, #b42318);
+}
+
+.cgw-publish-buttons,
+.cgw-publish-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Settings → Publishing. */
+.cgw-publishing-sites {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.cgw-publishing-sites th,
+.cgw-publishing-sites td {
+  padding: 6px;
+  border-block-end: 1px solid var(--cg-border);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.cgw-publishing-sites th {
+  color: var(--cg-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+@media (max-width: 560px) {
+  .cgw-publish-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cgw-publish-fields p {
+    grid-column: 1;
+  }
+}
