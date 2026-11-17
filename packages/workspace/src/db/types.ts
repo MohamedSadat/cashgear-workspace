@@ -156,7 +156,39 @@ export interface DatabaseRecord {
 /** At or below this many rows a device holds every row and queries locally (DECISIONS.md, Phase 4). */
 export const LOCAL_ROW_LIMIT = 5000;
 
-export type ViewType = 'table' | 'board' | 'list' | 'calendar' | 'gallery';
+export type ViewType = 'table' | 'board' | 'list' | 'calendar' | 'gallery' | 'timeline';
+
+/**
+ * Every view type this build knows, in the order they were added (Phase 9: `timeline`, the sixth).
+ * A type not in it is drawn as a table (never dropped). Its length is the `viewTypes` a
+ * `view.upsert` carries to the server (DECISIONS.md, 2026-11-17: an upsert without it, from an
+ * older build, keeps a stored type and settings it does not know).
+ */
+export const KNOWN_VIEW_TYPES: readonly ViewType[] = [
+  'table',
+  'board',
+  'list',
+  'calendar',
+  'gallery',
+  'timeline',
+];
+
+/** A timeline's zoom: a fixed width per day for each. */
+export type TimelineScale = 'day' | 'week' | 'month' | 'quarter';
+
+/** A timeline view's settings (`ViewConfig.timeline`; Phase 9). */
+export interface TimelineConfig {
+  /** The date property a row's bar starts at (its value's own range gives the end, below). */
+  start: PropertyId | null;
+  /** A second date property the bar ends at; absent or null: the start's own range. */
+  end?: PropertyId | null;
+  /** A select or status property the rows are put in lanes by, in its options' order. */
+  lane?: PropertyId | null;
+  /** Default `week`. */
+  scale?: TimelineScale;
+  /** The list of rows with no start beside the timeline; default true. */
+  undated?: boolean;
+}
 
 export interface ViewRecord {
   id: Id;
@@ -188,6 +220,8 @@ export interface ViewConfig {
   cardSize?: 'small' | 'medium' | 'large';
   /** Table: wrap cell text instead of cutting it. */
   wrap?: boolean;
+  /** Timeline: its dates, lanes, zoom and the undated list (Phase 9). */
+  timeline?: TimelineConfig;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -300,6 +334,26 @@ export interface QuerySpec {
   group: GroupRule | null;
   /** Words every row's title must contain, normalised; empty or absent for none. */
   search?: string;
+  /** Only the rows whose dates meet these days (a calendar's or a timeline's; Phase 9). */
+  window?: DateWindow | null;
+}
+
+/**
+ * A date window (Phase 9): the rows whose span meets `[from, to]`, both `YYYY-MM-DD` and
+ * inclusive. A row's span starts at `propertyId`'s start and ends at `endPropertyId`'s value (its
+ * end, else its start) when that property gives one, else at `propertyId`'s own end, else its
+ * start; an end before the start is the start. Each by its calendar date in the query's offset, as
+ * the date filters read them. A row with no start is never in a window; a window on a property that
+ * is not a date (or not there, or deleted) matches nothing, as does a `from` or `to` that is not a
+ * date or a `from` after `to`. An `endPropertyId` that is not a date (or not there, or deleted) is
+ * not used. Applied after the search and the filter, before sorts and groups: group counts count
+ * the rows in the window. `queryRows` is the rule; db-query-vectors.json holds it for the C# port.
+ */
+export interface DateWindow {
+  propertyId: PropertyId;
+  endPropertyId?: PropertyId | null;
+  from: string;
+  to: string;
 }
 
 /** One group's key and how many filtered rows it holds; `''` is the "no value" group. */

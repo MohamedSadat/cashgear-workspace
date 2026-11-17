@@ -250,6 +250,11 @@ describe('the vectors cover', () => {
     for (const by of ['day', 'week', 'year']) expect(query, by).toContain(`"dateBy": "${by}"`);
     expect(query).toContain('"direction": "desc"');
     expect(query).toContain('"hideEmpty": true');
+    // Phase 9's date window: one property, two, and none.
+    expect(query).toContain('"window": {');
+    expect(query).toContain('"endPropertyId": "pEnd0001"');
+    expect(query).toContain('"endPropertyId": null');
+    expect(query).toContain('"window": null');
   });
 
   it('every rollup function', () => {

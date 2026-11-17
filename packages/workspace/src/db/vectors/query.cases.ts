@@ -1,7 +1,8 @@
-// db-query-vectors.json: filter, sort, group and search, as `queryRows` evaluates them. Suites of
-// one database and its rows, each case a query spec and context with the hand-written rows (ids,
-// in order) and groups it must give.
+// db-query-vectors.json: filter, sort, group, search and (Phase 9) the date window, as `queryRows`
+// evaluates them. Suites of one database and its rows, each case a query spec and context with the
+// hand-written rows (ids, in order) and groups it must give.
 import type {
+  DateWindow,
   FilterCondition,
   FilterGroup,
   GroupCount,
@@ -245,6 +246,7 @@ interface Q {
   sorts?: SortRule[];
   group?: GroupRule;
   search?: string;
+  window?: DateWindow | null;
   ctx?: Partial<QueryContext>;
   groupKey?: string;
 }
@@ -261,6 +263,7 @@ function q(name: string, query: Q, rows: string[], groups: GroupCount[] | null =
     group: query.group ?? null,
   };
   if (query.search !== undefined) spec.search = query.search;
+  if (query.window !== undefined) spec.window = query.window;
   const c: QueryCase = { name, spec, ctx: { ...CTX, ...query.ctx }, expected: { rows, groups } };
   if (query.groupKey !== undefined) c.groupKey = query.groupKey;
   return c;
@@ -793,10 +796,274 @@ const textCases: QueryCase[] = [
   q('title with Arabic-Indic digits', { filter: cond('title', 'contains', '12') }, ids(35)),
 ];
 
+// The date window (Phase 9, `DateWindow`): a calendar's and a timeline's query. A row's span runs
+// from the property's start to the end property's value (its end, else its start) when that gives
+// one, else to the property's own end, else its start; an end before the start is the start; each
+// by its calendar date in the query's offset. No start, or a window on what is not a date: never.
+const END = prop('pEnd0001', 'date', { date: { includeTime: false } }, 'Ends');
+const GONE = prop('pGone001', 'date', { trashedAt: '2026-02-01T00:00:00.000Z' }, 'Gone');
+const WINDOWED = database([TITLE, P.date, WHEN, END, P.text, P.select, P.created, F_DATE, GONE]);
+const W = (n: number, title: string, values: VectorRow['values'], extra: Partial<VectorRow> = {}) =>
+  row(n, { title, values, ...extra });
+const WINDOW_ROWS: VectorRow[] = [
+  W(
+    41,
+    'one day',
+    {
+      pDate001: { start: '2026-03-10' },
+      pEnd0001: { start: '2026-03-12' },
+      pSel0001: 'optTodo1',
+      pGone001: { start: '2026-03-10' },
+    },
+    { createdAt: '2026-01-05T23:30:00.000Z', computed: { pFdt0001: { start: '2026-03-10' } } },
+  ),
+  W(
+    42,
+    'own span',
+    { pDate001: { start: '2026-03-01', end: '2026-03-05' }, pSel0001: 'optDone1' },
+    { computed: { pFdt0001: { start: '2026-03-01', end: '2026-03-05' } } },
+  ),
+  // A deleted end property would carry it into early March.
+  W(43, 'before', {
+    pDate001: { start: '2026-02-20', end: '2026-02-28' },
+    pSel0001: 'optTodo1',
+    pGone001: { start: '2026-03-04' },
+  }),
+  W(44, 'backwards', { pDate001: { start: '2026-03-20', end: '2026-03-15' } }),
+  W(45, 'no start', { pEnd0001: { start: '2026-03-10' }, pText001: 'one' }),
+  W(46, 'two properties', {
+    pDate001: { start: '2026-02-25' },
+    pEnd0001: { start: '2026-03-02', end: '2026-03-04' },
+  }),
+  W(47, 'end property earlier', {
+    pDate001: { start: '2026-02-26' },
+    pEnd0001: { start: '2026-02-20' },
+  }),
+  W(48, 'late evening', {
+    pWhen001: { start: '2026-02-28T22:30:00Z' },
+    pDate001: { start: '2026-04-01' },
+    pSel0001: 'optLate1',
+  }),
+  W(49, 'template', { pDate001: { start: '2026-03-10' } }, { isTemplate: true }),
+  W(
+    50,
+    'trashed',
+    { pDate001: { start: '2026-03-10' } },
+    { trashedAt: '2026-03-02T00:00:00.000Z' },
+  ),
+  W(51, 'into April', { pDate001: { start: '2026-03-31', end: '2026-04-30' } }),
+  W(52, 'whole year', {
+    pDate001: { start: '2026-01-01', end: '2026-12-31' },
+    pSel0001: 'optTodo1',
+  }),
+  W(53, 'small hours', { pWhen001: { start: '2026-03-01T02:00:00Z' } }),
+  W(54, 'evening span', {
+    pWhen001: { start: '2026-03-05T20:00:00Z', end: '2026-03-06T23:30:00Z' },
+  }),
+];
+const win = (
+  propertyId: string,
+  from: string,
+  to: string,
+  endPropertyId?: string | null,
+): DateWindow =>
+  endPropertyId === undefined ? { propertyId, from, to } : { propertyId, endPropertyId, from, to };
+const MARCH = win('pDate001', '2026-03-01', '2026-03-15');
+const MARCH_ENDS = win('pDate001', '2026-03-01', '2026-03-15', 'pEnd0001');
+
+const windowCases: QueryCase[] = [
+  q('no window: every row', { window: null }, ids(41, 42, 43, 44, 45, 46, 47, 48, 51, 52, 53, 54)),
+  q(
+    'single days and spans that meet the window, its first day included',
+    { window: MARCH },
+    ids(41, 42, 52),
+  ),
+  q(
+    'its last day counts, and a span ending on its first day',
+    { window: win('pDate001', '2026-03-05', '2026-03-10') },
+    ids(41, 42, 52),
+  ),
+  q(
+    'the days just inside a gap between rows meet only the span over it',
+    { window: win('pDate001', '2026-03-06', '2026-03-09') },
+    ids(52),
+  ),
+  q(
+    'an end before the start is the start',
+    { window: win('pDate001', '2026-03-15', '2026-03-20') },
+    ids(44, 52),
+  ),
+  q(
+    'an end before the start is the start: not the days between',
+    { window: win('pDate001', '2026-03-16', '2026-03-19') },
+    ids(52),
+  ),
+  q(
+    'a span from before the window into it, and one past it',
+    { window: win('pDate001', '2026-02-27', '2026-03-31') },
+    ids(41, 42, 43, 44, 51, 52),
+  ),
+  q(
+    'an end property: its value ends the span, else the own range',
+    { window: MARCH_ENDS },
+    ids(41, 42, 46, 52),
+  ),
+  q(
+    'an end property: its end, not its start, ends the span',
+    { window: win('pDate001', '2026-03-03', '2026-03-04', 'pEnd0001') },
+    ids(42, 46, 52),
+  ),
+  q(
+    'without the end property the same days hold fewer rows',
+    { window: win('pDate001', '2026-03-03', '2026-03-04') },
+    ids(42, 52),
+  ),
+  q(
+    'an end property earlier than the start is the start',
+    { window: win('pDate001', '2026-02-20', '2026-02-25', 'pEnd0001') },
+    ids(43, 46, 52),
+  ),
+  q(
+    'an end property of null is none',
+    { window: win('pDate001', '2026-03-03', '2026-03-04', null) },
+    ids(42, 52),
+  ),
+  q(
+    'an end property that is not a date is not used',
+    { window: win('pDate001', '2026-03-03', '2026-03-04', 'pText001') },
+    ids(42, 52),
+  ),
+  q(
+    'an end property that is not there is not used',
+    { window: win('pDate001', '2026-03-03', '2026-03-04', 'nothere1') },
+    ids(42, 52),
+  ),
+  q(
+    'an end property that was deleted is not used',
+    { window: win('pDate001', '2026-03-03', '2026-03-04', 'pGone001') },
+    ids(42, 52),
+  ),
+  q(
+    'a row with no start is never in a window, whatever its end',
+    { window: win('pDate001', '2026-03-10', '2026-03-10', 'pEnd0001') },
+    ids(41, 52),
+  ),
+  q(
+    'a date-time by its calendar date in UTC',
+    { window: win('pWhen001', '2026-02-28', '2026-02-28') },
+    ids(48),
+  ),
+  q(
+    'a date-time three hours east is the next day',
+    { window: win('pWhen001', '2026-03-01', '2026-03-01'), ctx: { offsetMinutes: 180 } },
+    ids(48, 53),
+  ),
+  q(
+    'three hours east, the day before holds nothing',
+    { window: win('pWhen001', '2026-02-28', '2026-02-28'), ctx: { offsetMinutes: 180 } },
+    [],
+  ),
+  q(
+    'a date-time five hours west is the day before',
+    { window: win('pWhen001', '2026-02-28', '2026-02-28'), ctx: { offsetMinutes: -300 } },
+    ids(48, 53),
+  ),
+  q(
+    "a date-time's end by its calendar date too: three hours east it reaches the next day",
+    { window: win('pWhen001', '2026-03-07', '2026-03-07'), ctx: { offsetMinutes: 180 } },
+    ids(54),
+  ),
+  q("a date-time's end in UTC", { window: win('pWhen001', '2026-03-07', '2026-03-07') }, []),
+  q(
+    'a date stays its date in any offset',
+    { window: win('pDate001', '2026-03-10', '2026-03-10'), ctx: { offsetMinutes: 180 } },
+    ids(41, 52),
+  ),
+  q(
+    'created time, by its calendar date',
+    { window: win('pCrt0001', '2026-01-05', '2026-01-05') },
+    ids(41),
+  ),
+  q(
+    'created time an hour east',
+    { window: win('pCrt0001', '2026-01-06', '2026-01-06'), ctx: { offsetMinutes: 60 } },
+    ids(41),
+  ),
+  q(
+    'a date formula, by its result and its range',
+    { window: win('pFdt0001', '2026-03-04', '2026-03-04') },
+    ids(42),
+  ),
+  q(
+    'a window on a text property matches nothing',
+    { window: win('pText001', '2026-03-01', '2026-03-15') },
+    [],
+  ),
+  q(
+    'a window on a property that is not there matches nothing',
+    { window: win('nothere1', '2026-03-01', '2026-03-15') },
+    [],
+  ),
+  q(
+    'a window on a deleted date property matches nothing',
+    { window: win('pGone001', '2026-03-01', '2026-03-15') },
+    [],
+  ),
+  q(
+    'a window whose first day is not a date matches nothing',
+    { window: win('pDate001', '2026-02-30', '2026-03-15') },
+    [],
+  ),
+  q(
+    'a window whose last day has a time matches nothing',
+    { window: win('pDate001', '2026-03-01', '2026-03-15T00:00:00Z') },
+    [],
+  ),
+  q(
+    'a window that ends before it starts matches nothing',
+    { window: win('pDate001', '2026-03-15', '2026-03-01') },
+    [],
+  ),
+  q('a window of one day', { window: win('pDate001', '2026-03-31', '2026-03-31') }, ids(51, 52)),
+  q(
+    'with the filter and the search',
+    { window: MARCH, filter: cond('pSel0001', 'is', 'optTodo1'), search: 'one' },
+    ids(41),
+  ),
+  q(
+    'with the filter: both must hold',
+    { window: MARCH, filter: cond('pSel0001', 'is', 'optTodo1') },
+    ids(41, 52),
+  ),
+  q(
+    'the sorts order the rows in the window',
+    { window: MARCH, sorts: [asc('pDate001')] },
+    ids(52, 42, 41),
+  ),
+  q(
+    'group counts count the rows in the window',
+    { window: MARCH, group: { propertyId: 'pSel0001' } },
+    ids(41, 42, 52),
+    [g('', 0), g('optTodo1', 2), g('optDone1', 1), g('optLate1', 0), g('optFive1', 0)],
+  ),
+  q(
+    'one group by key, in the window',
+    { window: MARCH, group: { propertyId: 'pSel0001' }, groupKey: 'optTodo1' },
+    ids(41, 52),
+    [g('', 0), g('optTodo1', 2), g('optDone1', 1), g('optLate1', 0), g('optFive1', 0)],
+  ),
+  q(
+    'the rows with no start, as a timeline lists them beside it: a filter, no window',
+    { filter: cond('pDate001', 'isEmpty') },
+    ids(45, 53, 54),
+  ),
+];
+
 export const queryVectors: QuerySuite[] = [
   { name: 'every property type', database: MAIN, rows: MAIN_ROWS, cases: mainCases },
   { name: 'status out of group order', database: REORDERED, rows: STATUS_ROWS, cases: statusCases },
   { name: 'text order', database: database([TITLE]), rows: TEXT_ROWS, cases: textCases },
+  { name: 'the date window', database: WINDOWED, rows: WINDOW_ROWS, cases: windowCases },
 ];
 
 export { DB };

@@ -2,6 +2,7 @@
 // `http.ts` implements it over @cgw/api; tests implement it in memory (testing/fakeServer.ts).
 import type {
   DatabaseRecord,
+  DateWindow,
   FilterGroup,
   GroupCount,
   GroupRule,
@@ -159,6 +160,8 @@ export interface QueryRequest {
   /** Pages within one group of a grouped query. */
   groupKey?: string | null;
   search?: string;
+  /** Only the rows whose dates meet these days (Phase 9; `DateWindow`, the same rule). */
+  window?: DateWindow | null;
   context: QueryContext;
   /** The `next` of the previous page (opaque), or null for the first. */
   after?: string | null;

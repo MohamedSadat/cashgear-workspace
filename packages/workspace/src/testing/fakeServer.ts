@@ -1255,6 +1255,7 @@ export class FakeServer {
           sorts: request.sorts ?? view?.config.sorts ?? [],
           group: request.group !== undefined ? request.group : (view?.config.group ?? null),
           search: request.search,
+          window: request.window ?? null,
         };
         const result = queryRows(
           database,

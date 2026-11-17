@@ -6155,5 +6155,1580 @@
         }
       }
     ]
+  },
+  {
+    "name": "the date window",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pDate001",
+          "name": "Due",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pWhen001",
+          "name": "When",
+          "type": "date",
+          "date": {
+            "includeTime": true
+          }
+        },
+        {
+          "id": "pEnd0001",
+          "name": "Ends",
+          "type": "date",
+          "date": {
+            "includeTime": false
+          }
+        },
+        {
+          "id": "pText001",
+          "name": "Notes",
+          "type": "text"
+        },
+        {
+          "id": "pSel0001",
+          "name": "Stage",
+          "type": "select",
+          "options": [
+            {
+              "id": "optTodo1",
+              "name": "To do",
+              "colour": "gray"
+            },
+            {
+              "id": "optDone1",
+              "name": "Done",
+              "colour": "green"
+            },
+            {
+              "id": "optLate1",
+              "name": "متأخر",
+              "colour": "red"
+            },
+            {
+              "id": "optFive1",
+              "name": "5",
+              "colour": "default"
+            }
+          ]
+        },
+        {
+          "id": "pCrt0001",
+          "name": "Created",
+          "type": "createdTime"
+        },
+        {
+          "id": "pFdt0001",
+          "name": "Due again",
+          "type": "formula",
+          "formula": {
+            "expression": "prop(\"pDate001\")"
+          }
+        },
+        {
+          "id": "pGone001",
+          "name": "Gone",
+          "type": "date",
+          "trashedAt": "2026-02-01T00:00:00.000Z"
+        }
+      ],
+      "version": 1
+    },
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000041",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "one day",
+        "orderKey": "a41",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-05T23:30:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-03-10"
+          },
+          "pEnd0001": {
+            "start": "2026-03-12"
+          },
+          "pSel0001": "optTodo1",
+          "pGone001": {
+            "start": "2026-03-10"
+          }
+        },
+        "computed": {
+          "pFdt0001": {
+            "start": "2026-03-10"
+          }
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000042",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "own span",
+        "orderKey": "a42",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-03-01",
+            "end": "2026-03-05"
+          },
+          "pSel0001": "optDone1"
+        },
+        "computed": {
+          "pFdt0001": {
+            "start": "2026-03-01",
+            "end": "2026-03-05"
+          }
+        }
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000043",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "before",
+        "orderKey": "a43",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-02-20",
+            "end": "2026-02-28"
+          },
+          "pSel0001": "optTodo1",
+          "pGone001": {
+            "start": "2026-03-04"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000044",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "backwards",
+        "orderKey": "a44",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-03-20",
+            "end": "2026-03-15"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000045",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "no start",
+        "orderKey": "a45",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pEnd0001": {
+            "start": "2026-03-10"
+          },
+          "pText001": "one"
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000046",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "two properties",
+        "orderKey": "a46",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-02-25"
+          },
+          "pEnd0001": {
+            "start": "2026-03-02",
+            "end": "2026-03-04"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000047",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "end property earlier",
+        "orderKey": "a47",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-02-26"
+          },
+          "pEnd0001": {
+            "start": "2026-02-20"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000048",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "late evening",
+        "orderKey": "a48",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pWhen001": {
+            "start": "2026-02-28T22:30:00Z"
+          },
+          "pDate001": {
+            "start": "2026-04-01"
+          },
+          "pSel0001": "optLate1"
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000049",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "template",
+        "orderKey": "a49",
+        "isTemplate": true,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-03-10"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000050",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "trashed",
+        "orderKey": "a50",
+        "isTemplate": false,
+        "trashedAt": "2026-03-02T00:00:00.000Z",
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-03-10"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000051",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "into April",
+        "orderKey": "a51",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-03-31",
+            "end": "2026-04-30"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000052",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "whole year",
+        "orderKey": "a52",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pDate001": {
+            "start": "2026-01-01",
+            "end": "2026-12-31"
+          },
+          "pSel0001": "optTodo1"
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000053",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "small hours",
+        "orderKey": "a53",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pWhen001": {
+            "start": "2026-03-01T02:00:00Z"
+          }
+        },
+        "computed": {}
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000054",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "evening span",
+        "orderKey": "a54",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {
+          "pWhen001": {
+            "start": "2026-03-05T20:00:00Z",
+            "end": "2026-03-06T23:30:00Z"
+          }
+        },
+        "computed": {}
+      }
+    ],
+    "cases": [
+      {
+        "name": "no window: every row",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000043",
+            "01900000-0000-7000-8000-000000000044",
+            "01900000-0000-7000-8000-000000000045",
+            "01900000-0000-7000-8000-000000000046",
+            "01900000-0000-7000-8000-000000000047",
+            "01900000-0000-7000-8000-000000000048",
+            "01900000-0000-7000-8000-000000000051",
+            "01900000-0000-7000-8000-000000000052",
+            "01900000-0000-7000-8000-000000000053",
+            "01900000-0000-7000-8000-000000000054"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "single days and spans that meet the window, its first day included",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "its last day counts, and a span ending on its first day",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-05",
+            "to": "2026-03-10"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "the days just inside a gap between rows meet only the span over it",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-06",
+            "to": "2026-03-09"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end before the start is the start",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-15",
+            "to": "2026-03-20"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000044", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end before the start is the start: not the days between",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-16",
+            "to": "2026-03-19"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a span from before the window into it, and one past it",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-02-27",
+            "to": "2026-03-31"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000043",
+            "01900000-0000-7000-8000-000000000044",
+            "01900000-0000-7000-8000-000000000051",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property: its value ends the span, else the own range",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "pEnd0001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000046",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property: its end, not its start, ends the span",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "pEnd0001",
+            "from": "2026-03-03",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000046",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "without the end property the same days hold fewer rows",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-03",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property earlier than the start is the start",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "pEnd0001",
+            "from": "2026-02-20",
+            "to": "2026-02-25"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000043",
+            "01900000-0000-7000-8000-000000000046",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property of null is none",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": null,
+            "from": "2026-03-03",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property that is not a date is not used",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "pText001",
+            "from": "2026-03-03",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property that is not there is not used",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "nothere1",
+            "from": "2026-03-03",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "an end property that was deleted is not used",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "pGone001",
+            "from": "2026-03-03",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a row with no start is never in a window, whatever its end",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "endPropertyId": "pEnd0001",
+            "from": "2026-03-10",
+            "to": "2026-03-10"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date-time by its calendar date in UTC",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pWhen001",
+            "from": "2026-02-28",
+            "to": "2026-02-28"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000048"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date-time three hours east is the next day",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pWhen001",
+            "from": "2026-03-01",
+            "to": "2026-03-01"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 180,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000048", "01900000-0000-7000-8000-000000000053"],
+          "groups": null
+        }
+      },
+      {
+        "name": "three hours east, the day before holds nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pWhen001",
+            "from": "2026-02-28",
+            "to": "2026-02-28"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 180,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date-time five hours west is the day before",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pWhen001",
+            "from": "2026-02-28",
+            "to": "2026-02-28"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": -300,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000048", "01900000-0000-7000-8000-000000000053"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date-time's end by its calendar date too: three hours east it reaches the next day",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pWhen001",
+            "from": "2026-03-07",
+            "to": "2026-03-07"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 180,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000054"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date-time's end in UTC",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pWhen001",
+            "from": "2026-03-07",
+            "to": "2026-03-07"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date stays its date in any offset",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-10",
+            "to": "2026-03-10"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 180,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "created time, by its calendar date",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pCrt0001",
+            "from": "2026-01-05",
+            "to": "2026-01-05"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041"],
+          "groups": null
+        }
+      },
+      {
+        "name": "created time an hour east",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pCrt0001",
+            "from": "2026-01-06",
+            "to": "2026-01-06"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 60,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a date formula, by its result and its range",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pFdt0001",
+            "from": "2026-03-04",
+            "to": "2026-03-04"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window on a text property matches nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pText001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window on a property that is not there matches nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "nothere1",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window on a deleted date property matches nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pGone001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window whose first day is not a date matches nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-02-30",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window whose last day has a time matches nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15T00:00:00Z"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window that ends before it starts matches nothing",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-15",
+            "to": "2026-03-01"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [],
+          "groups": null
+        }
+      },
+      {
+        "name": "a window of one day",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-31",
+            "to": "2026-03-31"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000051", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "with the filter and the search",
+        "spec": {
+          "filter": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pSel0001",
+                "operator": "is",
+                "value": "optTodo1"
+              }
+            ]
+          },
+          "sorts": [],
+          "group": null,
+          "search": "one",
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041"],
+          "groups": null
+        }
+      },
+      {
+        "name": "with the filter: both must hold",
+        "spec": {
+          "filter": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pSel0001",
+                "operator": "is",
+                "value": "optTodo1"
+              }
+            ]
+          },
+          "sorts": [],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041", "01900000-0000-7000-8000-000000000052"],
+          "groups": null
+        }
+      },
+      {
+        "name": "the sorts order the rows in the window",
+        "spec": {
+          "filter": null,
+          "sorts": [
+            {
+              "propertyId": "pDate001",
+              "direction": "asc"
+            }
+          ],
+          "group": null,
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000052",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000041"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "group counts count the rows in the window",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": {
+            "propertyId": "pSel0001"
+          },
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000052"
+          ],
+          "groups": [
+            {
+              "key": "",
+              "count": 0
+            },
+            {
+              "key": "optTodo1",
+              "count": 2
+            },
+            {
+              "key": "optDone1",
+              "count": 1
+            },
+            {
+              "key": "optLate1",
+              "count": 0
+            },
+            {
+              "key": "optFive1",
+              "count": 0
+            }
+          ]
+        }
+      },
+      {
+        "name": "one group by key, in the window",
+        "spec": {
+          "filter": null,
+          "sorts": [],
+          "group": {
+            "propertyId": "pSel0001"
+          },
+          "window": {
+            "propertyId": "pDate001",
+            "from": "2026-03-01",
+            "to": "2026-03-15"
+          }
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041", "01900000-0000-7000-8000-000000000052"],
+          "groups": [
+            {
+              "key": "",
+              "count": 0
+            },
+            {
+              "key": "optTodo1",
+              "count": 2
+            },
+            {
+              "key": "optDone1",
+              "count": 1
+            },
+            {
+              "key": "optLate1",
+              "count": 0
+            },
+            {
+              "key": "optFive1",
+              "count": 0
+            }
+          ]
+        },
+        "groupKey": "optTodo1"
+      },
+      {
+        "name": "the rows with no start, as a timeline lists them beside it: a filter, no window",
+        "spec": {
+          "filter": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pDate001",
+                "operator": "isEmpty"
+              }
+            ]
+          },
+          "sorts": [],
+          "group": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000045",
+            "01900000-0000-7000-8000-000000000053",
+            "01900000-0000-7000-8000-000000000054"
+          ],
+          "groups": null
+        }
+      }
+    ]
   }
 ]

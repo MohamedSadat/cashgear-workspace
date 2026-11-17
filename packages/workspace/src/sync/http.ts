@@ -10,22 +10,24 @@ import {
   type ApiClient,
   type Schemas,
 } from '@cgw/api';
-import type {
-  CellValue,
-  DatabaseRecord,
-  GroupCount,
-  PropertyDef,
-  PropertyId,
-  Value,
-  ViewConfig,
-  ViewRecord,
-  ViewType,
+import {
+  KNOWN_VIEW_TYPES,
+  type CellValue,
+  type DatabaseRecord,
+  type GroupCount,
+  type PropertyDef,
+  type PropertyId,
+  type Value,
+  type ViewConfig,
+  type ViewRecord,
+  type ViewType,
 } from '../db/types';
 import type { Id } from '../ids';
 import type {
   EntityRecord,
   EntityType,
   FavouriteRecord,
+  Operation,
   OpResult,
   PageKind,
   PageRecord,
@@ -231,15 +233,13 @@ export const databaseRecord = (d: DatabaseDto): DatabaseRecord => ({
   createdAt: d.createdAt,
 });
 
-const VIEW_TYPES: readonly ViewType[] = ['table', 'board', 'list', 'calendar', 'gallery'];
-
 export const viewRecord = (v: ViewDto): ViewRecord => ({
   id: v.id,
   workspaceId: v.workspaceId,
   databaseId: v.databaseId,
   name: v.name,
   // A type this build does not know is drawn as a table (never dropped).
-  type: VIEW_TYPES.includes(v.type as ViewType) ? (v.type as ViewType) : 'table',
+  type: KNOWN_VIEW_TYPES.includes(v.type as ViewType) ? (v.type as ViewType) : 'table',
   orderKey: v.orderKey,
   config: v.config as ViewConfig,
   version: num(v.version),
@@ -293,6 +293,15 @@ function entityRecord(
 const groupCounts = (groups: Schemas['QueryResponseDto']['groups']): GroupCount[] | null =>
   groups ? groups.map((g) => ({ key: g.key, count: num(g.count) })) : null;
 
+/**
+ * An operation's payload as the server takes it. A `view.upsert` says how many view types this
+ * build knows (`viewTypes`, Phase 9), so the server can tell a view an older build drew as a table
+ * (and sent back as one, without the settings it does not know) from a real change: only the wire
+ * carries it, never the store.
+ */
+export const wirePayload = (op: Operation): unknown =>
+  op.type === 'view.upsert' ? { ...op.payload, viewTypes: KNOWN_VIEW_TYPES.length } : op.payload;
+
 export function httpSyncApi(api: ApiClient): SyncApi {
   const phase3 = api as unknown as Phase3Routes;
   return {
@@ -324,7 +333,7 @@ export function httpSyncApi(api: ApiClient): SyncApi {
             deviceId,
             ops: ops.map((op) => ({
               ...op,
-              payload: op.payload as never,
+              payload: wirePayload(op) as never,
               baseVersion: op.baseVersion,
             })),
           },

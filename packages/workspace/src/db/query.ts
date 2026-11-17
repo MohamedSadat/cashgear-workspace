@@ -35,6 +35,7 @@
 //   it as above; errors are empty.
 // Groups: see `groupKeys` and `queryRows`.
 // Search: every word of `normaliseText(search)` starts a word of the normalised title.
+// The date window (Phase 9; `DateWindow` in db/types.ts): see `inWindow`.
 import type { Id } from '../ids';
 import { normaliseText as normalise, searchTerms } from '../search';
 import type { RowRecord } from '../types';
@@ -53,6 +54,7 @@ import type {
   CellValue,
   DatabaseRecord,
   DateValue,
+  DateWindow,
   FilterCondition,
   FilterGroup,
   FilterOperator,
@@ -379,6 +381,95 @@ export function matchesFilter(
 }
 
 // ---------------------------------------------------------------------------------------------
+// The date window (Phase 9)
+
+const WINDOW_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A window's `from` or `to`: a real `YYYY-MM-DD` date, else null. */
+const windowDate = (text: unknown): string | null =>
+  typeof text === 'string' && WINDOW_DATE.test(text) && parseDatePoint(text) === text ? text : null;
+
+/** A property that is there, not deleted, and reads as a date; else undefined. */
+function dateProperty(
+  database: DatabaseRecord,
+  props: ReadonlyMap<PropertyId, PropertyDef>,
+  id: PropertyId | null | undefined,
+): PropertyDef | undefined {
+  if (typeof id !== 'string') return undefined;
+  const def = props.get(id);
+  return def && !def.trashedAt && propertyKind(database, def) === 'date' ? def : undefined;
+}
+
+/** A row's first and last calendar date as a window reads them; null: no start (or no date). */
+type SpanOf = (row: RowRecord) => { start: string; end: string } | null;
+
+function spanReader(
+  database: DatabaseRecord,
+  window: Pick<DateWindow, 'propertyId' | 'endPropertyId'>,
+  ctx: QueryContext,
+  computed: Computed,
+): SpanOf | null {
+  const props = propsOf(database);
+  const def = dateProperty(database, props, window.propertyId);
+  if (!def) return null;
+  const endDef = dateProperty(database, props, window.endPropertyId);
+  const point = (text: string | null | undefined) =>
+    typeof text === 'string' && DATE_POINT.test(text) ? text : undefined;
+  return (row) => {
+    const cell = cellFor(def, 'date', row, computed) as DateValue | null;
+    if (cell === null) return null;
+    const start = calendarDate(cell.start, ctx.offsetMinutes);
+    const other = endDef ? (cellFor(endDef, 'date', row, computed) as DateValue | null) : null;
+    const last = other ? (point(other.end) ?? other.start) : point(cell.end);
+    const end = last ? calendarDate(last, ctx.offsetMinutes) : start;
+    return { start, end: end < start ? start : end };
+  };
+}
+
+/**
+ * A row's span as a date window reads it (`DateWindow`): its first and last calendar date in the
+ * query's offset, or null when it has no start or the window's property is not a date. The views
+ * place rows by the same rule, so what a window fetches is what they draw.
+ */
+export function windowSpan(
+  database: DatabaseRecord,
+  row: RowRecord,
+  window: Pick<DateWindow, 'propertyId' | 'endPropertyId'>,
+  ctx: QueryContext,
+  options: Pick<QueryOptions, 'computed'> = {},
+): { start: string; end: string } | null {
+  return spanReader(database, window, ctx, options.computed)?.(row) ?? null;
+}
+
+/** The rows a window takes, as a test of one row (it reads the database's properties once). */
+function windowTest(
+  database: DatabaseRecord,
+  window: DateWindow,
+  ctx: QueryContext,
+  computed: Computed,
+): (row: RowRecord) => boolean {
+  const from = windowDate(window.from);
+  const to = windowDate(window.to);
+  const span = from && to && from <= to ? spanReader(database, window, ctx, computed) : null;
+  if (!span) return () => false;
+  return (row) => {
+    const s = span(row);
+    return s !== null && s.start <= to! && s.end >= from!;
+  };
+}
+
+/** Whether a row is in a date window (`DateWindow`, the rule `queryRows` applies). */
+export function inWindow(
+  database: DatabaseRecord,
+  row: RowRecord,
+  window: DateWindow,
+  ctx: QueryContext,
+  options: Pick<QueryOptions, 'computed'> = {},
+): boolean {
+  return windowTest(database, window, ctx, options.computed)(row);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sorts
 
 type Key = number | string | Key[];
@@ -596,8 +687,8 @@ function groupOrder(def: PropertyDef, present: Map<string, number>, ctx: QueryCo
 
 /**
  * Rows of a database as a view shows them: templates and trashed rows never; then the search,
- * the filter, the sorts; then, with a group rule on a groupable property (else it is ignored),
- * the groups and their counts.
+ * the filter and the date window; the sorts; then, with a group rule on a groupable property
+ * (else it is ignored), the groups and their counts (of the rows in the window).
  */
 export function queryRows(
   database: DatabaseRecord,
@@ -607,13 +698,15 @@ export function queryRows(
   options: QueryOptions = {},
 ): QueryResult {
   const terms = searchTerms(normaliseText(spec.search ?? ''));
+  const windowed = spec.window ? windowTest(database, spec.window, ctx, options.computed) : null;
   let result = rows.filter((row) => {
     if (row.isTemplate || row.trashedAt) return false;
     if (terms.length) {
       const words = normaliseText(row.title ?? '').split(' ');
       if (!terms.every((term) => words.some((word) => word.startsWith(term)))) return false;
     }
-    return matchesFilter(database, row, spec.filter, ctx, options);
+    if (!matchesFilter(database, row, spec.filter, ctx, options)) return false;
+    return windowed === null || windowed(row);
   });
   result.sort(compareRows(database, spec.sorts ?? [], ctx, options));
 
