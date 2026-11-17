@@ -100,31 +100,50 @@ const DAY = 20;
 const HEADER = 56;
 
 /**
- * The `index`-th bar wholly in view (lines are drawn with some above and below the view, and a
- * line's bar may lie in days not shown), its row's title and its box.
+ * The `index`-th bar found wholly in view, its row's title and its box. Lines are the rows the
+ * days shown hold in the view's order (earliest start first), so the first lines are rows already
+ * under way, cut at the inline-start edge: like a person, it scrolls the lines down until whole
+ * bars come into view, counting each row once.
  */
-async function barAt(timeline: Locator, index: number) {
-  const view = (await timeline.locator('[data-cg-timeline-scroller]').boundingBox())!;
-  const bars = timeline.locator('[data-cg-timeline-item]');
-  const count = await bars.count();
-  let seen = 0;
-  for (let i = 0; i < count; i++) {
-    const bar = bars.nth(i);
-    const box = await bar.boundingBox();
-    if (
-      !box ||
-      box.x < view.x + 4 ||
-      box.x + box.width > view.x + view.width - 4 ||
-      // Below the header.
-      box.y < view.y + HEADER + 4 ||
-      box.y + box.height > view.y + view.height - 4
-    )
-      continue;
-    if (seen++ < index) continue;
-    const title = (await bar.textContent())!.trim();
-    return { bar, title, box };
+async function barAt(timeline: Locator, index: number, middle = false) {
+  const scroller = timeline.locator('[data-cg-timeline-scroller]');
+  const counted = new Set<string>();
+  for (let step = 0; step < 80; step++) {
+    const view = (await scroller.boundingBox())!;
+    const bars = timeline.locator('[data-cg-timeline-item]');
+    const count = await bars.count();
+    for (let i = 0; i < count; i++) {
+      const box = await bars.nth(i).boundingBox();
+      if (
+        !box ||
+        box.x < view.x + 4 ||
+        box.x + box.width > view.x + view.width - 4 ||
+        // Below the header.
+        box.y < view.y + HEADER + 4 ||
+        box.y + box.height > view.y + view.height - 4 ||
+        // Away from the top and bottom, where a drag scrolls the lines.
+        (middle && (box.y < view.y + HEADER + 96 || box.y + box.height > view.y + view.height - 96))
+      )
+        continue;
+      const title = (await bars.nth(i).textContent())!.trim();
+      if (counted.has(title)) continue;
+      if (counted.size === index) {
+        // By its title, not its place: the virtualised lines are drawn again as they scroll.
+        const bar = bars.filter({ hasText: title }).first();
+        return { bar, title, box };
+      }
+      counted.add(title);
+    }
+    const moved = await scroller.evaluate((el, header) => {
+      const before = el.scrollTop;
+      el.scrollTop += Math.max(100, el.clientHeight - header - 72);
+      return el.scrollTop !== before;
+    }, HEADER);
+    if (!moved) break;
+    await expect.poll(async () => bars.count(), { timeout: 5000 }).toBeGreaterThan(0);
+    await timeline.page().waitForTimeout(150);
   }
-  throw new Error(`No bar ${index} wholly in view (${seen} are)`);
+  throw new Error(`No bar ${index} wholly in view (${counted.size} were)`);
 }
 
 /** A pointer drag, in steps, as a hand drags (pointer events from page.mouse). */
@@ -230,17 +249,17 @@ test('drops a row with no date on the day under the pointer, and lays the rows i
   const title = (await item.locator('.cgw-cal-undated-open').textContent())!.trim();
   expect(await startOf(title)).toBeUndefined();
   // Dropped four days after a bar in view starts (its box's inline start is its first day's).
-  const known = await barAt(timeline, 2);
+  const known = await barAt(timeline, 2, true);
   const knownStart = (await startOf(known.title))!.start;
   const to = { x: known.box.x + 4 * DAY + DAY / 2, y: known.box.y + known.box.height / 2 };
   const from = (await item.boundingBox())!;
+  // The drag starts inside the list, then the pointer goes to the day in one move: passing through
+  // the timeline's edge would scroll its days (and so its lines) under the pointer, as it should.
   await page.mouse.move(from.x + 30, from.y + from.height / 2);
   await page.mouse.down();
-  for (let i = 1; i <= 12; i++)
-    await page.mouse.move(
-      from.x + 30 + ((to.x - from.x - 30) * i) / 12,
-      from.y + from.height / 2 + ((to.y - from.y - from.height / 2) * i) / 12,
-    );
+  await page.mouse.move(from.x + 20, from.y + from.height / 2, { steps: 3 });
+  await page.mouse.move(to.x, to.y);
+  await page.mouse.move(to.x + 1, to.y);
   await expect(timeline.locator('[data-cg-timeline-drop]')).toHaveAttribute('data-shown', '');
   await page.mouse.up();
   await expect

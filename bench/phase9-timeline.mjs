@@ -276,21 +276,32 @@ export async function measureTimeline(page, seeded, { opens = 6, log = console.l
 
   log('Dragging a bar along its line');
   // A bar wholly in view (lines are drawn past the view's edges), with room after it to drag.
-  const index = await page.evaluate(() => {
+  // The first lines are rows already under way, cut at the inline-start edge (the view's order is
+  // earliest start first): the lines are scrolled down, as a person would, until one is whole.
+  const index = await page.evaluate(async () => {
     const scroller = document.querySelector('.cgw-database-page [data-cg-timeline-scroller]');
-    const view = scroller?.getBoundingClientRect();
-    if (!view) return -1;
-    const bars = [...document.querySelectorAll('.cgw-database-page [data-cg-timeline-item]')];
-    return bars.findIndex((bar, i) => {
-      const box = bar.getBoundingClientRect();
-      return (
-        i >= 2 &&
-        box.left >= view.left + 8 &&
-        box.right <= view.left + view.width / 2 &&
-        box.top >= view.top + 60 &&
-        box.bottom <= view.bottom - 8
-      );
-    });
+    if (!scroller) return -1;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    for (let step = 0; step < 80; step++) {
+      const view = scroller.getBoundingClientRect();
+      const bars = [...document.querySelectorAll('.cgw-database-page [data-cg-timeline-item]')];
+      const found = bars.findIndex((bar) => {
+        const box = bar.getBoundingClientRect();
+        return (
+          box.left >= view.left + 8 &&
+          box.right <= view.left + view.width / 2 &&
+          box.top >= view.top + 60 &&
+          box.bottom <= view.bottom - 8
+        );
+      });
+      if (found >= 0) return found;
+      const before = scroller.scrollTop;
+      scroller.scrollTop += Math.max(100, scroller.clientHeight - 128);
+      if (scroller.scrollTop === before) return -1;
+      await frame();
+      await frame();
+    }
+    return -1;
   });
   if (index < 0) throw new Error('No bar wholly in the first half of the view');
   const bar = page.locator('.cgw-database-page [data-cg-timeline-item]').nth(index);

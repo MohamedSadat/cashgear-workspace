@@ -232,7 +232,8 @@ test('a page tree is published from the dialog and read with no account, then co
     // under it, only how many those are.
     const dialog = await publishView(page);
     const listed = dialog.getByTestId('publish-pages').getByRole('listitem');
-    await expect(listed).toHaveText(['Staff handbook', 'Leave', 'Payroll', 'Vendors']);
+    // Leave's inline database is a page under it (made with no name, so "Untitled"): published.
+    await expect(listed).toHaveText(['Staff handbook', 'Leave', 'Untitled', 'Payroll', 'Vendors']);
     await expect(dialog.getByTestId('publish-left-out')).toContainText('2');
     // The slug proposed from the title; a refused one is said before anything is sent.
     await expect(dialog.getByLabel('Address')).toHaveValue('staff-handbook');
@@ -347,7 +348,8 @@ test('a page tree is published from the dialog and read with no account, then co
       const look = await reader(browser, { javaScriptEnabled: true, bypassCSP: true, colorScheme });
       await look.page.goto(address);
       backgrounds.push(
-        await look.page.evaluate(() => getComputedStyle(document.body).backgroundColor),
+        // The page's colours are on the root element (the canvas), not the body.
+        await look.page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor),
       );
       expect(await axe(look.page, `the site (${colorScheme}, Arabic)`)).toEqual([]);
       await look.page.goto(`${address}/${ids.leave}`);

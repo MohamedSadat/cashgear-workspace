@@ -101,12 +101,13 @@ test('a workspace exported with its workbooks imports into a new synced workspac
     expect(zip.includes(Buffer.from('cgw-export.json'))).toBe(true);
 
     // Imported while signed in: a new workspace in the account, its workbook made again there.
+    // The import opens the new workspace, so its report is the window's notice.
     await importExport(page, path);
-    await expect(page.getByTestId('data-message')).toContainText(
-      'Imported as a new workspace in your account.',
-      { timeout: 60000 },
-    );
-    await expect(page.getByTestId('data-message')).toContainText('Workbooks made again: 1.');
+    const notice = page.locator('.cgw-notice');
+    await expect(notice).toContainText('Imported as a new workspace in your account.', {
+      timeout: 60000,
+    });
+    await expect(notice).toContainText('Workbooks made again: 1.');
     await expect(page.getByRole('button', { name: /Export space \(imported\)/ })).toBeVisible();
     await expect(syncStatus(page)).toHaveText('Synced', { timeout: 60000 });
     const imported = await workspaceIdOf(api, 'Export space (imported)');
@@ -130,16 +131,14 @@ test('a workspace exported with its workbooks imports into a new synced workspac
     expect((await workbooksOf(api, workspaceId)).map((w) => w.id)).toEqual([original]);
 
     // Imported signed out: on this device, its blocks as they were, the workbook skipped.
+    expect(errors).toEqual([]);
     await page.goto('/#/settings');
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    // This browser's own Sign out, after the device list's (the test's API session is a device).
+    await page.getByRole('button', { name: 'Sign out' }).last().click();
     await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();
     await importExport(page, path);
-    await expect(page.getByTestId('data-message')).toContainText('Imported as a new workspace.', {
-      timeout: 60000,
-    });
-    await expect(page.getByTestId('data-message')).toContainText(
-      'Workbooks not imported, since they live in an account: 1.',
-    );
+    await expect(notice).toContainText('Imported as a new workspace.', { timeout: 60000 });
+    await expect(notice).toContainText('Workbooks not imported, since they live in an account: 1.');
     await tree(page)
       .getByRole('treeitem', { name: /Figures/ })
       .first()
@@ -148,7 +147,9 @@ test('a workspace exported with its workbooks imports into a new synced workspac
     expect(await blockAttrs(page, 'sheetEmbed')).toEqual([
       expect.objectContaining({ workbookId: original }),
     ]);
-    expect(errors).toEqual([]);
+    // Signing out refuses what was already on its way (the members, a document's state): only
+    // those 401s, nothing else.
+    expect(errors.filter((line) => !/status of 401/.test(line))).toEqual([]);
   } finally {
     await api.dispose();
   }
