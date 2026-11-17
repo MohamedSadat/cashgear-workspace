@@ -34,6 +34,12 @@
 // (`pluginBlock`, schema 6) opens read-only there, both blocks drawn as needing a newer version,
 // nothing sent but the visit, the server's bytes kept, and the blocks' props (with one this build
 // does not know) exactly as this build wrote them when this build opens the page again.
+//
+// Phase 9 (v0.8.0 on :4272 and v0.7.0 on :4274, five view types): a timeline view, which neither
+// knows, is drawn there as a table (their fallback); its filter changed there goes up as a
+// `view.upsert` of type `table` without `viewTypes`, and the server keeps the stored type and the
+// timeline's settings (the older-build rule): this build shows a timeline again, with its
+// settings and the new filter.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -42,7 +48,7 @@ import { editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import { oldBuild, originOf, serveOldBuild } from '../../scripts/old-build.mjs';
-import { chooseOptions, fullPage, newDatabase, openRow, showView } from './database';
+import { addView, chooseOptions, fullPage, grid, newDatabase, openRow, showView } from './database';
 import {
   ERP_API,
   ERP_CLIENT,
@@ -776,3 +782,129 @@ test('the v0.6.0 build shows a page with plugin blocks read-only, sends nothing 
   await again.close();
   await api.dispose();
 });
+
+/** A view as the server holds it (its tree). */
+type ServerView = { id: string; name: string; type: string; config: Record<string, unknown> };
+async function serverView(api: Api, workspaceId: string, name: string): Promise<ServerView> {
+  const tree = await api.get(`/api/v1/workspaces/${workspaceId}/tree`);
+  return (tree.views as ServerView[]).find((v) => v.name === name)!;
+}
+
+for (const tag of ['v0.8.0', 'v0.7.0'] as const)
+  test(`the ${tag} build shows a timeline view as a table, and its filter changed there leaves it a timeline with its settings`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240000);
+    const OLD = await serve(tag);
+    const account = await newAccount(`Timeline and ${tag}`);
+    const api = await apiSession(account);
+
+    // This build: a Tasks database with a timeline view, laned by status, by months, no list.
+    const current = await browser.newContext();
+    const now = await current.newPage();
+    const nowErrors = watchAppErrors(now);
+    await now.goto('/');
+    await signIn(now, account);
+    await signedIn(now, account);
+    await now.getByLabel('Workspace name').fill(`Timeline ${tag}`);
+    await now.getByRole('button', { name: 'Create workspace' }).click();
+    await expect(editor(now)).toBeVisible();
+    await newDatabase(now, 'Tasks');
+    const db = fullPage(now);
+    await addView(db, now, 'Timeline');
+    await expect(db.locator('.cgw-db-tl')).toBeVisible();
+    await db.getByRole('button', { name: 'Layout', exact: true }).click();
+    const layout = now.getByRole('dialog', { name: 'Layout' });
+    await layout.getByLabel('Lanes by').selectOption({ label: 'Status' });
+    await layout.getByLabel('Zoom').selectOption({ label: 'Months' });
+    await layout.getByLabel('Show the rows with no date beside it').uncheck();
+    await now.keyboard.press('Escape');
+    await expect(db.locator('[data-cg-timeline-lane]').first()).toBeVisible();
+    await expect(syncStatus(now)).toHaveAttribute('data-state', 'synced', { timeout: 30000 });
+    const workspaceId = (
+      (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+    ).find((w) => w.name === `Timeline ${tag}`)!.id;
+    const made = await serverView(api, workspaceId, 'Timeline');
+    expect(made.type).toBe('timeline');
+    expect(made.config.timeline).toMatchObject({ scale: 'month', undated: false });
+    expect((made.config.timeline as { lane: string }).lane).toBeTruthy();
+    expect(made.config.filter).toBeNull();
+    await current.close();
+
+    // The older build, signed in as the same person: the timeline is a table there.
+    const oldContext = await browser.newContext({ baseURL: OLD });
+    const old = await oldContext.newPage();
+    const oldErrors: string[] = [];
+    old.on('pageerror', (error) => oldErrors.push(error.message));
+    const upserts: { type: string; payload: Record<string, unknown> }[] = [];
+    old.on('request', (request) => {
+      if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+      for (const op of (request.postDataJSON()?.ops ?? []) as {
+        type: string;
+        payload: Record<string, unknown>;
+      }[])
+        if (op.type === 'view.upsert') upserts.push(op);
+    });
+    await old.goto(`${OLD}/`);
+    await signIn(old, account, `${OLD}/`);
+    await signedIn(old, account);
+    await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+    await old
+      .getByRole('tree', { name: 'Pages' })
+      .getByRole('treeitem', { name: /Tasks/ })
+      .click({ timeout: 30000 });
+    const oldDb = fullPage(old);
+    await showView(oldDb, 'Timeline');
+    await expect(grid(oldDb)).toBeVisible({ timeout: 20000 });
+    await expect(oldDb.locator('.cgw-db-tl')).toHaveCount(0);
+    // Its filter changed there: Status is Not started.
+    await oldDb.getByRole('button', { name: 'Filter', exact: true }).click();
+    const filters = old.getByRole('dialog', { name: 'Filters' });
+    await filters.getByRole('button', { name: 'Add a filter', exact: true }).click();
+    await filters.getByRole('combobox', { name: 'Property' }).selectOption({ label: 'Status' });
+    await filters.getByRole('combobox', { name: 'Value' }).selectOption({ label: 'Not started' });
+    await old.keyboard.press('Escape');
+    await expect(oldDb.getByRole('button', { name: 'Filters: 1' })).toBeVisible();
+    await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+    await expect.poll(() => upserts.length, { timeout: 30000 }).toBeGreaterThan(0);
+    // It sent the view as a table, and said nothing of the types it knows.
+    expect(upserts.every((op) => op.payload.type === 'table')).toBe(true);
+    expect(upserts.some((op) => 'viewTypes' in op.payload)).toBe(false);
+    expect(oldErrors).toEqual([]);
+    await oldContext.close();
+
+    // The server kept the type and the settings, and took the filter.
+    await expect
+      .poll(async () => (await serverView(api, workspaceId, 'Timeline')).config.filter, {
+        timeout: 30000,
+      })
+      .not.toBeNull();
+    const kept = await serverView(api, workspaceId, 'Timeline');
+    expect(kept.type).toBe('timeline');
+    expect(kept.config.timeline).toEqual(made.config.timeline);
+    expect(JSON.stringify(kept.config.filter)).toContain('"condition"');
+
+    // This build again: a timeline, by months and in lanes, with the filter from the older build.
+    const again = await browser.newContext();
+    const back = await again.newPage();
+    await back.goto('/');
+    await signIn(back, account);
+    await signedIn(back, account);
+    await back
+      .getByRole('tree', { name: 'Pages' })
+      .getByRole('treeitem', { name: /Tasks/ })
+      .click();
+    const backDb = fullPage(back);
+    await showView(backDb, 'Timeline');
+    await expect(backDb.locator('.cgw-db-tl')).toBeVisible({ timeout: 20000 });
+    await expect(backDb.locator('[data-cg-timeline-scale="month"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(backDb.locator('[data-cg-timeline-lane]').first()).toBeVisible();
+    await expect(backDb.locator('.cgw-cal-undated')).toHaveCount(0);
+    await expect(backDb.getByRole('button', { name: 'Filters: 1' })).toBeVisible();
+    expect(nowErrors).toEqual([]);
+    await again.close();
+    await api.dispose();
+  });

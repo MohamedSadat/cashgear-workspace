@@ -4,7 +4,8 @@
 // edits stand, the same property is the last to reach the server's); a database over 5,000 rows
 // imported through the server's route, shown through the server's query, and offline showing the
 // rows on the device with its notice; the view exported through the server's route; a search hit
-// of a row not on the device; and a shared link drawing the database block's note.
+// of a row not on the device; and a shared link drawing the database block's rows, read only
+// (Phase 9: through the block's view, by the link's own routes).
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { test, expect, desktop } from './fixtures';
@@ -18,6 +19,7 @@ import {
   grid,
   network,
   newDatabase,
+  newRow,
   openRow,
   otherDevice,
   rowCount,
@@ -383,7 +385,7 @@ test('a search finds a row this device does not hold, and opens it', async ({
   expect(errors).toEqual([]);
 });
 
-test("a shared link draws a database block's note, not its rows", async ({ page }) => {
+test("a shared link draws a database block's rows, read only", async ({ page }) => {
   // The page's own browser opens the link (a desktop run has none of Playwright's: skipped).
   test.skip(desktop, 'A shared link opens in a browser');
   const browser = page.context().browser()!;
@@ -401,6 +403,9 @@ test("a shared link draws a database block's note, not its rows", async ({ page 
     .getByRole('button', { name: 'Create' })
     .click();
   await expect(editor(page).locator('.cgw-db')).toBeVisible();
+  const block = editor(page).locator('.cgw-db');
+  await newRow(page, 'Draft the plan', block);
+  await newRow(page, 'Book the room', block);
   await waitSaved(page);
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   // A link shows the server's derived document: wait until the worker holds the database block.
@@ -424,10 +429,25 @@ test("a shared link draws a database block's note, not its rows", async ({ page 
   const anonymousErrors = watchErrors(anonymous);
   await anonymous.goto(shareLink);
   await expect(anonymous.getByText('Before the database.')).toBeVisible({ timeout: 20000 });
-  await expect(
-    anonymous.getByText('Databases are shown in the app, not on a shared page.'),
-  ).toBeVisible();
-  await expect(anonymous.locator('[role="grid"]')).toHaveCount(0);
+  // Phase 9: the block's rows, by its view, read only: no new row, nothing editable.
+  const shared = anonymous.locator('.cgw-db');
+  await expect(grid(shared)).toBeVisible({ timeout: 20000 });
+  await expect(rowOf(shared, 'Draft the plan')).toBeVisible();
+  await expect(rowOf(shared, 'Book the room')).toBeVisible();
+  await expect(shared.locator('.cgw-new-row')).toHaveCount(0);
+  await expect(anonymous.locator('[contenteditable="true"]')).toHaveCount(0);
+  // Every database read went by the link: its token in a header, no account.
+  const reads: { url: string; token: string | null }[] = [];
+  anonymous.on('request', (r) => {
+    if (r.url().includes('/api/v1/shared/databases/'))
+      reads.push({ url: r.url(), token: r.headers()['x-share-token'] ?? null });
+  });
+  await anonymous.reload();
+  await expect(rowOf(anonymous.locator('.cgw-db'), 'Book the room')).toBeVisible({
+    timeout: 20000,
+  });
+  expect(reads.length).toBeGreaterThan(0);
+  expect(reads.every((r) => r.token === shareLink.split('#/s/')[1])).toBe(true);
   await anonymousContext.close();
   expect(errors).toEqual([]);
   expect(anonymousErrors).toEqual([]);

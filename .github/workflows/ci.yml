@@ -164,9 +164,10 @@ jobs:
       # that tests/e2e/old-build.spec.ts serves beside this build: v0.2.0 (Phase 3), v0.3.0
       # (Phase 4: a page with a database, and rows it must never see), v0.4.0 (Phase 5: a page
       # with a workbook and ERP data, schema 4), v0.5.0 (Phase 6: a schema-5 page naming a
-      # person, and the feed's comments and notifications) and v0.6.0 (Phase 7: a schema-6 page
-      # with plugin blocks).
-      - name: The old builds (v0.2.0's to v0.6.0's web apps)
+      # person, and the feed's comments and notifications), v0.6.0 (Phase 7: a schema-6 page
+      # with plugin blocks), and v0.7.0 and v0.8.0 (Phase 9: a timeline view, a type neither
+      # knows, drawn as a table there and kept a timeline with its settings).
+      - name: The old builds (v0.2.0's to v0.8.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs
@@ -255,7 +256,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -301,6 +302,11 @@ jobs:
       # machine (bench/phase8-server.mjs), as it needs 0.7.0 built beside this build.
       - name: Phase 8 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase8
+      # Phase 9's (bench/phase9.mjs): a published page of 2,000 blocks read from the Sites process
+      # (localhost:5290) over HTTP, fresh and from its cache, and a timeline over 50,000 rows in
+      # Chrome (its first bars and a drag), against the server stack above.
+      - name: Phase 9 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase9
       - uses: actions/upload-artifact@v4
         if: always()
         with:
