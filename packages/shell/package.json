@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cashgear/ui": "github:MohamedSadat/CashGear.React.UI#92d9f099950a98aa4c1ccfb9592fb35692126e76",
+    "@cashgear/ui": "github:MohamedSadat/CashGear.React.UI#0490cbd5782ebd5603f7c86eb5be8e54586dae6b",
     "@cgw/api": "workspace:*",
     "@cgw/database": "workspace:*",
     "@cgw/doc": "workspace:*",
