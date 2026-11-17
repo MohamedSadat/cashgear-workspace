@@ -44,21 +44,28 @@ async function until<T>(what: string, check: () => Promise<T | undefined | false
 }
 
 /** The release app with a data folder of its own and these test settings, driven over CDP. */
-async function startApp(folder: string, sheetApp: 'installed' | 'missing') {
+async function startApp(folder: string, sheetApp: 'installed' | 'missing' | null) {
   const args = `--remote-debugging-port=${DESKTOP_PORT} --remote-debugging-address=127.0.0.1`;
   const child: ChildProcess = spawn(join(root, 'target/release/cgw-desktop.exe'), [], {
     windowsHide: true,
     stdio: 'ignore',
     env: {
-      ...process.env,
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(
+          ([name]) => name !== 'CGW_SHEET_APP' && name !== 'CGW_OPEN_URL_FILE',
+        ),
+      ),
       WEBVIEW2_USER_DATA_FOLDER: join(folder, 'webview2'),
       WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: args,
       CGW_DATA_DIR: join(folder, 'data'),
       CGW_SAVE_DIR: join(folder, 'saved'),
       CGW_AUTH_URL_FILE: join(folder, 'authorize-url.txt'),
       CGW_KEYCHAIN_SERVICE: `com.cashgear.workspace.e2e.${randomUUID().slice(0, 8)}`,
-      CGW_SHEET_APP: sheetApp,
-      CGW_OPEN_URL_FILE: join(folder, 'sheet-link.txt'),
+      // null: no stand-ins (the variables left out: the app takes an empty one as set), the
+      // system answers and opens (the real app's acceptance run).
+      ...(sheetApp
+        ? { CGW_SHEET_APP: sheetApp, CGW_OPEN_URL_FILE: join(folder, 'sheet-link.txt') }
+        : {}),
     },
   });
   const endpoint = `http://127.0.0.1:${DESKTOP_PORT}`;
@@ -222,6 +229,81 @@ test('with Sheet’s app missing, the click opens Sheet’s web app as before', 
     await expect.poll(browserLinks, { timeout: 15000 }).toEqual([url]);
     expect(existsSync(app.linkFile)).toBe(false);
   } finally {
+    await api.dispose();
+    await app.stop();
+    rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  }
+});
+
+/** The titles of Sheet's desktop app's windows (its process `cgs-desktop`), as Windows has them. */
+function sheetWindows(): string[] {
+  const listed = spawnSync(
+    'powershell',
+    [
+      '-NoProfile',
+      '-Command',
+      'Get-Process cgs-desktop -ErrorAction SilentlyContinue | ForEach-Object { $_.MainWindowTitle }',
+    ],
+    { encoding: 'utf8', windowsHide: true },
+  );
+  return listed.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+// The acceptance run (Phase 9): Sheet's real desktop app installed on this machine, built by Track
+// S6's notes against this stack (`VITE_WORKSPACE_API_URL=http://127.0.0.1:5280`). No stand-ins:
+// the system says the scheme has a handler, the link goes to it, and Sheet redeems the ticket and
+// opens the workbook in a window of its own. Run with REAL_SHEET_APP=1.
+test('with Sheet’s real app installed, the click opens it on the workbook', async () => {
+  test.skip(!process.env.REAL_SHEET_APP, 'Needs Sheet’s desktop app installed (REAL_SHEET_APP=1)');
+  test.setTimeout(300000);
+  const folder = mkdtempSync(join(tmpdir(), 'cgw-e2e-sheet-real-'));
+  const app = await startApp(folder, null);
+  const owner = await newAccount('Real Sheet user');
+  const api = await sessionOf(owner);
+  const name = `Real book ${randomUUID().slice(0, 6)}`;
+  try {
+    const { page } = app;
+    await signedInWorkspace(page, owner, 'Real desk space', app.authUrlFile, cloud.signer);
+    const workspaceId = await workspaceIdOf(api, 'Real desk space');
+    await newWorkbook(
+      api,
+      workspaceId,
+      name,
+      workbookOf([
+        ['Item', 'Cost'],
+        ['Desk', 300],
+      ]),
+    );
+    await page.goto('/#/workbooks');
+    const open = page.getByRole('button', { name: `Open in Cash Gear Sheet: ${name}` });
+    await expect(open).toBeVisible({ timeout: 30000 });
+    const launched = page.waitForResponse((r) => r.url().includes('/launch'));
+    await open.click();
+    const answer = await launched;
+    expect(answer.request().postData() ?? '').toContain('desktop');
+    // Sheet's own window, titled by the workbook it redeemed the ticket for.
+    const title = await until(
+      'Sheet’s window on the workbook',
+      async () => sheetWindows().find((t) => t.includes(name)),
+      90000,
+    );
+    // Sheet writes "<name> – CashGear Sheet"; PowerShell's console output may turn the dash into "-".
+    expect(title).toMatch(new RegExp(`^${name} [–-] CashGear Sheet$`));
+    expect(existsSync(join(folder, 'sheet-link.txt'))).toBe(false);
+  } finally {
+    // Sheet's windows closed as a person closes them (each ends its file session).
+    spawnSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        'Get-Process cgs-desktop -ErrorAction SilentlyContinue | ForEach-Object { [void]$_.CloseMainWindow() }',
+      ],
+      { windowsHide: true },
+    );
     await api.dispose();
     await app.stop();
     rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
