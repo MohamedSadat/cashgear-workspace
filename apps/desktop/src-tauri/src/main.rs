@@ -7,11 +7,14 @@
 //! routes, or hand the page Cash Gear ERP's return (`…://erp#ticket=…&state=…`), which is never a
 //! route (crates/cgw-native). Signing in to the Workspace API happens here too (auth.rs): the
 //! refresh token stays on this side, in the OS keychain, and the page only gets access tokens.
+//! "Open in Cash Gear Sheet" opens Sheet's desktop app when the system has it (sheet.rs): the
+//! page can hand the system only Sheet's launch link, read and rebuilt here.
 
 mod auth;
 // Test builds only (`--features e2e-bridge`): never in a release (build.rs).
 #[cfg(feature = "e2e-bridge")]
 mod bridge;
+mod sheet;
 mod updates;
 
 use std::path::PathBuf;
@@ -233,6 +236,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(DeepLinks::default())
         .manage(auth::Auth::from_env())
+        .manage(sheet::SheetApp::from_env())
         .setup(|app| {
             let dir = data_dir(app.handle())?;
             let store = Store::open(&dir).map_err(|error| error.to_string())?;
@@ -261,6 +265,8 @@ fn main() {
             auth::auth_sign_in,
             auth::auth_token,
             auth::auth_sign_out,
+            sheet::sheet_app_installed,
+            sheet::sheet_app_open,
             #[cfg(feature = "e2e-bridge")]
             bridge::e2e_bridge_reply
         ])

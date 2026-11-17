@@ -1,6 +1,6 @@
 [package]
 name = "cgw-native"
-description = "Desktop helpers with no Tauri in them: deep links read into app routes, file names made safe, and the sign-in to the Workspace API (PKCE, the loopback callback, the keychain)"
+description = "Desktop helpers with no Tauri in them: deep links read into app routes, file names made safe, the sign-in to the Workspace API (PKCE, the loopback callback, the keychain), and Cash Gear Sheet's desktop app found and handed its launch link"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

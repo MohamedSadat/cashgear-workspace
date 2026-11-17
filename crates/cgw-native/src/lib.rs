@@ -1,11 +1,13 @@
 //! Desktop helpers that need no Tauri, so they are tested on their own: reading a deep link into
 //! one of the app's routes (or into Cash Gear ERP's return, which is never one), making a file name
 //! from what the page suggests, the computer's name,
-//! and the sign-in to the Workspace API ([`auth`]) with its refresh token in the OS keychain
-//! ([`keychain`]). The same code serves Windows and macOS.
+//! the sign-in to the Workspace API ([`auth`]) with its refresh token in the OS keychain
+//! ([`keychain`]), and Cash Gear Sheet's desktop app ([`sheet`]: whether it is installed, and its
+//! launch link handed to it). The same code serves Windows and macOS.
 
 pub mod auth;
 pub mod keychain;
+pub mod sheet;
 
 /// The app's own scheme (`plugins.deep-link` in tauri.conf.json). Test installs register another.
 /// Windows' installer registers it; on macOS the bundle's Info.plist does (`CFBundleURLTypes`,
