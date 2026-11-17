@@ -117,11 +117,15 @@ function documentUpdate(pageId, clientId, blocks, label) {
   return update;
 }
 
+/** Order key digits (base 62): the pages are a1, a2, … az. */
+const ORDER_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
 /**
  * The site: a workspace, a root page and PAGES pages of BLOCKS blocks under it, pushed, validated
  * and derived; the root published. `api` is scripts/cloud-account.mjs's `apiSession`.
  */
 export async function seedSite(api, { pages = PAGES, blocks = BLOCKS, log = console.log } = {}) {
+  if (pages > ORDER_DIGITS.length - 1) throw new Error(`At most ${ORDER_DIGITS.length - 1} pages`);
   const started = Date.now();
   const now = new Date().toISOString();
   const workspace = uuidv7();
@@ -168,9 +172,8 @@ export async function seedSite(api, { pages = PAGES, blocks = BLOCKS, log = cons
       createdAt: now,
     }),
     page(rootPage, null, 'a0', 'Site bench'),
-    ...children.map((id, i) =>
-      page(id, rootPage, `a${String(i).padStart(3, '0')}`, `Chapter ${i + 1}`),
-    ),
+    // Integer order keys a1, a2, … az (base 62, no trailing zero): enough for 61 pages.
+    ...children.map((id, i) => page(id, rootPage, `a${ORDER_DIGITS[i + 1]}`, `Chapter ${i + 1}`)),
   ];
   for (let i = 0; i < ops.length; i += 100) {
     const answer = await api.post(`/api/v1/workspaces/${workspace}/ops`, {

@@ -508,7 +508,9 @@ are in `DATA_MODEL.md` (Databases).
   pass and the next pass 100 ms later while some remain; each page and the hold's place written in
   one transaction), the feed keeps them fresh, and its views are queried on the device. A larger one
   is held `partial`: its views ask the server (`POST /databases/{id}/query`, keyset paged), whose
-  rows are kept as a cache; offline it shows the rows on the device, and says so. A hold moves
+  rows are kept as a cache (from Phase 9 just after the answer is drawn, one answer at a time in
+  the order answered: the engine's `kept()` waits for them); offline it shows the rows on the
+  device, and says so. A hold moves
   between full and partial as `rowCount` crosses the limit. An `access` event marks the holds under
   its root incomplete, and a feed past its retention marks all, so they are fetched again; a fetched
   page also removes held rows the server no longer has.
