@@ -221,8 +221,10 @@ describe('Settings’ search by meaning', () => {
     document.body.replaceChildren();
   });
 
+  /** Waits for `check`, bounded by time (5 s): Windows rounds each short timer up, CI runs cold. */
   async function until(check: () => boolean, what = 'the condition') {
-    for (let i = 0; i < 400 && !check(); i++)
+    const end = Date.now() + 5000;
+    while (!check() && Date.now() < end)
       await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
     if (!check()) throw new Error(`Timed out waiting for ${what}`);
   }

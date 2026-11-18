@@ -558,6 +558,9 @@ describe('the editor host for plugin blocks', () => {
   });
 
   it('draws a shared page’s third-party block as a placeholder naming its type', async () => {
+    // The frame's view loads lazily (as in the app); a cold run loads it late, so it is imported
+    // first and the wait is bounded by time, not by a count of ticks.
+    await import('@cgw/plugins/frame-view');
     const host = pluginsHost({ databases: null, i18n, thirdParty: SHARED_THIRD_PARTY });
     const element = document.createElement('div');
     document.body.append(element);
@@ -572,8 +575,7 @@ describe('the editor host for plugin blocks', () => {
         setProps: () => {},
       });
     });
-    for (let i = 0; i < 50 && !element.textContent; i++)
-      await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    await until(() => !!element.textContent, 'the placeholder');
     expect(element.textContent).toBe('Plugins aren’t shown on a shared page (vendor.notes).');
     expect(element.querySelector('iframe')).toBeNull();
     await act(async () => frame.destroy());
@@ -621,8 +623,10 @@ function render(
   return container;
 }
 
+/** Waits for `check`, bounded by time (5 s): Windows rounds each short timer up, CI runs cold. */
 async function until(check: () => boolean, what = 'the condition') {
-  for (let i = 0; i < 200 && !check(); i++)
+  const end = Date.now() + 5000;
+  while (!check() && Date.now() < end)
     await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
   if (!check()) throw new Error(`Timed out waiting for ${what}`);
 }
