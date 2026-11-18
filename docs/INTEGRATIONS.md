@@ -866,6 +866,17 @@ AdvEdit) per field, every check's code, a conflict from a change in the ERP, ide
 audit naming workspace, page and block, a `key` field applied to every row of its item and two
 different values refused, the ownership rule, and nothing of stock written.
 
+As built in Phase 10 (`packages/erp`: `contract.ts`, `drafts.ts`, `view/editing.tsx`,
+`view/aiPrepare.ts`; decisions, 2026-11-18): an edit of a `key` field is made on every record of
+its key the block holds on screen and in its draft, and a record of that key read later while
+editing takes the change; reverting it, or a conflict's choice for it, acts on every record of the
+key ("theirs" drops it from rows not in conflict too), so a commit carries one value a key. The
+review lists each record sent, then the records the dry run's answer adds for a changed key ("not
+shown here"); rows of one key are told apart by their ids. A conflict whose `fields` is empty
+needs no choice. AI's request marks such a field `scope: 'key'`. The mock ERP also refuses a
+commit's record whose `key` is not that record's own (`record.notFound`), so a client cannot dodge
+the one-value-a-key rule by naming another key.
+
 ### Track E: work in the ERP repo
 
 | # | Work | Why |
@@ -960,10 +971,134 @@ the editor's `nodeviews/plugin.ts`):
 - Copy and export write a definition's line (`Chart: Tasks`, `لوحة: Tasks`) through `@cgw/doc`'s
   `TextContext.pluginText`; the local search index, the server's derived text, search and Markdown
   write nothing.
-- Third-party plugins, if ever allowed, render only inside a sandboxed iframe with a message
-  contract like `sheet-embed.1`, and get no access to the document, the session or other blocks.
+- Third-party plugins render only inside a sandboxed iframe with a message contract like
+  `sheet-embed.1`, and get no access to the document, the session or other blocks (Phase 10:
+  `plugin-frame.1`, below).
 - Charts, kanban, calendar, timeline and embedded presentations are planned as first-party
   definitions on this interface.
+
+## Third-party plugins: `plugin-frame.1` (Phase 10)
+
+Agreed on 2026-11-18 (decisions, Phase 10). A third-party plugin is a bundle a workspace's owner or
+admin uploads; its code runs only in a sandboxed frame on an origin of its own, speaks to the page
+only through this contract, and is given nothing it was not granted. The types and validators are
+`packages/plugins/src/frame/` (`contract.ts`, `manifest.ts`); the vectors both sides can run are
+`packages/plugins/vectors/plugin-frame-vectors.json`; a reference and a hostile plugin are
+`tests/fixtures/plugins`.
+
+**The bundle.** A zip of at most 5 MB: `manifest.json` at its root, the entry `.html` and its files.
+At most 200 files, each at most 5 MB unpacked and 20 MB in all, none unpacking to over 100 times its
+size (read from the central directory before anything unpacks, then counted while unpacking); names
+of at most 200 characters with no `..`, absolute path, backslash, control character or repeat; only
+`.html .htm .js .mjs .css .json .svg .png .jpg .jpeg .gif .webp .ico .woff .woff2 .txt .map`, typed
+by extension. The device reads the manifest first and shows it; the server reads the whole bundle
+again as hostile and refuses with 400 `plugin.invalid` and `errors: [{code, path?}]`
+(`manifest.missing`, `manifest.invalid`, `type.reserved`, `entry.missing`, `file.type`,
+`file.name`, `bundle.tooLarge`, `bundle.zip`), or 413 over 5 MB.
+
+```ts
+interface PluginManifest {
+  contract: 'plugin-frame.1';
+  type: string;                 // dotted lower-case words, at most 64; never `cashgear.*`
+  version: number;              // a whole number from 1
+  name: { en: string; ar: string };          // 1 to 80 each
+  description?: { en: string; ar: string };  // at most 300 each
+  entry: string;                // an .html or .htm file in the bundle, default 'index.html'
+  reads?: { rows?: boolean };   // asks for a database view's rows
+  height?: number;              // the frame's first height, 48 to 1,200 CSS px, default 240
+  keywords?: string[];          // slash menu words, at most 10 of 1 to 30 characters
+}
+```
+
+**The routes** (owners and admins change; any member, guests included, reads and asks for frames):
+
+| Route | Method | Success |
+| --- | --- | --- |
+| `/api/v1/workspaces/{id}/plugins` | GET | 200 `{plugins: WorkspacePlugin[]}` |
+| `/api/v1/workspaces/{id}/plugins` | POST | The zip as `application/zip`: 201 a new type, 200 a new bundle of a type already there (same or higher version; lower 400 `plugin.older`); two adds of one type at once, the second 409 |
+| `/api/v1/workspaces/{id}/plugins/{pluginId}` | PATCH | `{enabled}`: 200 `WorkspacePlugin` |
+| `/api/v1/workspaces/{id}/plugins/{pluginId}` | DELETE | 204 |
+| `/api/v1/workspaces/{id}/plugins/{pluginId}/frames` | POST | The plugin live and on: 200 `{url, expiresAt}`; else 404. Rate `frames`, 120 a minute |
+
+`WorkspacePlugin` is `{id, type, version, name, description, reads, height, keywords, enabled,
+sizeBytes, addedBy: {id, name}, addedAt, updatedAt}`. Audit `plugin.add`, `plugin.update`,
+`plugin.enable`, `plugin.disable`, `plugin.remove` (type, version, bundle hash). Plugins are not in
+the change feed: the client reads the list on start, after Settings' changes and when a frame's
+ticket answers 404.
+
+**The plugins origin.** `https://plugins.cashgearerp.com` (`Plugins__PublicUrl`; `http://localhost:5291`
+in development and e2e), a second host name of the Sites process. A frame's `url` is
+`{origin}/f/{ticket}/{entry}`: the ticket is 32 random bytes in base64url, kept only as its SHA-256
+(`PluginFrameTickets`) with the workspace, the plugin and its bundle hash, for 10 minutes, not one
+use (the bundle's own files load under it). The origin answers only `GET` and `HEAD
+/f/{ticket}/{path}` of that bundle's files, while the plugin is live, on and of that bundle (its row
+read at most 30 s before), with the file's type and:
+
+```
+Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src {origin};
+  style-src {origin} 'unsafe-inline'; img-src {origin} data: blob:; font-src {origin};
+  media-src {origin}; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none';
+  base-uri 'none'; frame-ancestors {Workspace's origins}
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer
+Cache-Control: private, max-age=600
+Access-Control-Allow-Origin: *
+```
+
+never `Set-Cookie`. Anything else on that origin, and `/f/` on the pages origin, is the 404 page.
+The Sites process loads no Data Protection; its installed identity is denied the key ring's table.
+
+**The frame.** Workspace draws `<iframe src={url}>` with `sandbox="allow-scripts"` and nothing else
+(no same origin, pop-ups, top navigation, forms or modals), `referrerpolicy="no-referrer"`,
+`allow=""`, a `title` naming the plugin and no `name`, only when the url's origin is the build's
+plugins origin (`VITE_CGW_PLUGINS`). The web and desktop CSPs' `frame-src` name that origin beside
+Sheet's. The frame is mounted near the viewport, as other frames.
+
+**Handshake.** The plugin posts `{type: "ready", contracts: ["plugin-frame.1"]}` to `window.parent`
+with target `"*"`. The host takes a `ready` only when `event.source` is its frame's window and
+`event.origin` is `"null"` (a sandboxed frame's), once per load; it makes a `MessageChannel` and
+posts `init` to the frame with target `"*"`, transferring `port2`. Everything after is on the
+port. A second `load` of the frame (it navigated itself) ends it: the frame is removed and the
+block says the plugin stopped, with Reload. A message that fails validation is dropped; nothing
+logs a message's content.
+
+Host to plugin (on the port but `init`):
+
+| Message | Fields |
+| --- | --- |
+| `init` | `contract`, `plugin: {type, version}`, `block: {version, editable, newer}`, `props` (an object, without the host's `$` keys), `theme`, `direction`, `language`, `rows: Rows \| null` |
+| `props` | `props`: changed elsewhere (Undo, a collaborator) |
+| `theme` | `theme`, `direction`, `language` |
+| `editable` | `editable`, `newer` |
+| `rows` | `rows: Rows \| null` |
+| `saved` | The answer to a `setProps` written |
+| `refused` | `code`: `props.readOnly`, `props.invalid`, `props.tooLarge` |
+
+Plugin to host: `ready` (on the window), `resize {height}` (the frame is made that tall within 48
+to 1,200 CSS px and scrolls inside past it), `setProps {props}` (the plugin's whole props: an
+object at most 16 KB as JSON and 32 levels deep, written as one undoable edit only when `editable`
+and not `newer`, at most one write each 250 ms, merged so the host's `$` keys and any key not sent
+are kept; keys starting with `$` are dropped), `error {code, message}` (it cannot draw; `message`
+at most 500 characters, for the log only).
+
+`Rows`, only when the manifest asks (`reads.rows`) and the block names a view: `$view` in the
+block's props (`{databaseId, viewId}`), chosen by the person with the linked-view picker and written
+by the host, never by the plugin. `{databaseId, viewId, properties: [{id, name, type, options?}],
+rows: [{id, title, values}], total, complete}`: the view's own filter and sorts, its shown
+properties only, never a person, created-by or edited-by value, at most 500 rows, read as the reader
+may read them through the shell's `DatabaseHost`.
+
+**Placeholders.** A block draws a placeholder naming the plugin (its type where the name is not
+known), and the node is never changed, when the plugin is not installed in the workspace, turned
+off, offline, signed out, on a share link or a published site, in a local workspace or on a page of
+another workspace; a block written by a later version than the one installed is drawn read-only
+(`newer`), and a reader who cannot edit the page gets `editable: false`. A build that does not know
+third-party plugins (0.9.0 and earlier) draws its own "needs a newer version" placeholder and keeps
+the block exactly.
+
+**Trust.** A plugin shown rows could copy what it is shown into its own props, which every reader
+of the page receives; the add dialog says so. It has no network, so nothing it is shown can leave
+the page any other way. A contract version is never changed once shipped; a new one is added.
 
 ## Import formats (Phase 8)
 
@@ -1020,7 +1155,12 @@ public interface IAiProvider
 {
     string Id { get; }
     IAsyncEnumerable<AiChunk> CompleteAsync(AiRequest request, CancellationToken ct);
-    Task<float[][]> EmbedAsync(IReadOnlyList<string> texts, CancellationToken ct);  // optional
+}
+
+public interface IEmbeddingProvider   // Phase 10: a provider of its own (Voyage AI)
+{
+    string Id { get; }
+    Task<EmbeddingResult> EmbedAsync(EmbeddingCall call, CancellationToken ct);
 }
 ```
 
@@ -1037,7 +1177,8 @@ Rules:
   document as an ordinary edit by that user, undoable and in history.
 - Generated structured databases are created as proposals too: a schema and rows the user reviews.
 - AI search over workspace content uses embeddings stored per page, filtered by the same
-  permission check as ordinary search, at query time.
+  permission check as ordinary search, at query time, deleted when the workspace turns them off,
+  and never leaving the server (Phase 10, below).
 - AI and the ERP: AI can read ERP data only through the acting user's session, in memory, for
   the length of one request. It can fill a pending change list in an editable block. It cannot
   commit; a person reviews and commits through the same screen as always.
@@ -1155,3 +1296,82 @@ As built on the server (2026-11-15, Phase 7, stream D; `server/src/Cgw.Core/Ai`,
 - `tests/mocks/ai` stands in for the provider in the server's tests, the e2e stack and the benches
   (`Ai__AnthropicBaseUrl`, ignored in Production): the same streamed events as the API, the key
   recorded only as a hash, scripted answers and faults.
+
+### Embeddings and search by meaning (Phase 10)
+
+Agreed on 2026-11-18 (decisions, Phase 10): Voyage AI with the workspace's own key, `voyage-4` at
+1,024 dimensions as int8, off for every workspace until an owner or admin turns it on. Built in
+`server/src/Cgw.Core/Ai/Embeddings.cs`, `Ai/EmbeddingsService.cs`, `Search/MeaningSearch.cs` and
+the worker's `Jobs/EmbedJobs.cs`; the client's parts in `packages/shell/src/ai/AiSettings.tsx` and
+`packages/shell/src/search/meaning.ts`.
+
+**Settings.** `GET /workspaces/{id}/ai-settings` gains `embeddings`:
+
+```ts
+interface EmbeddingsSettings {
+  enabled: boolean;                   // on, with a key, and AI on for this server
+  provider: 'voyage';
+  model: string;                      // 'voyage-4' (default), 'voyage-4-large', 'voyage-4-lite'
+  models: string[];
+  // Owners and admins only:
+  hasKey?: boolean; keySetAt?: string | null; keySetBy?: { id: string; name: string } | null;
+  usage?: { month: string; requests: number; tokens: number };
+  progress?: { pages: number; embedded: number };   // while on: pages to embed, and embedded
+}
+```
+
+`PUT` takes `embeddings?: {enabled?, model?, apiKey?}` (`apiKey` a string sets, `null` removes,
+absent keeps). Turning on with no key is 400 `ai.keyMissing`, a model not offered 400
+`request.invalid`; removing the key turns embeddings off. Off deletes every vector of the workspace
+in the same request; on again, or a model change, embeds every page again. The key is the
+workspace's own, encrypted with Data Protection (purpose `Cgw.Ai.EmbeddingsKey.v1`, bound to the
+workspace) and never returned; its rules are Anthropic's key's. Embeddings may be on while AI
+completions are off: search by meaning needs no Anthropic key. Audit `ai.settings` with an
+`embeddings` detail, never the key.
+
+**The provider.** `IEmbeddingProvider.EmbedAsync(EmbeddingCall, ct) → EmbeddingResult`: the texts (1
+to 128, at most 100,000 characters together), their input type (`document` for the worker's chunks,
+`query` for a question), the workspace's model and key (printed without either); the int8 vectors in
+the inputs' order, Voyage's `total_tokens` and the time taken. `VoyageProvider` sends `POST
+https://api.voyageai.com/v1/embeddings` with `{input, model, input_type, output_dimension: 1024,
+output_dtype: "int8", truncation: true}` and `Authorization: Bearer <key>` over `HttpClient` (Voyage
+has no C# SDK); the base is named, `Ai__VoyageBaseUrl` only outside Production. A 401 or 403 is
+`ai.keyInvalid`; a 429, a 5xx, a failed connection or an attempt's 60 s is tried twice more, then
+`ai.limit` (429) or `ai.provider`. One `AiUsage` row a call (`embed` from the worker with no person,
+`search` for a question); completions' own `usage` no longer counts them.
+
+**What is embedded.** The worker's `embed` job embeds each page and row of a workspace with
+embeddings on, once its title or derived text has been unchanged for 30 s: the title, a blank line,
+then the derived text, in chunks of about 2,000 characters cut at paragraph ends, then sentence ends,
+then spaces, overlapping about 200, each starting with the title's line; at most 200 chunks a page.
+A chunk whose text and model already have a vector keeps it, with no call. Trashed and deleted
+pages' vectors are removed; a restored page is embedded again within 5 minutes. Never comments,
+workbooks, database property values or ERP data (none is in a page). `PageEmbeddings` holds the
+vectors; `EmbeddingChanges` names each page whose vectors changed, for a day (DATA_MODEL.md).
+
+**Search by meaning.** `GET /api/v1/workspaces/{id}/search/meaning?q=&limit=`. Checks in order: a
+member (404), not a guest (403 `access.denied`), embeddings on (403 `ai.disabled`), `q` 1 to 1,000
+characters after trimming and `limit` 1 to 20 (400 `request.invalid`), the key (502 `ai.keyInvalid`);
+the provider 502 `ai.provider` or 503 `ai.limit`. Rate bucket `meaning`, 30 a minute a person.
+Answer `{hits: SearchHit[]}`, ordinary search's hit (`pageId, title, snippet, score, kind,
+databaseId`), `score` the cosine similarity, `snippet` the start of the page's own best chunk. The
+API keeps each searched workspace's vectors of its current model in memory (capped by
+`Ai__EmbeddingsCacheMb`, the least recently used first), brought up to date from `EmbeddingChanges`
+on each search, and scores every chunk exactly; pages under the similarity floor
+(`Ai__EmbeddingsFloor`, 0.3) are left out; then ordinary search's permission check runs at query
+time, by the current pages, so a page restricted or trashed stops counting at once. No route
+returns a vector and no log holds one.
+
+**`ask`.** With embeddings on too, `ask`'s retrieval fuses the word search's top 8 and the meaning
+search's top 8 by reciprocal rank (k = 60) and sends the top 8 as before; a failure of the meaning
+search leaves the words' pages. Off, exactly as 0.9.0. `erpChanges` sends a field's `scope`.
+
+**The palette.** Online, with search by meaning on, it asks once the person pauses (500 ms, 3
+characters at least) and shows the pages the words did not find under "Related by meaning", each
+marked "Found by meaning" for screen readers; any failure shows nothing more.
+
+**The mock.** `tests/mocks/ai` answers Voyage's `POST /v1/embeddings` from a concept lexicon in
+English and Arabic (`embeddings.mjs`), so a question that shares no word with a page but shares its
+concepts scores high, in either language and across the two; `/__mock/embeddings` records each call's
+input count and type, the key only as a hash. One live test with a real key:
+`A_real_embedding` (`VOYAGE_API_KEY`), which prints voyage-4's scores against the floor.
