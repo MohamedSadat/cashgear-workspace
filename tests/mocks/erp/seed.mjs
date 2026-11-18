@@ -267,6 +267,8 @@ export const CONNECTORS = {
       }),
       field('payMethod', 'Payment method', 'طريقة الدفع', 'lookup', {
         lookup: 'paymentModes',
+        // Track E8: CustTable.PayMethod is required; an empty value is no payment mode.
+        required: true,
         filterable: true,
         sortable: true,
         edit: 'edit',
@@ -303,6 +305,8 @@ export const CONNECTORS = {
       field('creditLimit', 'Credit limit', 'حد الائتمان', 'decimal', {
         scale: 2,
         min: '0',
+        // Track E8: CustTable.CreditLimit is a float, exact to 15 significant digits.
+        max: '9999999999999.99',
         sortable: true,
         edit: 'advEdit',
       }),

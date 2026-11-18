@@ -833,12 +833,12 @@ customers they created can commit only those (`record.notFound` for any other).
 | `customerName` | Edit | required; at most 150 | `needsEdit` |
 | `customerGroup` | Edit | required; an active `customerGroups` code | `needsEdit` |
 | `mobile`, `mobile2` | Edit | at most 50 | `needsEdit` |
-| `payMethod` | Edit | an active `paymentModes` code | `needsEdit` |
+| `payMethod` | Edit | required; an active `paymentModes` code | `needsEdit` |
 | `address` | Edit | at most 150 (the ERP's update rule; the schema's `maxLength` says so) | `needsEdit` |
 | `taxFile` | Edit | at most 50 | `needsEdit` |
 | `currency` | AdvEdit | required; an active `currencies` code | `needsAdvEdit` (or `needsEdit` without Edit) |
 | `priceList` | AdvEdit | at most 50 | as `currency` |
-| `creditLimit` | AdvEdit | a decimal, scale 2, at least 0 | as `currency` |
+| `creditLimit` | AdvEdit | a decimal, scale 2, 0 to 9,999,999,999,999.99 (a float column, exact to 15 digits) | as `currency` |
 | `blocked` | AdvEdit | required | as `currency` |
 | `customerAccount`, `nationalId`, `governorate`, `city`, `createdBy`, `createdDate`, `modifiedBy`, `modifiedDate` | Never | | `notEditable` |
 
@@ -873,9 +873,19 @@ editing takes the change; reverting it, or a conflict's choice for it, acts on e
 key ("theirs" drops it from rows not in conflict too), so a commit carries one value a key. The
 review lists each record sent, then the records the dry run's answer adds for a changed key ("not
 shown here"); rows of one key are told apart by their ids. A conflict whose `fields` is empty
-needs no choice. AI's request marks such a field `scope: 'key'`. The mock ERP also refuses a
-commit's record whose `key` is not that record's own (`record.notFound`), so a client cannot dodge
-the one-value-a-key rule by naming another key.
+needs no choice. AI's request marks such a field `scope: 'key'`.
+
+As built in the ERP (Track E8, `CashGear` `f72bfd10` to `9f89743a`, 2026-11-18): one commit path
+(`SheetCommitService` over a `CommitTarget` a connector, Sheet's Vendors SQL and answers unchanged).
+Readings the contract leaves open, which the mock follows too: a record sent with a key other than
+its own is `record.notFound` for Customers and Items on hand (they are read by key; Vendors by id);
+text is trimmed, so spaces alone are empty and `maxLength` counts the trimmed text, while check 4
+compares a shared field's values as sent; a version is made from what the user sees, so a change to
+a field hidden from them is no conflict for them, and for someone who sees it a conflict with empty
+`fields`; Customers' `ModifiedBy` is the user's id; Items on hand has no AdvEdit field. Each
+workspace audit row, Vendors' too, now holds the record's id as sent (`SheetChangeAudit.RecordId`,
+tenant script `Add_WorkspaceCommitRecordId.sql`, after `Add_WorkspaceCommitAudit.sql`): it must run
+in a tenant's database before Workspace is turned on for that company.
 
 ### Track E: work in the ERP repo
 
