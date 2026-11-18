@@ -172,7 +172,14 @@ function kill(child) {
 const profile = mkdtempSync(join(tmpdir(), `cgw-kill-${sync ? 'sync-' : ''}${target}-`));
 const tag = basename(profile);
 
-/** Ends any process of this test's profile still running (children orphaned by a kill). */
+/**
+ * Ends any process of this test's profile still running (children orphaned by a kill), until none
+ * is left: on a crowded machine a killed tree takes a while to go (as in idb-durability.mjs), and
+ * a WebView2 process of the last start that still runs makes the next start of the profile join
+ * it, so the new debugging port never opens. Every start runs it first (CI run 44282443941: the
+ * signed-in desktop test "did not start" once in 25 on both attempts, each time straight after a
+ * kill, and started on its retry after a sweep).
+ */
 function sweep() {
   if (process.platform !== 'win32') return;
   spawnSync(
@@ -181,7 +188,7 @@ function sweep() {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${tag}*' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
+      `for ($i = 0; $i -lt 100; $i++) { $left = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${tag}*' -and $_.ProcessId -ne $PID }); if ($left.Count -eq 0) { break }; $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 200 }`,
     ],
     { windowsHide: true, stdio: 'ignore' },
   );
@@ -403,6 +410,8 @@ function watchDesktopStore(page, app) {
 
 /** Starts the app on the profile and returns a page attached over CDP, the probe in place. */
 async function launch({ blocked = false } = {}) {
+  // Nothing of the last start left to join (sweep).
+  sweep();
   const port = await freePort();
   let child;
   if (target === 'web') {
