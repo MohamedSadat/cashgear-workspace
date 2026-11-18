@@ -10,7 +10,7 @@ import { newAccount } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import { signedInWorkspace } from './database';
 import { workspaceIdOf } from './ecosystem';
-import { MEANING, QUESTIONS, meaningTitles, untilMeaningFinds, writePage } from './meaning';
+import { MEANING, QUESTIONS, meaningTitles, writePage } from './meaning';
 
 const KEY = process.env.VOYAGE_API_KEY;
 
@@ -19,7 +19,7 @@ test.skip(desktop || !KEY, 'Needs VOYAGE_API_KEY and the stack pointed at Voyage
 test('voyage-4 finds a page from a question sharing none of its words, in English, in Arabic and across the two, and the key leaves no trace', async ({
   page,
 }) => {
-  test.setTimeout(600000);
+  test.setTimeout(2400000);
   const account = await newAccount('Live meaning');
   await signedInWorkspace(page, account, 'Live meaning', null, async () => {
     throw new Error('The desktop is skipped');
@@ -41,14 +41,24 @@ test('voyage-4 finds a page from a question sharing none of its words, in Englis
     expect(JSON.stringify(settings)).not.toContain(KEY!);
 
     // English to English, Arabic to Arabic, and across the two; the unrelated page is never first.
-    await untilMeaningFinds(api, workspaceId, QUESTIONS.en, MEANING.refunds.title);
-    await untilMeaningFinds(api, workspaceId, QUESTIONS.ar, MEANING.leave.title);
-    await untilMeaningFinds(api, workspaceId, QUESTIONS.enToAr, MEANING.leave.title);
-    await untilMeaningFinds(api, workspaceId, QUESTIONS.arToEn, MEANING.refunds.title);
-    for (const q of Object.values(QUESTIONS)) {
-      const { titles } = await meaningTitles(api, workspaceId, q);
-      expect(titles[0], q).not.toBe(MEANING.other.title);
-    }
+    // A new Voyage account without a payment method takes about three requests a minute, so each
+    // question is asked once every 21 s (a refused one answers 503 and is asked again).
+    const finds = async (q: string, title: string) => {
+      const end = Date.now() + 8 * 60000;
+      for (;;) {
+        const { status, titles } = await meaningTitles(api, workspaceId, q);
+        if (status === 200 && titles.includes(title)) {
+          expect(titles[0], q).not.toBe(MEANING.other.title);
+          return titles;
+        }
+        if (Date.now() > end) throw new Error(`${q}: ${status} ${titles.join(' | ')}`);
+        await page.waitForTimeout(21000);
+      }
+    };
+    await finds(QUESTIONS.en, MEANING.refunds.title);
+    await finds(QUESTIONS.ar, MEANING.leave.title);
+    await finds(QUESTIONS.enToAr, MEANING.leave.title);
+    await finds(QUESTIONS.arToEn, MEANING.refunds.title);
   } finally {
     // Removing the key turns search by meaning off and deletes the vectors.
     const id = await workspaceIdOf(api, 'Live meaning').catch(() => null);
