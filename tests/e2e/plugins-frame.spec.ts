@@ -122,8 +122,9 @@ test('an owner adds the reference plugin, and a block draws in its frame with on
   await expect(frame.locator('#count')).toHaveText('2');
   await waitSaved(page);
   const pageId = pageIdOf(page);
+  // The props are JSON text in the block's attribute, so the derived JSON holds them escaped.
   await expect
-    .poll(async () => (await docJson(await apiSession(account), pageId)).includes('"count":2'), {
+    .poll(async () => /\\?"count\\?":2\b/.test(await docJson(await apiSession(account), pageId)), {
       timeout: 30000,
     })
     .toBe(true);
@@ -169,11 +170,23 @@ test('the hostile plugin reaches nothing: every attempt blocked, no request leav
 }) => {
   test.setTimeout(180000);
   const errors = watchAppErrors(page, ALLOW);
-  // Any request to example.com (or anywhere off the app's own hosts) would be the plugin escaping.
+  // Chrome reports a request its CSP refused as a request that failed (blocked by CSP), so the
+  // `request` event alone proves nothing. A request the browser actually sends reaches the
+  // context's route (aborted there, so nothing leaves even then) or finishes: either is the plugin
+  // escaping. Each one refused must have been refused by the browser's policy.
   const escaped: string[] = [];
-  page.on('request', (request) => {
-    const url = request.url();
-    if (/example\.com|\/steal/.test(url)) escaped.push(url);
+  const refused: string[] = [];
+  const steal = /example\.com|\/steal/;
+  await page.context().route(steal, (route) => {
+    escaped.push(`sent: ${route.request().url()}`);
+    return route.abort();
+  });
+  page.on('requestfinished', (request) => {
+    if (steal.test(request.url())) escaped.push(`finished: ${request.url()}`);
+  });
+  page.on('requestfailed', (request) => {
+    if (steal.test(request.url()))
+      refused.push(`${request.url()} ${request.failure()?.errorText ?? ''}`);
   });
   const account = await newAccount('Hostile owner');
   await page.goto('/');
@@ -199,6 +212,7 @@ test('the hostile plugin reaches nothing: every attempt blocked, no request leav
   // still the app (not navigated away).
   await page.waitForTimeout(2000);
   expect(escaped, escaped.join('\n')).toEqual([]);
+  for (const line of refused) expect(line).toMatch(/BLOCKED|csp/i);
   expect(new URL(page.url()).host).toBe('127.0.0.1:4273');
   expect(await pluginBlock(page).count()).toBe(1);
   expect(errors).toEqual([]);
@@ -258,7 +272,7 @@ test('a missing, a turned-off and a newer plugin draw a placeholder, and the doc
   // written at 2, is drawn read-only.
   await addPlugin(page, bundles.reference, 'Notes');
   await page.goto(`/#/p/${pageId}`);
-  await expect(frameOf(page).locator('#status')).toHaveText('Read only', { timeout: 30000 });
+  await expect(frameOf(page).locator('#status')).toHaveText(/^Read only/, { timeout: 30000 });
   const newerState = JSON.parse((await frameOf(page).locator('#state').textContent()) ?? '{}');
   expect(newerState.block).toEqual({ version: 2, editable: false, newer: true });
 

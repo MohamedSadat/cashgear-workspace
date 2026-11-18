@@ -106,11 +106,16 @@ export async function untilMeaningFinds(api: Api, workspaceId: string, q: string
     .toContain(title);
 }
 
-/** The palette, opened by its shortcut, with `q` typed. */
+/**
+ * The palette, opened by its shortcut, with `q` typed. Right after a reload the app may not have
+ * mounted its shortcuts yet, so the key is pressed again until the palette shows.
+ */
 export async function paletteSearch(page: Page, q: string) {
-  await page.keyboard.press('Control+KeyK');
   const palette = page.getByRole('dialog');
-  await expect(palette).toBeVisible();
+  await expect(async () => {
+    if (!(await palette.isVisible())) await page.keyboard.press('Control+KeyK');
+    await expect(palette).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 30000 });
   await palette.getByRole('combobox').fill(q);
   return palette;
 }

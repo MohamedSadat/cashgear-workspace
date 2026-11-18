@@ -487,9 +487,17 @@ test('the Arabic plugin block and Settings → Plugins have no English of their 
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     const theirs = {
       within: ['.cgw-plugin-frame-bar', '.cgw-plugins-name', '.cgw-plugins-type'],
-      names: [...scene.names, 'Notes', 'vendor.notes', 'Workspace', 'Private'].sort(
-        (a, b) => b.length - a.length,
-      ),
+      // Settings also lists the account's devices, named by the server from their browsers
+      // ("Chrome on Windows", and "Browser" for the tests' own API client), as above.
+      names: [
+        ...scene.names,
+        'Notes',
+        'vendor.notes',
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
     };
     const found: string[] = [];
     await pluginScreens(page, 'ar', async (screen) => {
