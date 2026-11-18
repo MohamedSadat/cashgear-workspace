@@ -131,12 +131,13 @@ test('a plugin type this build does not know is kept as it was, with a placehold
   await createWorkspace(page);
   await newPage(page, 'From a newer build');
   await page.keyboard.type('Before');
-  // A block from a later build, as the clipboard brings it.
+  // A block from a later build, as the clipboard brings it: a first-party type this build does
+  // not know (from 0.10.0 a `vendor.*` type is a third-party plugin, drawn by its own rules).
   await editor(page).evaluate((root) => {
     const data = new DataTransfer();
     data.setData(
       'text/html',
-      '<div data-block=""><div data-body="pluginBlock" data-type="vendor.timeline" data-version="3" data-props=\'{"span":"Q3","later":[1,2]}\'></div></div><p>After</p>',
+      '<div data-block=""><div data-body="pluginBlock" data-type="cashgear.timeline" data-version="3" data-props=\'{"span":"Q3","later":[1,2]}\'></div></div><p>After</p>',
     );
     root.dispatchEvent(
       new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
@@ -145,7 +146,7 @@ test('a plugin type this build does not know is kept as it was, with a placehold
   const block = pluginBlocks(page);
   await expect(block).toHaveCount(1);
   await expect(block).toContainText(
-    'This block needs a newer version of Cash Gear Workspace (vendor.timeline).',
+    'This block needs a newer version of Cash Gear Workspace (cashgear.timeline).',
   );
   // Typing around it changes nothing of it.
   await editor(page).getByText('After').click();
@@ -153,6 +154,6 @@ test('a plugin type this build does not know is kept as it was, with a placehold
   await page.keyboard.type(' and more');
   await waitSaved(page);
   await page.reload();
-  await expect(block).toContainText('(vendor.timeline)');
+  await expect(block).toContainText('(cashgear.timeline)');
   expect(errors).toEqual([]);
 });

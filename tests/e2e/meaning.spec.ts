@@ -70,7 +70,7 @@ test('on, the palette and ask find pages by meaning, in English, in Arabic and a
   const settings = page.getByTestId('embeddings-settings');
   await expect(settings.getByTestId('embeddings-key-state')).toHaveText('No key is set.');
   await settings.getByLabel('Voyage AI API key').fill(VOYAGE_KEY);
-  await settings.getByRole('button', { name: 'Save the key' }).click();
+  await settings.getByRole('button', { name: 'Save the Voyage AI key' }).click();
   await expect(settings.getByTestId('embeddings-key-state')).toContainText('A key is set');
   await expect(settings.getByLabel('Voyage AI API key')).toHaveValue('');
   await settings.getByLabel('Turn search by meaning on for this workspace').check();

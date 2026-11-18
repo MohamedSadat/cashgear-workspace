@@ -58,6 +58,8 @@ describe('catalogues', () => {
       'ai.embeddingsNote',
       'ai.embeddingsKey',
       'ai.embeddingsKeyMissing',
+      'ai.embeddingsSaveKey',
+      'ai.embeddingsRemoveKey',
       'ai.modelVoyage4',
       'ai.modelVoyage4Large',
       'ai.modelVoyage4Lite',

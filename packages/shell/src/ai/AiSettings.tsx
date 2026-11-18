@@ -316,7 +316,7 @@ function EmbeddingsPart({
             onChange={(event) => setKey(event.target.value)}
           />
           <button type="submit" className="cgw-button" disabled={busy || !key.trim()}>
-            {t('ai.saveKey')}
+            {t('ai.embeddingsSaveKey')}
           </button>
           {embeddings.hasKey && (
             <button
@@ -325,7 +325,7 @@ function EmbeddingsPart({
               disabled={busy}
               onClick={() => save({ embeddings: { apiKey: null } })}
             >
-              {t('ai.removeKey')}
+              {t('ai.embeddingsRemoveKey')}
             </button>
           )}
         </form>
