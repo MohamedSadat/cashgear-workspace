@@ -1349,3 +1349,24 @@ Built in M10.1 to M10.5 (the streams' choices, each in its note):
 | A plugin's props write | The plugin's whole props merged over the block's (its `$` keys and keys not sent kept), one undoable edit, at most one each 250 ms, answered `saved` or `refused` | Props are page content; the merge keeps a newer build's props (Phase 7's rule); the throttle keeps a chatty plugin within the keystroke budget |
 | A type with no third-party host | `plugins.has(type)` is true for a third-party type only with a host and a plugins origin; else the editor's own "needs a newer version" placeholder | A share link, a local workspace or an older build has no host |
 | AI refusals in the client | The code is read from the answer's error (openapi-fetch reads a failed body itself); every AI refusal had come back as `server.error` since 0.7.0 | Found by stream E; `ai.disabled`, `ai.keyMissing` and the rest now reach their own text |
+
+## 2026-11-18: After 0.10.0 (the Later list reviewed)
+
+Phase 10 was the last planned phase. The plan's "Later" list, with what Phases 8 to 10 left for
+later (added to it the same day), was put to you in one batch, grouped by theme.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| What comes after Phase 10 | Plan Phase 11, in a new session, from the themes below; it asks its own questions in one batch, as every phase has |
+| Themes for Phase 11 | Sign-in and permissions (groups in permissions, single sign-on, passkeys); ERP at scale (ERP reports, Q16, and the ERP's Query paging without reading a company's whole table); AI and plugins (a plugin's own network access, plugins in the change feed, embedding database property values, an approximate vector index, `voyage-4-nano` or another local model, AI's subscription mode); databases (a chart view type, moving a timeline bar between lanes, a screen-reader pass on the grid, pins of every row's document) |
+| Not chosen | Publishing (custom domains, the Sites process's rate limit, publishing in the change feed, an index of row files), offline and platforms (comments offline, Linux, a mobile app), import (Notion's people and outside relations, attachments' bytes before first opened), scale and upgrades (a backplane, Yjs 14, SQLite on OPFS): they stay on "Later" |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| How many phases | Left to Phase 11's planning: four themes may be one phase or split into releases, as Phases 8 to 10 were | The planning session sizes them against the code, and asks |
+| ERP reports and Query paging | Planned with Track E work in `CashGear` (E10 onward) as an agreed track | The hard limits change other repos only as agreed tracks |
+| Moving a bar between lanes | Its component work in Track U (`CgTimeline`) | The hard limits put generic components in `CashGear.React.UI` |

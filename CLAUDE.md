@@ -3,7 +3,7 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 9 are done (0.9.0: the local-first editor; accounts, sync, sharing, server
+Status: Phases 0 to 10 are done (0.10.0: the local-first editor; accounts, sync, sharing, server
 search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
 views; Sheet workbooks embedded in pages and read-only ERP blocks; real-time editing, presence,
 comments, mentions and the inbox; editable ERP blocks for Vendors, chart and kanban plugin
@@ -13,8 +13,11 @@ library's components (Track U), bulk cell editing, import from Notion, Markdown 
 email for mentions and replies; then publishing and views: a page tree published as a public
 site from a process of its own (`pages.cashgearerp.com`), databases' rows on sites and share
 links, the timeline view and date windows, and workbooks in the export with their history and
-Sheet's desktop app by deep link). Phase 10 is planned and next: editable Customers and Items,
-AI search by embeddings, third-party plugins.
+Sheet's desktop app by deep link; then editable Customers and Items on hand, with fields an
+item's rows share, search by meaning over Voyage AI's embeddings on the workspace's own key, and
+third-party plugins in sandboxed frames from an origin of their own, `plugins.cashgearerp.com`).
+No phase is planned after it yet: what could come next is under "Later" in
+`docs/IMPLEMENTATION_PLAN.md`.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.
 
@@ -693,3 +696,11 @@ Added as they are found, grouped by phase.
   `CacheControl.Private` and `.MaxAge`, not the string.
 - Right after a reload the app may not have mounted its shortcuts: a spec presses Ctrl+K again until
   the palette shows.
+- The sync status can still read "Synced" from before a click's operation is queued: a spec that
+  must know the server holds a change (a trash) reads the server (`untilTrashedOnServer`, the change
+  feed). Edge names its device "Edge on Windows": every Arabic walk of Settings allows both names.
+- The desktop's native side answers `auth_token` one at a time, and offline each refresh fails only
+  after about 2 s: callers at once share the ask in flight (`apps/web/src/platform/shared.ts`), or
+  the sync status says "Syncing" for many seconds before "Offline". A WebView2 process of the last
+  start still running makes the next start of its profile join it and the new debugging port never
+  opens: a harness ends the profile's processes until none is left before each start.

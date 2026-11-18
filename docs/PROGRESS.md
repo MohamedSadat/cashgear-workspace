@@ -19,10 +19,10 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 7: Editable ERP blocks, plugins, AI | Done, 2026-11-15 (0.7.0; proven against the mocks in CI and against the real ERP run locally; pushing Track E6 and E7, and the live test against Anthropic, are yours) | `phase-7`, `v0.7.0` |
 | Phase 8: Hardening and moving in | Done, 2026-11-16 (0.8.0; Chrome's own IndexedDB loss answered by a journal; the Chromium report, drafted, is yours to file; one notice keeps its own component) | `phase-8`, `v0.8.0` |
 | Phase 9: Publishing and views | Done, 2026-11-18 (0.9.0; the site's origin, DNS and certificate, and its install on the host are yours; Sheet's real desktop app proven on the reference machine) | `phase-9`, `v0.9.0` |
-| Phase 10 | Planned, 2026-11-15 ("Later" reviewed with you; `IMPLEMENTATION_PLAN.md`, `DECISIONS.md`) | |
+| Phase 10: Editable Customers and Items, search by meaning, third-party plugins | Done, 2026-11-18 (0.10.0; proven against the mocks in CI and against the real ERP run locally; the plugins origin's DNS and certificate, pushing Track E8 and E9 and the ERP's tenant script are yours; Voyage proven live) | `phase-10`, `v0.10.0` |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `0490cbd` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
-| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), committed there and not pushed | |
+| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), committed there and not pushed | |
 
 ## Planning
 
@@ -1201,6 +1201,123 @@ Benchmarks (`bench/phase9.mjs` in CI, gated against the budgets and the last run
 
 The deploy rehearsal (`node scripts/deploy-rehearsal.mjs`, 2026-11-17: rehearsal pass and drill pass. The package built with its `sites/` folder, the migration bundle applied, the published API, worker and Sites process running, every earlier smoke step, and a page published and read on its own origin with no account and no cookie; restored elsewhere, the site reads there too and is gone after an unpublish).
 
+## Phase 10: Editable Customers and Items, AI search by embeddings, third-party plugins
+
+Done 2026-11-18. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44333560961 (commit `f2e14c9`, all jobs green: 310 browser e2e cases passed and 14 skipped, the desktop app's 61 passed, every kill test 25 of 25, every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44333560848 (green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, WebView2, SQL Server LocalDB 2025, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-18: Phase 10); the contracts as built in `INTEGRATIONS.md` ("Customers and Items on hand editable (Phase 10, Track E8)", "Third-party plugins: `plugin-frame.1` (Phase 10)", "Embeddings and search by meaning (Phase 10)"); the design in `ARCHITECTURE.md` and `DATA_MODEL.md`; what changed for users in `CHANGELOG.md` (0.10.0).
+
+Milestones
+
+- [x] M10.1 Editable Customers and Items on hand. Commits `9ac4a29` (the contract written in full
+      first), `7628fa5` (`scope` in `@cgw/erp`, the drafts' shared fields, the review's added rows,
+      the mock ERP's Customers and Items on hand as the real connectors with their commits, the
+      suite's 13 cases, `erp-phase10.spec.ts`, `bench/phase10-erp.mjs`), `3fc217b` (Track E8's
+      readings); Tracks E8 and E9 in the ERP (below)
+- [x] M10.2 Embeddings. Commit `5e4f8f9` (the Voyage provider, the workspace's second key under
+      Data Protection, metering, the off switch deleting the vectors, `PageEmbeddings` and
+      `EmbeddingChanges`, the worker's `embed` job, the mock provider's embeddings)
+- [x] M10.3 Search by meaning. Commits `5e4f8f9` (the route, the API's exact search per workspace
+      with ordinary search's permission check at query time, `ask` fused by reciprocal rank),
+      `c72b4da` (Settings' part and the palette's "Related by meaning"), `ccefe94` and `6ef3bc4`
+      (the live spec)
+- [x] M10.4 Plugin frames. Commit `1032c2a` (`plugin-frame.1` with 262 shared vectors, the
+      sandboxed frame and its handshake, placeholders, the hostile plugin)
+- [x] M10.5 Plugin install and trust. Commits `5e4f8f9` (bundles read as hostile archives, the
+      routes and their audit, frame tickets stored hashed, the Sites process's plugins origin and
+      its CSP, `install.ps1 -PluginsHostName`), `1032c2a` (Settings → Plugins, the CSPs' `frame-src`)
+
+Notes
+
+- The work ran as three streams in one checkout to a written brief (the server; ERP editing and
+  the client of search by meaning; third-party plugins on the client), then a proof run by the
+  parent, after your answers (decisions, 2026-11-18). Tracks E8 and E9 ran in a session of their
+  own in `CashGear`.
+- **Frame tickets.** The server stream's first build made frame tickets with Data Protection, which
+  put the key ring in the Sites process, the one that serves the public: it could have opened the
+  AI keys' ciphers in the SQL it reads. Tickets are 32 random bytes kept only as their hash now, as
+  the hub's; the Sites process loads no Data Protection again, and `install.ps1` denies its identity
+  the key ring's table (`PluginTests` runs it as such a SQL user).
+- **Track E8 and E9.** ERP commits `f72bfd10`, `a23615b2`, `02dba6c9`, `9f89743a` in `CashGear`,
+  **committed locally, not pushed**. One commit path for Vendors, Customers and Items on hand
+  (`SheetCommitService` over a `CommitTarget`), Sheet's Vendors SQL and answers pinned unchanged by
+  `CommitSqlTests`. New tenant script `Add_WorkspaceCommitRecordId.sql` (the audit row's record
+  id; every workspace commit writes it), applied to LocalDB only: it must run in a tenant before
+  Workspace is turned on for that company. The ERP's tests: SQLite 156 passed (31 LocalDB-only
+  skipped), LocalDB 30 passed; one failure each, both your uncommitted `appsettings.json` and
+  `VendorModel.cs` edits, as before. **Workspace's `erp-connect.1` suite against UnifiedAPI on
+  LocalDB: 58 passed, 24 skipped (22 mock-only, 2 rate-limit cases for their own host), 0 failed.**
+  Its readings (payment method required, the credit limit's maximum, a record's key its own,
+  trimmed text, versions by what the user sees) are in `INTEGRATIONS.md`, and the mock follows the
+  first two.
+- **The live check against Voyage AI** (your key, in your user environment, read into each command
+  and never written down): `A_real_embedding` passed 3 of 4 (the fourth, run seconds after another,
+  hit a new account's limit of about three requests a minute, and passed on the next), voyage-4
+  scoring the related English and Arabic pages above the 0.3 floor and above an unrelated page;
+  `meaning-live.spec.ts` passed in Chrome in 1.8 minutes against `api.voyageai.com` (English,
+  Arabic and both across, the unrelated page never first, the key in no answer, removed at the end
+  with its vectors). No file held the key afterwards (test results, logs, the stack's data). A
+  workspace on an account without a payment method embeds slowly at that limit.
+- The proof found, in Chrome, what the streams' specs had not run against: two "Save the key"
+  buttons in Settings' AI section (the embeddings part's now name Voyage AI), Phase 7's
+  `plugins.spec.ts` meeting a `vendor.*` type that is now a third-party plugin (it pastes a
+  first-party type a later build would ship), and four spec assumptions (Chrome reports a request
+  its CSP refused as one that failed, a plugin's props escaped in the derived JSON, a status's
+  longer text, Ctrl+K pressed before the app mounted its shortcuts). CI run 44209972537 failed one
+  unit test that waited 50 ticks for a lazily loaded view on a cold runner (`1cd8d4e`). The
+  real-time recycle case failed once locally while the stack ran beside the specs and passed
+  again; nothing of Phase 10 touches the hub.
+- 0.9.0's release commit `9752235` turned CI red (run 44187516670) in the desktop sync kill test's
+  cleanup alone (its 25 runs, 0 failures): it clicked "Sign out" by name, and Settings also lists
+  every other signed-in device with a button of that name, the test's API session among them. It
+  clicks this app's own, the last (`770fda3`).
+- The two runs after it (44224371921 on `3fc217b`, 44263506045 on `770fda3`) failed one spec in
+  Edge alone: the Arabic walk of Settings → Plugins found "Edge on Windows", Edge's device name,
+  which every other Arabic walk of Settings allows. The second run's one flaky spec, a trashed page
+  still found by meaning once, was the spec's own race: the sync status still read "Synced" from
+  before the trash was queued, so the question reached the server first. The spec now waits until
+  the server's change feed holds the page trashed (`untilTrashedOnServer`); the query-time check
+  itself was never at fault.
+- The run on those fixes (44282443941, `9d1764e`) failed both attempts on one start of the
+  signed-in desktop kill test, run 5 and then run 1 of 25, straight after a kill: WebView2's
+  debugging port did not open in 45 s. Nothing was lost (device and server ended at the same text,
+  1,759 and 1,849), and each retry started after a sweep of the profile's processes. A WebView2
+  process of the last start that still runs makes the next start of the profile join it; every
+  start now first ends the profile's processes until none is left (`2313abe`).
+- That run (44309391191) was the first of Phase 10 to reach Phase 3's budgets, and failed at the
+  desktop app's cold start offline: signed in with the cached account, its status said "Syncing"
+  for 18 s before "Offline", past the bench's 15 s; locally on every start too. The native side
+  answers `auth_token` one at a time, and offline each refresh fails only after about 2 s (a
+  refused connection on Windows): eight callers at the start waited one behind another, the sync
+  engine last. Callers at once now share the one ask in flight (`shareInFlight`, `f2e14c9`):
+  "Offline" after about 4 s, and the cold start offline 1,367 ms locally (budget 1,500). The run on
+  it (44333560961) is the evidence run above: every job green, the cold start offline 668 ms.
+- Initial JavaScript 345.7 kB of Phase 1's 350 (0.9.0: 341.1): `@cgw/plugins/frame` and the
+  palette's search by meaning; the frame's view, the bundle reader and Settings load when first
+  needed.
+- Left for later: plugins in the change feed (a tab learns of an added or removed plugin on its
+  next read of the list); a plugin's network (refused in 0.10.0); embedding database property
+  values; an approximate vector index past what one API process holds; voyage-4-nano on the host.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| An edit to a customer or an item is written only after review and commit, is in the ERP's audit with its page, and a conflicting ERP change is shown, not overwritten; a user without the privilege cannot commit by any request, proven against the API; none of either connector's data is in any Workspace store | Pass | `erp-phase10.spec.ts` (Chrome, Edge): "a customer’s edit is written only after review and commit, names its page in the ERP’s audit, and a change made in the ERP is shown, not overwritten"; "an item’s name changed on one row changes every row of the item, written once; a stock movement meanwhile asks for no choice"; "a person without the privilege gets no editing of Customers or Items on hand, and a commit by any request is refused"; "nothing stored: after editing customers and items, none of their values, nor what was typed, is in any store, the document or search". The suite's commit cases for both connectors against the mock (`pnpm test`) and against UnifiedAPI on LocalDB (Track E9: 58 passed, 0 failed). The ERP's `WorkspaceCustomerCommitTests`, `WorkspaceItemCommitTests`, `WorkspaceEditableLocalDbTests` (concurrent commits of one customer and one item: one written, the rest 409; a posting meanwhile a 409 with empty `fields`). Unit: `packages/erp/src/shared.test.ts`, `view/shared.test.ts` |
+| With embeddings on, `ask` finds a page from a question that shares none of its words, in English and in Arabic, and never cites a page the person cannot read; with them off, no text leaves for the embeddings provider; a page restricted or trashed stops counting at once | Pass | `meaning.spec.ts` (Chrome, Edge; the mock provider): "on, the palette and ask find pages by meaning, in English, in Arabic and across the two, and never one the person cannot read"; "a page restricted or trashed stops counting at once"; "off, the embeddings provider receives nothing, the route refuses, and turning it off sends nothing more". Against the real Voyage AI: `meaning-live.spec.ts` and `A_real_embedding` (notes above). Server: `MeaningSearchTests` (the permission matrix at query time: restricted, private, hidden, trashed, a row of an unreadable database, another workspace, a guest), `EmbeddingTests` (settings by role, the key in no answer, log or audit, off deleting the vectors, chunks kept, made again and removed, a model change), `AiTests` (`ask` with and without embeddings) |
+| A third-party plugin draws in its frame with only what it was given; it cannot reach the document, the session, cookies, other blocks or the network, proven by a hostile plugin; a page holding it opens unchanged in a workspace without it and in an older build | Pass | `plugins-frame.spec.ts` (Chrome, Edge): "an owner adds the reference plugin, and a block draws in its frame with only what it was given"; "a plugin granted a view is shown its rows, never a person’s values"; "the hostile plugin reaches nothing: every attempt blocked, no request leaves the frame" (parent, top, cookies, local and session storage, IndexedDB, fetch, XHR, a WebSocket, an image beacon, top navigation, a pop-up, posting to other frames: none reached; no request reached the network); "a missing, a turned-off and a newer plugin draw a placeholder, and the document keeps the block". `old-build.spec.ts` "the v0.9.0 build shows a third-party plugin block as a placeholder, sends nothing of it, and the server keeps its bytes". Server: `PluginTests` (routes by role, every refusal of a hostile bundle, tickets expired, of another workspace or bundle, removed or off, the plugins origin's headers and 404s, the Sites process as a reader denied the key ring's table). Unit: `packages/plugins/src/frame/vectors.test.ts` (262), `host.test.ts`, `block.test.ts`, `packages/shell/src/plugins/plugins.test.ts` |
+
+Also: `a11y.spec.ts` "Axe finds nothing on Items on hand editing, its review and conflict", "…on the palette’s related by meaning and its settings", "…on a plugin block and Settings → Plugins" (light and dark, English and Arabic); `arabic.spec.ts` "the Arabic Items on hand editing, its review and conflict have no English of their own", "the Arabic related by meaning and its settings…", "the Arabic plugin block and Settings → Plugins…". Unit: 3,522 tests in `pnpm test` (3,516 passed, 6 skipped), 327 server tests (317 passed; the 8 benches and the 2 real provider calls skipped); every standing check passes.
+
+Benchmarks (`bench/phase10.mjs`; the client part in CI's Windows job, the server's in its Linux job; gated against the budgets and the last run on main)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| Review of 500 changed customers, less the ERP's dry run, p95 | 2 s | 127.2 ms (the ERP's own 36.3 ms, the total 163.5 ms) | 215.6 ms (the ERP's own 107.1 ms, the total 306.3 ms) |
+| Typing between 10 plugin frames: work per key, p95 | Phase 1's (8 ms; a frame on CI's runner) | 2.7 ms over 64 keys | 4.8 ms over 64 keys |
+| The same: key to the next frame, p95 | 33 ms | 18.1 ms | 17.9 ms |
+| Retrieval by meaning over 100,000 chunks, warm, p95, less the provider's time | 300 ms | 45.2 ms (Release; the mock provider's own p95 2.1 ms) | 76.3 ms (Release; ranking alone 10 ms) |
+| The same after a change of five pages, p95 | 300 ms | 51.5 ms | 55.9 ms |
+| The first search's load of the workspace's copy | tracked | 1,415.2 ms | 2,120.6 ms |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
@@ -1246,3 +1363,5 @@ Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
 - [x] E5 Rate limiting and CORS on the connect routes (`10a7393b`); Workspace's `erp-connect.1` suite against UnifiedAPI on LocalDB: 39 passed, 0 failed
 - [x] E6 Editable connectors and audit (CashGear `a97528cd`, `51da67ee`, `85dbb246`, local; the tenant script `Add_WorkspaceCommitAudit.sql`)
 - [x] E7 Contract suite against UnifiedAPI (`006f8c4d`, `89729d72`, local; Workspace's suite on LocalDB: 49 passed, 21 mock-only skipped, 0 failed)
+- [x] E8 Customers and Items on hand editable, one commit path for all three connectors, the audit row's record id (CashGear `f72bfd10`, `a23615b2`, `02dba6c9`, `9f89743a`, 2026-11-18, local; the tenant script `Add_WorkspaceCommitRecordId.sql`)
+- [x] E9 Workspace's suite with Phase 10's commit cases against UnifiedAPI on LocalDB: 58 passed, 24 skipped (22 mock-only, 2 for the rate-limit host), 0 failed

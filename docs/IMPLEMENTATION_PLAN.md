@@ -1556,6 +1556,9 @@ document schema rise.
 
 Not planned in any phase; listed so they are not lost. Reviewed on 2026-11-15: what was chosen
 went to Phases 8 to 10, and the earlier phases' deferrals that were not chosen are listed here.
+Reviewed again on 2026-11-18, after 0.10.0: sign-in and permissions, ERP at scale, AI and plugins,
+and the database items were chosen for Phase 11, which a session of its own plans (`DECISIONS.md`);
+they stay listed here until that plan takes them.
 
 - A chart view type for databases (the chart plugin block exists from 0.7.0).
 - Embedded presentations, once that app exists.
@@ -1574,6 +1577,17 @@ went to Phases 8 to 10, and the earlier phases' deferrals that were not chosen a
 - Pins that hold every row's document, not only a database's rows; a screen-reader pass on the
   database grid (Axe only so far); an end-to-end test of access lost without a feed change (the
   hub's 60 s re-check).
+- Left by Phase 8: a Notion export's people columns as members (text in 0.8.0) and its relations
+  to pages outside the export; an attachment's bytes fetched before it is first opened, so a
+  second device has them offline.
+- Left by Phase 9: custom domains for published sites; a rate limit in the Sites process; publishing
+  changes in the change feed (the dialog and Settings read them); an index of row files for the
+  site's file check (a `LIKE` over a database's rows in 0.9.0); moving a timeline bar to another
+  lane by dragging (Track U: `CgTimeline` has no lanes to drop on).
+- Left by Phase 10: plugins in the change feed (a tab learns of one added or removed on its next
+  read of the list); a plugin's own network access (refused by its CSP in 0.10.0); embedding
+  database property values, not only text; an approximate vector index past what one API process
+  holds; `voyage-4-nano` run on the host instead of Voyage's API.
 - Not while the hard limit stands: snapshotting an ERP view into a database, which would store ERP
   data in a Workspace table.
 
