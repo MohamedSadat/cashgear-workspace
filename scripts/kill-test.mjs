@@ -1374,7 +1374,8 @@ try {
       if (sync && target === 'desktop') {
         // The test's sign-in leaves the keychain.
         await app.page.goto(new URL('#/settings', app.page.url()).toString());
-        await app.page.getByRole('button', { name: 'Sign out' }).click({ timeout: 10000 });
+        // This app's own Sign out, after the device list's (the test's API session is a device).
+        await app.page.getByRole('button', { name: 'Sign out' }).last().click({ timeout: 10000 });
         await sleep(1500);
       }
     } catch (error) {
