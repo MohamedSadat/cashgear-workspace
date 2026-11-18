@@ -6,6 +6,7 @@ import type { UpdateInfo, WorkspacePlatform } from '@cgw/shell';
 import { DesktopStore } from '@cgw/store-desktop';
 import { erpFor } from './erp';
 import { pluginsOriginFor } from './plugins';
+import { shareInFlight } from './shared';
 import { sheetOriginFor } from './sheet';
 
 const bytes = (answer: ArrayBuffer | Uint8Array | number[]) =>
@@ -71,7 +72,9 @@ export const desktopPlatform: WorkspacePlatform = {
   auth: {
     kind: 'bearer',
     signIn: (language) => authCommand<boolean>('auth_sign_in', { language, deviceName: null }),
-    token: () => authCommand<string | null>('auth_token', {}),
+    // Callers at once share one ask (shared.ts): the native side answers them one at a time, and
+    // offline each would wait out the refresh before it.
+    token: shareInFlight(() => authCommand<string | null>('auth_token', {})),
     signOut: () => authCommand<void>('auth_sign_out', {}),
   },
   setWindowTheme: (theme) => getCurrentWindow().setTheme(theme),
