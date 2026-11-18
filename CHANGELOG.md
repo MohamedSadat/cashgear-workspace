@@ -4,6 +4,45 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.10.0] - 2026-11-18
+
+Edit customers and items from a page as you edit vendors, find pages by what they mean and not
+only by their words, and add plugin blocks of your own, each kept in a box of its own.
+
+- **Customers and items from a page.** An ERP block of Customers or Items on hand now has "Edit
+  data" for whoever Cash Gear ERP lets edit them: a customer's name, group, mobiles, payment
+  method, address and tax file with Edit, and its currency, price list, credit limit and blocked
+  flag with AdvEdit; an item's name and group with the Items unit's Edit. An item's name or group
+  changes on every row of that item at once, and the review lists the item's rows the page does
+  not show. Stock is never written: quantities move only by the ERP's own transactions. As for
+  vendors, nothing is written until you review and commit, the ERP's audit names the page, and a
+  change made in the ERP meanwhile is shown beside yours, never overwritten.
+- **Search by meaning.** Owners and admins can turn on search by meaning in Settings → AI with a
+  Voyage AI key of the workspace's own. The palette then also shows "Related by meaning": pages
+  that say what you are looking for in other words, in English or Arabic and across the two; and
+  Ask AI finds its sources the same way. A page someone cannot read never shows, a page restricted
+  or moved to the trash stops showing at once, and nothing leaves for Voyage while it is off.
+  Turning it off deletes what it made.
+- **Plugins.** Owners and admins can add plugin blocks of their own in Settings → Plugins: a zip
+  with the plugin's files, checked and shown before it is added, then turned on or off, updated or
+  removed. A plugin is inserted from the slash menu by its name and draws in a sealed frame on an
+  origin of its own: it sees only its block's settings, the theme and language, and, when it asks
+  and you choose a database view, that view's rows without anyone's name. It cannot reach the page,
+  your session, other blocks or the network. A plugin turned off, removed, or not in this
+  workspace shows a placeholder, and the page keeps the block as it was.
+- **Older versions.** 0.9.0 and earlier show a plugin block of your own as a placeholder and keep
+  it unchanged.
+- **Fixed.** The AI panel and Settings now say why AI refused (AI off, no key) instead of a general
+  error, and Settings' two key fields have buttons of their own names. The desktop app started
+  with no network says "Offline" after about 4 seconds, not after about 18 seconds of "Syncing".
+- **For whoever runs the server.** The Sites process also answers a second host name for plugin
+  frames: add the DNS record and certificate for `plugins.cashgearerp.com` and run `install.ps1`
+  (`-PluginsHostName plugins.cashgearerp.com`, the default), which also keeps the sites' identity
+  out of the key ring's table. The API needs `Plugins__PublicUrl` (an https address in
+  Production, or it does not start). The update adds the embeddings, plugins and frame-ticket
+  tables (`docs/OPERATIONS.md`). Before Customers and Items on hand are edited from Workspace in a
+  company, run the ERP's `Add_WorkspaceCommitRecordId.sql` in its tenant database.
+
 ## [0.9.0] - 2026-11-18
 
 Publish a page and the pages under it as a public site, plan with a timeline over any database,
