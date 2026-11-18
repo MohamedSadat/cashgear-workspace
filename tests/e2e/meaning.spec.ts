@@ -12,7 +12,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { editor } from './helpers';
-import { syncStatus } from './cloud';
 import { pageActions, restrict, team, type Team } from './collab';
 import {
   ANTHROPIC_KEY,
@@ -26,6 +25,7 @@ import {
   mockEmbeddings,
   paletteSearch,
   untilMeaningFinds,
+  untilTrashedOnServer,
   writePage,
 } from './meaning';
 
@@ -176,7 +176,7 @@ test('a page restricted or trashed stops counting at once', async ({ page, brows
   await expect(editor(page)).toContainText(MEANING.leave.text, { timeout: 30000 });
   await pageActions(page).click();
   await page.getByRole('menuitem', { name: 'Move to trash' }).click();
-  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+  await untilTrashedOnServer(t.owner.api, t.workspaceId, leave);
   for (const api of [ben.api, t.owner.api]) {
     expect((await meaningTitles(api, t.workspaceId, QUESTIONS.ar)).titles).not.toContain(
       MEANING.leave.title,

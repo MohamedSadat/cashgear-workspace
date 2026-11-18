@@ -496,6 +496,7 @@ test('the Arabic plugin block and Settings → Plugins have no English of their 
         'Workspace',
         'Private',
         'Chrome on Windows',
+        'Edge on Windows',
         'Browser',
       ].sort((a, b) => b.length - a.length),
     };

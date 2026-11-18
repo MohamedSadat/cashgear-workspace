@@ -107,6 +107,42 @@ export async function untilMeaningFinds(api: Api, workspaceId: string, q: string
 }
 
 /**
+ * Waits until the server holds the page as trashed, by the workspace's change feed (its newest
+ * change for the page). The sync status may still read "Synced" from before the trash was queued,
+ * so a question asked on it alone can reach the server first.
+ */
+export async function untilTrashedOnServer(api: Api, workspaceId: string, pageId: string) {
+  await expect
+    .poll(
+      async () => {
+        let after = '0';
+        let trashedAt: string | null | undefined;
+        for (;;) {
+          const answer = await api.raw(
+            `/api/v1/workspaces/${workspaceId}/changes?after=${after}&limit=500`,
+          );
+          if (answer.status !== 200) return undefined;
+          const body = JSON.parse(answer.body) as {
+            changes: {
+              entityId: string;
+              entity: { page?: { trashedAt: string | null } | null } | null;
+            }[];
+            cursor: string | number;
+            more: boolean;
+          };
+          for (const change of body.changes)
+            if (change.entityId === pageId && change.entity?.page)
+              trashedAt = change.entity.page.trashedAt;
+          if (!body.more) return trashedAt ?? null;
+          after = String(body.cursor);
+        }
+      },
+      { timeout: 30000, intervals: [250, 500, 1000] },
+    )
+    .not.toBeNull();
+}
+
+/**
  * The palette, opened by its shortcut, with `q` typed. Right after a reload the app may not have
  * mounted its shortcuts yet, so the key is pressed again until the palette shows.
  */
