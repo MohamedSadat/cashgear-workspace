@@ -1439,3 +1439,25 @@ Built in M11.1 to M11.3 (the streams' choices, each in its note):
 | Single sign-on in Settings | Owners of a synced workspace only (nobody else gets the section or a request); the secret write-only with "A secret is set", Remove and Keep; requiring sign-on always asks first; values as written in `lang="en"` | The routes are owners' only; the warning must never be skipped |
 | The tests' provider | `tests/mocks/oidc` on 4287, keys made at start in memory, each fault kept until reset, a realm per test | No test reaches a real provider; parallel tests never share a queued person or a fault |
 | Measuring CPU per push | `bench/phase8-server.mjs` against 0.10.0 built from its tag, a member typing in 20 groups on a page shared with 20 other groups (the fast path weighs each row and still decides) | An owner's push never reads the page's rows; the budget is the fast path with groups |
+
+## 2026-11-19: Phase 12
+
+Sized the same day as Phase 11's planning (`IMPLEMENTATION_PLAN.md`, Phase 12): the chart block's
+drawing and settings exist in `@cgw/plugins` and the site draws charts as SVG; an older build reads
+an unknown view type as a table and could send it back as one; 0.10.0's ERP connectors read every
+row the user may see and search, sort and page in C#, and advertise `maxRecords` without enforcing
+it; the ERP has AP aging, stock balance on a date and a trial balance as services, and no AR aging.
+Read before asking (nothing run): `CashGear.React.UI`'s branch holds 13 pushed commits after
+Workspace's pin `0490cbd` (its Blazor-parity work, R0 to R9); the ERP's `main` is at its
+`origin/main` (`5efc473d`), with a clean tree.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| The reports | AP aging by vendor, stock balance on a date and a trial balance: the three the ERP already has as services, as read-only report connectors in `erp-connect.1` (Track E11). No AR aging in 0.12.0 |
+| Tracks U19, E10 and E11: who builds them | Sessions of their own: one in `CashGear.React.UI` for U19 (on its branch's tip, so the pin's bump brings R0 to R9 too and Workspace adapts to them in the same bump), one in `CashGear` for E10 and E11, LocalDB only, committed there; pushing the ERP is yours. Workspace builds against its mocks meanwhile |
+| The ERP's order and search once paged in SQL | Exactly 0.10.0's answers: the same records in the same order, Arabic searched as now, held by the suite against both on the same records |
+| A chart view over a large database | Counts from the query's group counts at any size; sums and averages over at most 5,000 rows on the device, marked partial past that, as the chart block |
+| Pins of row documents | Every row's document of a pinned database that has one, up to 5,000 a database, through a batch pull so a pin stays inside the person's rate limit; Settings' progress counts them |
+| Screen readers | NVDA and Narrator on Windows and VoiceOver on a Mac, each by hand once from a written script of keys and what each must say (yours where the speech cannot be read here; there is no Mac here), and the grid's accessibility tree checked in CI on every run |
