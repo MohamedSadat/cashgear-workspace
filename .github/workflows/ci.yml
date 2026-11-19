@@ -166,6 +166,9 @@ jobs:
       - run: pnpm rust:fmt
       # Tauri embeds apps/web/dist, so the web build comes before clippy.
       - run: pnpm build
+      # Phase 11: the app built against the API on localhost, for the passkey specs (WebAuthn takes
+      # no IP address as its relying party); Playwright serves it on localhost:4268.
+      - run: node scripts/web-localhost.mjs --build
       # The released web builds (target/old-build/<tag>, each from its tag and its own lockfile)
       # that tests/e2e/old-build.spec.ts serves beside this build: v0.2.0 (Phase 3), v0.3.0
       # (Phase 4: a page with a database, and rows it must never see), v0.4.0 (Phase 5: a page

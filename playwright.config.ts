@@ -87,5 +87,17 @@ export default defineConfig({
     ...(process.env.E2E_API_URL ? [] : [serverStack]),
     // Phase 5: the mock Sheet and the mock ERP.
     ...mocks,
+    // Phase 11: the app built against the API on `localhost`, for the passkey specs (WebAuthn takes
+    // no IP address as its relying party): `node scripts/web-localhost.mjs --build` makes it.
+    ...(process.env.E2E_BASE_URL
+      ? []
+      : [
+          {
+            command: 'node scripts/web-localhost.mjs --serve',
+            url: 'http://localhost:4268',
+            reuseExistingServer: !process.env.CI,
+            timeout: 30000,
+          },
+        ]),
   ],
 });
