@@ -503,6 +503,21 @@ public sealed class AccessOracleTests(ServerFixture server)
                     Check($"the push's fast path: {person} on {page}", fast ? "one round trip" : "more than one", trips == 1 ? "one round trip" : "more than one");
                 }
             }
+
+        // Phase 12: the batch pull, every page of the workspace at once (a row's level read once a
+        // database there), each as the gate decides it; someone not in the workspace never reaches it.
+        var pulls = services.GetRequiredService<DocPulls>();
+        foreach (var person in w.People.Where(p => p.Role is not null))
+            foreach (var chunk in w.Pages.Chunk(DocPulls.MaxPages))
+            {
+                var answer = await pulls.PullAsync(new Member(w.Id, person.Id, person.Role!), new DocsPullRequest([.. chunk.Select(p => new DocsPullPage(p.Id, 0))]));
+                foreach (var (page, item) in chunk.Zip(answer.Value!.Docs))
+                {
+                    var rule = Rule(w, person, page);
+                    var expected = page.Deleted ? (Alive(w, person, page) == Levels.None ? "404" : "410") : rule == Levels.None ? "404" : "200";
+                    Check($"DocPulls: {person} on {page}", expected, item.Status.ToString(CultureInfo.InvariantCulture));
+                }
+            }
         return failures;
     }
 

@@ -1153,6 +1153,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/docs/pull': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['pullDocs'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/erp-links': {
     parameters: {
       query?: never;
@@ -1753,6 +1769,26 @@ export interface components {
       schemaVersion: number | string;
       /** Format: int64 */
       upToSeq: number | string;
+    };
+    DocsPullAnswer: {
+      docs: components['schemas']['DocsPullItem'][];
+    };
+    DocsPullItem: {
+      code?: null | string;
+      /** Format: uuid */
+      pageId: string;
+      pull?: null | components['schemas']['PullResponse'];
+      /** Format: int32 */
+      status: number | string;
+    };
+    DocsPullPage: {
+      /** Format: int64 */
+      after: number | string;
+      /** Format: uuid */
+      pageId: string;
+    };
+    DocsPullRequest: {
+      pages: components['schemas']['DocsPullPage'][];
     };
     DocUpdateIn: {
       /** Format: byte */
@@ -5025,6 +5061,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ChangesDto'];
+        };
+      };
+    };
+  };
+  pullDocs: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DocsPullRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DocsPullAnswer'];
         };
       };
     };

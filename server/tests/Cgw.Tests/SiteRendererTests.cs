@@ -291,6 +291,176 @@ public sealed partial class SiteRendererTests(ServerFixture server)
         Assert.Contains("This block cannot be shown here", body);
     }
 
+    // Chart views (Phase 12) ---------------------------------------------------------------------------
+
+    private static readonly Guid[] Charts = [.. Enumerable.Range(1, 8).Select(n => Guid.Parse($"01936f6e-0000-7000-8000-0000000002c{n}"))];
+
+    /// <summary>
+    /// A chart view of the tasks as <see cref="SharedDatabases"/> reads it: the view's filter, sorts
+    /// and group (a person's read ungrouped), a chart's shown properties (the title, its group's and
+    /// its measure's, whatever its config hides), and what may leave of them (never a person's, a
+    /// created-by, or a formula of a person). The tasks have those two properties too, here only.
+    /// </summary>
+    private static ScopedView ChartScoped(Page database, Guid id, int rows, string config)
+    {
+        var basis = Scoped(database, "table", null);
+        var properties = JsonNode.Parse(basis.Record.Properties)!.AsArray();
+        properties.Add(DatabaseTests.Prop("pFor0001", "formula", "Owner's", new JsonObject { ["formula"] = new JsonObject { ["expression"] = "prop(\"pPer0001\")" } }));
+        properties.Add(DatabaseTests.Prop("pCby0001", "createdBy", "Made by"));
+        var schema = Schema.Parse(database.Id, 1, properties.ToJsonString());
+        var source = basis.Rows;
+        if (rows > source.Count)
+            source = [.. Enumerable.Range(0, rows).Select(i => new RowData
+            {
+                Id = Guid.Parse($"01936f6e-0000-7000-8000-{i:D12}"),
+                DatabaseId = database.Id,
+                Title = "Row " + i,
+                OrderKey = "a" + i.ToString("D6"),
+                CreatedAt = At,
+                UpdatedAt = At,
+                Values = new Dictionary<string, object>(StringComparer.Ordinal) { ["pNum0001"] = 1.0, ["pSel0001"] = i % 2 == 0 ? "optA0001" : "optB0001" },
+            })];
+        var json = JsonNode.Parse(config)!.AsObject();
+        var spec = QuerySpec.FromView(config);
+        string[] never = ["pPer0001", "pCby0001", "pFor0001"];
+        var group = spec.Group is { } rule && never.Contains(rule.PropertyId) ? null : spec.Group;
+        var result = Query.Run(schema, source, new QuerySpec { Filter = spec.Filter, Sorts = spec.Sorts, Group = group }, new QueryContext("2026-11-17", 0, null, null));
+        var shown = SharedDatabases.ShownBy(schema, "chart", json);
+        var visible = shown.Select(d => d.Id).Concat(SharedDatabases.LayoutProperties("chart", json)).Where(p => !never.Contains(p)).ToHashSet(StringComparer.Ordinal);
+        return new ScopedView
+        {
+            Database = database,
+            Record = new WorkspaceDatabase { PageId = database.Id, Properties = properties.ToJsonString() },
+            Schema = schema,
+            View = new DatabaseView { Id = id, DatabaseId = database.Id, Type = "chart", Config = config },
+            Type = "chart",
+            Config = json,
+            Shown = shown,
+            Visible = visible,
+            Rows = result.Rows,
+            Groups = result.Groups,
+            Group = result.Groups is null ? null : group,
+            ScopeDatabases = new HashSet<Guid> { database.Id },
+        };
+    }
+
+    /// <summary>A chart view's config: its group, its chart settings and the properties it hides.</summary>
+    private static string ChartConfig(string? group, string chart, params string[] hidden) =>
+        new JsonObject
+        {
+            ["filter"] = null,
+            ["sorts"] = new JsonArray(),
+            ["group"] = group is null ? null : JsonNode.Parse(group),
+            ["properties"] = new JsonObject { ["order"] = new JsonArray(), ["hidden"] = JsonSerializer.SerializeToNode(hidden), ["widths"] = new JsonObject() },
+            ["chart"] = JsonNode.Parse(chart),
+        }.ToJsonString();
+
+    /// <summary>
+    /// Eight chart views drawn as database blocks: a bar chart of a sum by a select (its empty group
+    /// left out), a pie of a count by a checkbox with its own title (its config hiding its own group,
+    /// which a chart reads all the same), a line of an average by a date's days (no value hidden);
+    /// then four placeholders (a sum of a formula of a person, a group by who made the rows, a
+    /// person's group, no group); and a sum of a property that is not a number, which counts.
+    /// </summary>
+    private static readonly string[] ChartConfigs =
+    [
+        ChartConfig("""{"propertyId":"pSel0001","hideEmpty":true}""", """{"kind":"bar","measure":{"kind":"sum","propertyId":"pNum0001"},"title":null}""", "pPer0001", "pDat0001", "pChk0001"),
+        ChartConfig("""{"propertyId":"pChk0001"}""", """{"kind":"pie","measure":{"kind":"count"},"title":"Paid or not"}""", "pPer0001", "pDat0001", "pNum0001", "pSel0001", "pChk0001"),
+        ChartConfig("""{"propertyId":"pDat0001","dateBy":"day","hidden":[""]}""", """{"kind":"line","measure":{"kind":"average","propertyId":"pNum0001"}}""", "pPer0001", "pChk0001", "pSel0001"),
+        ChartConfig("""{"propertyId":"pSel0001"}""", """{"kind":"bar","measure":{"kind":"sum","propertyId":"pFor0001"}}"""),
+        ChartConfig("""{"propertyId":"pCby0001"}""", """{"kind":"bar","measure":{"kind":"count"}}"""),
+        ChartConfig("""{"propertyId":"pPer0001"}""", """{"kind":"bar","measure":{"kind":"count"}}"""),
+        ChartConfig(null, """{"kind":"bar","measure":{"kind":"count"}}"""),
+        ChartConfig("""{"propertyId":"pSel0001"}""", """{"kind":"pie","measure":{"kind":"sum","propertyId":"pDat0001"}}""", "pPer0001"),
+    ];
+
+    private static SitePage ChartPage(string language, Page? page = null, int rows = 0)
+    {
+        var blocks = new JsonArray(Charts.Select((id, i) => (JsonNode?)new JsonObject
+        {
+            ["type"] = "block",
+            ["attrs"] = new JsonObject { ["id"] = $"ChartView00{i + 1}" },
+            ["content"] = new JsonArray(new JsonObject { ["type"] = "databaseView", ["attrs"] = new JsonObject { ["databaseId"] = Database.ToString(), ["viewId"] = id.ToString() } }),
+        }).ToArray());
+        var json = new JsonObject { ["type"] = "doc", ["content"] = blocks }.ToJsonString();
+        var basis = Page(json, language, page);
+        var database = basis.Scope.Pages.Single(p => p.Id == Database);
+        var ctx = new QueryContext("2026-11-17", 0, null, null);
+        var views = Charts.Select((id, i) => (id, data: new SiteViewData { View = ChartScoped(database, id, rows, ChartConfigs[i]), Titles = new Dictionary<string, string>(), Context = ctx }))
+            .ToDictionary(v => SiteRenderer.ViewKey(Database, v.id, null), v => v.data);
+        return new SitePage
+        {
+            Site = basis.Site,
+            Scope = basis.Scope,
+            Page = basis.Page,
+            Json = json,
+            Assets = basis.Assets,
+            Views = views,
+            Database = page is null ? null : views[SiteRenderer.ViewKey(Database, Charts[0], null)],
+        };
+    }
+
+    [Fact]
+    public void A_chart_view_draws_as_the_chart_block_does_in_english()
+    {
+        var html = SiteRenderer.Render(ChartPage("en"));
+        Compare("chart-views-en.html", html);
+        // The bars, the pie, the line, and the pie of a sum of a date (which counts).
+        Assert.Equal(4, Regex.Matches(html, "<svg viewBox=\"0 0 600 300\" role=\"img\"").Count);
+        Assert.Contains("<figcaption>Sum of Hours by Stage</figcaption>", html);
+        Assert.Contains("<figcaption>Paid or not</figcaption>", html);
+        Assert.Contains("<figcaption>Average of Hours by Due</figcaption>", html);
+        // Doing 3, Done 1.5 and 4; no row with no stage, so its group is left out.
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Doing</th><td>3</td>", html);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Done</th><td>5.5</td>", html);
+        var figures = html.Split("<figure class=\"chart\">");
+        Assert.DoesNotContain("No value", figures[1]);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">No value</th><td>0</td>", figures[^1]);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">24 December 2026</th><td>4</td>", html);
+        Assert.Contains("<polyline class=\"line\"", html);
+        Assert.Contains("class=\"slice-0\"", html);
+        // A formula of a person measured, rows grouped by who made them or by a person, and no group: the placeholder each.
+        Assert.Equal(4, Regex.Matches(html, "This chart is not published").Count);
+        // A sum of a date counts.
+        Assert.Contains("<figcaption>Count by Stage</figcaption>", html);
+        Assert.DoesNotContain("0000000000b1", html);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_chart_view_draws_as_the_chart_block_does_in_arabic()
+    {
+        var html = SiteRenderer.Render(ChartPage("ar"));
+        Compare("chart-views-ar.html", html);
+        Assert.Contains("<figcaption>مجموع Hours حسب Stage</figcaption>", html);
+        Assert.Contains("<figcaption>متوسط Hours حسب Due</figcaption>", html);
+        Assert.Contains("<figcaption>العدد حسب Stage</figcaption>", html);
+        Assert.Contains("24 ديسمبر 2026", html);
+        Assert.Equal(4, Regex.Matches(html, "هذا المخطط غير منشور").Count);
+    }
+
+    [Fact]
+    public void A_database_page_whose_first_view_is_a_chart_draws_the_chart_and_no_pages_of_rows()
+    {
+        var html = SiteRenderer.Render(ChartPage("en", PageOf(Database, "Tasks", PageKinds.Database, Root)));
+        Compare("chart-view-page.html", html);
+        Assert.Contains("<figcaption>Sum of Hours by Stage</figcaption>", html);
+        Assert.DoesNotContain("<nav class=\"pager\"", html);
+        Assert.DoesNotContain("Draft the plan", html);
+    }
+
+    [Fact]
+    public void A_chart_views_sums_read_at_most_five_thousand_rows_and_say_so()
+    {
+        var page = ChartPage("en", rows: SiteDatabaseHtml.ChartRows + 1);
+        var html = SiteRenderer.Render(page);
+        // Counts from the query, of every row; the sum of the first 5,000 rows read group by group.
+        Assert.Contains("Based on the first 5,000 rows", html);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Doing</th><td>2501</td>", html);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Done</th><td>2499</td>", html);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Done</th><td>2500</td>", html);
+    }
+
     [Fact]
     public void The_not_found_page_is_in_both_languages_and_never_indexed()
     {

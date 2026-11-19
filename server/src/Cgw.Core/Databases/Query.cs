@@ -477,6 +477,9 @@ public static class Query
         PropertyTypes.Date, PropertyTypes.CreatedTime, PropertyTypes.LastEditedTime, PropertyTypes.CreatedBy, PropertyTypes.LastEditedBy,
     ];
 
+    /// <summary>Whether rows can be grouped by a property of this type (a chart view's group, Phase 12).</summary>
+    public static bool IsGroupable(string type) => Groupable.Contains(type);
+
     private static PropertyDef? GroupDef(Schema schema, GroupRule? rule) =>
         rule is not null && schema[rule.PropertyId] is { Trashed: false } def && Groupable.Contains(def.Type) ? def : null;
 

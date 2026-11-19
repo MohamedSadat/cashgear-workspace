@@ -80,9 +80,18 @@ public static class DocEndpoints
             })
             .WithName("getDocJson").RequireRateLimiting(RateLimits.User);
 
-        api.MapGroup("/workspaces/{workspaceId:guid}").WithTags("Documents").RequireAuthorization().AddEndpointFilter<MemberFilter>()
-            .MapPost("/yjs-clients", async (YjsClientsRequest body, DocService docs, HttpContext http) =>
+        var workspace = api.MapGroup("/workspaces/{workspaceId:guid}").WithTags("Documents").RequireAuthorization().AddEndpointFilter<MemberFilter>();
+        workspace.MapPost("/yjs-clients", async (YjsClientsRequest body, DocService docs, HttpContext http) =>
                 TypedResults.Ok(await docs.ClientsAsync(http.Member(), http.User.DeviceId(), body)))
             .WithName("yjsClients").RequireRateLimiting(RateLimits.User);
+
+        // Phase 12: many pages' documents at once (a pin's row documents), each checked and answered
+        // as GET /pages/{pageId}/doc would; one request of its own limit (RateLimits.Pull).
+        workspace.MapPost("/docs/pull", async Task<Results<Ok<DocsPullAnswer>, ProblemHttpResult>> (DocsPullRequest body, DocPulls pulls, HttpContext http) =>
+            {
+                var result = await pulls.PullAsync(http.Member(), body, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("pullDocs").RequireRateLimiting(RateLimits.Pull);
     }
 }

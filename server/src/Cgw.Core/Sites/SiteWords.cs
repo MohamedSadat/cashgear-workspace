@@ -42,6 +42,14 @@ public sealed class SiteWords
     public required string Chart { get; init; }
     public required string Board { get; init; }
     public required string TableCut { get; init; }
+    /// <summary>Phase 12: a chart view's title when it has none (the chart block's words): by <c>{0}</c>, the group.</summary>
+    public required string CountBy { get; init; }
+    /// <summary>Sum of <c>{0}</c>, the measure, by <c>{1}</c>, the group.</summary>
+    public required string SumBy { get; init; }
+    /// <summary>Average of <c>{0}</c>, the measure, by <c>{1}</c>, the group.</summary>
+    public required string AverageBy { get; init; }
+    /// <summary>A chart's sum or average read only its first <c>{0}</c> rows.</summary>
+    public required string ChartPartial { get; init; }
     public required string[] Months { get; init; }
     /// <summary><c>{0}</c> rows shown <c>of</c> <c>{1}</c>.</summary>
     public required string RowsOf { get; init; }
@@ -81,6 +89,10 @@ public sealed class SiteWords
         Chart = "Chart",
         Board = "Board",
         TableCut = "Only the first part of this table is shown",
+        CountBy = "Count by {0}",
+        SumBy = "Sum of {0} by {1}",
+        AverageBy = "Average of {0} by {1}",
+        ChartPartial = "Based on the first {0} rows",
         Months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
         RowsOf = "{0} of {1} rows",
         PageOf = "Page {0} of {1}",
@@ -119,6 +131,10 @@ public sealed class SiteWords
         Chart = "مخطط",
         Board = "لوحة",
         TableCut = "يُعرض الجزء الأول فقط من هذا الجدول",
+        CountBy = "العدد حسب {0}",
+        SumBy = "مجموع {0} حسب {1}",
+        AverageBy = "متوسط {0} حسب {1}",
+        ChartPartial = "محسوب من أول {0} صف",
         Months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"],
         RowsOf = "{0} من {1}",
         PageOf = "الصفحة {0} من {1}",

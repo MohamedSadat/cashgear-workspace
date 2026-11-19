@@ -172,6 +172,15 @@ public static class RateLimits
     public const string Meaning = "meaning";
     /// <summary>Plugin frame tickets, per person (Phase 10).</summary>
     public const string Frames = "frames";
+    /// <summary>
+    /// Batch pulls of documents, per person (Phase 12): up to 100 pages each, so a window of their
+    /// own rather than the account's 1,200 requests a minute (120,000 page reads). 120 a minute lets
+    /// a pin of 5,000 row documents (50 batches) through twice over in one minute, and bounds what
+    /// a person reads at ten times the single pull route's 1,200 a minute.
+    /// </summary>
+    public const string Pull = "pull";
+    /// <summary>The default of <see cref="Pull"/> (<c>RateLimits__pull</c>).</summary>
+    public const int PullPerMinute = 120;
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -216,6 +225,7 @@ public static class RateLimits
             options.AddPolicy(Ai, c => Window("ai:" + Who(c), Limit(Ai, 30)));
             options.AddPolicy(Meaning, c => Window("meaning:" + Who(c), Limit(Meaning, 30)));
             options.AddPolicy(Frames, c => Window("frames:" + Who(c), Limit(Frames, 120)));
+            options.AddPolicy(Pull, c => Window("pull:" + Who(c), Limit(Pull, PullPerMinute)));
         });
     }
 }

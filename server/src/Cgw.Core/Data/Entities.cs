@@ -423,7 +423,7 @@ public sealed class DatabaseView : ITenantOwned
     public Guid WorkspaceId { get; set; }
     public Guid DatabaseId { get; set; }
     public string Name { get; set; } = "";
-    /// <summary><c>table</c>, <c>board</c>, <c>list</c>, <c>calendar</c>, <c>gallery</c> or (Phase 9) <c>timeline</c>.</summary>
+    /// <summary><c>table</c>, <c>board</c>, <c>list</c>, <c>calendar</c>, <c>gallery</c>, (Phase 9) <c>timeline</c> or (Phase 12) <c>chart</c>.</summary>
     public string Type { get; set; } = "table";
     public string OrderKey { get; set; } = "";
     /// <summary>JSON: the <c>ViewConfig</c>.</summary>

@@ -263,6 +263,155 @@ public sealed class SharedDatabaseTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
     }
 
+    /// <summary>A chart view (Phase 12): its group, its measure and the properties its config says it hides (which a chart's reading does not go by).</summary>
+    private static async Task UpsertChart(Ws ws, Guid id, Guid database, string orderKey, object? group, object measure, string[] hidden, string type = "chart")
+    {
+        var result = (await ws.Push(ws.Op("view.upsert", id, new
+        {
+            id, workspaceId = ws.Id, databaseId = database, name = "Chart", type, orderKey, version = 1, createdAt = DateTimeOffset.UtcNow, viewTypes = 7,
+            config = new
+            {
+                filter = new { kind = "group", op = "and", children = new object[] { new { kind = "condition", propertyId = "pNum0001", @operator = "ge", value = 0 } } },
+                sorts = Array.Empty<object>(),
+                group,
+                properties = new { order = Array.Empty<string>(), hidden, widths = new { } },
+                chart = new { kind = "bar", measure, title = (string?)null },
+            },
+        })))[0];
+        Assert.True(result.GetProperty("status").GetString() == "applied", result.ToString());
+    }
+
+    private static List<string> Keys(JsonElement answer) =>
+        answer.GetProperty("rows").EnumerateArray().SelectMany(r => r.GetProperty("values").EnumerateObject().Select(p => p.Name)
+            .Concat(r.GetProperty("computed").EnumerateObject().Select(p => p.Name))).Distinct().Order(StringComparer.Ordinal).ToList();
+
+    [Fact]
+    public async Task A_share_links_chart_view_shows_only_its_group_and_measure_and_one_reading_what_may_not_leave_is_refused()
+    {
+        var ws = await Ws.Create(server);
+        var root = (await ws.NewPage("Report")).GetProperty("id").GetGuid();
+        var database = await DatabaseTests.NewDatabase(ws, "Effort", [
+            DatabaseTests.Prop("pNum0001", "number", "Hours"),
+            DatabaseTests.Prop("pNum0002", "number", "Cost"),
+            DatabaseTests.Prop("pTxt0001", "text", "Secret"),
+            DatabaseTests.Prop("pPer0001", "person", "Owner"),
+            DatabaseTests.Prop("pCby0001", "createdBy", "Made by"),
+            DatabaseTests.Prop("pFor0001", "formula", "Owner's", new JsonObject { ["formula"] = new JsonObject { ["expression"] = "prop(\"pPer0001\")" } }),
+            DatabaseTests.Prop("pSel0001", "select", "Stage", new JsonObject { ["options"] = DatabaseTests.Options(("optA0001", "A"), ("optB0001", "B"), ("optC0001", "C")) }),
+        ], parent: root);
+        await Row(ws, database, "T1", new { pNum0001 = 1, pNum0002 = 100, pTxt0001 = "alpha", pSel0001 = "optA0001", pPer0001 = new[] { ws.Account.Id } }, "a1");
+        var t2 = await Row(ws, database, "T2", new { pNum0001 = 2, pNum0002 = 200, pTxt0001 = "beta", pSel0001 = "optB0001" }, "a2");
+        await Row(ws, database, "T3", new { pNum0001 = 3, pNum0002 = 300, pTxt0001 = "gamma", pSel0001 = "optB0001" }, "a3");
+        await Row(ws, database, "T4", new { pNum0001 = -1, pTxt0001 = "delta", pSel0001 = "optA0001" }, "a4");
+
+        var sum = new { kind = "sum", propertyId = "pNum0001" };
+        var count = new { kind = "count" };
+        var stage = new { propertyId = "pSel0001", hideEmpty = true, hidden = new[] { "" } };
+        // Hours by stage. Its config hides nothing: a chart shows the title, its group and its measure all the same.
+        var shown = Guid.CreateVersion7();
+        await UpsertChart(ws, shown, database, "a0", stage, sum, []);
+        // Its config hides its own group and measure: they are the chart's, and read.
+        var ownHidden = Guid.CreateVersion7();
+        await UpsertChart(ws, ownHidden, database, "a1", stage, new { kind = "average", propertyId = "pNum0002" }, ["pSel0001", "pNum0002"]);
+        // Grouped by a person, by who made the rows, or summing a formula of a person: never by link.
+        var byPerson = Guid.CreateVersion7();
+        await UpsertChart(ws, byPerson, database, "a2", new { propertyId = "pPer0001" }, count, []);
+        var byCreator = Guid.CreateVersion7();
+        await UpsertChart(ws, byCreator, database, "a3", new { propertyId = "pCby0001" }, count, []);
+        var ofPeople = Guid.CreateVersion7();
+        await UpsertChart(ws, ofPeople, database, "a4", stage, new { kind = "sum", propertyId = "pFor0001" }, []);
+        // No group; a sum of a property that is not a number (it counts, as the app's chart does).
+        var noGroup = Guid.CreateVersion7();
+        await UpsertChart(ws, noGroup, database, "a5", null, count, []);
+        var notANumber = Guid.CreateVersion7();
+        await UpsertChart(ws, notANumber, database, "a6", stage, new { kind = "sum", propertyId = "pTxt0001" }, []);
+        // A table with the same settings, to show what its properties alone would let out.
+        var table = Guid.CreateVersion7();
+        await UpsertChart(ws, table, database, "a7", stage, sum, ["pPer0001"], type: "table");
+        var token = (await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/pages/{root}/share-links", new { }))).GetProperty("token").GetString()!;
+        var reader = Reader(server, token);
+
+        // The views and their settings come with the database, the chart's among them.
+        var listed = await reader.GetFromJsonAsync<JsonElement>($"/api/v1/shared/databases/{database}");
+        var chart = listed.GetProperty("views").EnumerateArray().Single(v => v.GetProperty("id").GetGuid() == shown);
+        Assert.Equal("chart", chart.GetProperty("type").GetString());
+        Assert.Equal("pNum0001", chart.GetProperty("config").GetProperty("chart").GetProperty("measure").GetProperty("propertyId").GetString());
+
+        // Grouped by its own group, as the view says (the empty group hidden, empty ones left out):
+        // the counts at any size, and each group's rows for the sums.
+        var answer = await QueryOk(reader, database, new { viewId = shown, limit = 500 });
+        Assert.Equal([("optA0001", 1L), ("optB0001", 2L)],
+            answer.GetProperty("groups").EnumerateArray().Select(g => (g.GetProperty("key").GetString()!, g.GetProperty("count").GetInt64())));
+        Assert.Equal(3, answer.GetProperty("total").GetInt64());
+        Assert.Equal(["pNum0001", "pSel0001"], Keys(answer));
+        var b = await QueryOk(reader, database, new { viewId = shown, groupKey = "optB0001" });
+        Assert.Equal(["T2", "T3"], b.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("title").GetString()).Order(StringComparer.Ordinal));
+        var text = answer.GetRawText() + b.GetRawText();
+        foreach (var never in new[] { "alpha", "beta", "gamma", "delta", ws.Account.Id.ToString(), "\"pNum0002\"" })
+            Assert.DoesNotContain(never, text);
+        // What its config hides of its own group and measure, it reads; nothing else.
+        var own = await QueryOk(reader, database, new { viewId = ownHidden, groupKey = "optB0001" });
+        Assert.Equal(["pNum0002", "pSel0001"], Keys(own));
+        Assert.Contains("300", own.GetRawText());
+
+        // A group or a measure whose values may not leave: refused, whatever is asked of it.
+        foreach (var refused in new[] { byPerson, byCreator, ofPeople })
+            foreach (var body in new object[] { new { viewId = refused }, new { viewId = refused, groupKey = "optA0001" }, new { viewId = refused, search = "t" } })
+            {
+                var response = await reader.PostAsJsonAsync($"/api/v1/shared/databases/{database}/query", body);
+                Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+                Assert.Equal("chart.hidden", await Kit.Code(response));
+                Assert.DoesNotContain("gamma", await response.Content.ReadAsStringAsync());
+            }
+        // No group: the rows come ungrouped with their titles only (the app asks for a group).
+        var ungrouped = await QueryOk(reader, database, new { viewId = noGroup });
+        Assert.Equal(JsonValueKind.Null, ungrouped.GetProperty("groups").ValueKind);
+        Assert.Equal(3, ungrouped.GetProperty("total").GetInt64());
+        Assert.Empty(Keys(ungrouped));
+        var counted = await QueryOk(reader, database, new { viewId = notANumber });
+        Assert.Equal(["pSel0001"], Keys(counted));
+
+        // A property added to the database after the views: in no view's hidden list. The table lets
+        // it out; the chart, which does not draw it, does not.
+        var added = (await ws.Push(ws.Op("db.update", database, new { properties = new[] { new { id = "pLate001", name = "Added later", type = "text" } } })))[0];
+        Assert.True(added.GetProperty("status").GetString() == "applied", added.ToString());
+        var updated = (await ws.Push(ws.Op("row.update", t2, new { values = new { pLate001 = "zeta" } })))[0];
+        Assert.True(updated.GetProperty("status").GetString() == "applied", updated.ToString());
+        Assert.Contains("zeta", (await QueryOk(reader, database, new { viewId = table, groupKey = "optB0001" })).GetRawText());
+        foreach (var body in new object[] { new { viewId = shown }, new { viewId = shown, groupKey = "optB0001" }, new { viewId = ownHidden, groupKey = "optB0001" }, new { viewId = noGroup } })
+        {
+            var later = await QueryOk(reader, database, body);
+            Assert.DoesNotContain("zeta", later.GetRawText());
+            Assert.DoesNotContain("pLate001", Keys(later));
+        }
+    }
+
+    [Fact]
+    public async Task A_file_property_added_after_a_chart_view_is_not_readable_through_it()
+    {
+        var ws = await Ws.Create(server);
+        var root = (await ws.NewPage("Files")).GetProperty("id").GetGuid();
+        var database = await DatabaseTests.NewDatabase(ws, "Papers", [
+            DatabaseTests.Prop("pNum0001", "number", "Pages"),
+            DatabaseTests.Prop("pSel0001", "select", "Stage", new JsonObject { ["options"] = DatabaseTests.Options(("optA0001", "A")) }),
+        ], parent: root);
+        var row = await Row(ws, database, "Paper", new { pNum0001 = 1, pSel0001 = "optA0001" }, "a1");
+        // The database's only view a chart, whose config hides nothing.
+        await UpsertChart(ws, Guid.CreateVersion7(), database, "a0", new { propertyId = "pSel0001" }, new { kind = "count" }, []);
+        var file = await AssetTests.Upload(ws, AssetTests.Png, "image/png", "added-later.png");
+        await server.RunJob<AssetCheckJob>();
+        var added = (await ws.Push(ws.Op("db.update", database, new { properties = new[] { new { id = "pFil0001", name = "Scan", type = "files" } } })))[0];
+        Assert.True(added.GetProperty("status").GetString() == "applied", added.ToString());
+        var updated = (await ws.Push(ws.Op("row.update", row, new { values = new { pFil0001 = new[] { file } } })))[0];
+        Assert.True(updated.GetProperty("status").GetString() == "applied", updated.ToString());
+        var token = (await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/pages/{root}/share-links", new { }))).GetProperty("token").GetString()!;
+        var reader = Reader(server, token);
+        Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync($"/api/v1/shared/assets/{file}/url")).StatusCode);
+        // A table that shows it does let it be read (the control).
+        await UpsertChart(ws, Guid.CreateVersion7(), database, "a1", null, new { kind = "count" }, [], type: "table");
+        Assert.True((await reader.GetAsync($"/api/v1/shared/assets/{file}/url")).IsSuccessStatusCode);
+    }
+
     [Fact]
     public void The_cursor_is_an_offset_only()
     {

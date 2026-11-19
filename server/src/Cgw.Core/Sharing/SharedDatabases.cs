@@ -23,7 +23,8 @@ public sealed record SharedDatabaseDto(SharedDatabaseInfoDto Database, IReadOnly
 /// sends is not read; <c>search</c> is the title search; <c>window</c> may name only a property the
 /// view shows; <c>context</c> gives today and the reader's offset (nothing else of it is read);
 /// <c>undated</c> asks a calendar's or a timeline's rows with no value in its own date property (the
-/// list beside it), the view's filter still applied.
+/// list beside it), the view's filter still applied. A chart view (Phase 12) shows only its group's
+/// and its measure's values, and is refused, <c>chart.hidden</c> (403), when either may not leave.
 /// </summary>
 public sealed record SharedQueryRequestDto(
     Guid? ViewId = null,
@@ -154,8 +155,9 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
                 .OrderBy(v => v.OrderKey, StringComparer.Ordinal).ThenBy(v => v.Id.ToString(), StringComparer.Ordinal).FirstOrDefault();
         var config = view is null ? null : JsonNode.Parse(string.IsNullOrEmpty(view.Config) ? "{}" : view.Config) as JsonObject;
         var databases = DatabasesOf(scope);
-        var shown = Csv.Shown(schema, config);
-        var visible = await VisibleAsync(schema, view?.Type ?? "table", config, shown, databases, ct);
+        var type = view?.Type ?? "table";
+        var shown = ShownBy(schema, type, config);
+        var visible = await VisibleAsync(schema, type, config, shown, databases, ct);
 
         DateWindow? dates = null;
         if (window is not null)
@@ -234,11 +236,19 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
         };
     }
 
-    /// <summary>The properties a view lays its rows out by, beside the ones it shows.</summary>
+    /// <summary>
+    /// A view's shown properties in order, title first: its <c>properties</c>' order less its hidden
+    /// ones; a chart view's exactly the title, its group's and its measure's (Phase 12,
+    /// <see cref="ChartView.Shown"/>), so a property added after it was made never leaves through it.
+    /// </summary>
+    public static List<PropertyDef> ShownBy(Schema schema, string type, JsonObject? config) =>
+        type == ChartView.Type ? ChartView.Shown(schema, config) : Csv.Shown(schema, config);
+
+    /// <summary>The properties a view lays its rows out by, beside the ones it shows (a chart's are among its shown ones).</summary>
     public static IEnumerable<string> LayoutProperties(string type, JsonObject? config)
     {
         static string? Str(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
-        if (config is null) yield break;
+        if (config is null || type == ChartView.Type) yield break;
         if (Str((config["group"] as JsonObject)?["propertyId"]) is { } group) yield return group;
         switch (type)
         {
@@ -393,6 +403,9 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
         var opened = await OpenViewAsync(scope, databaseId, request.ViewId, Context(request.Context), search, request.GroupKey, request.Window, request.Undated == true, ct);
         if (!opened.Ok) return opened.Failure!;
         var view = opened.Value!;
+        // Phase 12: a chart view's group and measure must be values that may leave (a site draws its
+        // placeholder for the same views).
+        if (ChartView.Hides(view)) return new Failure(Codes.ChartHidden, 403, "The chart's group or measure cannot be shown by a link");
         var page = view.Rows.Skip(start).Take(size).ToList();
         var (rows, titles) = await ProjectAsync(view, page, ct);
         var next = start + page.Count < view.Rows.Count && page.Count > 0 ? Cursor(start + page.Count) : null;
@@ -447,7 +460,7 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
                 : views.SelectMany(v =>
                 {
                     var config = JsonNode.Parse(string.IsNullOrEmpty(v.Config) ? "{}" : v.Config) as JsonObject;
-                    return Csv.Shown(schema, config).Select(d => d.Id).Concat(LayoutProperties(v.Type, config));
+                    return ShownBy(schema, v.Type, config).Select(d => d.Id).Concat(LayoutProperties(v.Type, config));
                 }).ToHashSet(StringComparer.Ordinal);
             foreach (var row in group)
             {

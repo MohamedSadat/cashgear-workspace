@@ -26,16 +26,46 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     /// <summary>Rows relating to a changed row recomputed inline; more mark their database for the worker.</summary>
     public static int InlineRelated { get; set; } = 1000;
 
-    /// <summary>The view types, in the order they were added: a build that knows N types knows the first N.</summary>
-    public static readonly string[] ViewTypeOrder = ["table", "board", "list", "calendar", "gallery", "timeline"];
+    /// <summary>
+    /// The view types, in the order they were added: a build that knows N types knows the first N
+    /// (0.4.0: five; 0.9.0: <c>timeline</c>; 0.12.0: <c>chart</c>).
+    /// </summary>
+    public static readonly string[] ViewTypeOrder = ["table", "board", "list", "calendar", "gallery", "timeline", "chart"];
 
     public static readonly HashSet<string> ViewTypes = [.. ViewTypeOrder];
 
     /// <summary>What a build that does not send <c>viewTypes</c> knows: every build before 0.9.0.</summary>
     public const int OlderViewTypes = 5;
 
+    /// <summary>
+    /// The view config keys each count of view types brought (db/types.ts <c>ViewConfig</c>): a
+    /// build of N types knows the keys of every count up to N. 5: every build before 0.9.0
+    /// (<c>ViewConfig</c> at 0.8.0); 6: <c>timeline</c> (0.9.0 to 0.11.0); 7: <c>chart</c> (0.12.0).
+    /// </summary>
+    public static readonly IReadOnlyList<(int Types, string[] Keys)> ConfigKeysByTypes =
+    [
+        (5, ["filter", "sorts", "group", "properties", "calendarBy", "cover", "cardSize", "wrap"]),
+        (6, ["timeline"]),
+        (7, ["chart"]),
+    ];
+
+    /// <summary>The view config keys a build of <paramref name="types"/> view types knows.</summary>
+    public static HashSet<string> ConfigKeysKnownBy(int types) =>
+        ConfigKeysByTypes.Where(k => k.Types <= Math.Max(types, OlderViewTypes)).SelectMany(k => k.Keys).ToHashSet(StringComparer.Ordinal);
+
     /// <summary>The view config keys every build before 0.9.0 knows (db/types.ts <c>ViewConfig</c> at 0.8.0).</summary>
-    public static readonly HashSet<string> OlderConfigKeys = ["filter", "sorts", "group", "properties", "calendarBy", "cover", "cardSize", "wrap"];
+    public static readonly HashSet<string> OlderConfigKeys = ConfigKeysKnownBy(OlderViewTypes);
+
+    /// <summary>
+    /// The number of view types the build that sent an upsert knows: its <c>viewTypes</c>, or
+    /// <see cref="OlderViewTypes"/> when it sends none, or anything but a positive whole number
+    /// (never fewer: no build knew fewer).
+    /// </summary>
+    public static int KnownViewTypes(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("viewTypes", out var known) && known.ValueKind == JsonValueKind.Number
+            && known.TryGetInt32(out var count) && count > 0
+            ? Math.Max(count, OlderViewTypes)
+            : OlderViewTypes;
 
     /// <summary>A row this operation changed, as it will be written.</summary>
     private sealed class RowState(Page page, DatabaseRow record)
@@ -438,11 +468,14 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
 
     /// <summary>
     /// A view made or changed (<c>view.upsert</c>). From Phase 9 a build sends <c>viewTypes</c>, the
-    /// number of view types it knows; one that does not (every build before 0.9.0) draws a type it
-    /// does not know as a table and may send it back so: such an upsert keeps the stored type when it
-    /// says <c>table</c> for a type it cannot know, and keeps every stored config key it does not know
-    /// and did not send (<c>timeline</c>, and any added later). A real change of type by it (to
-    /// another type it knows) is taken. With <c>viewTypes</c> the view is taken as sent.
+    /// number of view types it knows (none sent: <see cref="OlderViewTypes"/>, every build before
+    /// 0.9.0). A build that knows fewer types than this server draws a type it does not know as a
+    /// table and may send it back so: its upsert keeps the stored type when it says <c>table</c> for a
+    /// type past the ones it knows, and keeps every stored config key a build of that many types does
+    /// not know and that it did not send (<see cref="ConfigKeysByTypes"/>: so a 0.9.0 to 0.11.0 build
+    /// keeps a chart and its <c>chart</c>, a 0.8.0 build a timeline and a chart and both keys). A real
+    /// change of type by it (to another type it knows) is taken. From a build that knows every type
+    /// the view is taken as sent.
     /// </summary>
     public async Task<DatabaseView> UpsertViewAsync(Member member, Guid id, JsonElement payload, WorkspaceDatabase database, CancellationToken ct)
     {
@@ -458,9 +491,9 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         if (config.Length > MaxViewConfigChars) throw Invalid("The view's config is too large");
         var view = await db.DatabaseViews.FirstOrDefaultAsync(v => v.Id == id, ct);
         if (view is not null && view.DatabaseId != database.PageId) throw Invalid("A view stays with its database");
-        var older = !(payload.TryGetProperty("viewTypes", out var known) && known.ValueKind == JsonValueKind.Number && known.TryGetInt32(out var count) && count > 0);
-        if (older && view is not null)
-            (type, config) = KeepWhatOlderBuildsDrop(view, type, config);
+        var known = KnownViewTypes(payload);
+        if (known < ViewTypeOrder.Length && view is not null)
+            (type, config) = KeepWhatOlderBuildsDrop(view, type, config, known);
         if (config.Length > MaxViewConfigChars) throw Invalid("The view's config is too large");
         var now = Now;
         if (view is null)
@@ -486,20 +519,22 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     }
 
     /// <summary>
-    /// What an upsert from a build without <c>viewTypes</c> leaves of the stored view: its type when
-    /// the build said <c>table</c> for a type it cannot know, and the stored config keys it does not
-    /// know and so could not send.
+    /// What an upsert from a build of <paramref name="knownTypes"/> view types (default: one without
+    /// <c>viewTypes</c>) leaves of the stored view: its type when the build said <c>table</c> for a
+    /// type it cannot know, and the stored config keys a build of that many types does not know and
+    /// so could not send.
     /// </summary>
-    public static (string Type, string Config) KeepWhatOlderBuildsDrop(DatabaseView stored, string type, string config)
+    public static (string Type, string Config) KeepWhatOlderBuildsDrop(DatabaseView stored, string type, string config, int knownTypes = OlderViewTypes)
     {
-        var olderKnows = ViewTypeOrder.Take(OlderViewTypes).ToHashSet(StringComparer.Ordinal);
-        if (type == "table" && !olderKnows.Contains(stored.Type)) type = stored.Type;
+        var knows = ViewTypeOrder.Take(Math.Max(knownTypes, OlderViewTypes)).ToHashSet(StringComparer.Ordinal);
+        if (type == "table" && !knows.Contains(stored.Type)) type = stored.Type;
         if (JsonNode.Parse(string.IsNullOrEmpty(stored.Config) ? "{}" : stored.Config) is not JsonObject before) return (type, config);
         if (JsonNode.Parse(config) is not JsonObject after) return (type, config);
+        var keys = ConfigKeysKnownBy(knownTypes);
         var kept = false;
         foreach (var (key, value) in before)
         {
-            if (OlderConfigKeys.Contains(key) || after.ContainsKey(key)) continue;
+            if (keys.Contains(key) || after.ContainsKey(key)) continue;
             after[key] = value?.DeepClone();
             kept = true;
         }

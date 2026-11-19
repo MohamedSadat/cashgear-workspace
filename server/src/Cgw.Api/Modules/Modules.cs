@@ -32,6 +32,8 @@ public static class Modules
         // Phase 11: groups.
         services.AddScoped<GroupService>();
         services.AddScoped<DocService>();
+        // Phase 12: the batch pull of documents.
+        services.AddScoped<DocPulls>();
         services.AddScoped<AssetService>();
         services.AddScoped<LinkPreviews>();
         services.AddSingleton<SafeFetcher>();

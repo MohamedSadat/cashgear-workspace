@@ -187,6 +187,83 @@ public sealed partial class SiteTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.OK, (await site.SendAsync(new HttpRequestMessage(HttpMethod.Head, $"/{slug}"))).StatusCode);
     }
 
+    /// <summary>A chart view (Phase 12): grouped by its stage, its measure a sum of the property named, its config hiding what is named.</summary>
+    private static async Task UpsertChart(Ws ws, Guid id, Guid database, string orderKey, string measure, params string[] hidden)
+    {
+        var result = (await ws.Push(ws.Op("view.upsert", id, new
+        {
+            id, workspaceId = ws.Id, databaseId = database, name = "Chart " + orderKey, type = "chart", orderKey, version = 1, createdAt = DateTimeOffset.UtcNow, viewTypes = 7,
+            config = new
+            {
+                filter = (object?)null, sorts = Array.Empty<object>(),
+                group = new { propertyId = "pSel0001", hideEmpty = true },
+                properties = new { order = Array.Empty<string>(), hidden, widths = new { } },
+                chart = new { kind = "bar", measure = new { kind = "sum", propertyId = measure }, title = (string?)null },
+            },
+        })))[0];
+        Assert.True(result.GetProperty("status").GetString() == "applied", result.ToString());
+    }
+
+    [Fact]
+    public async Task A_published_chart_view_draws_from_its_rows_and_one_reading_what_may_not_leave_its_placeholder()
+    {
+        var ws = await Ws.Create(server);
+        var root = await Kit.PageWithText(server, ws, "Report");
+        var database = await DatabaseTests.NewDatabase(ws, "Effort", [
+            DatabaseTests.Prop("pNum0001", "number", "Hours"),
+            DatabaseTests.Prop("pNum0002", "number", "Salary"),
+            DatabaseTests.Prop("pPer0001", "person", "Owner"),
+            DatabaseTests.Prop("pFor0001", "formula", "Owner's", new JsonObject { ["formula"] = new JsonObject { ["expression"] = "prop(\"pPer0001\")" } }),
+            DatabaseTests.Prop("pSel0001", "select", "Stage", new JsonObject { ["options"] = DatabaseTests.Options(("optA0001", "Doing"), ("optB0001", "Done")) }),
+        ], parent: root);
+        var first = Guid.Empty;
+        foreach (var (title, spent, salary, stage, order) in new[] { ("First task", 2, 7001, "optA0001", "a0"), ("Second task", 3, 7002, "optB0001", "a1"), ("Third task", 4, 7003, "optB0001", "a2") })
+        {
+            var id = Guid.CreateVersion7();
+            if (first == Guid.Empty) first = id;
+            var row = DatabaseTests.PageJson(id, ws.Id, ws.Shared, database, order, title, "row");
+            row["row"] = new JsonObject { ["values"] = new JsonObject { ["pNum0001"] = spent, ["pNum0002"] = salary, ["pSel0001"] = stage } };
+            await ws.Push(ws.Op("page.create", id, row));
+        }
+        // The database's first view a chart of hours (its config hiding nothing: a chart shows only
+        // what it draws); a second summing a formula of a person, which never leaves.
+        var hours = Guid.CreateVersion7();
+        await UpsertChart(ws, hours, database, "a0", "pNum0001");
+        var salaries = Guid.CreateVersion7();
+        await UpsertChart(ws, salaries, database, "a1", "pFor0001");
+        await Derived(ws, root, Doc(
+            Para("This month"),
+            Atom("databaseView", new { databaseId = database, viewId = hours }),
+            Atom("databaseView", new { databaseId = database, viewId = salaries })));
+        var slug = await Publish(ws, root, "report");
+        var site = ServerFixture.SiteClient(server.Sites);
+
+        var html = await (await site.GetAsync($"/{slug}")).Content.ReadAsStringAsync();
+        Assert.Contains("<figcaption>Sum of Hours by Stage</figcaption>", html);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Doing</th><td>2</td>", html);
+        Assert.Contains("<th scope=\"row\" dir=\"auto\">Done</th><td>7</td>", html);
+        Assert.Contains("<svg viewBox=\"0 0 600 300\" role=\"img\"", html);
+        Assert.Contains("This chart is not published", html);
+        foreach (var never in new[] { "First task", "Salary", "7001", "14005", "Owner", ws.Account.Id.ToString() })
+            Assert.DoesNotContain(never, html);
+
+        // The database's own page draws its first view, the chart, with no pages of rows.
+        var page = await (await site.GetAsync($"/{slug}/{database}")).Content.ReadAsStringAsync();
+        Assert.Contains("<figcaption>Sum of Hours by Stage</figcaption>", page);
+        Assert.DoesNotContain("Third task", page);
+        Assert.DoesNotContain("7003", page);
+        Assert.DoesNotContain("<nav class=\"pager\"", page);
+
+        // A files property added after the charts is in neither's hidden list, and still no file of it reads.
+        var scan = await AssetTests.Upload(ws, AssetTests.Png, "image/png", "scan.png");
+        await server.RunJob<AssetCheckJob>();
+        var added = (await ws.Push(ws.Op("db.update", database, new { properties = new[] { new { id = "pFil0001", name = "Scan", type = "files" } } })))[0];
+        Assert.True(added.GetProperty("status").GetString() == "applied", added.ToString());
+        var updated = (await ws.Push(ws.Op("row.update", first, new { values = new { pFil0001 = new[] { scan } } })))[0];
+        Assert.True(updated.GetProperty("status").GetString() == "applied", updated.ToString());
+        Assert.Equal(HttpStatusCode.NotFound, (await site.GetAsync($"/{slug}/files/{scan}")).StatusCode);
+    }
+
     [Fact]
     public async Task An_answer_is_kept_by_what_it_is_drawn_from_and_revalidated_by_its_etag()
     {

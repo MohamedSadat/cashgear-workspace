@@ -115,6 +115,8 @@ public sealed class ServerFixture : IAsyncLifetime
         ["RateLimits:ai"] = "100000",
         ["RateLimits:meaning"] = "100000",
         ["RateLimits:frames"] = "100000",
+        // Phase 12: the batch pull's limit has a test of its own (DocsPullTests), on a variant.
+        ["RateLimits:pull"] = "100000",
         ["Ai:AnthropicBaseUrl"] = AiMockUrl,
         // Phase 10: embeddings go to the same mock (its /v1/embeddings); pages are embedded as soon
         // as they are derived, and a provider's busy answer is tried again after 50 ms, not 500.

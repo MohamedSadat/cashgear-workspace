@@ -45,17 +45,39 @@ public sealed class PageGate(Access access, TenantScope scope, CgwDb db)
     public async Task<Result<PageAccess>> OpenAsync(Guid userId, Guid pageId, CancellationToken ct = default) =>
         await DecideAsync(userId, await Read(db, pageId, userId, ct));
 
+    /// <summary>
+    /// <see cref="OpenAsync"/> for a request that acts in one workspace (Phase 12: the batch pull):
+    /// a page of another workspace is 404, as if it did not exist, whatever the caller may see there.
+    /// The same read and the same decision otherwise. <paramref name="rowLevels"/>, kept by the
+    /// caller for one request, holds the level of each database whose rows it has opened: a row's
+    /// level is its database's (<see cref="Access"/>), so the rows of one database are decided once.
+    /// </summary>
+    public async Task<Result<PageAccess>> OpenInAsync(Guid userId, Guid workspaceId, Guid pageId, Dictionary<Guid, string>? rowLevels = null, CancellationToken ct = default)
+    {
+        var found = await Read(db, pageId, userId, ct);
+        if (found is not null && found.Page.WorkspaceId != workspaceId) return Failure.NotFound("No such page");
+        return await DecideAsync(userId, found, rowLevels);
+    }
+
     /// <summary>The gate's decision on what it read (null: no such page).</summary>
-    public async Task<Result<PageAccess>> DecideAsync(Guid userId, GateRow? found)
+    public Task<Result<PageAccess>> DecideAsync(Guid userId, GateRow? found) => DecideAsync(userId, found, null);
+
+    private async Task<Result<PageAccess>> DecideAsync(Guid userId, GateRow? found, Dictionary<Guid, string>? rowLevels)
     {
         if (found is null || found.Role is not { } role) return Failure.NotFound("No such page");
         var page = found.Page;
         var member = new Member(page.WorkspaceId, userId, role);
         Enter(page.WorkspaceId);
         // The level first: that a page was deleted is said only to those who could see it.
-        var level = page.DeletedAt is null
-            ? await access.PageLevelAsync(member, page, found.Visibility, found.Owner, found.Visibility is not null)
-            : await access.DeletedLevelAsync(member, page);
+        string level;
+        if (page.DeletedAt is not null) level = await access.DeletedLevelAsync(member, page);
+        else if (rowLevels is not null && page.Kind == PageKinds.Row && page.ParentPageId is { } database)
+        {
+            if (!rowLevels.TryGetValue(database, out var known))
+                rowLevels[database] = known = await access.PageLevelAsync(member, page, found.Visibility, found.Owner, found.Visibility is not null);
+            level = known;
+        }
+        else level = await access.PageLevelAsync(member, page, found.Visibility, found.Owner, found.Visibility is not null);
         if (level == Levels.None) return Failure.NotFound("No such page");
         if (page.DeletedAt is not null) return new Failure(Codes.PageGone, 410, "The page was deleted for good");
         return new PageAccess(member, page, level);

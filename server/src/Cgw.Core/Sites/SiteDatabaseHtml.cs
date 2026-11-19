@@ -14,7 +14,8 @@ namespace Cgw.Core.Sites;
 /// the view's visible values, a person's cell empty, a related row by its title only when its
 /// database is published too, never a link into a row. A chart is drawn as SVG with its numbers as
 /// a table, a board plugin as columns, both from their view's rows and only by properties the view
-/// shows.
+/// shows. A chart view (Phase 12) is drawn as the chart block is, by the same drawing, from its
+/// view's own settings and group, wherever its database is (a block or the database's page).
 /// </summary>
 public static class SiteDatabaseHtml
 {
@@ -36,15 +37,27 @@ public static class SiteDatabaseHtml
         h.Raw("<section class=\"database\">\n<div class=\"db-title\"><a").Attr("href", SiteRenderer.PageUrl(page.Site, page.Scope, view.Database.Id)).Raw(">");
         Icon(h, view.Database.Icon);
         h.Text(view.Database.Title.Length > 0 ? view.Database.Title : words.Untitled).Raw("</a></div>\n");
-        var rows = view.Rows.Take(SiteRenderer.BlockRows).ToList();
-        Rows(h, page, data, rows, words);
-        Count(h, rows.Count, view.Rows.Count, words);
+        if (view.Type == ChartView.Type) ViewChart(h, data, words);
+        else
+        {
+            var rows = view.Rows.Take(SiteRenderer.BlockRows).ToList();
+            Rows(h, page, data, rows, words);
+            Count(h, rows.Count, view.Rows.Count, words);
+        }
         h.Raw("</section>\n");
     }
 
     public static void FullPage(SiteHtml h, SitePage page, SiteViewData data, SiteWords words)
     {
         var view = data.View;
+        if (view.Type == ChartView.Type)
+        {
+            // A chart is one figure of every row: no pages of rows.
+            h.Raw("<section class=\"database\">\n");
+            ViewChart(h, data, words);
+            h.Raw("</section>\n");
+            return;
+        }
         var pages = Math.Max(1, (view.Rows.Count + SiteRenderer.PageRows - 1) / SiteRenderer.PageRows);
         var number = Math.Clamp(page.PageNumber, 1, pages);
         var rows = view.Rows.Skip((number - 1) * SiteRenderer.PageRows).Take(SiteRenderer.PageRows).ToList();
@@ -320,6 +333,7 @@ public static class SiteDatabaseHtml
 
     private sealed record Point(string Label, double? Value);
 
+    /// <summary>The chart block (<c>cashgear.chart</c>): its own kind, group and measure over its view's rows.</summary>
     private static void Chart(SiteHtml h, SiteViewData? data, JsonElement props, SiteWords words)
     {
         if (data is null)
@@ -337,22 +351,20 @@ public static class SiteDatabaseHtml
             var id = Str(Js.Prop(measure, "propertyId"));
             measured = id is null ? null : view.Schema.Live(id);
             // Only a number the view shows: a sum of a hidden property would tell its values.
-            if (measured is null || measured.Type is not (PropertyTypes.Number or PropertyTypes.Formula or PropertyTypes.Rollup) || !view.Visible.Contains(measured.Id))
+            if (measured is null || !ChartView.Measurable.Contains(measured.Type) || !view.Visible.Contains(measured.Id))
             {
                 SiteRenderer.Placeholder(h, words.ChartHidden);
                 return;
             }
         }
-        double? Measure(IEnumerable<RowData> rows, long count)
-        {
-            if (measured is null) return count;
-            var numbers = rows.Take(ChartRows).Select(r => Cells.Read(measured, r)).OfType<double>().Where(double.IsFinite).ToList();
-            if (measureKind == "sum") return numbers.Sum();
-            return numbers.Count > 0 ? numbers.Average() : null;
-        }
         var groupBy = Str(Js.Prop(props, "groupBy")) is { Length: > 0 } g ? g : null;
         List<Point> points;
-        if (groupBy is null) points = [new Point(MeasureWord(measureKind, words), Measure(view.Rows, view.Rows.Count))];
+        var partial = false;
+        if (groupBy is null)
+        {
+            points = [new Point(MeasureWord(measureKind, words), measured is null ? view.Rows.Count : Measure(view.Rows.Take(ChartRows), measureKind, measured))];
+            partial = measured is not null && view.Rows.Count > ChartRows;
+        }
         else
         {
             if (view.Group is not { } rule || rule.PropertyId != groupBy || view.Groups is null || view.Schema.Live(groupBy) is not { } groupDef)
@@ -360,18 +372,102 @@ public static class SiteDatabaseHtml
                 SiteRenderer.Placeholder(h, words.ChartHidden);
                 return;
             }
-            points = view.Groups.Select(group => new Point(GroupLabel(groupDef, group.Key, words),
-                Measure(view.Rows.Where(r => Query.GroupKeys(view.Schema, r, rule, data.Context).Contains(group.Key)), group.Count))).ToList();
+            points = GroupPoints(data, rule, groupDef, measureKind, measured, words, out partial);
         }
         var title = Str(Js.Prop(props, "title")) is { Length: > 0 } t ? (t.Length > 200 ? t[..200] : t) : $"{MeasureWord(measureKind, words)}: {view.Database.Title}";
+        Figure(h, kind == "number" || groupBy is null ? "number" : kind, points, title, MeasureWord(measureKind, words), partial, words);
+    }
+
+    /// <summary>
+    /// A chart view (Phase 12): drawn as the chart block is, from its view's <c>chart</c> settings,
+    /// grouped by the view's own group; its placeholder when it has no group or its group or measure
+    /// is a property the view does not show (<see cref="ChartView"/>, as a share link refuses it).
+    /// </summary>
+    private static void ViewChart(SiteHtml h, SiteViewData data, SiteWords words)
+    {
+        var (chart, _) = ChartView.Read(data.View);
+        if (chart is null)
+        {
+            SiteRenderer.Placeholder(h, words.ChartHidden);
+            return;
+        }
+        var points = GroupPoints(data, chart.Group, chart.GroupDef, chart.Measure, chart.Measured, words, out var partial);
+        var title = chart.Title ?? chart.Measure switch
+        {
+            "sum" => string.Format(CultureInfo.InvariantCulture, words.SumBy, chart.Measured!.Name, chart.GroupDef.Name),
+            "average" => string.Format(CultureInfo.InvariantCulture, words.AverageBy, chart.Measured!.Name, chart.GroupDef.Name),
+            _ => string.Format(CultureInfo.InvariantCulture, words.CountBy, chart.GroupDef.Name),
+        };
+        Figure(h, chart.Kind, points, title, MeasureWord(chart.Measure, words), partial, words);
+    }
+
+    /// <summary>
+    /// One point per group, in the query's group order: its count from the query, or the sum or
+    /// average of the measure over the group's rows, at most <see cref="ChartRows"/> rows in all read
+    /// group by group, as the app's chart reads them (<paramref name="partial"/> when some were not).
+    /// </summary>
+    private static List<Point> GroupPoints(SiteViewData data, GroupRule rule, PropertyDef groupDef, string measureKind, PropertyDef? measured, SiteWords words, out bool partial)
+    {
+        var view = data.View;
+        partial = false;
+        Dictionary<string, List<RowData>>? byGroup = null;
+        if (measured is not null)
+        {
+            byGroup = new Dictionary<string, List<RowData>>(StringComparer.Ordinal);
+            foreach (var row in view.Rows)
+                foreach (var key in Query.GroupKeys(view.Schema, row, rule, data.Context))
+                {
+                    if (!byGroup.TryGetValue(key, out var list)) byGroup[key] = list = [];
+                    list.Add(row);
+                }
+        }
+        var left = ChartRows;
+        var points = new List<Point>();
+        foreach (var group in view.Groups ?? [])
+        {
+            double? value = group.Count;
+            if (byGroup is not null)
+            {
+                var rows = byGroup.GetValueOrDefault(group.Key) ?? [];
+                var read = rows.Take(Math.Max(left, 0)).ToList();
+                if (read.Count < rows.Count) partial = true;
+                left -= read.Count;
+                value = Measure(read, measureKind, measured!);
+            }
+            points.Add(new Point(GroupLabel(groupDef, group.Key, words), value));
+        }
+        return points;
+    }
+
+    /// <summary>A sum or an average of the measure's finite numbers; an average of none is no value.</summary>
+    private static double? Measure(IEnumerable<RowData> rows, string kind, PropertyDef measured)
+    {
+        var numbers = rows.Select(r => Cells.Read(measured, r)).OfType<double>().Where(double.IsFinite).ToList();
+        if (kind == "sum") return numbers.Sum();
+        return numbers.Count > 0 ? numbers.Average() : null;
+    }
+
+    /// <summary>
+    /// The one drawing of a chart, the block's and the view's: its title, one number or the SVG
+    /// (bars, a line or a pie), its numbers always as a table, and a note when a sum or an average
+    /// read only some rows. A chart of no groups says there are no rows.
+    /// </summary>
+    private static void Figure(SiteHtml h, string kind, List<Point> points, string title, string measureWord, bool partial, SiteWords words)
+    {
         h.Raw("<figure class=\"chart\">\n<figcaption>").Text(title).Raw("</figcaption>\n");
-        if (kind == "number" || groupBy is null) h.Raw("<p class=\"number\">").Text(Number(points.Sum(p => p.Value ?? 0))).Raw("</p>\n");
+        if (kind == "number") h.Raw("<p class=\"number\">").Text(Number(points.Sum(p => p.Value ?? 0))).Raw("</p>\n");
+        else if (points.Count == 0) h.Raw("<p class=\"count\">").Text(words.NoRows).Raw("</p>\n");
         else Svg(h, kind, points, title);
-        h.Raw("<div class=\"table-wrap\"><table>\n<thead><tr><th scope=\"col\">").Text(words.Group).Raw("</th><th scope=\"col\">").Text(MeasureWord(measureKind, words))
-            .Raw("</th></tr></thead>\n<tbody>\n");
-        foreach (var point in points)
-            h.Raw("<tr><th scope=\"row\" dir=\"auto\">").Text(point.Label).Raw("</th><td>").Text(point.Value is { } value ? Number(value) : "").Raw("</td></tr>\n");
-        h.Raw("</tbody>\n</table></div>\n</figure>\n");
+        if (points.Count > 0)
+        {
+            h.Raw("<div class=\"table-wrap\"><table>\n<thead><tr><th scope=\"col\">").Text(words.Group).Raw("</th><th scope=\"col\">").Text(measureWord)
+                .Raw("</th></tr></thead>\n<tbody>\n");
+            foreach (var point in points)
+                h.Raw("<tr><th scope=\"row\" dir=\"auto\">").Text(point.Label).Raw("</th><td>").Text(point.Value is { } value ? Number(value) : "").Raw("</td></tr>\n");
+            h.Raw("</tbody>\n</table></div>\n");
+        }
+        if (partial) h.Raw("<p class=\"count\">").Text(string.Format(CultureInfo.InvariantCulture, words.ChartPartial, ChartRows.ToString("N0", CultureInfo.InvariantCulture))).Raw("</p>\n");
+        h.Raw("</figure>\n");
     }
 
     private static string MeasureWord(string kind, SiteWords words) => kind switch { "sum" => words.Sum, "average" => words.Average, _ => words.Count };

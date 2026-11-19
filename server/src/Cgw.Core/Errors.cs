@@ -89,6 +89,15 @@ public static class Codes
     /// <summary>The provider's answer was refused (the callback's page says why in words).</summary>
     public const string SsoFailed = "sso.failed";
 
+    // Phase 12: chart views.
+
+    /// <summary>
+    /// A chart view read by a share link whose group's or measure's values may not leave (a person's,
+    /// a formula of one, a rollup out of the scope) (403): its rows are not answered, as a site draws
+    /// its placeholder.
+    /// </summary>
+    public const string ChartHidden = "chart.hidden";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -101,6 +110,7 @@ public static class Codes
         SlugTaken, PublishingOff,
         PluginInvalid, PluginOlder,
         SsoDomainTaken, SsoDnsNotFound, SsoNotTested, SsoDiscoveryFailed, SsoRequired, SsoFailed,
+        ChartHidden,
     ];
 }
 
