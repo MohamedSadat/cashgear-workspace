@@ -604,6 +604,8 @@ async function measureRun(label, parts) {
     const per = (k) => (typing[k] - (idle[k] * typingMs) / idleMs) / pushes;
     const result = {
       label,
+      // Phase 11: the groups the typist was put in (0 on a build without groups).
+      groups: s.groups,
       pushes,
       refused: state.refused.length,
       apiCpuMsPerPush: round(per(0)),

@@ -9,6 +9,7 @@ import { pluginScene, pluginScreens } from './plugins';
 import { ERP10_THEIRS, erp10Scene, erp10Screens } from './erp10';
 import { meaningScene, meaningScreens } from './meaning';
 import { groupsScene, groupsScreens } from './groups';
+import { SSO_REFUSED, ssoScene, ssoScreens } from './sso';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -541,6 +542,46 @@ test('the Arabic groups in Settings, the share dialog and a workbook’s access 
     };
     const found: string[] = [];
     await groupsScreens(page, scene, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.dispose();
+    await cloud.close();
+  }
+});
+
+// Phase 11's single sign-on in Arabic: Settings → Single sign-on (the provider set and not tested
+// yet, a domain proven and one not, the unproven one's Verify refused in words) and each question
+// it asks; against the server stack and the mock provider (sso.ts's scene, made in English). The
+// domains, the provider's address and client, the protocol's name (OpenID Connect) and what is
+// registered elsewhere as it is (the redirect address, a record's name and value) are theirs.
+test('the Arabic single sign-on in Settings has no English of its own', async ({ page }) => {
+  test.skip(desktop, 'The mock provider is reached by the web build; the screens are the same');
+  test.setTimeout(300000);
+  const cloud = signers();
+  // The unproven domain's Verify is answered 400, which the browser logs.
+  const errors = watchAppErrors(page, [SSO_REFUSED]);
+  const scene = await ssoScene(page, 'Samira', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(editor(page)).toBeVisible({ timeout: 30000 });
+    const theirs = {
+      within: ['.cgw-sso-value', '.cgw-sso-name'],
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await ssoScreens(page, scene, 'ar', async (screen) => {
       found.push(...(await english(page, screen, theirs)));
     });
     expect(found, found.join('\n')).toEqual([]);

@@ -1,0 +1,130 @@
+/* Phase 11: Settings → Single sign-on (SsoSettings.tsx) and Settings → Account's password
+   (PasswordSettings.tsx). Logical properties only, so right to left needs nothing of its own;
+   colours from the theme's variables, so dark needs nothing either. These are `cgw-sso-*`. */
+
+.cgw-sso {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cgw-sso h2,
+.cgw-sso h3,
+.cgw-sso p,
+.cgw-sso-password h3,
+.cgw-sso-password p {
+  margin: 0;
+}
+
+.cgw-sso-part {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+.cgw-sso-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-inline-size: 40rem;
+}
+
+.cgw-sso-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-sso-field > .cgw-input {
+  max-inline-size: 32rem;
+}
+
+.cgw-sso-row,
+.cgw-sso-copyable,
+.cgw-sso-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-sso-row > .cgw-input {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  max-inline-size: 32rem;
+}
+
+.cgw-sso-field > .cgw-sso-hours {
+  max-inline-size: 8rem;
+}
+
+/* An address, a record's name or value: what is typed or registered elsewhere, as it is. */
+.cgw-sso-value {
+  padding: 2px 6px;
+  border: 1px solid var(--cg-border);
+  border-radius: 4px;
+  background: var(--cg-surface-subtle);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+  unicode-bidi: isolate;
+}
+
+.cgw-sso-domain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: 8px;
+}
+
+.cgw-sso-domain-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-sso-name {
+  flex: 0 1 auto;
+  overflow-wrap: anywhere;
+  unicode-bidi: isolate;
+}
+
+.cgw-sso-domain-head > .cgw-muted {
+  flex: 1 1 10rem;
+}
+
+.cgw-sso-record {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.cgw-sso-record > div {
+  display: contents;
+}
+
+.cgw-sso-record dt {
+  font-weight: 600;
+}
+
+.cgw-sso-record dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.cgw-sso-password {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block: 16px;
+}

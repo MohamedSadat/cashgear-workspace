@@ -10,6 +10,8 @@ import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 import { GroupsSection } from '../cloud/GroupsSettings';
 import { PasskeysSection } from '../cloud/PasskeysSettings';
+import { PasswordSection } from '../cloud/PasswordSettings';
+import { SsoSection } from '../cloud/SsoSettings';
 import { OfflineSettings } from '../cloud/OfflineSettings';
 import { MailSettings } from '../cloud/MailSettings';
 import { ErpSettingsSection } from '../erp/SettingsSection';
@@ -62,7 +64,13 @@ export function Settings({
           label: <span lang={language}>{t(`language.${language}`)}</span>,
         }))}
       />
-      {cloud && <AccountSettings cloud={cloud} passkeys={<PasskeysSection cloud={cloud} />} />}
+      {cloud && (
+        <AccountSettings
+          cloud={cloud}
+          passwordSection={<PasswordSection cloud={cloud} />}
+          passkeys={<PasskeysSection cloud={cloud} />}
+        />
+      )}
       {cloud && <MailSettings cloud={cloud} />}
       {cloud && session.workspaceId && (
         <MembersSettings
@@ -71,6 +79,7 @@ export function Settings({
           groups={(members) => <GroupsSection cloud={cloud} session={session} members={members} />}
         />
       )}
+      {cloud && session.workspaceId && <SsoSection cloud={cloud} session={session} />}
       {cloud && session.workspaceId && (
         <Suspense fallback={null}>
           <PublishingSettings cloud={cloud} session={session} />

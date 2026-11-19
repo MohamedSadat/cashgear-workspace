@@ -1,44 +1,34 @@
 // Phase 11 (M11.3): single sign-on in Chrome and Edge, against the server stack and the mock OpenID
 // Connect provider (tests/mocks/oidc on http://127.0.0.1:4287, which Playwright starts; the e2e
 // stack reads a domain's TXT record from its DNS stand-in, `Sso__DnsBaseUrl`). An owner sets up the
-// workspace's provider and proves a domain; a person of that domain signs in on the API's page
-// through the provider, with no password, and lands in the app as a member of the workspace; with
-// sign-on required for the domain, a password of the domain is refused (the page offers the
-// organisation's sign-in instead), while the owner still signs in with theirs.
+// workspace's provider and proves a domain in Settings → Single sign-on; a person of that domain
+// signs in on the API's page through the provider, with no password, lands in the app as a member
+// of the workspace, and is offered a password by mail in Settings → Account; required sign-on is
+// refused until an owner has signed in through the provider, then turned on, after which a password
+// of the domain is refused (the page offers the organisation's sign-in instead), while the owner
+// still signs in with theirs.
 //
 // The server's refusals (a wrong signature, issuer, audience, nonce or expiry, `alg: none`, a key
 // never published, a state or a code used twice, an address outside the domains, an unverified
 // address, discovery down) are SsoTests'. Here: a real browser's redirects, cookies and CSP
-// (`form-action` on the way to the provider and back) end to end.
-//
-// TODO(C2/C3): Settings → Single sign-on is not built yet: the owner's steps go through the routes
-// with `api`. Each TODO names what the screen must offer, so this spec can drive it instead.
+// (`form-action` on the way to the provider and back) end to end, and the owner's screen.
 //
 //   pnpm exec playwright test tests/e2e/sso.spec.ts --project chrome --project edge
 import type { Browser, Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { watchErrors } from './helpers';
 import { API, link, mailTo, signedIn, type TestAccount } from './cloud';
+import { signedInWorkspace } from './database';
+import { escapeRegExp, watchAppErrors, workspaceIdOf } from './ecosystem';
+import { MOCK, ORGANISATION, SSO_REFUSED, mock, realmWithClient, ssoSettings } from './sso';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 
-const MOCK = process.env.E2E_OIDC_URL ?? 'http://127.0.0.1:4287';
 const APP = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4273';
-const ORGANISATION = "Sign in with your organisation's account";
 
 test.skip(
   desktop,
   "The desktop signs in through the system browser, a browser's redirects (SsoTests: its consent and code)",
 );
-
-/** A control of the mock provider (`/__mock/*`), on the root or a realm. */
-async function mock(path: string, body: unknown) {
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  expect(response.ok, `${path}: ${response.status} ${await response.text()}`).toBe(true);
-}
 
 /** A confirmed account with the given address, made through the API as the sign-up page would. */
 async function register(email: string, name: string): Promise<TestAccount> {
@@ -91,91 +81,183 @@ async function signInThroughProvider(page: Page, realm: string, email: string, n
 test('a person of a verified domain signs in through the workspace’s provider with no password, joins as a member, and required sign-on refuses their domain’s passwords but the owner’s', async ({
   page,
 }) => {
-  test.setTimeout(240000);
+  test.setTimeout(300000);
   const browser = page.context().browser()!;
   const run = `${Date.now()}`;
   const domain = `e2e-${run}.test`;
-  const realm = `${MOCK}/realms/e2e-sso-${run}`;
-  const clientId = `cgw-e2e-${run}`;
-  const clientSecret = `e2e+secret%${run}`;
-  await mock(`${realm}/__mock/clients`, {
-    clientId,
-    clientSecret,
-    redirectUris: [`${API}/account/sso/callback`],
-  });
+  const { realm, clientId, clientSecret } = await realmWithClient(run);
+  const callback = `${API}/account/sso/callback`;
 
-  // The owner: an account of the domain with a password, and the workspace.
+  // The owner: an account of the domain with a password, signed in in the app, and the workspace.
   const owner = await register(`owner@${domain}`, 'Acme Owner');
+  const space = `Acme ${run}`;
+  await signedInWorkspace(page, owner, space, null, async () => browser);
   const ownerApi = await apiSession(owner);
-  const workspaceId = crypto.randomUUID();
-  await ownerApi.post('/api/v1/workspaces', { id: workspaceId, name: `Acme ${run}` });
+  const workspaceId = await workspaceIdOf(ownerApi, space);
   const sso = `/api/v1/workspaces/${workspaceId}/sso`;
+  // The section's refusals below are 400s, which the browser logs; nothing else may be.
+  const ownerErrors = watchAppErrors(page, [SSO_REFUSED]);
 
-  // TODO(C2/C3): Settings → Single sign-on, for owners only: fields "Issuer", "Client ID" and
-  // "Client secret" (the secret never shown again, "A secret is set" instead), "Let people of the
-  // domains join as members" (on), "Session length (hours)" (24), the redirect address to register
-  // at the provider (the answer's `redirectUri`, with a copy button), and Save; a discovery that
-  // fails says so in words (`sso.discoveryFailed`).
-  const provider = (await ownerApi.put(`${sso}/provider`, {
+  // Settings → Single sign-on: the redirect address to register at the provider, copied.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP });
+  const section = await ssoSettings(page);
+  await expect(section.getByTestId('sso-redirect')).toHaveText(callback);
+  await section.getByRole('button', { name: 'Copy the redirect address', exact: true }).click();
+  await expect(
+    section.getByRole('button', { name: 'Copied the redirect address', exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(callback);
+
+  // The provider: a discovery that fails says so in words and saves nothing; then it is saved,
+  // and its secret is never shown again.
+  const form = section.getByTestId('sso-provider-form');
+  const providerStatus = section.getByTestId('sso-provider-status');
+  await expect(section.getByTestId('sso-secret-state')).toHaveText('No secret is set.');
+  await form.getByLabel('Issuer', { exact: true }).fill(realm);
+  await form.getByLabel('Client ID', { exact: true }).fill(clientId);
+  await form.getByLabel('Client secret', { exact: true }).fill(clientSecret);
+  await expect(
+    form.getByRole('checkbox', { name: /^People of these domains join the workspace as members/ }),
+  ).toBeChecked();
+  await expect(form.getByLabel('Session length (hours)', { exact: true })).toHaveValue('24');
+  await mock(`${realm}/__mock/fault`, { kind: 'discoveryDown' });
+  await form.getByRole('button', { name: 'Save the provider', exact: true }).click();
+  await expect(providerStatus).toHaveText(
+    `The provider’s settings could not be read from ${realm}. Check the issuer, and that the provider can be reached.`,
+  );
+  expect(((await ownerApi.get(sso)) as { provider: unknown }).provider).toBeNull();
+  await mock(`${realm}/__mock/fault`, { kind: null });
+  await form.getByRole('button', { name: 'Save the provider', exact: true }).click();
+  await expect(providerStatus).toHaveText('The provider is saved.');
+  await expect(section.getByTestId('sso-secret-state')).toHaveText(
+    'A secret is set. It is never shown again: type a new one to replace it.',
+  );
+  await expect(form.getByLabel('Client secret', { exact: true })).toHaveValue('');
+  await expect(section.getByTestId('sso-tested')).toContainText('Not tested yet.');
+  await expect(section).not.toContainText(clientSecret);
+  const saved = (await ownerApi.get(sso)) as {
+    provider: Record<string, unknown>;
+    redirectUri: string;
+  };
+  expect(saved.provider).toMatchObject({
     issuer: realm,
     clientId,
-    clientSecret,
-  })) as { hasSecret: boolean; testedAt: string | null };
-  expect(provider.hasSecret).toBe(true);
-  expect(provider.testedAt).toBeNull();
-  expect(((await ownerApi.get(sso)) as { redirectUri: string }).redirectUri).toBe(
-    `${API}/account/sso/callback`,
+    hasSecret: true,
+    joinAsMember: true,
+    sessionHours: 24,
+    testedAt: null,
+  });
+  expect(JSON.stringify(saved)).not.toContain(clientSecret);
+  expect(saved.redirectUri).toBe(callback);
+
+  // A domain: its TXT record to create, Verify refused while DNS does not have it, then proven.
+  const domains = section.getByTestId('sso-domains');
+  const domainsStatus = section.getByTestId('sso-domains-status');
+  await domains.getByLabel('Domain to add', { exact: true }).fill(domain);
+  await domains.getByRole('button', { name: 'Add the domain', exact: true }).click();
+  await expect(domainsStatus).toHaveText(
+    `${domain} is added. Create its record, then press Verify.`,
   );
+  const row = domains.locator(`[data-sso-domain="${domain}"]`);
+  await expect(row).toContainText('Not verified yet');
+  await expect(row.getByTestId('sso-record-name')).toHaveText(`_cashgear-workspace.${domain}`);
+  const value = (await row.getByTestId('sso-record-value').textContent())!;
+  expect(value).toMatch(/^cgw-verify=[A-Za-z0-9_-]+$/);
+  await row
+    .getByRole('button', { name: `Copy the record value for ${domain}`, exact: true })
+    .click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(value);
+  await row.getByRole('button', { name: `Verify ${domain}`, exact: true }).click();
+  await expect(domainsStatus).toHaveText(
+    `The record for ${domain} was not found yet. DNS can take a while to show a new record: try again in a few minutes.`,
+  );
+  await mock(`${MOCK}/__mock/dns`, { name: `_cashgear-workspace.${domain}`, txt: [value] });
+  await row.getByRole('button', { name: `Verify ${domain}`, exact: true }).click();
+  await expect(domainsStatus).toHaveText(`${domain} is verified.`);
+  await expect(row).toContainText('Verified');
+  const required = row.getByRole('switch', {
+    name: `Require sign-in through the provider for ${domain}`,
+    exact: true,
+  });
+  await expect(required).not.toBeChecked();
 
-  // TODO(C2/C3): "Add a domain" (the domain typed), then its TXT record shown as a name and a value
-  // to copy, and "Verify" (`sso.dnsNotFound` said in words while the record is not there yet).
-  const added = (await ownerApi.post(`${sso}/domains`, { domain })) as {
-    record: { name: string; value: string };
-  };
-  expect(added.record.name).toBe(`_cashgear-workspace.${domain}`);
-  await mock(`${MOCK}/__mock/dns`, { name: added.record.name, txt: [added.record.value] });
-  const verified = (await ownerApi.post(`${sso}/domains/${domain}/verify`, {})) as {
-    verifiedAt: string | null;
-  };
-  expect(verified.verifiedAt).not.toBeNull();
+  // Required sign-on before an owner has signed in through the provider: asked, then refused,
+  // saying how to test it.
+  const ask = page.getByRole('alertdialog');
+  await row.getByText('Require sign-in through the provider', { exact: true }).click();
+  await expect(ask).toContainText(`Require sign-on for ${domain}?`);
+  await ask.getByRole('button', { name: 'Require sign-on', exact: true }).click();
+  await expect(domainsStatus).toHaveText(
+    "Sign-on cannot be required yet: an owner must first sign in through the provider. Sign out, then on the sign-in page choose “Sign in with your organisation's account”.",
+  );
+  await expect(required).not.toBeChecked();
 
-  // A person of the domain signs in through the provider: no password, an account made, a member.
-  const errors = watchErrors(page);
-  await signInThroughProvider(page, realm, `ada@${domain}`, 'Ada Lovelace');
-  await signedIn(page, { email: `ada@${domain}`, password: '', name: 'Ada Lovelace' });
-  const me = (await (await page.context().request.get(`${API}/api/v1/account/me`)).json()) as {
+  // A person of the domain signs in through the provider: no password, an account made, a member,
+  // her workspace open; Settings → Account offers her a password by mail.
+  const ada = await profile(browser);
+  const adaEmail = `ada@${domain}`;
+  await signInThroughProvider(ada.page, realm, adaEmail, 'Ada Lovelace');
+  await signedIn(ada.page, { email: adaEmail, password: '', name: 'Ada Lovelace' });
+  const me = (await (await ada.context.request.get(`${API}/api/v1/account/me`)).json()) as {
     email: string;
     hasPassword: boolean;
+    ssoRequired: boolean;
   };
-  expect(me.email).toBe(`ada@${domain}`);
-  expect(me.hasPassword).toBe(false);
-  const theirs = (await (await page.context().request.get(`${API}/api/v1/workspaces`)).json()) as {
+  expect(me).toMatchObject({ email: adaEmail, hasPassword: false, ssoRequired: false });
+  const theirs = (await (await ada.context.request.get(`${API}/api/v1/workspaces`)).json()) as {
     id: string;
     role: string;
   }[];
   expect(theirs).toContainEqual(expect.objectContaining({ id: workspaceId, role: 'member' }));
-  // TODO(C2): the workspace switcher lists "Acme …" for her, and opens it.
-  expect(errors).toEqual([]);
+  await expect(
+    ada.page.getByRole('button', { name: new RegExp(escapeRegExp(space)) }).first(),
+  ).toBeVisible({ timeout: 30000 });
+  await ada.page.goto(`${APP}/#/settings`);
+  const password = ada.page.getByTestId('password-settings');
+  await expect(password).toContainText(
+    `This account has no password: it signs in through your organisation’s account. You can set one too, by a link sent to ${adaEmail}.`,
+    { timeout: 30000 },
+  );
+  // A member is not shown single sign-on at all.
+  await expect(ada.page.getByTestId('passkeys-settings')).toBeVisible();
+  await expect(ada.page.getByTestId('sso-settings')).toHaveCount(0);
+  await password.getByRole('button', { name: 'Set a password', exact: true }).click();
+  await expect(password.getByTestId('password-status')).toHaveText(
+    `A link to set a password is on its way to ${adaEmail}. Open it, choose a password, then sign in with it whenever you like.`,
+  );
+  expect(await mailTo(adaEmail, '/account/reset')).toContain('/account/reset');
+  expect(ada.errors).toEqual([]);
 
   // Someone of the domain with a password, before sign-on is required.
   const pat = await register(`pat@${domain}`, 'Pat');
 
-  // Required sign-on needs an owner's sign-in through the provider first.
-  // TODO(C2/C3): the domain's "Require sign-in through the provider" switch, off and explained
-  // until an owner has signed in through it (`sso.notTested`), then on, saying that the domain's
-  // other sessions end and its owners keep their password.
-  const untested = await ownerApi.raw(`${sso}`);
-  expect(JSON.parse(untested.body).provider.testedAt).toBeNull();
+  // The owner signs in through the provider once (another browser), which tests it; then turns
+  // required sign-on on in Settings, asked first: the domain's other sessions end, owners keep
+  // their password.
   const ownerBrowser = await profile(browser);
   await signInThroughProvider(ownerBrowser.page, realm, owner.email);
   await signedIn(ownerBrowser.page, owner);
   expect(
     ((await ownerApi.get(sso)) as { provider: { testedAt: string | null } }).provider.testedAt,
   ).not.toBeNull();
-  const required = (await ownerApi.patch(`${sso}/domains/${domain}`, { required: true })) as {
-    required: boolean;
-  };
-  expect(required.required).toBe(true);
+  const again = await ssoSettings(page);
+  await expect(again.getByTestId('sso-tested')).toContainText('Tested');
+  const againRow = again.locator(`[data-sso-domain="${domain}"]`);
+  await againRow.getByText('Require sign-in through the provider', { exact: true }).click();
+  await expect(ask).toContainText(
+    'those signed in with a password or a passkey are signed out now, on every device. The workspace’s owners are not, and keep their password.',
+  );
+  await ask.getByRole('button', { name: 'Require sign-on', exact: true }).click();
+  await expect(again.getByTestId('sso-domains-status')).toHaveText(
+    `Sign-on is now required for ${domain}.`,
+  );
+  await expect(
+    againRow.getByRole('switch', { name: `Require sign-in through the provider for ${domain}` }),
+  ).toBeChecked();
+  const domainNow = (
+    (await ownerApi.get(sso)) as { domains: { domain: string; required: boolean }[] }
+  ).domains.find((d) => d.domain === domain);
+  expect(domainNow?.required).toBe(true);
 
   // Pat's password is refused; the page offers the organisation's sign-in, which signs Pat in.
   const patBrowser = await profile(browser);
@@ -195,6 +277,16 @@ test('a person of a verified domain signs in through the workspace’s provider 
     timeout: 30000,
   });
   await signedIn(patBrowser.page, pat);
+  // Pat's account has a password the domain no longer takes: Settings says the organisation signs
+  // it in, and offers none.
+  await patBrowser.page.goto(`${APP}/#/settings`);
+  await expect(patBrowser.page.getByTestId('password-organisation')).toHaveText(
+    'Your organisation signs this account in through its own sign-in: a password does not sign it in.',
+    { timeout: 30000 },
+  );
+  await expect(
+    patBrowser.page.getByRole('button', { name: 'Set a password', exact: true }),
+  ).toHaveCount(0);
   expect(patBrowser.errors).toEqual([]);
 
   // The owner keeps their password.
@@ -209,7 +301,9 @@ test('a person of a verified domain signs in through the workspace’s provider 
     timeout: 30000,
   });
   await signedIn(ownerByPassword.page, owner);
+  expect(ownerErrors).toEqual([]);
 
-  for (const opened of [ownerBrowser, patBrowser, ownerByPassword]) await opened.context.close();
+  for (const opened of [ada, ownerBrowser, patBrowser, ownerByPassword])
+    await opened.context.close();
   await ownerApi.dispose();
 });

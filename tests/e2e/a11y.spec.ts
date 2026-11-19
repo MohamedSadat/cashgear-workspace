@@ -28,6 +28,7 @@ import { phase7Scene, phase7Screens } from './phase7';
 import { erp10Scene, erp10Screens } from './erp10';
 import { meaningScene, meaningScreens } from './meaning';
 import { groupsScene, groupsScreens } from './groups';
+import { ssoScene, ssoScreens } from './sso';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -634,6 +635,41 @@ test.describe('accessibility of Phase 11’s groups', () => {
           await page.reload();
           await expect(editor(page)).toBeVisible({ timeout: 30000 });
           await groupsScreens(page, scene, language, async (screen) => {
+            problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+          });
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.dispose();
+    }
+  });
+});
+
+// Phase 11: Axe on Settings → Single sign-on (the provider set and not tested yet, a domain proven
+// and one not, a refusal said, then each question it asks: removing the provider, requiring
+// sign-on, removing a domain), in both themes and both languages, against the server stack and
+// the mock provider (sso.ts's scene, made in English, then loaded again in each language and theme).
+test.describe('accessibility of Phase 11’s single sign-on', () => {
+  const cloud = signers();
+  test.afterEach(() => cloud.close());
+  test('Axe finds nothing on Settings’ single sign-on and its questions (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop, 'The mock provider is reached by the web build; the screens are the same');
+    test.setTimeout(480000);
+    const scene = await ssoScene(page, 'Axe sign-on', cloud.signer);
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await ssoScreens(page, scene, language, async (screen) => {
             problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
           });
         }
