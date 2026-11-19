@@ -18,6 +18,14 @@
 // Writes bench/results/phase8-server-stack.json.
 //   node bench/phase8-server.mjs [--runs 3] [--warmup 60] [--seconds 30] [--cycles 3] [--before DIR]
 //     [--after DIR] [--only before|after] [--no-presence] [--no-reader] [--out NAME]
+//     [--typist owner|member] [--groups N]
+// Phase 11 (IMPLEMENTATION_PLAN.md, Phase 11: "the server's CPU per push within 10 % of 0.10.0's,
+// the push's fast path deciding for a person in 20 groups"): `--before target/phase11-v0100` (0.10.0,
+// `git archive v0.10.0 server global.json`, this checkout's target/ffi copied, built in Release),
+// `--typist member` (the member types and the owner reads: an owner's push never reads the page's
+// rows), and `--groups 20` (on a build with groups: the typist in 20 groups, and the page shared
+// with 20 others at view, so the fast path weighs each group row and still decides the push).
+// A build without groups' routes gets the same page with no rows.
 // Ports: CGW_BENCH_API_PORT (5380), CGW_BENCH_BLOB_PORT (10100); database cgw_phase8_bench
 // (dropped and made again each run); data under .cgw-dev/phase8.
 import { spawn, spawnSync } from 'node:child_process';
@@ -46,6 +54,8 @@ const RUNS = Number(arg('--runs', 3));
 const ONLY = arg('--only', null);
 const PRESENCE = !args.includes('--no-presence');
 const READER = !args.includes('--no-reader');
+const TYPIST = arg('--typist', 'owner');
+const GROUPS = Number(arg('--groups', 0));
 const WARMUP_S = Number(arg('--warmup', 60));
 const SECONDS = Number(arg('--seconds', 30));
 const CYCLES = Number(arg('--cycles', 3));
@@ -383,15 +393,26 @@ async function scene() {
   const token = /\/#\/invite\/([A-Za-z0-9_-]+)/.exec(await mailTo(member.email, '/#/invite/'))[1];
   const memberApi = await apiSession(member);
   await memberApi.post('/api/v1/invites/accept', { token });
+  const typistApi = TYPIST === 'member' ? memberApi : ownerApi;
+  const readerApi = TYPIST === 'member' ? ownerApi : memberApi;
+  const groups =
+    GROUPS > 0
+      ? await groupsOn(ownerApi, workspaceId, pageId, TYPIST === 'member' ? member : owner)
+      : 0;
 
   const { base, clients } = basePage();
   const typistClient = 1_000_000 + Math.floor(Math.random() * 2_000_000_000);
+  // The base's clients are the owner's (who pushes the base); the typist's is the typist's own.
   const registered = await ownerApi.post(`/api/v1/workspaces/${workspaceId}/yjs-clients`, {
     issue: null,
-    register: [...clients, typistClient],
+    register: clients,
   });
-  if (registered.registered.length !== clients.length + 1)
-    throw new Error('Clients not registered: ' + JSON.stringify(registered));
+  const own = await typistApi.post(`/api/v1/workspaces/${workspaceId}/yjs-clients`, {
+    issue: null,
+    register: [typistClient],
+  });
+  if (registered.registered.length !== clients.length || own.registered.length !== 1)
+    throw new Error('Clients not registered: ' + JSON.stringify({ registered, own }));
   await ownerApi.post(`/api/v1/pages/${pageId}/doc/updates`, {
     epoch: 0,
     clientSchemaVersion: 1,
@@ -407,13 +428,13 @@ async function scene() {
   Y.applyUpdate(doc, base, 'remote');
   doc.clientID = typistClient;
   const received = new Map();
-  const reader = await openHub(memberApi, {
+  const reader = await openHub(readerApi, {
     Updates: (frame) => {
       const at = Date.now();
       for (const update of frame.updates) received.set(update.updateId, at);
     },
   });
-  const typist = await openHub(ownerApi);
+  const typist = await openHub(typistApi);
   for (const connection of READER ? [typist, reader] : [typist]) {
     await call(connection, 'JoinWorkspaces', [workspaceId]);
     await call(connection, 'JoinPage', pageId);
@@ -429,7 +450,36 @@ async function scene() {
     received,
     readerClient: 4_000_000 + Math.floor(Math.random() * 1_000_000),
     readerDoc,
+    groups,
   };
+}
+
+/**
+ * Phase 11: `count` groups with the typist in each, and `count` others with the page shared with
+ * them at view (rows the push's fast path weighs, none of them the typist's). 0 on a build with no
+ * groups' routes (0.10.0), whose page then holds no row.
+ */
+async function groupsOn(ownerApi, workspaceId, pageId, typist) {
+  const probe = await ownerApi.raw(`/api/v1/workspaces/${workspaceId}/groups`);
+  if (probe.status === 404) return 0;
+  const listed = await ownerApi.get(`/api/v1/workspaces/${workspaceId}/members`);
+  const members = Array.isArray(listed) ? listed : listed.members;
+  const typistId = members.find((m) => m.email === typist.email).userId;
+  const shared = [];
+  for (let i = 0; i < GROUPS * 2; i++) {
+    const mine = i < GROUPS;
+    const group = await ownerApi.post(`/api/v1/workspaces/${workspaceId}/groups`, {
+      name: `${mine ? 'Typist' : 'Other'} ${i}`,
+      people: mine ? [typistId] : [],
+    });
+    if (!mine) shared.push(group.id);
+  }
+  await ownerApi.put(`/api/v1/pages/${pageId}/permissions`, {
+    restricted: false,
+    principals: ['group'],
+    entries: shared.map((id) => ({ principalType: 'group', principalId: id, level: 'view' })),
+  });
+  return GROUPS;
 }
 
 /** Types (`typing`) or idles, for `ms`; presence as the app sends it. Returns the pushes made. */
@@ -658,6 +708,8 @@ const out = {
     keyMs: KEY_MS,
     before: BEFORE,
     after: AFTER,
+    typist: TYPIST,
+    groups: GROUPS,
   },
   summary,
   runs,

@@ -9,6 +9,7 @@ import type { WorkspaceSession } from '../session';
 import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 import { GroupsSection } from '../cloud/GroupsSettings';
+import { PasskeysSection } from '../cloud/PasskeysSettings';
 import { OfflineSettings } from '../cloud/OfflineSettings';
 import { MailSettings } from '../cloud/MailSettings';
 import { ErpSettingsSection } from '../erp/SettingsSection';
@@ -61,7 +62,7 @@ export function Settings({
           label: <span lang={language}>{t(`language.${language}`)}</span>,
         }))}
       />
-      {cloud && <AccountSettings cloud={cloud} />}
+      {cloud && <AccountSettings cloud={cloud} passkeys={<PasskeysSection cloud={cloud} />} />}
       {cloud && <MailSettings cloud={cloud} />}
       {cloud && session.workspaceId && (
         <MembersSettings

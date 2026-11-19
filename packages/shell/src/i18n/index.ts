@@ -6,6 +6,7 @@ import { ar } from './ar';
 import { directionOf, type Language } from './catalogue';
 import { en } from './en';
 import type { groupsEn } from '../cloud/groupsWords';
+import type { passkeysEn } from '../cloud/passkeysWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -16,6 +17,7 @@ export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from '
  */
 interface Sections {
   groups: typeof groupsEn;
+  passkeys: typeof passkeysEn;
 }
 
 declare module 'i18next' {

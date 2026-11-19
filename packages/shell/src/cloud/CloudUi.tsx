@@ -259,8 +259,12 @@ type Device = Awaited<ReturnType<Cloud['devices']>>[number];
 export type MemberRow = Awaited<ReturnType<Cloud['members']>>[number];
 type InviteRow = Awaited<ReturnType<Cloud['invites']>>[number];
 
-/** Settings: who is signed in, the devices signed in, and signing out. */
-export function AccountSettings({ cloud }: { cloud: Cloud }) {
+/**
+ * Settings: who is signed in, the devices signed in, and signing out. Phase 11: `passkeys`, the
+ * account's passkeys, drawn while signed in (Settings passes it, so their code loads with
+ * Settings, not with the app).
+ */
+export function AccountSettings({ cloud, passkeys }: { cloud: Cloud; passkeys?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const account = useAccount(cloud);
   const [devices, setDevices] = useState<Device[] | null>(null);
@@ -324,6 +328,7 @@ export function AccountSettings({ cloud }: { cloud: Cloud }) {
           <button type="button" className="cgw-button" onClick={() => void cloud.signOut()}>
             {t('cloud.signOut')}
           </button>
+          {passkeys}
           <h3>{t('cloud.deleteAccount')}</h3>
           <p className="cgw-muted">{t('cloud.deleteAccountNote')}</p>
           <button

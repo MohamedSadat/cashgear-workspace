@@ -457,7 +457,7 @@ export const en = {
     signOutDevice: 'Sign out',
     deleteAccount: 'Delete the account',
     deleteAccountNote:
-      'Deletes the account, and the workspaces no one else is in, from the server for good. You will be asked for your password. What is on this device stays here.',
+      'Deletes the account, and the workspaces no one else is in, from the server for good. You will be asked to confirm it is you. What is on this device stays here.',
     deleteAccountOpen: 'Delete the account…',
     lastSeen: 'Last seen {{when}}',
     platformWeb: 'Browser',

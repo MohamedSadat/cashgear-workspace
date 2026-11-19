@@ -1,0 +1,39 @@
+/* Phase 11: Settings → Account → Passkeys (PasskeysSettings.tsx). Logical properties only, so right
+   to left needs nothing of its own; colours from the theme's variables, so dark needs nothing
+   either. The rows are the shell's list rows; these are `cgw-passkey-*`. */
+
+.cgw-passkeys {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block: 16px;
+}
+
+.cgw-passkeys h3,
+.cgw-passkeys p {
+  margin: 0;
+}
+
+.cgw-passkey-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.cgw-passkey-name {
+  overflow-wrap: anywhere;
+}
+
+.cgw-passkey-form {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-passkey-form .cgw-input {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+}

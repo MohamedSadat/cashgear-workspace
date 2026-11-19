@@ -1,13 +1,14 @@
 import i18next from 'i18next';
 import { describe, expect, it } from 'vitest';
 import { groupsWords } from '../cloud/groupsWords';
+import { passkeysWords } from '../cloud/passkeysWords';
 import { ar } from './ar';
 import { flatten } from './catalogue';
 import { en } from './en';
 import { addSection, type Section } from './sections';
 
 /** Every section a screen brings with it (sections.ts). */
-const SECTIONS: Section[] = [groupsWords];
+const SECTIONS: Section[] = [groupsWords, passkeysWords];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();
 

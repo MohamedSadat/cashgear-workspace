@@ -8,7 +8,9 @@
 // Every ceremony runs on the API's own pages (AccountPages, /account/passkey.js); the server's
 // refusals (another origin or relying party, a challenge used twice, a counter going back, another
 // account's passkey) are PasskeyTests', through a software authenticator. Here: a real browser's
-// ceremony end to end, the autofill's field, and the pages under Axe in English and Arabic.
+// ceremony end to end, started from Settings → Account → Passkeys (added, listed, removed there),
+// the autofill's field, the pages under Axe in English and Arabic, and Settings' passkeys under
+// Axe in both themes and languages with no English of their own in Arabic.
 //
 // Needs (phase-11-s2.md): the e2e stack, and `node scripts/web-localhost.mjs --build` then
 // `--serve` (Playwright's start list for this spec); then
@@ -85,7 +87,13 @@ async function signInWithPassword(page: Page, account: TestAccount) {
  */
 async function signInWithPasskey(page: Page) {
   await page.goto(signInPage());
-  await expect(page.getByLabel('Email')).toHaveAttribute('autocomplete', 'username webauthn');
+  // Edge's virtual authenticator answers the autofill's ask as the page opens, and the page then
+  // signs in by itself before the field can be read: check the field only while it is there.
+  const autofill = await page
+    .getByLabel('Email')
+    .getAttribute('autocomplete', { timeout: 5000 })
+    .catch(() => null);
+  if (autofill !== null) expect(autofill).toBe('username webauthn');
   await page
     .getByRole('button', { name: 'Sign in with a passkey' })
     .click({ timeout: 10000 })
@@ -114,6 +122,33 @@ async function signOut(page: Page) {
   ).toBeVisible({ timeout: 20000 });
 }
 
+/** Settings → Account → Passkeys (packages/shell/src/cloud/PasskeysSettings.tsx). */
+const passkeysSection = (page: Page) => page.getByTestId('passkeys-settings');
+
+/** A passkey's row in Settings, by its name. */
+const listed = (page: Page, name: string) =>
+  passkeysSection(page)
+    .getByTestId('passkeys-list')
+    .getByRole('listitem')
+    .filter({ hasText: name });
+
+/**
+ * Settings' "Add a passkey": the API's page in this tab, in the interface language, with this
+ * app's Settings as `return`; named there and added (a sign-in of the last ten minutes, so no
+ * password asked again), then back to Settings.
+ */
+async function addFromSettings(page: Page, name: string) {
+  await passkeysSection(page).getByRole('button', { name: 'Add a passkey' }).click();
+  await page.waitForURL((url) => url.origin === API && url.pathname === '/account/passkeys/new');
+  const asked = new URL(page.url());
+  expect(asked.searchParams.get('return')).toBe(`${APP}/#/settings`);
+  expect(asked.searchParams.get('lang')).toBe('en');
+  await expect(page.getByRole('heading', { name: 'Add a passkey' })).toBeVisible();
+  await page.getByLabel('Name, to tell your passkeys apart').fill(name);
+  await page.getByRole('button', { name: 'Add a passkey' }).click();
+  await page.waitForURL(`${APP}/#/settings`, { timeout: 30000 });
+}
+
 test('a passkey added from Settings signs in on its own, and once removed is refused', async ({
   page,
 }) => {
@@ -123,24 +158,21 @@ test('a passkey added from Settings signs in on its own, and once removed is ref
   await signInWithPassword(page, account);
   await signedIn(page, account);
 
-  // Adding one: the API's page, within ten minutes of the sign-in, back to Settings after.
-  // TODO(C2): Settings → Account's "Add a passkey" opens this page with the app's address as
-  // `return` (C2 provides the button; then replace the goto with):
-  //   await page.goto(`${APP}/#/settings`);
-  //   await page.getByRole('button', { name: 'Add a passkey' }).click();
-  await page.goto(`${API}/account/passkeys/new?return=${encodeURIComponent(`${APP}/#/settings`)}`);
-  await expect(page.getByRole('heading', { name: 'Add a passkey' })).toBeVisible();
-  await page.getByLabel('Name, to tell your passkeys apart').fill('Virtual key');
-  await page.getByRole('button', { name: 'Add a passkey' }).click();
-  await page.waitForURL(`${APP}/#/settings`, { timeout: 30000 });
+  // Adding one: Settings → Account's "Add a passkey" opens the API's page in this tab, with this
+  // app's Settings as `return`; within ten minutes of the sign-in it adds at once, then comes back.
+  await page.goto(`${APP}/#/settings`);
+  await expect(passkeysSection(page).getByText('No passkeys yet.')).toBeVisible({ timeout: 20000 });
+  await addFromSettings(page, 'Virtual key');
   const made = await authenticator.credentials();
   expect(made).toHaveLength(1);
   expect(made[0].isResidentCredential).toBe(true);
   const [added] = await passkeys(page);
   expect(added.name).toBe('Virtual key');
   expect(added.lastUsedAt).toBeNull();
-  // TODO(C2): Settings → Account lists it (name, added, last used), e.g.
-  //   await expect(page.getByRole('listitem').filter({ hasText: 'Virtual key' })).toBeVisible();
+  // Back in Settings, the list read again shows it: its name, when it was added, never used.
+  await expect(listed(page, 'Virtual key')).toBeVisible({ timeout: 20000 });
+  await expect(listed(page, 'Virtual key')).toContainText('Added');
+  await expect(listed(page, 'Virtual key')).toContainText('Not used yet');
 
   // Signed out, the passkey alone signs in, and the session makes a device of its own.
   await signOut(page);
@@ -151,17 +183,19 @@ test('a passkey added from Settings signs in on its own, and once removed is ref
   expect(used.lastUsedAt).not.toBeNull();
   expect((await authenticator.credentials())[0].signCount).toBeGreaterThan(0);
 
-  // Removed, it stops at once.
-  // TODO(C2): Settings → Account → the passkey's "Remove" (C2's button and its confirmation).
-  const csrf = (await (await page.request.get(`${API}/api/v1/account/antiforgery`)).json()) as {
-    token: string;
-    headerName: string;
-  };
-  const removed = await page.request.delete(`${API}/api/v1/account/passkeys/${used.id}`, {
-    headers: { [csrf.headerName]: csrf.token },
-  });
-  expect(removed.status()).toBe(204);
+  // Removed in Settings → Account (asked first), it stops at once.
+  await page.goto(`${APP}/#/settings`);
+  await expect(listed(page, 'Virtual key')).toContainText('Last used', { timeout: 20000 });
+  await listed(page, 'Virtual key').getByRole('button', { name: 'Remove Virtual key' }).click();
+  const ask = page.getByRole('alertdialog', { name: 'Remove the passkey “Virtual key”?' });
+  await expect(ask).toContainText('You can no longer sign in with it.');
+  await expect(ask).toContainText('until you sign them out under “Devices signed in”');
+  await ask.getByRole('button', { name: 'Remove the passkey' }).click();
+  await expect(ask).toBeHidden();
+  await expect(passkeysSection(page).getByRole('status')).toHaveText('“Virtual key” is removed.');
+  await expect(passkeysSection(page).getByText('No passkeys yet.')).toBeVisible();
   expect(await passkeys(page)).toEqual([]);
+  expect(used.id).toBe(added.id);
 
   // The authenticator still holds it; the API refuses it, and the browser stays on its page.
   await signOut(page);
@@ -210,4 +244,99 @@ test('the passkey pages pass Axe in English and Arabic, the script their only on
     }
   }
   await context.close();
+});
+
+/** The section's own words the walk presses (packages/shell/src/cloud/passkeysWords.ts). */
+const WORDS = {
+  en: { rename: 'Rename', remove: 'Remove', name: 'Name of the passkey', cancel: 'Cancel' },
+  ar: { rename: 'إعادة تسمية', remove: 'إزالة', name: 'اسم مفتاح المرور', cancel: 'إلغاء' },
+};
+
+/** Axe on one part of the page (the section, or the dialog drawn over it). */
+async function axeOn(page: Page, scope: string, screen: string) {
+  const result = await new AxeBuilder({ page }).include(scope).withTags(WCAG).analyze();
+  return result.violations.map(
+    (v) =>
+      `${screen}: ${v.id} (${v.impact}) ${v.help}\n` +
+      v.nodes
+        .slice(0, 5)
+        .map((n) => `    ${n.target.join(' ')}: ${n.failureSummary?.split('\n')[1] ?? ''}`)
+        .join('\n'),
+  );
+}
+
+/** Latin letters in what a part of the page shows or names, the passkey's own name aside. */
+async function latinIn(page: Page, scope: string, screen: string, theirs: string) {
+  return page.evaluate(
+    ({ scope, screen, theirs }) => {
+      const found: string[] = [];
+      for (const root of document.querySelectorAll<HTMLElement>(scope)) {
+        const named = [...root.querySelectorAll('[aria-label], [title], [placeholder]')].flatMap(
+          (el) => ['aria-label', 'title', 'placeholder'].map((a) => el.getAttribute(a) ?? ''),
+        );
+        for (const text of [root.innerText, ...named])
+          if (/[A-Za-z]/.test(text.split(theirs).join(' ')))
+            found.push(`${screen}: ${text.trim()}`);
+      }
+      return found;
+    },
+    { scope, screen, theirs },
+  );
+}
+
+// Settings → Account → Passkeys with a passkey listed (only a real ceremony makes one, and only on
+// `localhost`, so the walk is here rather than in a11y.spec.ts and arabic.spec.ts): the list, a
+// passkey being renamed, its removal asked; Axe in light and dark, English and Arabic, and no
+// English of the section's own in Arabic (the passkey's name is the person's).
+test('Settings’ passkeys pass Axe in both themes and languages, and the Arabic has no English of its own', async ({
+  page,
+}) => {
+  test.setTimeout(240000);
+  const errors = watchErrors(page);
+  await virtualAuthenticator(page);
+  const account = await newAccount('Walk Wafa');
+  await signInWithPassword(page, account);
+  await signedIn(page, account);
+  await page.goto(`${APP}/#/settings`);
+  await addFromSettings(page, 'Virtual key');
+  const problems: string[] = [];
+  const english: string[] = [];
+  for (const theme of ['light', 'dark'] as const) {
+    for (const language of ['en', 'ar'] as const) {
+      await page.evaluate(
+        ([theme, language]) => {
+          localStorage.setItem('cgw-theme', theme);
+          localStorage.setItem('cgw-language', language);
+        },
+        [theme, language],
+      );
+      await page.reload();
+      await expect(page.locator('html')).toHaveAttribute('dir', language === 'ar' ? 'rtl' : 'ltr');
+      const words = WORDS[language];
+      const row = listed(page, 'Virtual key');
+      await expect(row).toBeVisible({ timeout: 20000 });
+      const check = async (screen: string, scope: string) => {
+        const name = `${screen} (${theme}, ${language})`;
+        problems.push(...(await axeOn(page, scope, name)));
+        if (language === 'ar') english.push(...(await latinIn(page, scope, name, 'Virtual key')));
+      };
+      await check('the list', '[data-testid="passkeys-settings"]');
+
+      await row.getByRole('button', { name: `${words.rename} Virtual key` }).click();
+      await expect(passkeysSection(page).getByLabel(words.name)).toBeFocused();
+      await check('renaming', '[data-testid="passkeys-settings"]');
+      await passkeysSection(page).getByRole('button', { name: words.cancel, exact: true }).click();
+      await expect(row.getByRole('button', { name: `${words.rename} Virtual key` })).toBeFocused();
+
+      await row.getByRole('button', { name: `${words.remove} Virtual key` }).click();
+      const ask = page.getByRole('alertdialog');
+      await expect(ask).toBeVisible();
+      await check('removing asked', '.cgw-dialog');
+      await ask.getByRole('button', { name: words.cancel, exact: true }).click();
+      await expect(ask).toBeHidden();
+    }
+  }
+  expect(problems, problems.join('\n')).toEqual([]);
+  expect(english, english.join('\n')).toEqual([]);
+  expect(errors).toEqual([]);
 });
