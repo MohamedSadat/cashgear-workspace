@@ -9,6 +9,9 @@
 // answer, as a dropped connection does; `throttle` answers the next call of a kind with 429 (or
 // 503) and a `Retry-After`; `expire` answers an account's calls with 401.
 //
+// Phase 12: the batch pull of documents (`pullDocs`), each page checked and answered as `pullDoc`
+// checks and answers it, past an answer's size (`pullDocsBytes`) the rest deferred.
+//
 // Phase 4: databases, views and rows with the server's rules (contract sections 1, 2 and 4): the
 // client's planner again (per-property merges, coercion, type changes converting every row,
 // relations kept two-way, the tree rules), plus what only the server does: each property's
@@ -33,6 +36,7 @@ import {
   type DocCodec,
   type DocPull,
   type DocPushRequest,
+  type DocsPullItem,
   type ServerChange,
   type SyncApi,
 } from '../sync/api';
@@ -112,6 +116,7 @@ export type Kind =
   | 'tree'
   | 'pushDoc'
   | 'pullDoc'
+  | 'pullDocs'
   | 'docStateHash'
   | 'repairDoc'
   | 'fetchBytes'
@@ -128,6 +133,8 @@ export interface FakeServerOptions {
   codec?: DocCodec;
   /** For Yjs client ids it issues. */
   random?: () => number;
+  /** Update bytes a batch pull answers at most before it defers the rest (8 MiB, the server's). */
+  pullDocsBytes?: number;
 }
 
 /** The server's limits on a push (SYNC_DESIGN.md, What the server checks). */
@@ -135,6 +142,9 @@ export const MAX_UPDATE_BYTES = 1024 * 1024;
 export const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
 export const MAX_REQUEST_UPDATES = 200;
 const MAX_PULL = 1000;
+/** A batch pull's limits (Phase 12): pages a request, and update bytes an answer. */
+export const MAX_PULL_PAGES = 100;
+export const MAX_PULL_BYTES = 8 * 1024 * 1024;
 
 export class FakeServer {
   readonly spaces = new Map<Id, Space>();
@@ -155,6 +165,8 @@ export class FakeServer {
   calls: string[] = [];
   /** Every document push that reached the server: page, how many updates, how many bytes, how. */
   pushes: ServerPush[] = [];
+  /** Every batch pull that reached the server: how many pages it asked for, and how many it deferred. */
+  batchPulls: { pages: number; deferred: number }[] = [];
   /** What the worker refuses (Q20): set by `refuse`. */
   private refusing: ((update: { pageId: Id; updateId: Id; data: Uint8Array }) => boolean) | null =
     null;
@@ -1282,6 +1294,47 @@ export class FakeServer {
         this.gate('pullDoc', account);
         const { doc } = this.pageGate(account, pageId, false);
         return this.answer('pullDoc', this.pull(doc, after, account));
+      },
+      pullDocs: async (workspaceId, pages) => {
+        this.gate('pullDocs', account);
+        this.space(account, workspaceId);
+        if (
+          !pages.length ||
+          pages.length > MAX_PULL_PAGES ||
+          new Set(pages.map((p) => p.pageId)).size !== pages.length
+        )
+          throw new SyncHttpError(400, 'request.invalid');
+        // Each page as the single route answers it; past the answer's size, the rest are deferred.
+        // A page over the size alone is answered (its own paging as the single route's) when
+        // nothing before it in the answer carries updates, so the first page always is (DocPulls).
+        const cap = this.options.pullDocsBytes ?? MAX_PULL_BYTES;
+        let bytes = 0;
+        let full = false;
+        const docs = pages.map(({ pageId, after }): DocsPullItem => {
+          if (full) return { pageId, status: 0, code: 'deferred' };
+          try {
+            // A page of another workspace is not found in this one.
+            if (!this.gone.has(pageId) && this.workspaceOf(pageId) !== workspaceId)
+              throw new SyncHttpError(404, 'not.found');
+            const { doc } = this.pageGate(account, pageId, false);
+            const pull = this.pull(doc, after, account);
+            const size = pull.updates.reduce((n, u) => n + u.data.byteLength, 0);
+            if (bytes > 0 && bytes + size > cap) {
+              full = true;
+              return { pageId, status: 0, code: 'deferred' };
+            }
+            bytes += size;
+            return { pageId, status: 200, pull };
+          } catch (error) {
+            if (!(error instanceof SyncHttpError)) throw error;
+            return { pageId, status: error.status, code: error.code };
+          }
+        });
+        this.batchPulls.push({
+          pages: pages.length,
+          deferred: docs.filter((d) => d.status === 0).length,
+        });
+        return this.answer('pullDocs', docs);
       },
       docStateHash: async (pageId) => {
         this.gate('docStateHash', account);

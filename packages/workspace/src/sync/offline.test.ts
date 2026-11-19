@@ -1,7 +1,8 @@
 // Phase 3's sync loop against the fake server: signed in with no network, 401 pauses, backoff
 // with `Retry-After`, resume after sleep, long outboxes in batches, the feed past its retention,
-// the state-hash repair path, updates the worker refuses (repaired, or kept aside), and pins.
-import { describe, expect, it } from 'vitest';
+// the state-hash repair path, updates the worker refuses (repaired, or kept aside), and pins;
+// from Phase 12 the pinned databases' rows' documents, by the batch pull.
+import { describe, expect, it, vi } from 'vitest';
 import { newOp } from '../build';
 import { uuidv7, type Id } from '../ids';
 import { MemoryStore } from '../memory';
@@ -10,14 +11,17 @@ import {
   ALICE,
   device,
   localWorkspace,
+  makeDatabase,
+  PROP,
   mirrorShape,
   pageRecord,
   serverShape,
   sharedWorkspace,
   VirtualClock,
+  type Device,
 } from '../testing/syncHarness';
 import type { StoredUpdate } from '../types';
-import { OfflineError, type DocCodec } from './api';
+import { OfflineError, SyncHttpError, type DocCodec, type SyncApi } from './api';
 import { ACCOUNT_PREF, pushBatches, PUSH_LIMITS } from './engine';
 
 const update = (bytes: number, client = 7) => {
@@ -692,15 +696,19 @@ describe('pins', () => {
     let passes = 0;
     let most = 0;
     while ((await two.engine.offlineProgress(ws.id)).toFetch > 0) {
-      const before = server.calls.filter((c) => c === 'pullDoc').length;
+      const before = server.batchPulls.length;
       await two.engine.syncOnce();
-      most = Math.max(most, server.calls.filter((c) => c === 'pullDoc').length - before);
+      const requests = server.batchPulls.slice(before);
+      most = Math.max(most, requests.length);
+      for (const request of requests) expect(request.pages).toBeLessThanOrEqual(100);
       passes++;
       expect(passes).toBeLessThan(80);
     }
-    // 2 minutes at a pass every 1.5 s is 80 passes; each pass fetches a bounded number.
-    expect(passes).toBeLessThanOrEqual(Math.ceil(502 / 24));
-    expect(most).toBeLessThanOrEqual(24);
+    // 2 minutes at a pass every 1.5 s is 80 passes; each pass fetches a bounded number: from
+    // Phase 12 two batch pulls of 100 pages, none of them one by one.
+    expect(passes).toBeLessThanOrEqual(Math.ceil(502 / 200));
+    expect(most).toBeLessThanOrEqual(2);
+    expect(server.calls.filter((c) => c === 'pullDoc')).toEqual([]);
     expect(offline.length).toBeGreaterThan(0);
     expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ pinned: 502, held: 502 });
     expect(await two.engine.pinOf(pages[499].id)).toMatchObject({ inherited: true });
@@ -719,5 +727,337 @@ describe('pins', () => {
     expect((await two.engine.availableOffline(ws.id)).has(later.id)).toBe(true);
     // 502 and the later one, less the trashed page and the 24 under it.
     expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ pinned: 478, toFetch: 0 });
+  });
+});
+
+// Phase 12 (M12.4): a pinned database holds each of its rows' documents, through the batch pull.
+const text = async (store: MemoryStore, pageId: Id) =>
+  decode(fakeCodec.merge((await store.loadDoc(pageId)).updates.map((u) => u.data))).text;
+
+/** A document pushed to a page as another device of Alice's would (the feed then says so). */
+const pushElsewhere = (server: FakeServer, pageId: Id, words: string) =>
+  server.api(ALICE).pushDoc(pageId, {
+    epoch: 0,
+    clientSchemaVersion: 1,
+    updates: [{ updateId: uuidv7(), data: fakeUpdate(70, words) }],
+  });
+
+/**
+ * Alice's workspace with a database under Alpha whose `count` rows the server made (as an import
+ * does), each with a document unless `bare` says not; and a second device of hers that knows the
+ * workspace and holds nothing of the database yet.
+ */
+async function databaseOfRows(
+  count: number,
+  options: {
+    bare?: (i: number) => boolean;
+    server?: FakeServer;
+    device?: Parameters<typeof device>[2];
+  } = {},
+) {
+  const server = options.server ?? new FakeServer();
+  const shared = await sharedWorkspace(server);
+  const { ws, section, a, one } = shared;
+  const { db } = await makeDatabase(one.store, ws.id, section.id, a.id, []);
+  await one.engine.syncOnce();
+  const rows = server.seedRows(db.id, count);
+  for (const [i, row] of rows.entries())
+    if (!options.bare?.(i)) await pushElsewhere(server, row.id, `row ${i}`);
+  const two = device(server, ALICE, options.device ?? {});
+  await two.engine.syncOnce();
+  return { ...shared, server, db: db.id, rows, two };
+}
+
+/** Passes until every pinned page and row document is held; the batch pulls each pass made. */
+async function untilHeld(two: Device, server: FakeServer, workspaceId: Id) {
+  const passes: number[][] = [];
+  for (;;) {
+    const before = server.batchPulls.length;
+    await two.engine.syncOnce();
+    passes.push(server.batchPulls.slice(before).map((b) => b.pages));
+    const progress = await two.engine.offlineProgress(workspaceId);
+    if (!progress.toFetch && !progress.rowsToFetch) return { passes, progress };
+    if (passes.length > 200) throw new Error('Never held');
+  }
+}
+
+/** A device's batch pulls as asked: the pages of each request, in order. */
+function askedOf(asked: Id[][]) {
+  return (base: SyncApi): Partial<SyncApi> => ({
+    pullDocs: async (workspaceId, pages) => {
+      asked.push(pages.map((p) => p.pageId));
+      return base.pullDocs(workspaceId, pages);
+    },
+  });
+}
+
+describe("pins: a database's rows' documents", { timeout: 60_000 }, () => {
+  it('holds every row document of a pinned 5,000-row database in batches of 100, two a pass, rows without one skipped, and caps it at 5,000', async () => {
+    const asked: Id[][] = [];
+    const bare = (i: number) => i % 50 === 7;
+    const { server, ws, db, rows, two } = await databaseOfRows(5000, {
+      bare,
+      device: { api: askedOf(asked) },
+    });
+    await two.engine.pin(db);
+    const { passes, progress } = await untilHeld(two, server, ws.id);
+    expect(progress).toMatchObject({ pinned: 1, held: 1, rows: 4900, rowsHeld: 4900 });
+    // The database's own page first (it is pinned), then 4,900 documents: 50 requests of at most
+    // 100 pages, at most two a pass, nothing one by one, nothing twice.
+    expect(asked[0][0]).toBe(db);
+    expect(asked.flat()).toHaveLength(4901);
+    expect(new Set(asked.flat()).size).toBe(4901);
+    expect(asked).toHaveLength(50);
+    expect(Math.max(...asked.map((a) => a.length))).toBe(100);
+    expect(Math.max(...passes.map((p) => p.length))).toBeLessThanOrEqual(2);
+    expect(passes.length).toBeLessThanOrEqual(26);
+    expect(server.calls.filter((c) => c === 'pullDoc')).toEqual([]);
+    // Rows without a document are never asked for, and are not held.
+    const without = rows.filter((_, i) => bare(i)).map((r) => r.id);
+    expect(asked.flat().filter((id) => without.includes(id))).toEqual([]);
+    const held = await two.engine.availableOffline(ws.id);
+    expect(without.filter((id) => held.has(id))).toEqual([]);
+    // In the database's row order.
+    expect(asked[0].slice(1, 4)).toEqual(rows.slice(0, 3).map((r) => r.id));
+    // Offline, each opens from the store.
+    server.offline = true;
+    expect(await text(two.store, rows[0].id)).toBe('row 0');
+    expect(await text(two.store, rows[4999].id)).toBe('row 4999');
+    server.offline = false;
+
+    // Past 5,000 rows the database is held in part, and its documents are capped: those of its
+    // first 5,000 rows with one, in its order, that this device holds. 110 more rows with
+    // documents come last: the first 100 are fetched, the last ten are not.
+    const more = server.seedRows(db, 110);
+    for (const row of more) await pushElsewhere(server, row.id, 'later');
+    await two.engine.syncOnce();
+    await two.engine.syncOnce();
+    expect(await two.store.dbHold(db)).toMatchObject({ mode: 'partial' });
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({
+      rows: 5000,
+      rowsHeld: 5000,
+      rowsToFetch: 0,
+    });
+    const after = await two.engine.availableOffline(ws.id);
+    expect(more.slice(0, 100).every((r) => after.has(r.id))).toBe(true);
+    expect(more.slice(100).filter((r) => after.has(r.id))).toEqual([]);
+  });
+
+  it('keeps them fresh (moved heads in one batch), fetches a row given a document later, and after an unpin fetches nothing more and keeps what is held', async () => {
+    const asked: Id[][] = [];
+    const { server, ws, db, rows, two } = await databaseOfRows(30, {
+      bare: (i) => i % 10 === 0,
+      device: { api: askedOf(asked) },
+    });
+    // A subtree pin over the database's page holds them too.
+    await two.engine.pin((await two.store.getPage(db))!.parentPageId!, true);
+    await untilHeld(two, server, ws.id);
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rows: 27, rowsHeld: 27 });
+
+    // Three held rows edited elsewhere, and a row without a document given one.
+    for (const i of [1, 2, 3]) await pushElsewhere(server, rows[i].id, ' edited');
+    await pushElsewhere(server, rows[10].id, 'now with words');
+    asked.length = 0;
+    const singles = server.calls.filter((c) => c === 'pullDoc').length;
+    await two.engine.syncOnce();
+    expect(asked).toEqual([[rows[1].id, rows[2].id, rows[3].id]]);
+    // The one new document alone, by its own route.
+    expect(server.calls.filter((c) => c === 'pullDoc').length).toBe(singles + 1);
+    expect(await text(two.store, rows[2].id)).toBe('row 2 edited');
+    expect(await text(two.store, rows[10].id)).toBe('now with words');
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rows: 28, rowsToFetch: 0 });
+
+    // Unpinned: not counted, nothing new fetched; what is held stays, and is still kept fresh.
+    await two.engine.unpin((await two.store.getPage(db))!.parentPageId!);
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ pinned: 0, rows: 0 });
+    await pushElsewhere(server, rows[20].id, 'after the unpin');
+    await pushElsewhere(server, rows[4].id, ' again');
+    await two.engine.syncOnce();
+    await two.engine.syncOnce();
+    const held = await two.engine.availableOffline(ws.id);
+    expect(held.has(rows[20].id)).toBe(false);
+    expect(held.has(rows[1].id)).toBe(true);
+    expect(await text(two.store, rows[4].id)).toBe('row 4 again');
+  });
+
+  it('once every document is held, reads the database whole again only when a changed row lacks its document', async () => {
+    class Counting extends MemoryStore {
+      reads = 0;
+      override readRows(...args: Parameters<MemoryStore['readRows']>) {
+        this.reads++;
+        return super.readRows(...args);
+      }
+    }
+    const store = new Counting();
+    const { server, ws, one, db, rows, two } = await databaseOfRows(40, {
+      bare: (i) => i === 39,
+      device: { store },
+    });
+    await two.engine.pin(db);
+    await untilHeld(two, server, ws.id);
+    await two.engine.syncOnce();
+    const settled = store.reads;
+    // Values edited elsewhere, and held rows' documents moved: nothing lacks a document.
+    await one.engine.syncOnce();
+    await one.store.applyLocalOps(
+      rows
+        .slice(0, 5)
+        .map((r) => newOp('row.update', ws.id, r.id, { values: { [PROP.notes]: 'edited' } })),
+    );
+    await one.engine.syncOnce();
+    await pushElsewhere(server, rows[6].id, ' moved');
+    await two.engine.syncOnce();
+    expect(await text(two.store, rows[6].id)).toBe('row 6 moved');
+    expect(store.reads).toBe(settled);
+    // A row given its first document: read whole, and fetched; read once more in the next pass,
+    // which finds every document held; then nothing again.
+    await pushElsewhere(server, rows[39].id, 'first words');
+    await two.engine.syncOnce();
+    expect(store.reads).toBe(settled + 1);
+    expect(await text(two.store, rows[39].id)).toBe('first words');
+    await two.engine.syncOnce();
+    await two.engine.syncOnce();
+    expect(store.reads).toBe(settled + 2);
+  });
+
+  it('takes the rest of a batch when one page in it is refused, and asks for that one again only once its record comes anew', async () => {
+    const asked: Id[][] = [];
+    let victim: Id | null = null;
+    const { server, ws, db, rows, two } = await databaseOfRows(6, {
+      device: {
+        api: (base) => ({
+          pullDocs: async (workspaceId, pages) => {
+            asked.push(pages.map((p) => p.pageId));
+            const answer = await base.pullDocs(workspaceId, pages);
+            return answer.map((item) =>
+              item.pageId === victim
+                ? { pageId: item.pageId, status: 403, code: 'access.denied' }
+                : item,
+            );
+          },
+        }),
+      },
+    });
+    victim = rows[2].id;
+    await two.engine.pin(db);
+    await two.engine.syncOnce();
+    expect(two.engine.status.state).toBe('synced');
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rows: 6, rowsHeld: 5 });
+    expect((await two.engine.availableOffline(ws.id)).has(victim)).toBe(false);
+    // Not asked for again pass after pass.
+    asked.length = 0;
+    await two.engine.syncOnce();
+    await two.engine.syncOnce();
+    expect(asked).toEqual([]);
+    // Its record comes anew (here, its document moved): asked again (alone, by its own route),
+    // and taken.
+    victim = null;
+    await pushElsewhere(server, rows[2].id, ' and more');
+    const singles = server.calls.filter((c) => c === 'pullDoc').length;
+    await two.engine.syncOnce();
+    expect(asked).toEqual([]);
+    expect(server.calls.filter((c) => c === 'pullDoc').length).toBe(singles + 1);
+    expect(await text(two.store, rows[2].id)).toBe('row 2 and more');
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rowsToFetch: 0 });
+  });
+
+  it('asks again first for the pages an answer deferred (its size cap)', async () => {
+    const asked: Id[][] = [];
+    // A cap so small that each answer carries one page's updates: the first is always answered.
+    const { server, ws, db, rows, two } = await databaseOfRows(5, {
+      server: new FakeServer({ pullDocsBytes: 1 }),
+      device: { api: askedOf(asked) },
+    });
+    await two.engine.pin(db);
+    await two.engine.syncOnce();
+    const ids = rows.map((r) => r.id);
+    // Two requests this pass (the database's own page, with no updates, and the first row, then
+    // the rest): the second starts with the first's deferred pages, in order.
+    expect(asked).toEqual([[db, ...ids], ids.slice(1)]);
+    expect(server.batchPulls.slice(0, 2)).toEqual([
+      { pages: 6, deferred: 4 },
+      { pages: 4, deferred: 3 },
+    ]);
+    await untilHeld(two, server, ws.id);
+    // Each later request starts with what the one before deferred; the last page, alone, by its
+    // own route.
+    expect(asked.map((a) => a[0])).toEqual([db, ...ids.slice(1, 4)]);
+    for (const [i, row] of rows.entries()) expect(await text(two.store, row.id)).toBe(`row ${i}`);
+  });
+
+  it("backs off the pins alone for a 429's Retry-After: the rest of the loop syncs meanwhile", async () => {
+    const clock = new VirtualClock();
+    const { server, ws, a, db, two } = await databaseOfRows(8, { device: { ...clock } });
+    await two.engine.pin(db);
+    server.throttle('pullDocs', 30_000);
+    await two.engine.syncOnce();
+    expect(two.engine.status).toMatchObject({ state: 'synced', waiting: 0 });
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rows: 8, rowsHeld: 0 });
+    const asks = () => server.calls.filter((c) => c === 'pullDocs').length;
+    const tried = asks();
+    // Typing still goes up while the pins wait.
+    await append(two.store, a.id, [fakeUpdate(71, 'typed meanwhile')]);
+    clock.jump(29_000);
+    await two.engine.syncOnce();
+    expect(asks()).toBe(tried);
+    expect(server.docs.get(a.id)!.rows.some((r) => decode(r.data).text === 'typed meanwhile')).toBe(
+      true,
+    );
+    clock.jump(2000);
+    await two.engine.syncOnce();
+    expect(asks()).toBe(tried + 1);
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rowsHeld: 8, rowsToFetch: 0 });
+  });
+
+  it('goes on from where it stopped when the network goes in the middle, nothing asked twice', async () => {
+    let calls = 0;
+    const box: { server: FakeServer | null } = { server: null };
+    const server = new FakeServer();
+    box.server = server;
+    const { ws, db, two } = await databaseOfRows(450, {
+      server,
+      device: {
+        api: (base) => ({
+          pullDocs: async (workspaceId, pages) => {
+            if (++calls === 2) box.server!.offline = true;
+            return base.pullDocs(workspaceId, pages);
+          },
+        }),
+      },
+    });
+    await two.engine.pin(db);
+    await expect(two.engine.syncOnce()).rejects.toThrow(OfflineError);
+    // The first request: the database's own page and 99 rows.
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rows: 450, rowsHeld: 99 });
+    server.offline = false;
+    await untilHeld(two, server, ws.id);
+    // The request the network took never reached the server: every page was served once.
+    expect(server.batchPulls.reduce((n, b) => n + b.pages, 0)).toBe(451);
+    expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rowsHeld: 450 });
+  });
+
+  it('pulls page by page from a server without the batch route, and never takes its 404 for the workspace gone', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { server, ws, db, two } = await databaseOfRows(30, {
+        device: {
+          api: () => ({
+            pullDocs: async () => {
+              throw new SyncHttpError(404, 'not.found');
+            },
+          }),
+        },
+      });
+      await two.engine.pin(db);
+      await untilHeld(two, server, ws.id);
+      expect((await two.store.readMirror(ws.id)).workspaces).toHaveLength(1);
+      expect(two.notices()).toEqual([]);
+      expect(await two.engine.offlineProgress(ws.id)).toMatchObject({ rows: 30, rowsHeld: 30 });
+      // Asked once; from then on one by one (24 a pass), as before Phase 12.
+      expect(server.calls.filter((c) => c === 'pullDoc').length).toBeGreaterThanOrEqual(30);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

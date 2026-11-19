@@ -42,6 +42,7 @@ import {
   type Account,
   type ChangesPage,
   type DocPull,
+  type DocsPullItem,
   type QueryAnswer,
   type RowsPage,
   type ServerChange,
@@ -133,6 +134,24 @@ interface RepairAnswer {
   pull: Pull;
 }
 type Answer<T> = Promise<{ data?: T; error?: unknown; response: Response }>;
+
+/**
+ * Phase 12's batch pull of documents (`POST /workspaces/{id}/docs/pull`): each item one page, in
+ * the request's order, as the engine reads it: `status` 200 with the single route's `pull`, `0`
+ * with `deferred`, or the single route's refusal.
+ */
+const docsPullItem = (item: Schemas['DocsPullItem']): DocsPullItem => {
+  const status = num(item.status);
+  if (status === 200 && item.pull)
+    return { pageId: item.pageId, status: 200, pull: docPull(item.pull) };
+  // Neither a pull nor a code: asked again, as a deferred page is.
+  return {
+    pageId: item.pageId,
+    status: status === 200 ? 0 : status,
+    code: item.code ?? 'deferred',
+  };
+};
+
 interface Phase3Routes {
   GET(
     path: '/api/v1/pages/{pageId}/doc/state-hash',
@@ -437,6 +456,16 @@ export function httpSyncApi(api: ApiClient): SyncApi {
           api.GET('/api/v1/pages/{pageId}/doc', { params: { path: { pageId }, query: { after } } }),
         ),
       );
+    },
+
+    async pullDocs(workspaceId, pages): Promise<DocsPullItem[]> {
+      const answer = await call(() =>
+        api.POST('/api/v1/workspaces/{workspaceId}/docs/pull', {
+          params: { path: { workspaceId } },
+          body: { pages: pages.map((p) => ({ pageId: p.pageId, after: p.after })) },
+        }),
+      );
+      return answer.docs.map(docsPullItem);
     },
 
     async docStateHash(pageId) {

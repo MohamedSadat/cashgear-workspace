@@ -8,14 +8,16 @@
 //   3. pull the change feed until it has no more (the whole tree when the feed has been pruned
 //      past this device's cursor), and resync any subtree access changed on;
 //   4. pull documents this device holds whose server head moved, then a bounded number of pinned
-//      pages it does not hold yet;
+//      pages it does not hold yet (Phase 12: and of pinned databases' rows' documents), by the
+//      batch route, a hundred pages a request;
 //   5. repair pages whose own updates the worker refused (their whole state, which carries what
 //      the refused ones referred to), then compare a few pages' state hashes with the server's,
 //      and repair those that differ.
 // Phase 4 (databases): after the feed, the rows of databases this device holds in full and has
 // not fetched yet come by their own route (at most 4 requests of 1,000 rows a pass, the next pass
 // soon while some remain); the feed keeps held rows fresh after that; pins hold the databases in
-// them; rows' documents are pulled and pushed as pages' are.
+// them; rows' documents are pulled and pushed as pages' are. Phase 12: a pinned database holds
+// each of its rows' documents too (up to 5,000), fetched as pinned pages are.
 // Failures back off exponentially with jitter, capped at 5 minutes and never shorter than the
 // server's `Retry-After`; a timer that fires far later than it was set for (the machine slept)
 // runs a pass at once with the backoff reset. A 401 pauses the loop until the user signs in
@@ -52,12 +54,14 @@ import {
   type WorkspaceRecord,
 } from '../types';
 import {
+  DOCS_PULL_PAGES,
   OfflineError,
   SyncHttpError,
   dependsOnCreate,
   type Account,
   type DocCodec,
   type DocPull,
+  type DocsPullItem,
   type DocStateHash,
   type QueryAnswer,
   type QueryRequest,
@@ -139,8 +143,10 @@ export interface SyncOptions {
   random?: () => number;
   /** Wall-clock milliseconds, for tests: a timer that fires far too late means the machine slept. */
   now?: () => number;
-  /** Pinned pages fetched per pass (default 24). */
+  /** Pages a batch pull of documents asks for (default and most 100). */
   pinBatch?: number;
+  /** Batch pulls a pass makes for what pins cover and the device does not hold (default 2). */
+  pinRequests?: number;
   /** Rows a request of a database's rows asks for (default 1,000), and requests a pass (4). */
   rowsPage?: number;
   rowsRequests?: number;
@@ -156,8 +162,17 @@ export interface OfflineProgress {
   held: number;
   /** Pinned pages still to fetch. */
   toFetch: number;
-  /** Every page of the workspace this device holds, pinned or only opened. */
+  /** Every page of the workspace this device holds, pinned or only opened (rows' pages too). */
   available: number;
+  /**
+   * Phase 12: the documents pinned databases hold, each row's that has one on the server (its
+   * templates', and up to `PIN_ROW_DOCS` rows' a database, in its row order).
+   */
+  rows: number;
+  /** Of those, the documents this device holds. */
+  rowsHeld: number;
+  /** Rows' documents still to fetch. */
+  rowsToFetch: number;
 }
 
 const MAX_BACKOFF = 5 * 60_000;
@@ -181,8 +196,17 @@ export const PUSH_LIMITS = {
 /** Unsent updates read at a time, and how many such reads a pass makes before it yields. */
 const PUSH_READ = 200;
 const PUSH_ROUNDS = 10;
-const PIN_BATCH = 24;
+/** Batch pulls a pass makes for what pins cover (Phase 12), each of `DOCS_PULL_PAGES` pages. */
+const PIN_REQUESTS = 2;
+/** Batch pulls a pass makes for held pages whose head moved. */
+const MOVED_REQUESTS = 10;
+/** With no batch route (an older server), pinned pages pulled one by one a pass (Phase 3's). */
+const PIN_SINGLES = 24;
 const PIN_PARALLEL = 4;
+/** How long the pins' fetch waits after a 429 or 503 that named no `Retry-After`. */
+const PIN_WAIT = 60_000;
+/** A pinned database holds at most this many rows' documents (and its templates'). */
+export const PIN_ROW_DOCS = LOCAL_ROW_LIMIT;
 /** State-hash checks a pass makes, and passes a check waits for the server to catch up. */
 const CHECKS_PER_PASS = 4;
 const CHECK_TRIES = 20;
@@ -294,6 +318,14 @@ export function pushBatches(updates: StoredUpdate[], limits = PUSH_LIMITS): Stor
   return out;
 }
 
+/** Strings in code-unit order, as the database's row order compares them (db/query.ts). */
+const ordinal = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** The pinned pages that are databases' pages. */
+function pinnedDatabases(pages: PageRecord[], pinned: ReadonlySet<Id>): Id[] {
+  return pages.filter((p) => p.kind === 'database' && pinned.has(p.id)).map((p) => p.id);
+}
+
 export class SyncEngine {
   private account: Account | null = null;
   /** Whose changes the status counts while signed out (the cached or last account). */
@@ -346,6 +378,22 @@ export class SyncEngine {
   private quarantineDirty = true;
   /** Workspaces whose held pages changed in this pass. */
   private readonly heldChanged = new Set<Id>();
+  /**
+   * Phase 12: pages a batch pull refused (not found, gone, not readable): not asked for again until
+   * the feed or a tree brings their record anew.
+   */
+  private readonly pullRefused = new Set<Id>();
+  /**
+   * Pinned databases whose rows' documents were all held when last read: not read whole again
+   * until their hold or record changes, or a row that changed since lacks its document.
+   */
+  private readonly rowDocsHeld = new Set<Id>();
+  /** Rows of those databases that came since (the feed, a fetch, a query), by database. */
+  private readonly rowDocsChanged = new Map<Id, Map<Id, RowRecord>>();
+  /** No batch pull for what pins cover before this (the server's `Retry-After`), wall clock. */
+  private pinsNotBefore = 0;
+  /** False once the server refused the batch route (an older one): pages go one by one. */
+  private batchPull = true;
   /** Workspaces where a tree operation on a subtree was answered: the mirror is checked after the feed. */
   private readonly reconcile = new Set<Id>();
   private mine = new Set<Id>();
@@ -777,7 +825,7 @@ export class SyncEngine {
           await this.holdPinned(workspace, mirror.pages, mirror.databases, pinned);
           await this.fetchRows(workspace, mirror.databases);
           await this.pullDocs(workspace, mirror.pages, pinned);
-          await this.fetchPinned(workspace, pinned);
+          await this.fetchPinned(workspace, mirror.pages, pinned);
           await this.repairRefused(workspace);
           await this.runChecks(workspace);
         } catch (error) {
@@ -845,11 +893,38 @@ export class SyncEngine {
     ]);
     // A row delete names no database: every held one is read again.
     const removed = !!batch.deleteRows?.length;
+    this.noteRowDocs(batch, removed);
     await this.store.applyRemote(batch);
     if (!touched.size && !removed) return;
     for (const hold of await this.store.dbHolds(workspaceId))
       if (removed || touched.has(hold.databaseId))
         this.emit({ kind: 'rows', workspaceId, databaseId: hold.databaseId });
+  }
+
+  /**
+   * What a batch means for the pinned databases' rows' documents (`fetchPinned`): a row that came
+   * may have a document this device lacks, so it is looked at; a database whose hold or record
+   * changed (a row made or removed elsewhere moves its count), or a row removed, is read whole.
+   */
+  private noteRowDocs(batch: RemoteBatch, removed: boolean) {
+    if (removed) {
+      this.rowDocsHeld.clear();
+      this.rowDocsChanged.clear();
+      return;
+    }
+    for (const row of batch.rows ?? []) {
+      if (!this.rowDocsHeld.has(row.databaseId)) continue;
+      let changed = this.rowDocsChanged.get(row.databaseId);
+      if (!changed) this.rowDocsChanged.set(row.databaseId, (changed = new Map()));
+      changed.set(row.id, row);
+    }
+    for (const id of [
+      ...(batch.holds ?? []).map((h) => h.databaseId),
+      ...(batch.databases ?? []).map((d) => d.id),
+    ]) {
+      this.rowDocsHeld.delete(id);
+      this.rowDocsChanged.delete(id);
+    }
   }
 
   /** What waits in a workspace's outbox, by entity: the types of operation on each. */
@@ -1394,6 +1469,8 @@ export class SyncEngine {
     if (!pages.length && !rows.length) return;
     const heads = await this.store.docCursors(workspaceId);
     for (const p of [...pages, ...rows]) {
+      // Its record came anew (a grant, a move, its head): a pull refused before is asked again.
+      this.pullRefused.delete(p.id);
       const held = heads[p.id];
       if (held && ((p.docHeadSeq ?? 0) > held.headSeq || (p.docEpoch ?? 0) !== held.epoch))
         this.wanted.add(p.id);
@@ -1525,6 +1602,11 @@ export class SyncEngine {
     );
   }
 
+  /**
+   * Held pages whose head moved, and pages asked for: one alone by its own route, more by the
+   * batch route (Phase 12), at most `MOVED_REQUESTS` requests a pass (the next pass soon while
+   * some remain).
+   */
   private async pullDocs(workspace: WorkspaceRecord, pages: PageRecord[], pinned: Set<Id>) {
     const heads = await this.store.docCursors(workspace.id);
     const creating = await this.creating(workspace.id);
@@ -1538,17 +1620,135 @@ export class SyncEngine {
       if (!row) this.wanted.delete(id);
       else if (row.kind === 'row' && row.workspaceId === workspace.id) rows.push(row);
     }
+    const due: { page: PageRecord; after: number }[] = [];
+    const moved = new Set<Id>();
     for (const page of [...pages, ...rows]) {
       if (creating.has(page.id)) continue;
       const held = heads[page.id];
-      const moved =
-        held && ((page.docHeadSeq ?? 0) > held.headSeq || (page.docEpoch ?? 0) !== held.epoch);
-      if (!this.wanted.has(page.id) && !moved) continue;
-      const added = await this.pullDoc(page);
-      // A pinned page refreshed with others' edits: its state is checked against the server's.
-      if (moved && added && pinned.has(page.id) && !this.checks.has(page.id))
-        this.checks.set(page.id, 0);
+      if (held && ((page.docHeadSeq ?? 0) > held.headSeq || (page.docEpoch ?? 0) !== held.epoch))
+        moved.add(page.id);
+      if (!this.wanted.has(page.id) && (!moved.has(page.id) || this.pullRefused.has(page.id)))
+        continue;
+      due.push({ page, after: held?.headSeq ?? 0 });
     }
+    if (!due.length) return;
+    const { added, left } = await this.pullMany(workspace.id, due, MOVED_REQUESTS, Infinity);
+    if (left) this.backlog = true;
+    // A pinned page refreshed with others' edits: its state is checked against the server's.
+    for (const [id, count] of added)
+      if (count && moved.has(id) && pinned.has(id) && !this.checks.has(id)) this.checks.set(id, 0);
+  }
+
+  /**
+   * Pulls pages (`after`: the cursor each is asked from). One alone, or all with no batch route,
+   * by the page's own route (`singles` of them, four at a time); more by the batch route (Phase
+   * 12): `DOCS_PULL_PAGES` a request, at most `requests` requests, a page the answer deferred
+   * asked again first. Each answered page is taken in its own turn, four at a time. Returns how
+   * many updates each page lacked, and how many pages are left for a later pass.
+   */
+  private async pullMany(
+    workspaceId: Id,
+    asked: { page: PageRecord; after: number }[],
+    requests: number,
+    singles: number,
+  ): Promise<{ added: Map<Id, number>; left: number }> {
+    const size = Math.max(1, Math.min(DOCS_PULL_PAGES, this.options.pinBatch ?? DOCS_PULL_PAGES));
+    const added = new Map<Id, number>();
+    let queue = asked;
+    let made = 0;
+    const alone = asked.length === 1;
+    while (queue.length) {
+      if (!this.batchPull || alone) {
+        const now = queue.slice(0, singles);
+        queue = queue.slice(now.length);
+        await this.inTurns(now, async ({ page }) => {
+          added.set(page.id, await this.pullDoc(page));
+        });
+        break;
+      }
+      if (made++ >= requests) break;
+      const batch = queue.slice(0, size);
+      const items = await this.askBatch(workspaceId, batch);
+      // No batch route after all: the same pages, one by one.
+      if (!items) continue;
+      queue = queue.slice(batch.length);
+      const byId = new Map(items.map((item) => [item.pageId, item]));
+      const again = new Set<Id>();
+      await this.inTurns(batch, async ({ page, after }) => {
+        const item = byId.get(page.id);
+        const pull = item?.pull;
+        if (!item || (!pull && item.status === 0)) again.add(page.id);
+        else if (!pull) this.refusedPull(page, item.status);
+        else
+          added.set(page.id, await this.onPage(page.id, () => this.takeBatched(page, after, pull)));
+      });
+      queue = [...batch.filter(({ page }) => again.has(page.id)), ...queue];
+    }
+    return { added, left: queue.length };
+  }
+
+  /**
+   * One request of the batch route, or null when the server will not take it: an older server has
+   * no such route (its 404 must not read as the workspace gone, which would remove it here), and
+   * one that refuses the request would refuse it every pass. Pages then go one by one this session.
+   */
+  private async askBatch(
+    workspaceId: Id,
+    batch: { page: PageRecord; after: number }[],
+  ): Promise<DocsPullItem[] | null> {
+    try {
+      return await this.api.pullDocs(
+        workspaceId,
+        batch.map(({ page, after }) => ({ pageId: page.id, after })),
+      );
+    } catch (error) {
+      if (!(error instanceof SyncHttpError) || ![400, 404, 405].includes(error.status)) throw error;
+      console.warn('The batch pull was refused; pulling pages one by one:', error.code);
+      this.batchPull = false;
+      return null;
+    }
+  }
+
+  /**
+   * A batch's answer for one page, in the page's own turn, as `pullDocNow` takes its first answer.
+   * A page whose cursor moved since it was asked (a frame, an opening), or of another epoch, is
+   * pulled by its own route instead, which knows what to do with either.
+   */
+  private async takeBatched(page: PageRecord, after: number, pull: DocPull): Promise<number> {
+    const cursor = await this.store.docCursor(page.id);
+    if ((cursor?.headSeq ?? 0) !== after || (cursor && cursor.epoch !== pull.epoch))
+      return this.pullDocNow(page);
+    this.wanted.delete(page.id);
+    let added = await this.takePull(page, pull, !cursor, after, after);
+    if (pull.more) added += await this.pullDocNow(page);
+    return added;
+  }
+
+  /**
+   * A page the batch route refused: nothing to take, as the page's own route's 404 and 410 give
+   * nothing; one not found, gone or not readable is not asked for again until its record comes
+   * anew (`beforeRemote`). Any other refusal is asked again in a later pass.
+   */
+  private refusedPull(page: PageRecord, status: number) {
+    this.wanted.delete(page.id);
+    if (status === 403 || status === 404 || status === 410) this.pullRefused.add(page.id);
+  }
+
+  /** `fn` over `items`, four at a time; the first failure stops what has not started, then is thrown. */
+  private async inTurns<T>(items: T[], fn: (item: T) => Promise<void>) {
+    let failure: unknown = null;
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length && failure === null) {
+        try {
+          await fn(items[next++]);
+        } catch (error) {
+          failure ??= error;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PIN_PARALLEL, items.length) }, worker));
+    if (failure !== null) throw failure;
   }
 
   /** Pulls a page until it holds the server's head; returns how many updates it lacked. */
@@ -1807,14 +2007,21 @@ export class SyncEngine {
     const page = await this.store.getPage(pageId);
     if (!page) throw new Error('No such page');
     await this.store.pin({ workspaceId: page.workspaceId, pageId, subtree, pinnedAt: this.iso() });
+    this.rowDocsHeld.clear();
+    this.rowDocsChanged.clear();
     this.emit({ kind: 'offline', workspaceId: page.workspaceId });
     this.kick(0);
   }
 
-  /** Stops keeping a page fresh for offline use; what is held stays until it is needed no more. */
+  /**
+   * Stops keeping a page (and a database's rows' documents) for offline use: nothing more is
+   * fetched for it, and what is held stays, as an opened page's does.
+   */
   async unpin(pageId: Id): Promise<void> {
     const page = await this.store.getPage(pageId);
     await this.store.unpin(pageId);
+    this.rowDocsHeld.clear();
+    this.rowDocsChanged.clear();
     if (page) this.emit({ kind: 'offline', workspaceId: page.workspaceId });
   }
 
@@ -1837,19 +2044,32 @@ export class SyncEngine {
     return null;
   }
 
-  /** What the shell shows of offline use: pins, how many pinned pages are held, what remains. */
+  /**
+   * What the shell shows of offline use: pins, how many pinned pages are held, what remains, and
+   * the same of pinned databases' rows' documents (Phase 12).
+   */
   async offlineProgress(workspaceId: Id): Promise<OfflineProgress> {
     const mirror = await this.store.readMirror(workspaceId);
     const pinned = await this.pinnedPages(workspaceId, mirror.pages);
     const held = new Set(await this.store.heldPages(workspaceId));
     let have = 0;
     for (const id of pinned) if (held.has(id)) have++;
+    let rows = 0;
+    let rowsHeld = 0;
+    for (const id of pinnedDatabases(mirror.pages, pinned))
+      for (const row of await this.rowDocs(id)) {
+        rows++;
+        if (held.has(row.id)) rowsHeld++;
+      }
     return {
       pins: await this.store.pins(workspaceId),
       pinned: pinned.size,
       held: have,
       toFetch: pinned.size - have,
       available: held.size,
+      rows,
+      rowsHeld,
+      rowsToFetch: rows - rowsHeld,
     };
   }
 
@@ -1887,31 +2107,67 @@ export class SyncEngine {
     return out;
   }
 
-  /** A bounded number of pinned pages this device does not hold, a few at a time. */
-  private async fetchPinned(workspace: WorkspaceRecord, pinned: Set<Id>) {
-    if (!pinned.size) return;
+  /**
+   * What pins cover and this device does not hold: pinned pages first, then pinned databases'
+   * rows' documents (Phase 12, `rowDocs`), by the batch route, at most `PIN_REQUESTS` requests a
+   * pass (the next pass soon while some remain). After a 429 or 503 the pins wait out the server's
+   * `Retry-After` while the rest of the loop goes on: what is typed still syncs.
+   */
+  private async fetchPinned(workspace: WorkspaceRecord, pages: PageRecord[], pinned: Set<Id>) {
+    if (!pinned.size || this.now() < this.pinsNotBefore) return;
     const held = new Set(await this.store.heldPages(workspace.id));
     const creating = await this.creating(workspace.id);
-    const todo = [...pinned].filter((id) => !held.has(id) && !creating.has(id));
-    if (!todo.length) return;
-    const batch = todo.slice(0, this.options.pinBatch ?? PIN_BATCH);
-    if (todo.length > batch.length) this.backlog = true;
-    let failure: unknown = null;
-    let next = 0;
-    const worker = async () => {
-      while (next < batch.length && failure === null) {
-        const page = await this.store.getPage(batch[next++]);
-        if (!page) continue;
-        try {
-          await this.pullDoc(page);
-        } catch (error) {
-          failure ??= error;
-        }
+    const missing = (id: Id) => !held.has(id) && !creating.has(id) && !this.pullRefused.has(id);
+    const todo: PageRecord[] = pages.filter((p) => pinned.has(p.id) && missing(p.id));
+    for (const id of pinnedDatabases(pages, pinned)) {
+      const changed = [...(this.rowDocsChanged.get(id)?.values() ?? [])];
+      this.rowDocsChanged.delete(id);
+      if (this.rowDocsHeld.has(id)) {
+        // Every row's document was held: only a row that changed since can lack one. A database
+        // held in part is read whole on any change (a row moved can bring another under the cap).
+        const lacking = changed.some(
+          (r) => !r.trashedAt && (r.docHeadSeq ?? 0) > 0 && missing(r.id),
+        );
+        if (!lacking && (!changed.length || (await this.store.dbHold(id))?.mode === 'full'))
+          continue;
+        this.rowDocsHeld.delete(id);
       }
-    };
-    await Promise.all(Array.from({ length: Math.min(PIN_PARALLEL, batch.length) }, worker));
-    this.heldChanged.add(workspace.id);
-    if (failure !== null) throw failure;
+      const rows = (await this.rowDocs(id)).filter((r) => missing(r.id));
+      if (!rows.length) this.rowDocsHeld.add(id);
+      todo.push(...rows);
+    }
+    if (!todo.length) return;
+    try {
+      const { left } = await this.pullMany(
+        workspace.id,
+        todo.map((page) => ({ page, after: 0 })),
+        this.options.pinRequests ?? PIN_REQUESTS,
+        PIN_SINGLES,
+      );
+      if (left) this.backlog = true;
+    } catch (error) {
+      if (!(error instanceof SyncHttpError) || (error.status !== 429 && error.status !== 503))
+        throw error;
+      this.pinsNotBefore = this.now() + (error.retryAfterMs ?? PIN_WAIT);
+    } finally {
+      this.heldChanged.add(workspace.id);
+    }
+  }
+
+  /**
+   * The rows of a pinned database whose documents it holds (Phase 12): every live row with a
+   * document on the server, in the database's row order, its templates first and then at most
+   * `PIN_ROW_DOCS` rows. A database above `LOCAL_ROW_LIMIT` rows is held in part, so these are of
+   * the rows this device holds (those its views' queries returned): the first of them in order.
+   */
+  private async rowDocs(databaseId: Id): Promise<RowRecord[]> {
+    const rows = (await this.store.readRows(databaseId))
+      .filter((r) => !r.trashedAt && (r.docHeadSeq ?? 0) > 0)
+      .sort((a, b) => ordinal(a.orderKey, b.orderKey) || ordinal(a.id, b.id));
+    return [
+      ...rows.filter((r) => r.isTemplate),
+      ...rows.filter((r) => !r.isTemplate).slice(0, PIN_ROW_DOCS),
+    ];
   }
 
   // 4c. Databases ----------------------------------------------------------------------------------
@@ -2005,8 +2261,8 @@ export class SyncEngine {
   }
 
   /**
-   * Pinned pages hold the databases among them, in full when small (the rows only: a row's
-   * document is fetched when it is opened, as an unpinned page's is).
+   * Pinned pages hold the databases among them, in full when small; from Phase 12 their rows'
+   * documents too (`fetchPinned`).
    */
   private async holdPinned(
     workspace: WorkspaceRecord,

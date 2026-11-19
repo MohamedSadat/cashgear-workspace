@@ -2,8 +2,9 @@
 // built desktop app: "with the network off: the app starts, pinned pages open, edits are saved, a
 // new page is created; with the network back, everything syncs with no action from the user".
 // Also a recovered page end to end (edited offline here, deleted for good on another device), the
-// sidebar's "not available offline" marks on pages this device holds, and Axe on the offline
-// screens in both languages and themes.
+// sidebar's "not available offline" marks on pages this device holds, Axe on the offline screens
+// in both languages and themes, and (Phase 12) a pinned database whose every row's page opens
+// offline, Settings counting them.
 //
 // The network: in a browser, Playwright's offline mode for the whole context (the app then starts
 // from its service worker, after one visit online); on the desktop, the API's address blocked in
@@ -12,9 +13,12 @@
 // none). The other device is a second browser profile signed in as the same person.
 import AxeBuilder from '@axe-core/playwright';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { apiSession } from '../../scripts/cloud-account.mjs';
+import { notionId, zip, type Files } from '../../packages/shell/src/exchange/fixtures/fixtures';
 import { test, expect, desktop } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved } from './helpers';
 import { newAccount, signIn, signedIn, signInDesktop, syncStatus, type TestAccount } from './cloud';
+import { fullPage, rowOf } from './database';
 
 const APP = 'http://127.0.0.1:4273';
 const API = process.env.E2E_API_URL ?? 'http://127.0.0.1:5280';
@@ -297,6 +301,158 @@ async function axe(page: Page, screen: string) {
         .join('\n'),
   );
 }
+
+// Phase 12 (M12.4): a pinned database holds every row's document. The database comes from a
+// Notion export imported on the other device (rows each with their page's words), so this device
+// holds none of it until the pin.
+const utf8 = new TextEncoder();
+const encPath = (path: string) => path.split('/').map(encodeURIComponent).join('/');
+const ROW_COUNT = 24;
+
+/** A Notion export: "Rows home" holding the database "Many rows", each row's page with its words. */
+function notionRows(count: number) {
+  const home = `Rows home ${notionId('rows-home')}`;
+  const table = `Many rows ${notionId('many-rows')}`;
+  const titles = Array.from({ length: count }, (_, i) => `Row ${String(i + 1).padStart(2, '0')}`);
+  const csv = ['Name,Status', ...titles.map((t, i) => `${t},${i % 2 ? 'Open' : 'Done'}`)];
+  const files: Files = {
+    [`${home}.md`]: utf8.encode(
+      ['# Rows home', '', `[Many rows](${encPath(`${home}/${table}.csv`)})`].join('\n'),
+    ),
+    [`${home}/${table}.csv`]: utf8.encode(csv.join('\r\n') + '\r\n'),
+    [`${home}/${table}_all.csv`]: utf8.encode(csv.join('\r\n') + '\r\n'),
+  };
+  for (const [i, title] of titles.entries())
+    files[`${home}/${table}/${title} ${notionId(title)}.md`] = utf8.encode(
+      [`# ${title}`, '', `Status: ${i % 2 ? 'Open' : 'Done'}`, '', wordsOf(title)].join('\n'),
+    );
+  return { name: 'Export-rows.zip', bytes: zip(files), titles };
+}
+const wordsOf = (title: string) => `The words of ${title}, kept offline.`;
+
+/** Settings → Your data → Import from Markdown, Notion or Word: a Notion export, to its report. */
+async function importNotion(page: Page, file: { name: string; bytes: Uint8Array }) {
+  await page.goto('/#/settings');
+  await page.getByRole('button', { name: 'Import from Markdown, Notion or Word' }).click();
+  const panel = page.getByRole('dialog', { name: 'Import pages' });
+  await panel.getByRole('radio', { name: /^A Notion export/ }).check();
+  const chooser = page.waitForEvent('filechooser');
+  await panel.getByRole('button', { name: 'Choose a file…' }).click();
+  await (
+    await chooser
+  ).setFiles({ name: file.name, mimeType: 'application/zip', buffer: Buffer.from(file.bytes) });
+  await expect(page.getByTestId('import-report')).toBeVisible({ timeout: 60000 });
+  await page.getByTestId('import-report').getByRole('button', { name: 'Close' }).click();
+}
+
+test("a pinned database holds every row's page: they open offline, and Settings counts them", async ({
+  page,
+  authUrlFile,
+}) => {
+  const context = page.context();
+  test.setTimeout(300000);
+  const account = await newAccount('Pinned rows');
+  await signedInWorkspace(page, account, 'Rows space', authUrlFile, signer);
+
+  // The other device imports the database; the server holds every row's document.
+  const other = await otherDevice(desktop ? await signer() : context.browser()!, account);
+  const fixture = notionRows(ROW_COUNT);
+  await importNotion(other.page, fixture);
+  await expect(syncStatus(other.page)).toHaveText('Synced', { timeout: 60000 });
+  await other.context.close();
+  const api = await apiSession(account);
+  let database: string;
+  let rows: { id: string; title: string }[] = [];
+  try {
+    const workspaceId = (
+      (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+    ).find((w) => w.name === 'Rows space')!.id;
+    const tree = (await api.get(`/api/v1/workspaces/${workspaceId}/tree`)) as {
+      pages: { id: string; kind: string; title: string }[];
+    };
+    database = tree.pages.find((p) => p.kind === 'database' && p.title === 'Many rows')!.id;
+    // Every row's document validated on the server, so the count below is the whole of it.
+    await expect
+      .poll(
+        async () => {
+          const answer = (await api.get(`/api/v1/databases/${database}/rows?limit=1000`)) as {
+            rows: { id: string; title: string; docHeadSeq: number | string }[];
+          };
+          const ours = answer.rows.filter((r) => fixture.titles.includes(r.title));
+          rows = ours.map((r) => ({ id: r.id, title: r.title }));
+          return ours.filter((r) => Number(r.docHeadSeq) > 0).length;
+        },
+        { timeout: 60000 },
+      )
+      .toBe(ROW_COUNT);
+  } finally {
+    await api.dispose();
+  }
+
+  // This device has not opened any of it. The database is kept offline from its page's menu.
+  const home = row(page, 'Rows home');
+  await expect(home).toBeVisible({ timeout: 30000 });
+  if ((await home.getAttribute('aria-expanded')) !== 'true') {
+    await home.focus();
+    await page.keyboard.press('ArrowRight');
+  }
+  await row(page, 'Many rows').click();
+  await expect(rowOf(fullPage(page), 'Row 01')).toBeVisible({ timeout: 30000 });
+  await pageActions(page).click();
+  await page.getByRole('menuitem', { name: 'Make available offline', exact: true }).click();
+  await page.goto('/#/settings');
+  await expect(page.getByTestId('offline-rows-progress')).toHaveText(
+    `All ${ROW_COUNT} row pages in the databases kept offline are on this device.`,
+    { timeout: 60000 },
+  );
+  await expect(page.getByTestId('offline-progress')).toHaveText(
+    'All 1 pages kept offline are on this device.',
+  );
+  if (!desktop)
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, {
+      timeout: 30000,
+    });
+
+  // The network off, the app started again: Settings still counts them, and every row's page
+  // opens with its words.
+  const net = await network(page, context);
+  await net.off();
+  await page.goto('/#/settings');
+  await page.reload();
+  await signedIn(page, account);
+  await expect(syncStatus(page)).toHaveText(/^Offline/, { timeout: 20000 });
+  await expect(page.getByTestId('offline-rows-progress')).toHaveText(
+    `All ${ROW_COUNT} row pages in the databases kept offline are on this device.`,
+    { timeout: 20000 },
+  );
+  await page.evaluate((id) => (location.hash = `#/p/${id}`), database!);
+  await expect(rowOf(fullPage(page), 'Row 01')).toBeVisible({ timeout: 20000 });
+  for (const { id, title } of rows) {
+    await page.evaluate((rowId) => (location.hash = `#/p/${rowId}`), id);
+    await expect(page.getByLabel('Page title')).toHaveValue(title);
+    await expect(editor(page)).toContainText(wordsOf(title));
+    await expect(page.getByTestId('not-on-device')).toHaveCount(0);
+  }
+
+  // In Arabic too, with the numbers as the language writes them; Axe finds nothing in either.
+  if (!desktop) {
+    const problems: string[] = [];
+    await page.goto('/#/settings');
+    await expect(page.getByTestId('offline-rows-progress')).toBeVisible({ timeout: 20000 });
+    problems.push(...(await axe(page, 'settings, row pages offline (en)')));
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    const total = await page.evaluate((n) => new Intl.NumberFormat('ar').format(n), ROW_COUNT);
+    await expect(page.getByTestId('offline-rows-progress')).toHaveText(
+      `كل صفحات الصفوف في قواعد البيانات المتاحة دون اتصال (${total}) على هذا الجهاز.`,
+      { timeout: 20000 },
+    );
+    problems.push(...(await axe(page, 'settings, row pages offline (ar)')));
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'en'));
+    expect(problems, problems.join('\n')).toEqual([]);
+  }
+  await net.on();
+});
 
 test('Axe finds nothing on the offline screens, in both languages and themes', async ({ page }) => {
   test.skip(desktop, 'Axe runs in the browsers (a11y.spec.ts)');

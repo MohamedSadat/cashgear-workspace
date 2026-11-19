@@ -2134,6 +2134,30 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.close();
     });
 
+    // Phase 12: a pinned database's rows' documents come by pulls, not by opening the row.
+    it("holds a row's document taken from a pull: it loads, counts as held, and waits for nothing", async () => {
+      const store = await factory();
+      const { ws, r1, r2 } = await seedDatabase(store, true);
+      await store.applyRemoteDocUpdates(r1.id, {
+        epoch: 0,
+        headSeq: 2,
+        updates: [
+          { seq: 1, updateId: uuidv7(), data: bytes(7) },
+          { seq: 2, updateId: uuidv7(), data: bytes(8, 9) },
+        ],
+      });
+      expect(await store.heldPages(ws.id)).toEqual([r1.id]);
+      expect(r2.id).not.toBe(r1.id);
+      expect(await store.docCursor(r1.id)).toEqual({ headSeq: 2, epoch: 0 });
+      expect((await store.docCursors(ws.id))[r1.id]).toEqual({ headSeq: 2, epoch: 0 });
+      expect((await store.loadDoc(r1.id)).updates.map((u) => [u.seq, [...u.data]])).toEqual([
+        [1, [7]],
+        [2, [8, 9]],
+      ]);
+      expect(await store.unsentDocUpdates(10)).toEqual([]);
+      await store.close();
+    });
+
     it("uploads a local workspace's databases: records, views, then rows, relations after", async () => {
       const store = await factory();
       const tree = await seedDatabase(store);

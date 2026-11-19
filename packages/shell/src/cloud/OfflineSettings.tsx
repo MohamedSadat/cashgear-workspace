@@ -1,17 +1,20 @@
 // Settings → Offline (M3.1): the pages kept offline (each can stop being kept), how many of them
 // this device holds and how many are still to fetch, and the storage this workspace uses here
 // (and, in a browser, what the browser allows the app). Read when the section opens and again on
-// the engine's `offline` events; nothing here changes while typing.
+// the engine's `offline` events; nothing here changes while typing. Phase 12: the same of the
+// rows' pages the databases kept offline hold (their words a section loaded with Settings).
 import type { HoldProgress, Id, OfflineProgress, StorageUsage } from '@cgw/workspace';
 import { pageGlyph } from '../database/make';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell } from '../context';
+import { useSection } from '../i18n/sections';
 import { routeHash } from '../route';
 import type { WorkspaceSession } from '../session';
 import { useMirror } from '../sidebar/Sidebar';
 import type { Cloud } from './cloud';
 import { useOfflineRevision } from './CloudUi';
+import { offlineRowsWords } from './offlineWords';
 
 /** Bytes for people: kB, MB or GB, in the interface language. */
 function useBytes() {
@@ -41,6 +44,7 @@ export function OfflineSettings({
   session: WorkspaceSession;
 }) {
   const { t, i18n } = useTranslation();
+  useSection(offlineRowsWords);
   const { platform } = useShell();
   useMirror(session);
   const revision = useOfflineRevision(cloud);
@@ -106,6 +110,7 @@ export function OfflineSettings({
 
   if (!workspace) return null;
   const pins = synced ? cloud.offline.pinList() : [];
+  const number = (n: number) => new Intl.NumberFormat(i18n.language).format(n);
   return (
     <section aria-labelledby="cgw-offline-title">
       <h2 id="cgw-offline-title">{t('offline.title')}</h2>
@@ -127,6 +132,17 @@ export function OfflineSettings({
                         toFetch: progress.toFetch,
                       })
                     : t('offline.progressDone', { pinned: progress.pinned })}
+                </p>
+              )}
+              {progress && progress.rows > 0 && (
+                <p role="status" data-testid="offline-rows-progress">
+                  {progress.rowsToFetch > 0
+                    ? t('offlineRows.progress', {
+                        held: number(progress.rowsHeld),
+                        total: number(progress.rows),
+                        toFetch: number(progress.rowsToFetch),
+                      })
+                    : t('offlineRows.progressDone', { total: number(progress.rows) })}
                 </p>
               )}
               <ul className="cgw-list" data-testid="offline-pins">

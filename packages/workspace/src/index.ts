@@ -32,11 +32,13 @@ export {
   type SyncStatus,
 } from './sync/engine';
 export {
+  DOCS_PULL_PAGES,
   OfflineError,
   SyncHttpError,
   type Account,
   type DocCodec,
   type DocPull,
+  type DocsPullItem,
   type DocPushRequest,
   type DocRepairAnswer,
   type DocRepairRequest,

@@ -197,6 +197,19 @@ export interface DocPull {
   rejected: Id[];
 }
 
+/**
+ * Phase 12, the batch pull of documents (`POST /workspaces/{id}/docs/pull`): one page of a request
+ * as answered, in the request's order. `pull` is exactly what `pullDoc` with the same `after`
+ * answers; without it, `status` and `code` are what that route would have refused the page with
+ * (403, 404, 410, ...), or `0` and `deferred`: not read in this answer (its size cap), ask again.
+ */
+export type DocsPullItem =
+  | { pageId: Id; status: 200; pull: DocPull; code?: undefined }
+  | { pageId: Id; status: number; code: string; pull?: undefined };
+
+/** Pages a batch pull asks for at most (and at least one). */
+export const DOCS_PULL_PAGES = 100;
+
 /** The server's state hash of a page's document at its validated head (the repair check). */
 export interface DocStateHash {
   epoch: number;
@@ -242,6 +255,13 @@ export interface SyncApi {
     request: DocPushRequest,
   ): Promise<{ acks: { updateId: Id; seq: number }[]; headSeq: number }>;
   pullDoc(pageId: Id, after: number): Promise<DocPull>;
+  /**
+   * Phase 12: up to `DOCS_PULL_PAGES` distinct pages of one workspace in one request, each checked
+   * and answered as `pullDoc` would be, one page's refusal never failing the rest (`DocsPullItem`).
+   * The request as a whole fails as any route does (401, 429 with `Retry-After`, 400
+   * `request.invalid` for no page, too many or one twice, 404 for a workspace not the account's).
+   */
+  pullDocs(workspaceId: Id, pages: { pageId: Id; after: number }[]): Promise<DocsPullItem[]>;
   /** The state hash of the page's validated head (SYNC_DESIGN.md, Repair). */
   docStateHash(pageId: Id): Promise<DocStateHash>;
   /** Sends the device's full state (or nothing, for a reader) and pulls the page from the start. */

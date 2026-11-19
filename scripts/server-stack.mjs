@@ -242,6 +242,9 @@ const env = {
         Ai__EmbeddingsSettleSeconds: '1',
         RateLimits__meaning: '10000',
         RateLimits__frames: '10000',
+        // Phase 12: the specs and benches pin databases of thousands of rows, one batch pull of up to
+        // 100 documents at a time, many a minute from one address.
+        RateLimits__pull: '10000',
       }
     : {}),
 };

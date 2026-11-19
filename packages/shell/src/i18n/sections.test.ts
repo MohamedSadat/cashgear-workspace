@@ -2,6 +2,7 @@ import i18next from 'i18next';
 import { describe, expect, it } from 'vitest';
 import { groupsWords } from '../cloud/groupsWords';
 import { passkeysWords } from '../cloud/passkeysWords';
+import { offlineRowsWords } from '../cloud/offlineWords';
 import { ssoWords } from '../cloud/ssoWords';
 import { ar } from './ar';
 import { flatten } from './catalogue';
@@ -9,7 +10,7 @@ import { en } from './en';
 import { addSection, type Section } from './sections';
 
 /** Every section a screen brings with it (sections.ts). */
-const SECTIONS: Section[] = [groupsWords, passkeysWords, ssoWords];
+const SECTIONS: Section[] = [groupsWords, passkeysWords, ssoWords, offlineRowsWords];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();
 
