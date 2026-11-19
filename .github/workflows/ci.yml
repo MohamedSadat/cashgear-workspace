@@ -104,7 +104,7 @@ jobs:
           run=$(gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$run" ]; then
             gh run download "$run" --name phase2-server --dir bench/previous-run
-            for name in phase2.json phase4.json phase10.json; do
+            for name in phase2.json phase4.json phase10.json phase11.json; do
               found=$(find bench/previous-run -name "$name" | head -n 1)
               if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" "bench/previous/$name"; fi
             done
@@ -128,6 +128,14 @@ jobs:
         run: pnpm bench:phase10 -- --server
         env:
           CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+      # Phase 11's server budgets (bench/phase11.mjs, Phase11Bench): search on the full-text path and
+      # the feed of 1,000 changes at 10,000 pages for a member in 20 groups, the tree tracked; a
+      # sign-in by passkey and one through single sign-on (the mock provider), the API's own time.
+      - name: Phase 11 server budgets (groups at 10,000 pages, passkey and single sign-on sign-ins)
+        run: pnpm bench:phase11
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+          CGW_TEST_FULLTEXT: required
       - uses: actions/upload-artifact@v4
         if: always()
         with:
