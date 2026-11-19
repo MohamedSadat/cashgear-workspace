@@ -704,3 +704,10 @@ Added as they are found, grouped by phase.
   the sync status says "Syncing" for many seconds before "Offline". A WebView2 process of the last
   start still running makes the next start of its profile join it and the new debugging port never
   opens: a harness ends the profile's processes until none is left before each start.
+
+### After 0.10.0
+
+- The production host has IIS's WebDAV Publishing installed (for other sites), and its module
+  answers every `PUT` and `DELETE` with 405 before ASP.NET Core sees them: 0.10.0's API could read
+  its AI settings but never save them. Both `web.config`s remove `WebDAVModule` and the `WebDAV`
+  handler; tests through `WebApplicationFactory` never meet IIS, so only the IIS log shows it.
