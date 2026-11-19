@@ -15,4 +15,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Cgw.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 11: the account pages' one script, served as /account/passkey.js (AccountPages). -->
+    <EmbeddedResource Include="Identity/passkey.js" LogicalName="Cgw.Api.Identity.passkey.js" />
+  </ItemGroup>
 </Project>

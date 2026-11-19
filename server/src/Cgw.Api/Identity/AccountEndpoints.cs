@@ -73,8 +73,11 @@ public static class AccountEndpoints
             })
             .WithName("getSession").AllowAnonymous().RequireRateLimiting(RateLimits.User);
 
-        // Deleting the account is not an API call: it asks for the password again, on the
-        // account page /account/delete (AccountPages), which the app opens.
+        // Deleting the account is not an API call: it asks for the password (or, Phase 11, a
+        // passkey) again, on the account page /account/delete (AccountPages), which the app opens.
+
+        // Phase 11: the account's passkeys (Passkeys.cs); adding one is the page /account/passkeys/new.
+        account.MapPasskeys();
 
         account.MapPatch("/me", async Task<Results<NoContent, ProblemHttpResult>> (MeUpdate body, AccountService service, CgwDb db, HttpContext http) =>
             {

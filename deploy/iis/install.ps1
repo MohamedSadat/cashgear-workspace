@@ -85,10 +85,17 @@ param(
   # or the sites'), served by the same Sites site under a second host-name binding. The certificate
   # defaults to the sites' (a *.cashgearerp.com certificate covers it).
   [string] $PluginsHostName = 'plugins.cashgearerp.com',
-  [string] $PluginsCertificateThumbprint = ''
+  [string] $PluginsCertificateThumbprint = '',
+  # Phase 11: the passkeys' relying party, the API's own host (never a wider domain: the ERP, the
+  # sites and the plugins could then ask for assertions). The API refuses to start in Production
+  # without it, or with any other name than -HostName.
+  [string] $PasskeyDomain = 'workspace-api.cashgearerp.com'
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PasskeyDomain -ne $HostName) {
+  throw "-PasskeyDomain ($PasskeyDomain) must be the API's host name, -HostName ($HostName): passkeys are made for the API's own host."
+}
 Import-Module WebAdministration
 $package = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $manifest = Get-Content (Join-Path $package 'manifest.json') -Raw | ConvertFrom-Json
@@ -119,6 +126,8 @@ $environment = [ordered]@{
   Sites__PublicUrl = "https://$SitesHostName"
   # Phase 10: the plugins' origin, for the frames' addresses the API gives out; required in Production.
   Plugins__PublicUrl = "https://$PluginsHostName"
+  # Phase 11: the passkeys' relying party id (the API's host); required in Production.
+  Identity__Passkeys__ServerDomain = $PasskeyDomain
   OpenIddict__SigningCertificateThumbprint = $SigningThumbprint
   OpenIddict__EncryptionCertificateThumbprint = $EncryptionThumbprint
   DataProtection__Dpapi = 'true'

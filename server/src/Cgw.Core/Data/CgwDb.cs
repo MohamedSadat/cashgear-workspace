@@ -73,6 +73,11 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<PluginFrameTicket> PluginFrameTickets => Set<PluginFrameTicket>();
     public DbSet<WorkspaceGroup> WorkspaceGroups => Set<WorkspaceGroup>();
     public DbSet<WorkspaceGroupMember> WorkspaceGroupMembers => Set<WorkspaceGroupMember>();
+    /// <summary>Phase 11: each passkey ceremony's challenge once it is used, so none is used twice.</summary>
+    public DbSet<PasskeyChallenge> PasskeyChallenges => Set<PasskeyChallenge>();
+
+    /// <summary>When a passkey last signed someone in or confirmed them (a shadow property of <c>UserPasskeys</c>).</summary>
+    public const string PasskeyLastUsedAt = "LastUsedAt";
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -100,6 +105,28 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         b.Entity<IdentityUserLogin<Guid>>().ToTable("UserLogins");
         b.Entity<IdentityUserToken<Guid>>().ToTable("UserTokens");
         b.Entity<IdentityRoleClaim<Guid>>().ToTable("RoleClaims");
+        // Phase 11 (M11.2): Identity's passkeys, its store schema 3, mapped here in full. Identity
+        // maps them only for a host whose IdentityOptions ask for schema 3, which would also narrow
+        // Phase 2's UserLogins, UserTokens and PhoneNumber columns, and the worker, the Sites process
+        // and the design-time factory have no Identity to ask: no host asks, and every process builds
+        // the one model the migrations hold (PasskeyTests). The key is the credential id, up to 1,023
+        // bytes (WebAuthn): nonclustered, as a clustered key holds 900 at most. LastUsedAt is ours, a
+        // shadow property Identity's store never writes.
+        b.Entity<User>().HasMany<IdentityUserPasskey<Guid>>().WithOne().HasForeignKey(x => x.UserId).IsRequired();
+        b.Entity<IdentityUserPasskey<Guid>>(e =>
+        {
+            e.ToTable("UserPasskeys");
+            e.HasKey(x => x.CredentialId).IsClustered(false);
+            e.Property(x => x.CredentialId).HasMaxLength(1024);
+            e.OwnsOne(x => x.Data).ToJson();
+            e.Property<DateTimeOffset?>(PasskeyLastUsedAt);
+        });
+        b.Entity<PasskeyChallenge>(e =>
+        {
+            e.HasKey(x => x.Hash);
+            e.Property(x => x.Hash).HasMaxLength(32).IsFixedLength();
+            e.HasIndex(x => x.ExpiresAt);
+        });
 
         b.Entity<Device>(e =>
         {

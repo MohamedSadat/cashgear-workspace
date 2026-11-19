@@ -1438,6 +1438,23 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("PageVisits");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.PasskeyChallenge", b =>
+                {
+                    b.Property<byte[]>("Hash")
+                        .HasMaxLength(32)
+                        .HasColumnType("binary(32)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.HasKey("Hash");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("PasskeyChallenges");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.PluginFrameTicket", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -2558,6 +2575,28 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("UserLogins", (string)null);
                 });
 
+            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserPasskey<System.Guid>", b =>
+                {
+                    b.Property<byte[]>("CredentialId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("varbinary(1024)");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("CredentialId");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("CredentialId"), false);
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserPasskeys", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<System.Guid>", b =>
                 {
                     b.Property<byte[]>("UserId")
@@ -2827,6 +2866,58 @@ namespace Cgw.Core.Data.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserPasskey<System.Guid>", b =>
+                {
+                    b.HasOne("Cgw.Core.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("Microsoft.AspNetCore.Identity.IdentityPasskeyData", "Data", b1 =>
+                        {
+                            b1.Property<byte[]>("IdentityUserPasskeyCredentialId");
+
+                            b1.Property<byte[]>("AttestationObject")
+                                .IsRequired();
+
+                            b1.Property<byte[]>("ClientDataJson")
+                                .IsRequired();
+
+                            b1.Property<DateTimeOffset>("CreatedAt")
+                                .HasColumnType("datetimeoffset(3)");
+
+                            b1.Property<bool>("IsBackedUp");
+
+                            b1.Property<bool>("IsBackupEligible");
+
+                            b1.Property<bool>("IsUserVerified");
+
+                            b1.Property<string>("Name");
+
+                            b1.Property<byte[]>("PublicKey")
+                                .IsRequired();
+
+                            b1.Property<long>("SignCount");
+
+                            b1.PrimitiveCollection<string>("Transports");
+
+                            b1.HasKey("IdentityUserPasskeyCredentialId");
+
+                            b1.ToTable("UserPasskeys");
+
+                            b1
+                                .ToJson("Data")
+                                .HasColumnType("nvarchar(max)");
+
+                            b1.WithOwner()
+                                .HasForeignKey("IdentityUserPasskeyCredentialId");
+                        });
+
+                    b.Navigation("Data")
                         .IsRequired();
                 });
 

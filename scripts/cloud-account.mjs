@@ -135,7 +135,7 @@ export async function signInPage(page, account, back = `${APP}/`) {
   await page.goto(`${API}/account/signin?returnUrl=${encodeURIComponent(back)}`);
   await page.getByLabel('Email').fill(account.email);
   await page.getByLabel('Password').fill(account.password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL((url) => url.origin !== new URL(API).origin, { timeout: 30000 });
   await page.locator('.cgw-account-button').first().waitFor({ state: 'attached', timeout: 30000 });
 }
@@ -159,7 +159,7 @@ export async function desktopSignIn(page, browser, authUrlFile, account) {
     await tab.goto(authorize);
     await tab.getByLabel('Email').fill(account.email);
     await tab.getByLabel('Password').fill(account.password);
-    await tab.getByRole('button', { name: 'Sign in' }).click();
+    await tab.getByRole('button', { name: 'Sign in', exact: true }).click();
     await tab.getByRole('button', { name: 'Continue' }).click();
     await tab.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback/);
   } finally {

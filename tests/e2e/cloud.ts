@@ -92,7 +92,7 @@ export async function signIn(page: Page, account: TestAccount, back = '/') {
   await page.goto(`${API}/account/signin?returnUrl=${encodeURIComponent(app)}`);
   await page.getByLabel('Email').fill(account.email);
   await page.getByLabel('Password').fill(account.password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL((url) => url.origin !== new URL(API).origin, { timeout: 30000 });
 }
 
@@ -122,7 +122,7 @@ export async function signInDesktop(
   await tab.goto(readFileSync(authUrlFile, 'utf8').trim());
   await tab.getByLabel('Email').fill(account.email);
   await tab.getByLabel('Password').fill(account.password);
-  await tab.getByRole('button', { name: 'Sign in' }).click();
+  await tab.getByRole('button', { name: 'Sign in', exact: true }).click();
   await tab.getByRole('button', { name: 'Continue' }).click();
   await tab.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback/);
   await tab.close();

@@ -943,7 +943,7 @@ async function main() {
       await tab.goto(authorize);
       await tab.getByLabel('Email').fill(email);
       await tab.getByLabel('Password').fill(password);
-      await tab.getByRole('button', { name: 'Sign in' }).click();
+      await tab.getByRole('button', { name: 'Sign in', exact: true }).click();
       await tab.getByText(`as ${email}?`).waitFor({ timeout: 30_000 });
       await tab.getByRole('button', { name: 'Continue' }).click();
       await tab.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback/, { timeout: 30_000 });

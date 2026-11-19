@@ -467,6 +467,8 @@ public sealed class AccountSecurityTests(ServerFixture server)
             ("Web:Origins:0", "https://workspace.cashgearerp.com"), ("Api:PublicUrl", "https://workspace-api.cashgearerp.com"), ("DataProtection:Dpapi", "true"),
             ("Sheet:Origin", "https://sheet.cashgearerp.com"), ("Sheet:Origins:0", "https://sheet.cashgearerp.com"), ("Erp:ApiBase", "https://api.cashgearerp.com"),
             ("Sites:PublicUrl", "https://pages.cashgearerp.com"), ("Plugins:PublicUrl", "https://plugins.cashgearerp.com"),
+            // Phase 11: the passkeys' relying party (PasskeyTests).
+            ("Identity:Passkeys:ServerDomain", "workspace-api.cashgearerp.com"),
         ];
         Assert.Empty(ProductionChecks.Problems(Settings(complete), production, windows: true));
         // Phase 10: the plugins' origin, over https.

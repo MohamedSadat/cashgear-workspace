@@ -984,6 +984,18 @@ public sealed class WorkspaceGroup : ITenantOwned
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// A passkey ceremony's challenge, written when a ceremony that used it succeeds (Phase 11, M11.2):
+/// Identity keeps a ceremony's state in a cookie, which a copied request would carry again, so a
+/// challenge seen here is refused. Kept until the state could no longer be read.
+/// </summary>
+public sealed class PasskeyChallenge
+{
+    /// <summary>SHA-256 of the challenge as the client data names it (base64url).</summary>
+    public byte[] Hash { get; set; } = [];
+    public DateTimeOffset ExpiresAt { get; set; }
+}
+
 /// <summary>One person in a group (Phase 11): a member, admin or owner of the group's workspace.</summary>
 public sealed class WorkspaceGroupMember : ITenantOwned
 {

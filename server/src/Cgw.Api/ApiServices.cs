@@ -88,6 +88,9 @@ public static class ApiServices
                 o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
                 o.Tokens.EmailConfirmationTokenProvider = TokenOptions.DefaultProvider;
                 o.Tokens.PasswordResetTokenProvider = ResetTokenProvider.ProviderName;
+                // Phase 11: passkeys are Identity's schema 3 table, which CgwDb maps itself: this
+                // option stays at its default, as asking for schema 3 here would also narrow Phase 2's
+                // UserLogins, UserTokens and PhoneNumber columns in this process's model alone.
             })
             .AddEntityFrameworkStores<CgwDb>()
             .AddSignInManager()
@@ -156,6 +159,9 @@ public static class ApiServices
                 },
             };
         });
+        // Phase 11: the passkey ceremonies (Passkeys.cs): their relying party, origins and the
+        // cookie Identity keeps a ceremony's state in between its options and its answer.
+        services.AddCgwPasskeys(configuration, environment, shortcuts, cookies, secure);
         services.AddAntiforgery(o =>
         {
             o.HeaderName = CsrfHeader;
@@ -212,6 +218,7 @@ public static class ApiServices
         services.AddScoped<Devices>();
         services.AddScoped<AccountService>();
         services.AddScoped<AccountDeletion>();
+        services.AddScoped<Passkeys>();
         services.AddSingleton<MailQueue>();
         services.AddSingleton<MailCooldown>();
         services.AddHostedService<MailSender>();

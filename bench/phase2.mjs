@@ -418,7 +418,7 @@ async function firstSync() {
           await page.goto(`${API}/account/signin?returnUrl=${encodeURIComponent(APP + '/')}`);
           await page.getByLabel('Email').fill(account.email);
           await page.getByLabel('Password').fill(account.password);
-          await page.getByRole('button', { name: 'Sign in' }).click();
+          await page.getByRole('button', { name: 'Sign in', exact: true }).click();
           await page.waitForURL((url) => url.origin === APP, {
             waitUntil: 'commit',
             timeout: 30000,

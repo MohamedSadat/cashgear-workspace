@@ -48,7 +48,7 @@ test('signs in through the browser, syncs a workspace, and a browser sees its pa
   await tab.goto(authorize);
   await tab.getByLabel('Email').fill(account.email);
   await tab.getByLabel('Password').fill(account.password);
-  await tab.getByRole('button', { name: 'Sign in' }).click();
+  await tab.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(tab.getByText(`as ${account.email}?`)).toBeVisible();
   await tab.getByRole('button', { name: 'Continue' }).click();
   await tab.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/callback/);

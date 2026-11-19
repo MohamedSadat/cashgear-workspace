@@ -222,7 +222,9 @@ workspace (a test fails if a table with `WorkspaceId` lacks it).
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `Users` | `Id`, `Email` (unique), `DisplayName`, `Locale`, `AvatarAssetId`, `DeletedAt` | ASP.NET Core Identity tables hang off this (`Roles`, `UserClaims`, `UserLogins`, `UserTokens`, `RoleClaims`); OpenIddict's applications, authorisations and tokens beside them |
-| `Devices` | `Id`, `UserId`, `Name`, `Platform`, `LastSeenAt`, `RevokedAt`, `AuthorizationId` | A desktop install or a browser profile. A cookie session carries its device id and is refused once it is revoked; a desktop's OpenIddict authorisation is revoked with it |
+| `UserPasskeys` | `CredentialId` (key, up to 1,024 bytes, nonclustered), `UserId`, `Data` (JSON: `PublicKey`, `Name`, `CreatedAt`, `SignCount`, `Transports`, `IsUserVerified`, `IsBackupEligible`, `IsBackedUp`, `AttestationObject`, `ClientDataJson`), `LastUsedAt` | Phase 11: Identity's passkeys (its store schema 3), mapped by `CgwDb` itself so every process builds one model (the stores' own option stays at its default). `Name` 1 to 60 characters; at most 20 an account; `LastUsedAt` is ours (a shadow property), written at each sign-in or confirmation. No attestation is kept beyond what Identity stores. Removed at once by the account's own `DELETE /account/passkeys/{id}`, and all of them with the account |
+| `PasskeyChallenges` | `Hash` (key, SHA-256 of a ceremony's challenge), `ExpiresAt` | Phase 11: a challenge whose ceremony succeeded, kept six minutes (longer than Identity's state cookie lasts), so the same answer sent again with that cookie is refused; old rows go as new ones come |
+| `Devices` | `Id`, `UserId`, `Name`, `Platform`, `LastSeenAt`, `RevokedAt`, `AuthorizationId` | A desktop install or a browser profile. A cookie session carries its device id and is refused once it is revoked; a desktop's OpenIddict authorisation is revoked with it. From Phase 11 the session also carries when it last proved who it is (`auth_time`, the sign-in or the password or a passkey asked again) and how it signed in (`amr`: `password`, `passkey`) |
 | `DataProtectionKeys` | `FriendlyName`, `Xml` | The key ring for cookies and Identity tokens, shared by every API instance, DPAPI-protected on Windows hosts |
 | `YjsClients` | `ClientId`, `WorkspaceId`, `UserId`, `DeviceId`, `Origin` | Unique on (`WorkspaceId`, `ClientId`). `Origin` is `issued` (a device's pool) or `registered` (used before the device synced) |
 | `Workspaces` | `Id`, `Name`, `Icon`, `OwnerUserId`, `ChangeSeq`, `Version`, `StorageQuotaBytes`, `StorageUsedBytes`, `PublishingEnabled`, `DeletedAt` | `ChangeSeq` is the head of the change feed, given out under the row's lock. The quota is recorded and shown, not enforced (Q10). `PublishingEnabled` (Phase 9, on by default, every workspace before it too): off, every live site of the workspace is unpublished at once and none may be published; on again, none comes back |
@@ -706,7 +708,10 @@ workspace's records as creates. A workspace made while signed in is uploaded at 
 - Deleting an account removes the user's memberships (from Phase 11 their place in every group
   too), their private sections and their personal data, revokes every device and token, and keeps their edits in shared pages under "Deleted
   user". It is refused while the user is the only owner of a workspace others are in: they hand
-  it over first. Workspaces no one else is in are deleted with the account.
+  it over first. Workspaces no one else is in are deleted with the account. It is asked for on the
+  API's page `/account/delete`, which asks the password again or (Phase 11) a passkey of the
+  account; an account with neither (single sign-on only) needs a sign-in of the last 10 minutes.
+  From Phase 11 its passkeys go with it.
 - As built in Phase 2, the server's export (`POST /workspaces/{id}/exports`, owners and admins)
   holds the pages the requester may read, their own private section included and other people's
   not; the worker writes the zip, and it is kept 7 days behind a signed URL for the requester

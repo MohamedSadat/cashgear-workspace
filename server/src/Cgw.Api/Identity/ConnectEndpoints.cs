@@ -97,7 +97,9 @@ public static class ConnectEndpoints
             identity.SetAuthorizationId(authorizationId);
             device.AuthorizationId = Guid.Parse(authorizationId!);
             db.Devices.Update(device);
-            audit.Add(http.Actor() with { UserId = user.Id }, "signin", targetType: "device", targetId: device.Id, detail: new { platform = "desktop" });
+            // Phase 11: how the browser that confirmed it signed in (a password or a passkey).
+            var method = cookie.Principal!.FindFirst(AccountService.MethodClaim)?.Value;
+            audit.Add(http.Actor() with { UserId = user.Id }, "account.signin", targetType: "device", targetId: device.Id, detail: new { platform = "desktop", method });
             await db.SaveChangesAsync();
             return Results.SignIn(new ClaimsPrincipal(identity), properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }).AllowAnonymous().RequireRateLimiting(RateLimits.SignIn);

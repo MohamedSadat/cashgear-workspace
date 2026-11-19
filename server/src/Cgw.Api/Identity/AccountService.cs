@@ -40,14 +40,33 @@ public sealed class AccountService(
 {
     public const string DeviceClaim = "device_id";
 
+    /// <summary>Phase 11: when the session last proved who it is (a sign-in, or the password or a passkey asked again), in Unix seconds.</summary>
+    public const string AuthTimeClaim = "auth_time";
+
+    /// <summary>Phase 11: how the session signed in (<see cref="Methods"/>).</summary>
+    public const string MethodClaim = "amr";
+
+    /// <summary>The ways a session signs in, as <see cref="MethodClaim"/> and the audit's <c>method</c> name them.</summary>
+    public static class Methods
+    {
+        public const string Password = "password";
+        public const string Passkey = "passkey";
+    }
+
     /// <summary>
     /// The claims a sign-in adds to the user's own; the security-stamp refresh carries them over
     /// (ApiServices, <c>OnRefreshingPrincipal</c>).
     /// </summary>
-    public static readonly string[] SessionClaims = [DeviceClaim];
+    public static readonly string[] SessionClaims = [DeviceClaim, AuthTimeClaim, MethodClaim];
+
+    /// <summary>
+    /// Phase 11: how long a sign-in counts as recent, for what must not follow from an open session
+    /// alone (adding a passkey; deleting an account that has neither a password nor a passkey).
+    /// </summary>
+    public static readonly TimeSpan Recent = TimeSpan.FromMinutes(10);
 
     /// <summary>The local pages a sign-in may return to, besides the web app's origins.</summary>
-    private static readonly string[] LocalReturns = ["/connect/authorize", "/account/delete"];
+    private static readonly string[] LocalReturns = ["/connect/authorize", "/account/delete", "/account/passkeys/new"];
 
     /// <summary>A password hash nobody has, checked for an unknown address so it costs what a real one does.</summary>
     private static string? dummyHash;
@@ -269,10 +288,63 @@ public sealed class AccountService(
             await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "signin.fail", targetType: "user", targetId: user.Id);
             return SignInOutcome.Invalid;
         }
-        var device = await devices.CreateAsync(user.Id, "web", Devices.NameFromUserAgent(http.Request.Headers.UserAgent));
-        await signIn.SignInWithClaimsAsync(user, isPersistent: true, [new Claim(DeviceClaim, device.Id.ToString())]);
-        await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "signin", targetType: "device", targetId: device.Id, detail: new { platform = "web" });
+        await SignInSessionAsync(user, Methods.Password, http);
         return SignInOutcome.Ok;
+    }
+
+    /// <summary>
+    /// The one way a browser session is made, whatever proved the person (a password, a passkey;
+    /// from Phase 11's single sign-on, the workspace's provider): a new device record names it, and
+    /// the cookie carries the device, when and how it signed in. The device gate refuses a session
+    /// without its device, so Identity's own sign-ins that add none (<c>PasskeySignInAsync</c>) are
+    /// never used. Audited <c>account.signin</c> with the method.
+    /// </summary>
+    public async Task<Device> SignInSessionAsync(User user, string method, HttpContext http, IEnumerable<Claim>? extra = null)
+    {
+        var device = await devices.CreateAsync(user.Id, "web", Devices.NameFromUserAgent(http.Request.Headers.UserAgent));
+        await signIn.SignInWithClaimsAsync(user, isPersistent: true, [.. Session(device.Id, method), .. extra ?? []]);
+        await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "account.signin", targetType: "device", targetId: device.Id, detail: new { platform = "web", method });
+        return device;
+    }
+
+    /// <summary>The session's own claims: its device, when it proved who it is (now), and how it signed in.</summary>
+    private Claim[] Session(Guid deviceId, string method) =>
+    [
+        new(DeviceClaim, deviceId.ToString()),
+        new(AuthTimeClaim, clock.GetUtcNow().ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
+        new(MethodClaim, method),
+    ];
+
+    /// <summary>When the session last proved who it is; null for a session older than Phase 11 (it counts as long ago).</summary>
+    public static DateTimeOffset? AuthenticatedAt(ClaimsPrincipal principal) =>
+        long.TryParse(principal.FindFirstValue(AuthTimeClaim), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
+
+    /// <summary>Whether the session proved who it is within <paramref name="within"/> (<see cref="Recent"/> unless said).</summary>
+    public bool AuthenticatedRecently(ClaimsPrincipal principal, TimeSpan? within = null)
+    {
+        if (AuthenticatedAt(principal) is not { } at) return false;
+        var age = clock.GetUtcNow() - at;
+        // A minute of skew between instances; never a time to come.
+        return age >= TimeSpan.FromMinutes(-1) && age < (within ?? Recent);
+    }
+
+    /// <summary>
+    /// The person proved who they are again (their password or a passkey, asked again): the same
+    /// session, on the same device and with the same method, now counts as recent. Audited
+    /// <c>account.reauthenticate</c> with how.
+    /// </summary>
+    public async Task ReauthenticatedAsync(User user, string method, HttpContext http)
+    {
+        if (http.User.DeviceId() is not { } deviceId) return;
+        var signedInWith = http.User.FindFirstValue(MethodClaim) ?? method;
+        // Any other claim a sign-in added (SessionClaims) stays as it was.
+        var kept = SessionClaims.Except([DeviceClaim, AuthTimeClaim, MethodClaim])
+            .SelectMany(type => http.User.FindAll(type))
+            .Select(c => new Claim(c.Type, c.Value, c.ValueType));
+        await signIn.SignInWithClaimsAsync(user, isPersistent: true, [.. Session(deviceId, signedInWith), .. kept]);
+        await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "account.reauthenticate", targetType: "device", targetId: deviceId, detail: new { method });
     }
 
     /// <summary>The signed-in person's password, asked again before something that cannot be undone; wrong tries count towards the lockout.</summary>

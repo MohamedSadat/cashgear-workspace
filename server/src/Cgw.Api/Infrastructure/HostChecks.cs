@@ -36,8 +36,9 @@ public sealed record Shortcuts(bool AllowHttp, bool EphemeralKeys, bool PublicUr
 /// <summary>
 /// What Production refuses to start without, and what it refuses to start with: the web app's
 /// origins, the public URL mail links are built from, DPAPI over the keys kept in the database (on
-/// Windows), Sheet's origins and the ERP's base (Phase 5), and none of the development
-/// <see cref="Shortcuts"/>.
+/// Windows), Sheet's origins and the ERP's base (Phase 5), the sites' and plugins' origins (Phases 9
+/// and 10), the passkeys' relying party as the API's own host (Phase 11), and none of the
+/// development <see cref="Shortcuts"/>.
 /// </summary>
 public static class ProductionChecks
 {
@@ -67,6 +68,12 @@ public static class ProductionChecks
         // Phase 10: a plugin frame's address is built from here alone.
         if (!Https(configuration[Cgw.Core.Plugins.PluginsOptions.PublicUrlKey]))
             problems.Add("Set Plugins__PublicUrl to the plugins' https origin (https://plugins.cashgearerp.com).");
+        // Phase 11: the passkeys' relying party is the API's own host, never a request's.
+        var serverDomain = configuration[Cgw.Api.Identity.PasskeySetup.ServerDomainKey];
+        if (string.IsNullOrEmpty(serverDomain))
+            problems.Add("Set Identity__Passkeys__ServerDomain to the API's host (workspace-api.cashgearerp.com).");
+        else if (url is not null && !string.Equals(url.Host, serverDomain, StringComparison.OrdinalIgnoreCase))
+            problems.Add($"Identity__Passkeys__ServerDomain ({serverDomain}) must be the host of Api__PublicUrl ({url.Host}).");
         foreach (var key in Shortcuts.Keys)
             if (string.Equals(configuration[key], "true", StringComparison.OrdinalIgnoreCase))
                 problems.Add($"{key.Replace(":", "__", StringComparison.Ordinal)} is for a developer's machine and is refused in Production.");
@@ -89,6 +96,9 @@ public static class ProductionChecks
 /// </summary>
 public sealed record CookieNames(string Session, string Antiforgery)
 {
+    /// <summary>Phase 11: a passkey ceremony's state between its options and its answer (five minutes), with the same prefix.</summary>
+    public string Passkey => Session.StartsWith("__Host-", StringComparison.Ordinal) ? "__Host-cgw_passkey" : "cgw_passkey";
+
     public static CookieNames For(IHostEnvironment environment, Shortcuts shortcuts) =>
         Shortcuts.IsLocal(environment) || shortcuts.AllowHttp
             ? new CookieNames("cgw_session", "cgw_xsrf")
