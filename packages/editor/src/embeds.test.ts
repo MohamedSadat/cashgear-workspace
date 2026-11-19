@@ -53,6 +53,7 @@ const erpView = (attrs: Record<string, unknown> = {}) => ({
     fields: null,
     sort: null,
     pageSize: null,
+    parameters: null,
     ...attrs,
   },
 });
@@ -278,7 +279,17 @@ describe('the ERP view block', () => {
       connectorId: 'vendors',
       fields: '["name"]',
       pageSize: 25,
+      parameters: null,
     });
+    // Phase 12: a report's parameters go to update too, kept in the block as written.
+    options.setAttrs({ connectorId: 'apAging', parameters: '{"asOf":"2026-10-31"}' });
+    expect(drawn.mounts).toHaveLength(1);
+    expect(drawn.updates.at(-1)).toMatchObject({
+      connectorId: 'apAging',
+      parameters: '{"asOf":"2026-10-31"}',
+    });
+    expect(blocks.firstBody(list()[0])!.node.attrs.parameters).toBe('{"asOf":"2026-10-31"}');
+    options.setAttrs({ connectorId: 'vendors' });
     options.setAttrs({ linkId: OTHER });
     expect(drawn.destroys()).toBe(1);
     expect(drawn.mounts.map((m) => m.options.linkId)).toEqual([LINK, OTHER]);

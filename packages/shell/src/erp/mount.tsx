@@ -97,11 +97,22 @@ function ErpBlock({
     i18n.on('languageChanged', apply);
     return () => i18n.off('languageChanged', apply);
   }, [i18n, container]);
-  const { linkId, connectorId, filter, fields, sort, pageSize, editable, setAttrs, blockId } =
-    options;
+  const {
+    linkId,
+    connectorId,
+    filter,
+    fields,
+    sort,
+    pageSize,
+    parameters,
+    editable,
+    setAttrs,
+    blockId,
+  } = options;
   const host = useMemo<ErpViewHost>(
     () => ({
-      attrs: { linkId, connectorId, filter, fields, sort, pageSize },
+      // Phase 12: a report's parameters, as the person set them; never its answer.
+      attrs: { linkId, connectorId, filter, fields, sort, pageSize, parameters },
       editable,
       setAttrs: (attrs) => {
         if (editable) setAttrs(attrs);
@@ -120,6 +131,7 @@ function ErpBlock({
       fields,
       sort,
       pageSize,
+      parameters,
       editable,
       setAttrs,
       services,

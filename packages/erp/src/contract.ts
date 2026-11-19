@@ -29,6 +29,17 @@ export const ROUTES = {
   connectors: 'api/connect/Connectors',
 } as const;
 
+/**
+ * `Connectors` asking for these kinds (Phase 12, INTEGRATIONS.md, "Reports"):
+ * `api/connect/Connectors?kinds=entity,report`. Without `kinds` (a build before 0.12.0) the ERP
+ * lists its entities only.
+ */
+export function connectorsRoute(kinds: readonly ConnectorKind[] | null): string {
+  return kinds && kinds.length
+    ? `${ROUTES.connectors}?kinds=${kinds.join(',')}`
+    : ROUTES.connectors;
+}
+
 /** A connector's own route: `api/connect/Connectors/{id}/Schema`, `Query` or `Commit`. */
 export function connectorRoute(id: string, name: 'Schema' | 'Query' | 'Commit'): string {
   return `${ROUTES.connectors}/${encodeURIComponent(id)}/${name}`;
@@ -277,6 +288,10 @@ export type EditReason = (typeof EDIT_REASONS)[number];
 export const FIELD_SCOPES = ['record', 'key'] as const;
 export type FieldScope = (typeof FIELD_SCOPES)[number];
 
+/** How a report's field is totalled (Phase 12): summed over every match into `totals`. */
+export const FIELD_TOTALS = ['sum'] as const;
+export type FieldTotal = (typeof FIELD_TOTALS)[number];
+
 export interface FieldSchema {
   readonly name: string;
   readonly label: Localized;
@@ -286,6 +301,8 @@ export interface FieldSchema {
   readonly editReason?: EditReason;
   /** Absent: `record`. A `key` field's value belongs to every record of the same key. */
   readonly scope?: FieldScope;
+  /** A report's decimal or integer field summed over every match into the answer's `totals`. */
+  readonly total?: FieldTotal;
   readonly required?: boolean;
   readonly maxLength?: number;
   /** A decimal string for a decimal, a number for an integer, `YYYY-MM-DD` for a date. */
@@ -318,16 +335,46 @@ export interface LookupItem {
   readonly active?: boolean;
 }
 
-/** A report's parameter (a later release). */
+/** A report parameter's kinds (Phase 12, INTEGRATIONS.md, "Reports"). */
+export const PARAMETER_TYPES = ['date', 'choice', 'lookup', 'boolean'] as const;
+export type ParameterType = (typeof PARAMETER_TYPES)[number];
+
+/** A date parameter's default besides a `YYYY-MM-DD`: read in the company's time zone. */
+export const DATE_DEFAULTS = ['today', 'monthStart'] as const;
+export type DateDefault = (typeof DATE_DEFAULTS)[number];
+
+/** The first and last days a date parameter takes (`range` outside them). */
+export const PARAMETER_DATES = { min: '1900-01-01', max: '9999-12-31' } as const;
+
+/** A parameter's value on the wire: dates `YYYY-MM-DD`, choices and lookups by value. */
+export type ParameterValue = string | boolean | null;
+
+export interface ParameterOption {
+  readonly value: string;
+  readonly label: Localized;
+}
+
+/** A report's parameter, in the order the report shows them. */
 export interface ReportParameter {
   readonly name: string;
   readonly label: Localized;
-  readonly type: string;
+  readonly type: ParameterType;
   readonly required: boolean;
+  /** A `choice`'s values, at least one. */
+  readonly options?: readonly ParameterOption[];
+  /** A `lookup`'s list: a key of the schema's `lookups`. */
+  readonly lookup?: string;
+  /**
+   * Used when the parameter is absent: a date's `today`, `monthStart` or `YYYY-MM-DD`, a
+   * choice's value, a lookup's code, a boolean. Absent (or null): no value.
+   */
+  readonly default?: string | boolean;
 }
 
 export interface ConnectorSchema {
   readonly id: string;
+  /** Absent: `entity` (Phase 12). A report's fields are all read-only and it commits nothing. */
+  readonly kind?: ConnectorKind;
   readonly schemaVersion: string;
   /** The business key, a read-only text or integer field whose value is each record's `key`. */
   readonly keyField: string;
@@ -339,8 +386,13 @@ export interface ConnectorSchema {
   /** Only the fields this user may see, in the ERP's order. */
   readonly fields: readonly FieldSchema[];
   readonly lookups: Readonly<Record<string, readonly LookupItem[]>>;
+  /** A report's, in the order they are shown. */
   readonly parameters?: readonly ReportParameter[];
 }
+
+/** A schema's kind, `entity` when it does not say (as a build before 0.12.0 reads it). */
+export const kindOf = (schema: Pick<ConnectorSchema, 'kind'>): ConnectorKind =>
+  schema.kind ?? 'entity';
 
 // ---------------------------------------------------------------------------------------------
 // Query
@@ -359,8 +411,11 @@ export interface SortKey {
 
 export interface QueryRequest {
   readonly filter: QueryFilter;
-  /** Reports only. */
-  readonly parameters?: Readonly<Record<string, unknown>>;
+  /**
+   * A report's, required for one (`{}` for every default); never an entity's. What the person set:
+   * an absent parameter takes the report's default.
+   */
+  readonly parameters?: Readonly<Record<string, ParameterValue>>;
   /** A subset of the schema's fields; absent, every one. */
   readonly fields?: readonly string[];
   /** At most three, sortable fields only. */
@@ -381,10 +436,19 @@ export interface ErpRecord {
 
 export interface QueryResponse {
   readonly records: readonly ErpRecord[];
-  /** Null on the last page. */
+  /**
+   * Null on the last page, and on the page that reaches the schema's `maxRecords` (Phase 12): a
+   * query reads at most that many records through its cursors, whatever `total` says.
+   */
   readonly nextCursor: string | null;
   /** Every match, whatever the cursor. */
   readonly total: number;
+  /** A report's: each `total: 'sum'` field of the answer's over every match, whatever the cursor. */
+  readonly totals?: Readonly<Record<string, WireValue>>;
+  /** A report's field labels its parameters give (AP aging's bands by `ageBy`). */
+  readonly labels?: Readonly<Record<string, Localized>>;
+  /** A report's: true when a limit of the ERP's own cut it short (stock balance's). */
+  readonly partial?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -793,13 +857,32 @@ function connectorSummary(value: unknown, path: string): ConnectorSummary {
   };
 }
 
-export function parseConnectors(value: unknown, path = '$'): ConnectorsResponse {
+/**
+ * `Connectors`' answer. With `kinds`, the kinds the request asked for (Phase 12): any other kind
+ * breaks the contract; asked without (`null`), only entities may be listed.
+ */
+export function parseConnectors(
+  value: unknown,
+  kinds?: readonly ConnectorKind[] | null,
+  path = '$',
+): ConnectorsResponse {
   const o = object(value, path);
   const connectors = array(o.connectors, `${path}.connectors`).map((v, i) =>
     connectorSummary(v, `${path}.connectors[${i}]`),
   );
   if (new Set(connectors.map((c) => c.id)).size !== connectors.length) {
     throw new ErpContractError(`${path}.connectors`, 'unique ids', o.connectors);
+  }
+  if (kinds !== undefined) {
+    const asked: readonly ConnectorKind[] = kinds && kinds.length ? kinds : ['entity'];
+    const stray = connectors.findIndex((c) => !asked.includes(c.kind));
+    if (stray >= 0) {
+      throw new ErpContractError(
+        `${path}.connectors[${stray}].kind`,
+        `one of the kinds asked for (${asked.join(', ')})`,
+        connectors[stray]!.kind,
+      );
+    }
   }
   return { connectors };
 }
@@ -838,6 +921,10 @@ function field(value: unknown, path: string, lookups: Obj): FieldSchema {
   if (type === 'lookup' && (lookup === undefined || lookups[lookup] === undefined)) {
     throw new ErpContractError(`${path}.lookup`, 'the name of a list in lookups', lookup);
   }
+  const total = optional(o, 'total', path, (v, p) => oneOf(FIELD_TOTALS, v, p));
+  if (total !== undefined && type !== 'decimal' && type !== 'integer') {
+    throw new ErpContractError(`${path}.total`, 'a total on a decimal or integer field', total);
+  }
   return {
     name: name(o.name, `${path}.name`),
     label: localized(o.label, `${path}.label`),
@@ -863,6 +950,7 @@ function field(value: unknown, path: string, lookups: Obj): FieldSchema {
       'scope',
       optional(o, 'scope', path, (v, p) => oneOf(FIELD_SCOPES, v, p)),
     ),
+    ...spread('total', total),
     filterable: boolean(o.filterable, `${path}.filterable`),
     sortable: boolean(o.sortable, `${path}.sortable`),
   };
@@ -877,13 +965,73 @@ function lookupItem(value: unknown, path: string): LookupItem {
   };
 }
 
-function parameter(value: unknown, path: string): ReportParameter {
+/** Whether `text` is a date a parameter takes: `YYYY-MM-DD` from 1900-01-01 to 9999-12-31. */
+export function isParameterDate(text: unknown): text is string {
+  return (
+    typeof text === 'string' &&
+    isIsoDate(text) &&
+    text >= PARAMETER_DATES.min &&
+    text <= PARAMETER_DATES.max
+  );
+}
+
+function parameterOption(value: unknown, path: string): ParameterOption {
   const o = object(value, path);
+  return { value: nonEmpty(o.value, `${path}.value`), label: localized(o.label, `${path}.label`) };
+}
+
+function parameter(value: unknown, path: string, lookups: Obj): ReportParameter {
+  const o = object(value, path);
+  const type = oneOf(PARAMETER_TYPES, o.type, `${path}.type`);
+  let options: ParameterOption[] | undefined;
+  if (type === 'choice') {
+    options = array(o.options, `${path}.options`).map((v, i) =>
+      parameterOption(v, `${path}.options[${i}]`),
+    );
+    if (options.length === 0) {
+      throw new ErpContractError(`${path}.options`, 'at least one option', o.options);
+    }
+    if (new Set(options.map((x) => x.value)).size !== options.length) {
+      throw new ErpContractError(`${path}.options`, 'unique values', o.options);
+    }
+  }
+  const lookup = type === 'lookup' ? name(o.lookup, `${path}.lookup`) : undefined;
+  if (lookup !== undefined && lookups[lookup] === undefined) {
+    throw new ErpContractError(`${path}.lookup`, 'the name of a list in lookups', lookup);
+  }
+  const at = `${path}.default`;
+  const fallback = o.default === null || o.default === undefined ? undefined : o.default;
+  if (fallback !== undefined) {
+    const ok =
+      type === 'boolean'
+        ? typeof fallback === 'boolean'
+        : type === 'date'
+          ? (DATE_DEFAULTS as readonly unknown[]).includes(fallback) || isParameterDate(fallback)
+          : type === 'choice'
+            ? options!.some((x) => x.value === fallback)
+            : typeof fallback === 'string' && fallback.length > 0;
+    if (!ok) {
+      throw new ErpContractError(
+        at,
+        type === 'boolean'
+          ? 'true or false'
+          : type === 'date'
+            ? 'today, monthStart or a date from 1900-01-01 to 9999-12-31'
+            : type === 'choice'
+              ? 'one of the options’ values'
+              : 'a code',
+        fallback,
+      );
+    }
+  }
   return {
     name: name(o.name, `${path}.name`),
     label: localized(o.label, `${path}.label`),
-    type: nonEmpty(o.type, `${path}.type`),
+    type,
     required: boolean(o.required, `${path}.required`),
+    ...spread('options', options),
+    ...spread('lookup', lookup),
+    ...spread('default', fallback as string | boolean | undefined),
   };
 }
 
@@ -918,16 +1066,32 @@ export function parseSchema(value: unknown, path = '$'): ConnectorSchema {
     throw new ErpContractError(`${path}.idField`, 'a field not sent in values', idField);
   }
   const parameters = optional(o, 'parameters', path, (v, p) =>
-    array(v, p).map((item, i) => parameter(item, `${p}[${i}]`)),
+    array(v, p).map((item, i) => parameter(item, `${p}[${i}]`, lookupsObj)),
   );
+  if (parameters && new Set(parameters.map((p) => p.name)).size !== parameters.length) {
+    throw new ErpContractError(`${path}.parameters`, 'unique names', o.parameters);
+  }
+  const kind = optional(o, 'kind', path, (v, p) => oneOf(CONNECTOR_KINDS, v, p));
+  const maxCommitRecords = integer(o.maxCommitRecords, `${path}.maxCommitRecords`, 0);
+  if (kind === 'report') {
+    // A report is read-only (Phase 12): nothing of it can be committed.
+    const editable = fields.findIndex((f) => f.editable);
+    if (editable >= 0) {
+      throw new ErpContractError(`${path}.fields[${editable}].editable`, 'false on a report', true);
+    }
+    if (maxCommitRecords !== 0) {
+      throw new ErpContractError(`${path}.maxCommitRecords`, '0 on a report', maxCommitRecords);
+    }
+  }
   return {
     id: connectorId(o.id, `${path}.id`),
+    ...spread('kind', kind),
     schemaVersion: nonEmpty(o.schemaVersion, `${path}.schemaVersion`),
     keyField,
     idField,
     maxPageSize: integer(o.maxPageSize, `${path}.maxPageSize`, 1),
     maxRecords: integer(o.maxRecords, `${path}.maxRecords`, 1),
-    maxCommitRecords: integer(o.maxCommitRecords, `${path}.maxCommitRecords`, 0),
+    maxCommitRecords,
     fields,
     lookups,
     ...spread('parameters', parameters),
@@ -1068,7 +1232,43 @@ export function parseQueryResponse(
   if (total < records.length) {
     throw new ErpContractError(`${path}.total`, 'at least the records sent', total);
   }
-  return { records, nextCursor, total };
+  // Phase 12: a report's totals, labels and whether a limit of its own cut it.
+  const byName = schema ? new Map(schema.fields.map((f) => [f.name, f])) : null;
+  const totals = optional(o, 'totals', path, (v, p) => {
+    const read: Record<string, WireValue> = {};
+    for (const [key, item] of Object.entries(object(v, p))) {
+      const at = `${p}.${key}`;
+      name(key, at);
+      const value = wireValue(item, at);
+      const f = byName?.get(key);
+      if (byName && (!f || f.total !== 'sum')) {
+        throw new ErpContractError(at, 'a field the schema totals', key);
+      }
+      const problem = f ? valueProblem(f, value) : null;
+      if (problem) throw new ErpContractError(at, `what the schema allows (${problem})`, value);
+      read[key] = value;
+    }
+    return read;
+  });
+  const labels = optional(o, 'labels', path, (v, p) => {
+    const read: Record<string, Localized> = {};
+    for (const [key, item] of Object.entries(object(v, p))) {
+      const at = `${p}.${key}`;
+      name(key, at);
+      if (byName && !byName.has(key)) throw new ErpContractError(at, 'a field of the schema', key);
+      read[key] = localized(item, at);
+    }
+    return read;
+  });
+  const partial = optional(o, 'partial', path, boolean);
+  return {
+    records,
+    nextCursor,
+    total,
+    ...spread('totals', totals),
+    ...spread('labels', labels),
+    ...spread('partial', partial),
+  };
 }
 
 // Commit

@@ -10,6 +10,9 @@ import { ERP10_THEIRS, erp10Scene, erp10Screens } from './erp10';
 import { meaningScene, meaningScreens } from './meaning';
 import { groupsScene, groupsScreens } from './groups';
 import { SSO_REFUSED, ssoScene, ssoScreens } from './sso';
+import { chartScene, chartScreens } from './chart';
+import { gridScene, gridScreens } from './grid';
+import { ERP12_THEIRS, englishIn, erp12Scene, erp12Screens } from './erp12';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -588,6 +591,84 @@ test('the Arabic single sign-on in Settings has no English of its own', async ({
     expect(errors).toEqual([]);
   } finally {
     await scene.dispose();
+    await cloud.close();
+  }
+});
+
+// Phase 12's chart view in Arabic: its bars, its Layout settings, a pie and a chart with no group
+// (chart.ts's scene, made in Arabic on this device: the Projects template's words are Arabic too).
+// The chart's own words, the library's among them (its data table, its points' names, the keys it
+// tells a screen reader to press), are the app's.
+test('the Arabic chart view and its settings have no English of their own', async ({ page }) => {
+  test.setTimeout(240000);
+  const errors = watchErrors(page);
+  const scene = await chartScene(page, 'ar');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  const found: string[] = [];
+  await chartScreens(page, scene.language, 'ar', async (screen) => {
+    found.push(...(await english(page, screen, { names: ['Workspace', 'Private'] })));
+  });
+  expect(found, found.join('\n')).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// Phase 12's grid in Arabic (M12.3): the table with a row's cell active, a title being edited and
+// cancelled, the grouped table as a tree grid with a group's header active and collapsed, and a
+// "New" line reached, each said in the live region in Arabic (grid.ts's scene, made in Arabic on
+// this device: the Tasks template's words are Arabic too). The key the live region names (Enter)
+// is a key's name.
+test('the Arabic grid, its tree grid and what its live region says have no English of their own', async ({
+  page,
+}) => {
+  test.setTimeout(240000);
+  const errors = watchErrors(page);
+  await gridScene(page, 'ar');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  const found: string[] = [];
+  await gridScreens(page, 'ar', async (screen) => {
+    found.push(...(await english(page, screen, { names: ['Workspace', 'Private'] })));
+  });
+  expect(found, found.join('\n')).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// Phase 12's ERP reports in Arabic (M12.6): AP aging with its parameters and totals, its date's
+// calendar open, stock balance with its switch on, and the trial balance; against the server stack
+// and the mock ERP (erp12.ts's scene, made in English). The page-wide walk leaves a page's blocks
+// to their writer, so each screen also walks the block itself; the ERP's rows, totals and its
+// lists' items (a vendor group's, a site's) are the ERP's own.
+test('the Arabic ERP report blocks, their parameters, calendar and totals have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop || REAL_ERP, 'A browser against the mocks');
+  test.setTimeout(300000);
+  const cloud = signers();
+  const errors = watchAppErrors(page);
+  const scene = await erp12Scene(page, 'Sawsan', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const theirs = {
+      within: ERP12_THEIRS,
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await erp12Screens(page, 'ar', async (screen, block) => {
+      found.push(...(await english(page, screen, theirs)));
+      found.push(...(await englishIn(block, `${screen}, in the block`, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.api.dispose();
     await cloud.close();
   }
 });

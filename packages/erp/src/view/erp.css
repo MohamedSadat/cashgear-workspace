@@ -530,3 +530,42 @@
 .cgw-erp-confirm p {
   margin: 0;
 }
+
+/* Reports (Phase 12): the settings above the table, its totals at the foot */
+
+.cgw-erp-tag {
+  padding-inline: 6px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 4px);
+  color: var(--cg-text-secondary);
+  font-size: var(--cg-font-size-xs, 12px);
+}
+
+.cgw-erp-choose-group {
+  margin: 0;
+  color: var(--cg-text-secondary);
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-erp-parameters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cg-space-2, 8px) var(--cg-space-4, 16px);
+}
+
+.cgw-erp-table tfoot th,
+.cgw-erp-table tfoot td {
+  position: sticky;
+  inset-block-start: auto;
+  inset-block-end: 0;
+  border-block-start: 1px solid var(--cg-border);
+  border-block-end: 0;
+  background: var(--cg-surface-subtle, var(--cg-surface));
+  color: var(--cg-text);
+  font-weight: var(--cg-font-weight-medium, 600);
+}
+
+.cgw-erp-total-label {
+  color: var(--cg-text-secondary);
+}

@@ -29,6 +29,9 @@ import { erp10Scene, erp10Screens } from './erp10';
 import { meaningScene, meaningScreens } from './meaning';
 import { groupsScene, groupsScreens } from './groups';
 import { ssoScene, ssoScreens } from './sso';
+import { chartScene, chartScreens } from './chart';
+import { gridScene, gridScreens } from './grid';
+import { erp12Scene, erp12Screens } from './erp12';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -677,6 +680,93 @@ test.describe('accessibility of Phase 11’s single sign-on', () => {
       expect(problems, problems.join('\n')).toEqual([]);
     } finally {
       await scene.dispose();
+    }
+  });
+});
+
+// Phase 12: Axe on the chart view (bars, its Layout settings, a pie, a chart with no group), in both
+// themes and both languages, on this device (chart.ts's scene: a Projects database, made in
+// English, then loaded again in each language and theme).
+test.describe('accessibility of Phase 12’s chart view', () => {
+  test('Axe finds nothing on the chart view and its settings (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+    const scene = await chartScene(page, 'en');
+    const problems: string[] = [];
+    for (const theme of ['light', 'dark'] as const) {
+      for (const language of ['en', 'ar'] as const) {
+        await page.goto(scene.url);
+        await setTheme(page, theme);
+        await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+        await page.reload();
+        await chartScreens(page, scene.language, language, async (screen) => {
+          problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+        });
+      }
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
+});
+
+// Phase 12 (M12.3): Axe on the database grid as a screen reader gets it: the table with a row's
+// cell active, a title being edited and cancelled (said in the live region), the grouped table
+// as a tree grid with a group's header active and collapsed, and a "New" line reached; in both
+// themes and both languages, on this device (grid.ts's scene: the Tasks template and a fifth view
+// grouped by Priority, made in English, then loaded again in each language and theme).
+test.describe('accessibility of Phase 12’s grid', () => {
+  test('Axe finds nothing on the grid and the tree grid, moving and editing (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+    const scene = await gridScene(page, 'en');
+    const problems: string[] = [];
+    for (const theme of ['light', 'dark'] as const) {
+      for (const language of ['en', 'ar'] as const) {
+        await page.goto(scene.url);
+        await setTheme(page, theme);
+        await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+        await page.reload();
+        await gridScreens(page, language, async (screen) => {
+          problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+        });
+      }
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
+  });
+});
+
+// Phase 12 (M12.6): Axe on ERP report blocks: AP aging with its parameters (a date, two choices, a
+// lookup) and its totals row, its date's calendar open, stock balance with its switch on, and the
+// trial balance; in both themes and both languages, against the server stack and the mock ERP
+// (erp12.ts's scene, made in English, then loaded again in each language and theme).
+test.describe('accessibility of Phase 12’s ERP reports', () => {
+  const cloud = signers();
+  test.afterEach(() => cloud.close());
+  test('Axe finds nothing on report blocks, their parameters, calendar and totals (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop || REAL_ERP, 'A browser against the mocks');
+    test.setTimeout(480000);
+    const scene = await erp12Scene(page, 'Axe twelve', cloud.signer);
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await erp12Screens(page, language, async (screen) => {
+            problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+          });
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.api.dispose();
     }
   });
 });

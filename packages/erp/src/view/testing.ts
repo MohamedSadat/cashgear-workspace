@@ -60,6 +60,7 @@ export const EMPTY_ATTRS: ErpBlockAttrs = {
   fields: null,
   sort: null,
   pageSize: null,
+  parameters: null,
 };
 
 export const CONNECTORS: ConnectorSummary[] = [
@@ -343,6 +344,133 @@ export const ITEM_RECORDS: ErpRecord[] = [
   },
 ];
 
+/** Phase 12: a report, as AP aging by vendor is listed. */
+export const AP_AGING: ConnectorSummary = {
+  id: 'apAging',
+  kind: 'report',
+  label: { en: 'AP aging by vendor', ar: 'أعمار ديون الموردين' },
+  schemaVersion: 'apAging.1',
+  access: 'view',
+};
+
+const band = (n: number, en: string, ar: string) =>
+  field(`band${n}`, en, ar, 'decimal', { scale: 2, sortable: true, total: 'sum' });
+
+/** AP aging's shape: a date, two choices, a lookup and a switch; bands totalled. */
+export const AP_SCHEMA: ConnectorSchema = {
+  id: 'apAging',
+  kind: 'report',
+  schemaVersion: 'apAging.1',
+  keyField: 'vendorAccount',
+  idField: null,
+  maxPageSize: 1000,
+  maxRecords: 10_000,
+  maxCommitRecords: 0,
+  fields: [
+    field('vendorAccount', 'Vendor account', 'حساب المورد', 'text', { sortable: true }),
+    field('vendorName', 'Vendor', 'المورد', 'text', { sortable: true }),
+    field('vendorGroup', 'Group', 'المجموعة', 'lookup', {
+      lookup: 'vendorGroups',
+      filterable: true,
+      sortable: true,
+    }),
+    field('balance', 'Balance', 'الرصيد', 'decimal', { scale: 2, sortable: true, total: 'sum' }),
+    band(0, 'Not due', 'غير مستحق'),
+    band(1, '1–30 days', 'من 1 إلى 30 يومًا'),
+    field('openItems', 'Open items', 'البنود المفتوحة', 'integer', { sortable: true }),
+  ],
+  lookups: {
+    vendorGroups: [
+      { code: 'LOCAL', label: 'Local' },
+      { code: 'IMPORT', label: 'Import' },
+      { code: 'OLD', label: 'Old suppliers', active: false },
+    ],
+  },
+  parameters: [
+    {
+      name: 'asOf',
+      label: { en: 'As of', ar: 'حتى تاريخ' },
+      type: 'date',
+      required: true,
+      default: 'today',
+    },
+    {
+      name: 'ageBy',
+      label: { en: 'Aged by', ar: 'العمر حسب' },
+      type: 'choice',
+      required: false,
+      options: [
+        { value: 'dueDate', label: { en: 'Due date', ar: 'تاريخ الاستحقاق' } },
+        { value: 'invoiceDate', label: { en: 'Invoice date', ar: 'تاريخ الفاتورة' } },
+      ],
+      default: 'dueDate',
+    },
+    {
+      name: 'vendorGroup',
+      label: { en: 'Vendor group', ar: 'مجموعة الموردين' },
+      type: 'lookup',
+      required: false,
+      lookup: 'vendorGroups',
+    },
+    {
+      name: 'includeZero',
+      label: { en: 'Include zero balances', ar: 'إظهار الأرصدة الصفرية' },
+      type: 'boolean',
+      required: false,
+      default: false,
+    },
+  ],
+};
+
+/** Two vendors' positions, with distinctive names as the mock's markers. */
+export const AP_RECORDS: ErpRecord[] = [
+  {
+    id: 'V-1001',
+    key: 'V-1001',
+    version: 'AAAAAAAAAAE=',
+    values: {
+      vendorAccount: 'V-1001',
+      vendorName: 'Qorvath Lantern Trading',
+      vendorGroup: 'LOCAL',
+      balance: '1500.00',
+      band0: '1000.00',
+      band1: '500.00',
+      openItems: 2,
+    },
+  },
+  {
+    id: 'V-1002',
+    key: 'V-1002',
+    version: 'AAAAAAAAAAI=',
+    values: {
+      vendorAccount: 'V-1002',
+      vendorName: 'مؤسسة زمرّدان للتوريدات',
+      vendorGroup: 'IMPORT',
+      balance: '250.50',
+      band0: null,
+      band1: '250.50',
+      openItems: 1,
+    },
+  },
+];
+
+/** What AP aging answers beside its records: totals, and the bands' labels by `ageBy`. */
+export function apAnswer(request: QueryRequest): Partial<QueryResponse> {
+  const byInvoice = request.parameters?.ageBy === 'invoiceDate';
+  return {
+    totals: { balance: '1750.50', band0: '1000.00', band1: '750.50' },
+    labels: byInvoice
+      ? {
+          band0: { en: '0–30 days', ar: 'من 0 إلى 30 يومًا' },
+          band1: { en: '31–60 days', ar: 'من 31 إلى 60 يومًا' },
+        }
+      : {
+          band0: { en: 'Not due', ar: 'غير مستحق' },
+          band1: { en: '1–30 days', ar: 'من 1 إلى 30 يومًا' },
+        },
+  };
+}
+
 /** An ERP in memory behind the client's interface, paging by offset as the mock does. */
 export class FakeErp {
   language: Language = 'en';
@@ -360,6 +488,8 @@ export class FakeErp {
   readonly statusAsked: string[] = [];
   /** Answers a commit instead of the in-memory ERP, when set. */
   commitWith: ((request: CommitRequest) => CommitOutcome | Promise<CommitOutcome>) | null = null;
+  /** Phase 12: what a query answers beside its records (a report's totals, labels, partial). */
+  answerWith: ((request: QueryRequest) => Partial<QueryResponse>) | null = null;
   /** Real commits written, by id. */
   readonly stored = new Map<string, CommitResponse>();
   private n = 0;
@@ -370,6 +500,15 @@ export class FakeErp {
     this.connectorsList = [VENDORS];
     this.schemaValue = VENDOR_SCHEMA;
     this.records = VENDOR_RECORDS.map((r) => ({ ...r, values: { ...r.values } }));
+    return this;
+  }
+
+  /** Phase 12: AP aging, a report, beside the entities; its schema and records. */
+  report(): this {
+    this.connectorsList = [...CONNECTORS, AP_AGING];
+    this.schemaValue = AP_SCHEMA;
+    this.records = AP_RECORDS.map((r) => ({ ...r, values: { ...r.values } }));
+    this.answerWith = apAnswer;
     return this;
   }
 
@@ -496,6 +635,7 @@ export class FakeErp {
         records: page,
         nextCursor: next < this.records.length ? String(next) : null,
         total: this.records.length,
+        ...this.answerWith?.(request),
       };
     },
     commit: async (_token, _id, request) => {

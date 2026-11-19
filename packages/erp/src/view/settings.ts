@@ -2,16 +2,22 @@
 // connector's schema. Attributes are JSON text written by any build and any person, so each is
 // read leniently: what does not parse is ignored, never thrown. A setting may name a field the
 // reader's ERP account cannot see (two people see different fields, INTEGRATIONS.md): it is left
-// out of the reader's query, and kept when the reader changes something else.
+// out of the reader's query, and kept when the reader changes something else. Phase 12: a report's
+// parameters, what the person set of them (`parameters`), each absent one taking the report's
+// default, so a date left at `today` tracks the day.
 import {
   LIMITS,
   isDecimal,
   isIsoDate,
   isIsoDateTime,
+  isParameterDate,
+  kindOf,
   type ConnectorSchema,
   type FieldSchema,
+  type ParameterValue,
   type QueryFilter,
   type QueryRequest,
+  type ReportParameter,
   type SortKey,
   type WireValue,
 } from '../contract';
@@ -32,6 +38,11 @@ export interface ViewSettings {
   readonly sort: readonly SortKey[];
   /** Null: the default. */
   readonly pageSize: number | null;
+  /**
+   * Phase 12: a report's parameters as the block holds them, names the schema may not list
+   * included (kept when another is written); absent ones take the report's defaults.
+   */
+  readonly parameters: Readonly<Record<string, ParameterValue>>;
 }
 
 function json(text: string | null): unknown {
@@ -87,13 +98,63 @@ export function readSettings(attrs: ErpBlockAttrs): ViewSettings {
       ? attrs.pageSize
       : null;
 
+  const parametersValue = json(attrs.parameters);
+  const parameters: Record<string, ParameterValue> = {};
+  if (
+    typeof parametersValue === 'object' &&
+    parametersValue !== null &&
+    !Array.isArray(parametersValue)
+  ) {
+    for (const [key, value] of Object.entries(parametersValue as Record<string, unknown>)) {
+      if (!NAME.test(key)) continue;
+      if (value === null || typeof value === 'string' || typeof value === 'boolean')
+        parameters[key] = value;
+    }
+  }
+
   return {
     fields: fields && fields.length ? fields : null,
     search,
     equals,
     sort,
     pageSize,
+    parameters,
   };
+}
+
+/** Whether `value` is one `parameter` takes, before the ERP checks it (a lookup's code is its). */
+export function parameterValueValid(parameter: ReportParameter, value: ParameterValue): boolean {
+  if (value === null) return !parameter.required;
+  switch (parameter.type) {
+    case 'date':
+      return isParameterDate(value);
+    case 'choice':
+      return (parameter.options ?? []).some((option) => option.value === value);
+    case 'lookup':
+      return typeof value === 'string' && value !== '';
+    case 'boolean':
+      return typeof value === 'boolean';
+  }
+}
+
+/** The value a parameter has when the block holds none for it: its default, else none. */
+export const parameterDefault = (parameter: ReportParameter): ParameterValue =>
+  parameter.default ?? null;
+
+/**
+ * The `parameters` attribute with `parameter` set to `value` (undefined: back to the default). A
+ * value equal to the default is not held, so a date left at `today` keeps tracking the day; other
+ * names, those the schema does not list included, stay as they are. Null when nothing is held.
+ */
+export function parametersText(
+  current: Readonly<Record<string, ParameterValue>>,
+  parameter: ReportParameter,
+  value: ParameterValue | undefined,
+): string | null {
+  const next: Record<string, ParameterValue> = { ...current };
+  if (value === undefined || value === parameterDefault(parameter)) delete next[parameter.name];
+  else next[parameter.name] = value;
+  return Object.keys(next).length ? JSON.stringify(next) : null;
 }
 
 /** The `filter` attribute for a search and conditions: null when there is neither. */
@@ -130,9 +191,39 @@ export type QueryPlan =
     }
   | { readonly kind: 'noField' }
   | { readonly kind: 'filterDenied' }
-  | { readonly kind: 'filterNotFilterable' };
+  | { readonly kind: 'filterNotFilterable' }
+  /** Phase 12: a report's required parameter has no value and no default: nothing is asked. */
+  | { readonly kind: 'parameterNeeded'; readonly parameter: ReportParameter };
 
-export function planQuery(schema: ConnectorSchema, settings: ViewSettings): QueryPlan {
+/**
+ * A report's `parameters` for its query (Phase 12): only those the schema lists, each with a value
+ * its type takes (any other is left out, so the report's default applies), `{}` for every
+ * default; or the required parameter that has neither a value nor a default.
+ */
+export function reportParameters(
+  schema: ConnectorSchema,
+  held: Readonly<Record<string, ParameterValue>>,
+):
+  | { readonly parameters: Readonly<Record<string, ParameterValue>> }
+  | { readonly needed: ReportParameter } {
+  const parameters: Record<string, ParameterValue> = {};
+  for (const parameter of schema.parameters ?? []) {
+    const has = Object.prototype.hasOwnProperty.call(held, parameter.name);
+    const value = held[parameter.name];
+    if (has && value !== undefined && parameterValueValid(parameter, value)) {
+      parameters[parameter.name] = value;
+    } else if (parameter.required && parameter.default === undefined) {
+      return { needed: parameter };
+    }
+  }
+  return { parameters };
+}
+
+export function planQuery(
+  schema: ConnectorSchema,
+  settings: ViewSettings,
+  report = kindOf(schema) === 'report',
+): QueryPlan {
   const byName = new Map(schema.fields.map((f) => [f.name, f]));
   let hidden = 0;
 
@@ -141,6 +232,14 @@ export function planQuery(schema: ConnectorSchema, settings: ViewSettings): Quer
     // Dropping the condition would show records the view does not mean to show.
     if (!field) return { kind: 'filterDenied' };
     if (!field.filterable) return { kind: 'filterNotFilterable' };
+  }
+
+  // A report's query always carries its parameters; an entity's never does.
+  let parameters: Readonly<Record<string, ParameterValue>> | undefined;
+  if (report) {
+    const read = reportParameters(schema, settings.parameters);
+    if ('needed' in read) return { kind: 'parameterNeeded', parameter: read.needed };
+    parameters = read.parameters;
   }
 
   let columns: FieldSchema[];
@@ -178,6 +277,7 @@ export function planQuery(schema: ConnectorSchema, settings: ViewSettings): Quer
     kind: 'query',
     request: {
       filter,
+      ...(parameters ? { parameters } : {}),
       ...(fields ? { fields } : {}),
       ...(sort.length ? { sort } : {}),
       pageSize,

@@ -12,10 +12,15 @@
 // (`scope: 'key'`), and versions made from the values a user sees, as neither CustTable nor
 // InvTable nor InvSum has a rowversion.
 
-/** The companies, each with Workspace turned on. */
+import { largeRecords } from './large.mjs';
+
+/**
+ * The companies, each with Workspace turned on. Phase 12: a report's `today` and `monthStart` are
+ * read in the company's time zone.
+ */
 export const COMPANIES = {
-  Kit: { name: 'Kit Trading', database: 'ASTDataTest' },
-  Dot: { name: 'Dot Foods', database: 'ASTDataTest' },
+  Kit: { name: 'Kit Trading', database: 'ASTDataTest', timeZone: 'Africa/Cairo' },
+  Dot: { name: 'Dot Foods', database: 'ASTDataTest', timeZone: 'Africa/Cairo' },
 };
 
 export const CONNECTOR_IDS = ['vendors', 'customers', 'itemsOnHand'];
@@ -26,7 +31,10 @@ export const CONNECTOR_IDS = ['vendors', 'customers', 'itemsOnHand'];
  * them (Customers' national ID from employees, as the customer list's ShowSensitiveData does);
  * `rules` the record rules it applies (Customers' `LoadOwnedRows`: only the customers they
  * created); `admin` whether they may link and revoke; `edit` (Phase 7, Phase 10) a connector's
- * Edit privilege (`edit`) or Edit and AdvEdit (`advEdit`).
+ * Edit privilege (`edit`) or Edit and AdvEdit (`advEdit`). Phase 12: `roles`, the ERP roles its
+ * report pages check (each report lists those it takes, reports.mjs), and `showCost`, whether the
+ * Warehouse balance page shows them cost (Exec, or AdvView on unit 4006). Every user's entities
+ * are as before.
  */
 export const USERS = {
   alice: {
@@ -35,6 +43,9 @@ export const USERS = {
     company: 'Kit',
     displayName: 'Alice Haddad',
     connectors: ['vendors', 'customers', 'itemsOnHand'],
+    // An accounts manager: every report, with cost.
+    roles: ['accountmgr'],
+    showCost: true,
     admin: false,
   },
   bob: {
@@ -46,6 +57,8 @@ export const USERS = {
     // Bob sells: an employee who sees only the customers he created, without their national ID.
     rules: { customers: { createdBy: 'u102' } },
     hidden: { customers: ['nationalId'] },
+    // Also keeps the warehouse: stock balance, without cost; neither AP aging nor the trial balance.
+    roles: ['warehouse'],
     admin: false,
   },
   carol: {
@@ -70,6 +83,8 @@ export const USERS = {
     company: 'Dot',
     displayName: 'Erin Nassar',
     connectors: ['vendors', 'customers', 'itemsOnHand'],
+    roles: ['accountmgr'],
+    showCost: true,
     admin: true,
   },
   // Vendors' and Customers' Edit; like Bob, an employee who sees only the customers she created.
@@ -82,6 +97,8 @@ export const USERS = {
     rules: { customers: { createdBy: 'u105' } },
     hidden: { customers: ['nationalId'] },
     edit: { vendors: 'edit', customers: 'edit' },
+    // Payables: AP aging only.
+    roles: ['payable'],
     admin: false,
   },
   // Vendors' and Customers' Edit and AdvEdit, Items' Edit; sees every customer.
@@ -92,6 +109,9 @@ export const USERS = {
     displayName: 'فارس منير',
     connectors: ['vendors', 'customers', 'itemsOnHand'],
     edit: { vendors: 'advEdit', customers: 'advEdit', itemsOnHand: 'edit' },
+    // The warehouse manager: stock balance, with cost.
+    roles: ['warehousemgr'],
+    showCost: true,
     admin: false,
   },
 };
@@ -797,7 +817,16 @@ function items(pick) {
       ),
     );
   }
-  return interleave(kit, dot, null);
+  // In the connector's own order (item, site, warehouse, location, ordinal), as the ERP reads it.
+  const order = (a, b) => {
+    for (const name of ['itemId', 'siteId', 'warehouseId', 'locationId']) {
+      const x = a[name] ?? '';
+      const y = b[name] ?? '';
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return 0;
+  };
+  return interleave(kit.sort(order), dot.sort(order), null);
 }
 
 /** Two companies' rows in one table, interleaved in the id space as they are in the ERP. */
@@ -825,9 +854,15 @@ export const stockId = (row) =>
  * the values a user sees when read (server.mjs).
  *
  * `kitVendors` and `kitCustomers`: more of Kit's than the seed's 150 and 240, for the review
- * benches; `locks: false`, no record locked.
+ * benches; `locks: false`, no record locked. Phase 12: `large`, Kit's records of the three
+ * connectors are the large seed's 100,000 each (large.mjs); Dot's stay as they are.
  */
-export function seedRecords({ kitVendors = 150, kitCustomers = 240, locks = true } = {}) {
+export function seedRecords({
+  kitVendors = 150,
+  kitCustomers = 240,
+  locks = true,
+  large = false,
+} = {}) {
   const pick = random(20261114);
   let counter = 0x1000n;
   const version = () => {
@@ -836,12 +871,20 @@ export function seedRecords({ kitVendors = 150, kitCustomers = 240, locks = true
     return bytes.toString('base64');
   };
   const out = {};
-  for (const [id, rows] of [
+  // Phase 12: the large seed (large.mjs) in place of Kit's records; Dot keeps its own.
+  const big = large ? largeRecords() : null;
+  for (const [id, made] of [
     ['vendors', vendors(pick, kitVendors, locks)],
     ['customers', customers(pick, kitCustomers)],
     ['itemsOnHand', items(pick)],
   ]) {
     const connector = CONNECTORS[id];
+    const rows = big
+      ? [
+          ...big[id].map((row) => ({ company: 'Kit', ...row })),
+          ...made.filter((row) => row.company !== 'Kit'),
+        ]
+      : made;
     out[id] = rows.map((row) => ({
       ...row,
       id: id === 'itemsOnHand' ? stockId(row) : row[connector.idField],

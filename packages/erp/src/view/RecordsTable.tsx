@@ -1,7 +1,9 @@
 // A page of a query's records as a table, each value drawn by its field's type, with the range
 // shown and paging by cursor. A native table: screen readers read its headers with each cell.
 // Phase 7: with `edit`, the block's pending changes are drawn in place of what was read, marked,
-// and an editable field's cells open an editor (`EditableCell`).
+// and an editable field's cells open an editor (`EditableCell`). Phase 12: a report's answer names
+// some fields' labels itself (AP aging's bands by `ageBy`), and ends with its totals over every
+// match, the same on every page.
 import { CgButton } from '@cashgear/ui';
 import { useId } from 'react';
 import type {
@@ -55,6 +57,11 @@ export function RecordsTable({
   const rangeId = useId();
   const records = response.records;
   const first = sort[0];
+  const { totals, labels } = response;
+  const heading = (field: FieldSchema) => {
+    const given = labels?.[field.name];
+    return given ? given[language] || given.en : labelOf(field, language);
+  };
   const range = records.length
     ? t('range', {
         from: formatInteger(from, locale),
@@ -89,7 +96,7 @@ export function RecordsTable({
                       : undefined
                   }
                 >
-                  <span dir="auto">{labelOf(field, language)}</span>
+                  <span dir="auto">{heading(field)}</span>
                 </th>
               ))}
             </tr>
@@ -131,6 +138,30 @@ export function RecordsTable({
               );
             })}
           </tbody>
+          {totals && columns.length > 0 && (
+            <tfoot>
+              <tr className="cgw-erp-totals" data-testid="erp-totals">
+                {columns.map((field, i) => {
+                  const value = totals[field.name];
+                  const shown =
+                    value === undefined ? null : (
+                      <CellBody field={field} value={value} schema={schema} locale={locale} />
+                    );
+                  const className = numeric(field) ? 'cgw-erp-num' : undefined;
+                  return i === 0 ? (
+                    <th key={field.name} scope="row" data-field={field.name} className={className}>
+                      <span className="cgw-erp-total-label">{t('total')}</span>
+                      {shown && <> {shown}</>}
+                    </th>
+                  ) : (
+                    <td key={field.name} data-field={field.name} className={className}>
+                      {shown}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       <div className="cgw-erp-pager" role="group" aria-label={t('pages')}>

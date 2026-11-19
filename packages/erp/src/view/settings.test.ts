@@ -2,14 +2,16 @@
 // values read. No DOM.
 import { describe, expect, it } from 'vitest';
 import { formatDate, formatDateTime, formatDecimal } from './format';
+import type { ConnectorSchema } from '../contract';
 import {
   filterText,
+  parametersText,
   parseConditionValue,
   planQuery,
   readSettings,
   type ViewSettings,
 } from './settings';
-import { EMPTY_ATTRS, SCHEMA } from './testing';
+import { AP_SCHEMA, EMPTY_ATTRS, SCHEMA } from './testing';
 
 const settings = (over: Partial<ViewSettings> = {}): ViewSettings => ({
   fields: null,
@@ -17,6 +19,7 @@ const settings = (over: Partial<ViewSettings> = {}): ViewSettings => ({
   equals: {},
   sort: [],
   pageSize: null,
+  parameters: {},
   ...over,
 });
 
@@ -111,6 +114,103 @@ describe('the block settings', () => {
     expect(parseConditionValue(f('blocked'), '')).toBeNull();
     expect(parseConditionValue(f('lastInvoiceDate'), '2026-02-30')).toBeUndefined();
     expect(parseConditionValue(f('salesperson'), '')).toBeNull();
+  });
+});
+
+describe('a report’s parameters (Phase 12)', () => {
+  const p = (name: string) => AP_SCHEMA.parameters!.find((x) => x.name === name)!;
+
+  it('read what parses: names, and values that are text, true or false, or null', () => {
+    expect(readSettings(EMPTY_ATTRS).parameters).toEqual({});
+    expect(
+      readSettings({
+        ...EMPTY_ATTRS,
+        parameters:
+          '{"asOf":"2026-10-31","ageBy":"invoiceDate","includeZero":true,"vendorGroup":null,"n":3,"o":{"a":1},"9bad":"x","__proto__":"y","gone":"kept"}',
+      }).parameters,
+    ).toEqual({
+      asOf: '2026-10-31',
+      ageBy: 'invoiceDate',
+      includeZero: true,
+      vendorGroup: null,
+      gone: 'kept',
+    });
+    for (const bad of ['{', 'null', '"x"', '[1]', '3'])
+      expect(readSettings({ ...EMPTY_ATTRS, parameters: bad }).parameters).toEqual({});
+  });
+
+  it('send a report its parameters, {} for every default, and an entity none', () => {
+    expect(planQuery(AP_SCHEMA, settings())).toMatchObject({
+      kind: 'query',
+      request: { filter: {}, parameters: {}, pageSize: 50 },
+    });
+    // Only names the report lists, each with a value its type takes; the rest take the default.
+    const plan = planQuery(
+      AP_SCHEMA,
+      settings({
+        parameters: {
+          asOf: '2026-10-31',
+          ageBy: 'invoiceDate',
+          vendorGroup: 'IMPORT',
+          includeZero: true,
+          gone: 'x',
+        },
+      }),
+    );
+    expect(plan.kind === 'query' && plan.request.parameters).toEqual({
+      asOf: '2026-10-31',
+      ageBy: 'invoiceDate',
+      vendorGroup: 'IMPORT',
+      includeZero: true,
+    });
+    const wrong = planQuery(
+      AP_SCHEMA,
+      settings({
+        parameters: { asOf: '1899-12-31', ageBy: 'weekday', vendorGroup: true, includeZero: 'yes' },
+      }),
+    );
+    expect(wrong.kind === 'query' && wrong.request.parameters).toEqual({});
+    expect(
+      planQuery(AP_SCHEMA, settings({ parameters: { asOf: '2026-02-30', vendorGroup: null } })),
+    ).toMatchObject({ request: { parameters: { vendorGroup: null } } });
+    // An entity's query never carries parameters, whatever the block holds.
+    const entity = planQuery(SCHEMA, settings({ parameters: { asOf: '2026-10-31' } }));
+    expect(entity.kind === 'query' && 'parameters' in entity.request).toBe(false);
+  });
+
+  it('ask nothing while a required parameter has neither a value nor a default', () => {
+    const schema: ConnectorSchema = {
+      ...AP_SCHEMA,
+      parameters: [{ ...p('asOf'), default: undefined }, p('ageBy')],
+    };
+    expect(planQuery(schema, settings())).toEqual({
+      kind: 'parameterNeeded',
+      parameter: schema.parameters![0],
+    });
+    // A null is no value for a required one.
+    expect(planQuery(schema, settings({ parameters: { asOf: null } })).kind).toBe(
+      'parameterNeeded',
+    );
+    expect(planQuery(schema, settings({ parameters: { asOf: '2026-11-01' } }))).toMatchObject({
+      kind: 'query',
+      request: { parameters: { asOf: '2026-11-01' } },
+    });
+  });
+
+  it('write what differs from the default, and keep names the report does not list', () => {
+    expect(parametersText({}, p('asOf'), '2026-10-31')).toBe('{"asOf":"2026-10-31"}');
+    expect(parametersText({ asOf: '2026-10-31' }, p('asOf'), undefined)).toBeNull();
+    expect(parametersText({}, p('ageBy'), 'dueDate')).toBeNull();
+    expect(parametersText({ ageBy: 'invoiceDate', gone: 1 as never }, p('ageBy'), 'dueDate')).toBe(
+      '{"gone":1}',
+    );
+    expect(parametersText({}, p('includeZero'), false)).toBeNull();
+    expect(parametersText({}, p('includeZero'), true)).toBe('{"includeZero":true}');
+    // A lookup without a default: "All" is its default, so it is not held.
+    expect(parametersText({ vendorGroup: 'LOCAL' }, p('vendorGroup'), null)).toBeNull();
+    expect(parametersText({}, { ...p('vendorGroup'), default: 'LOCAL' }, null)).toBe(
+      '{"vendorGroup":null}',
+    );
   });
 });
 

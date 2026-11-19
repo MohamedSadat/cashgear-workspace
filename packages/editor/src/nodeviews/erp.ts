@@ -1,10 +1,10 @@
 // The ERP view block (schema version 4, `erpView`): a frame the host draws the ERP view into
 // (`host.erp.mount`, the shell's `@cgw/erp` view, from the reader's own ERP session, in memory
 // only), by the lazy frame's rules (frame.ts). The frame is mounted again only when the block's
-// link, block id or editability changes; its connector, filter, fields, sort and page size go to
-// the frame's `update`. A block with no link yet is mounted too: choosing the link and connector
-// is the view's own (its pickers). Without a host to draw it, it says so. The block holds only
-// what the person chose, never ERP data.
+// link, block id or editability changes; its connector, filter, fields, sort, page size and (Phase
+// 12) a report's parameters go to the frame's `update`. A block with no link yet is mounted too:
+// choosing the link and connector is the view's own (its pickers). Without a host to draw it, it
+// says so. The block holds only what the person chose, never ERP data.
 import type { NodeViewRenderer } from '@tiptap/core';
 import type { EditorHost, ErpBlockAttrs, ErpMountOptions, OnHostChange } from '../host';
 import { frameBlockView, type FrameBlockSpec } from './frame';
@@ -40,6 +40,7 @@ const spec: FrameBlockSpec<ErpMountOptions> = {
       fields: text(node.attrs.fields),
       sort: text(node.attrs.sort),
       pageSize: size(node.attrs.pageSize),
+      parameters: text(node.attrs.parameters),
     };
     return {
       kind: 'frame',

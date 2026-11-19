@@ -8,6 +8,7 @@ import type {
   CommitOutcome,
   ErpClient,
   ErpCommitStatusOptions,
+  ErpConnectorsOptions,
   ErpQueryOptions,
   ErpRequestOptions,
 } from './client';
@@ -280,7 +281,7 @@ export class ErpSessions {
     }
   }
 
-  connectors(linkId: string, options?: ErpRequestOptions): Promise<readonly ConnectorSummary[]> {
+  connectors(linkId: string, options?: ErpConnectorsOptions): Promise<readonly ConnectorSummary[]> {
     return this.#use(linkId, (token) => this.#client.connectors(token, options));
   }
 

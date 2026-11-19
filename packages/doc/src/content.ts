@@ -81,7 +81,10 @@ export const sheetEmbed = (
       height,
     },
   });
-/** Schema version 4: a read-only ERP view through a link; filter, fields and sort as JSON text. */
+/**
+ * Schema version 4: a read-only ERP view through a link; filter, fields and sort as JSON text, and
+ * from Phase 12 a report's `parameters` (JSON text too).
+ */
 export const erpView = (
   linkId: string | null,
   connectorId: string | null,
@@ -90,6 +93,7 @@ export const erpView = (
     fields?: string | null;
     sort?: string | null;
     pageSize?: number | null;
+    parameters?: string | null;
   } = {},
 ) =>
   block({
@@ -101,6 +105,7 @@ export const erpView = (
       fields: settings.fields ?? null,
       sort: settings.sort ?? null,
       pageSize: settings.pageSize ?? null,
+      parameters: settings.parameters ?? null,
     },
   });
 /**

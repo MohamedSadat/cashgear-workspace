@@ -8,6 +8,7 @@ import { CgButton } from '@cashgear/ui';
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { ConnectorSummary, ErpError, Language } from '../contract';
 import { useErpT } from '../i18n';
+import { useReportWords } from '../i18n/reports';
 import type { ErpSessionState } from '../session';
 import { ConnectorView } from './ConnectorView';
 import type { ErpLinkInfo, ErpViewHost } from './host';
@@ -19,6 +20,8 @@ export interface ErpViewProps {
 }
 
 export function ErpView({ host }: ErpViewProps) {
+  // Phase 12: the report words, which the views bring with them rather than the app at start.
+  useReportWords();
   return (
     <div className="cgw-erp" data-testid="erp-view">
       <ErpBody host={host} />
@@ -256,6 +259,7 @@ function Connected({
             filter: null,
             sort: null,
             pageSize: null,
+            parameters: null,
           })
         }
       />
@@ -308,6 +312,8 @@ function ConnectorPicker({
   const [tick, setTick] = useState(0);
   const connectors = useConnectors(host, link.id, tick);
   const heading = useId();
+  const listsHeading = useId();
+  const reportsHeading = useId();
   const wait = useWait(connectors.status === 'error' ? connectors.error : null);
   if (connectors.status === 'loading') return <Message text={t('loading')} busy />;
   if (connectors.status === 'error')
@@ -328,24 +334,48 @@ function ConnectorPicker({
     );
   if (!connectors.value.length)
     return <Message text={t('noConnectors')} testId="erp-no-connectors" />;
+  const list = (items: readonly ConnectorSummary[], labelledBy?: string) => (
+    <ul className="cgw-erp-choose-list" aria-labelledby={labelledBy}>
+      {items.map((connector) => (
+        <li key={connector.id}>
+          <CgButton
+            appearance="outline"
+            data-connector={connector.id}
+            data-kind={connector.kind}
+            onClick={() => onPick(connector.id)}
+          >
+            {connector.label[language] || connector.label.en}
+          </CgButton>
+        </li>
+      ))}
+    </ul>
+  );
+  // Phase 12: reports listed apart from the lists, as reports.
+  const entities = connectors.value.filter((c) => c.kind !== 'report');
+  const reports = connectors.value.filter((c) => c.kind === 'report');
   return (
     <div className="cgw-erp-choose" role="group" aria-labelledby={heading} data-testid="erp-choose">
       <p id={heading} className="cgw-erp-choose-title">
         {t('chooseData')}
       </p>
-      <ul className="cgw-erp-choose-list">
-        {connectors.value.map((connector) => (
-          <li key={connector.id}>
-            <CgButton
-              appearance="outline"
-              data-connector={connector.id}
-              onClick={() => onPick(connector.id)}
-            >
-              {connector.label[language] || connector.label.en}
-            </CgButton>
-          </li>
-        ))}
-      </ul>
+      {reports.length ? (
+        <>
+          {entities.length > 0 && (
+            <>
+              <p id={listsHeading} className="cgw-erp-choose-group">
+                {t('lists')}
+              </p>
+              {list(entities, listsHeading)}
+            </>
+          )}
+          <p id={reportsHeading} className="cgw-erp-choose-group">
+            {t('reports')}
+          </p>
+          {list(reports, reportsHeading)}
+        </>
+      ) : (
+        list(connectors.value)
+      )}
     </div>
   );
 }

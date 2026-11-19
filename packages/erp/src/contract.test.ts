@@ -3,11 +3,14 @@ import {
   ErpContractError,
   ErpError,
   connectorRoute,
+  connectorsRoute,
   isDecimal,
   isIsoDate,
   isIsoDateTime,
+  isParameterDate,
   isToken,
   isVersion,
+  kindOf,
   parseConnectCreateTicket,
   parseConnectSession,
   parseConnectors,
@@ -503,6 +506,268 @@ describe('queries', () => {
     expect(
       recordProblems(read(), { key: 'V-1001', values: { ...empty, vendorAccount: 'V-1001' } }),
     ).toEqual([]);
+  });
+});
+
+// Phase 12 (INTEGRATIONS.md, "Reports"): a report's schema, its parameters and its answers.
+describe('reports', () => {
+  const report = (): Record<string, unknown> => ({
+    id: 'apAging',
+    kind: 'report',
+    schemaVersion: 'apAging.1',
+    keyField: 'vendorAccount',
+    idField: null,
+    maxPageSize: 1000,
+    maxRecords: 10000,
+    maxCommitRecords: 0,
+    fields: [
+      {
+        name: 'vendorAccount',
+        label: { en: 'Vendor account', ar: 'حساب المورد' },
+        type: 'text',
+        editable: false,
+        editReason: 'notEditable',
+        filterable: false,
+        sortable: true,
+      },
+      {
+        name: 'balance',
+        label: { en: 'Balance', ar: 'الرصيد' },
+        type: 'decimal',
+        scale: 2,
+        total: 'sum',
+        editable: false,
+        editReason: 'notEditable',
+        filterable: false,
+        sortable: true,
+      },
+      {
+        name: 'band0',
+        label: { en: 'Not due', ar: 'غير مستحق' },
+        type: 'decimal',
+        scale: 2,
+        total: 'sum',
+        editable: false,
+        editReason: 'notEditable',
+        filterable: false,
+        sortable: true,
+      },
+      {
+        name: 'openItems',
+        label: { en: 'Open items', ar: 'البنود المفتوحة' },
+        type: 'integer',
+        editable: false,
+        editReason: 'notEditable',
+        filterable: false,
+        sortable: true,
+      },
+    ],
+    lookups: { vendorGroups: [{ code: 'LOCAL', label: 'محلي' }] },
+    parameters: [
+      {
+        name: 'asOf',
+        label: { en: 'As of', ar: 'حتى تاريخ' },
+        type: 'date',
+        required: true,
+        default: 'today',
+      },
+      {
+        name: 'ageBy',
+        label: { en: 'Aged by', ar: 'العمر حسب' },
+        type: 'choice',
+        required: false,
+        options: [
+          { value: 'dueDate', label: { en: 'Due date', ar: 'تاريخ الاستحقاق' } },
+          { value: 'invoiceDate', label: { en: 'Invoice date', ar: 'تاريخ الفاتورة' } },
+        ],
+        default: 'dueDate',
+      },
+      {
+        name: 'vendorGroup',
+        label: { en: 'Vendor group', ar: 'مجموعة الموردين' },
+        type: 'lookup',
+        required: false,
+        lookup: 'vendorGroups',
+        default: null,
+      },
+      {
+        name: 'includeZero',
+        label: { en: 'Include zero', ar: 'إظهار الصفري' },
+        type: 'boolean',
+        required: false,
+        default: false,
+      },
+    ],
+  });
+  const withParameter = (index: number, change: Record<string, unknown>) => {
+    const s = report();
+    const parameters = [...(s.parameters as Record<string, unknown>[])];
+    parameters[index] = { ...parameters[index], ...change };
+    return { ...s, parameters };
+  };
+
+  it('reads a report’s schema: its kind, totals and parameters of every type', () => {
+    const read = parseSchema(report());
+    expect(read.kind).toBe('report');
+    expect(kindOf(read)).toBe('report');
+    expect(kindOf(parseSchema(schema()))).toBe('entity');
+    expect(read.fields.map((f) => f.total ?? null)).toEqual([null, 'sum', 'sum', null]);
+    const [asOf, ageBy, group, zero] = read.parameters!;
+    expect(asOf).toEqual({
+      name: 'asOf',
+      label: { en: 'As of', ar: 'حتى تاريخ' },
+      type: 'date',
+      required: true,
+      default: 'today',
+    });
+    expect(ageBy).toMatchObject({ type: 'choice', default: 'dueDate' });
+    expect(ageBy!.options!.map((o) => o.value)).toEqual(['dueDate', 'invoiceDate']);
+    // A null default is no default.
+    expect(group).toEqual({
+      name: 'vendorGroup',
+      label: { en: 'Vendor group', ar: 'مجموعة الموردين' },
+      type: 'lookup',
+      required: false,
+      lookup: 'vendorGroups',
+    });
+    expect(zero).toMatchObject({ type: 'boolean', default: false });
+    for (const fallback of ['monthStart', '2026-10-31', '1900-01-01', '9999-12-31']) {
+      expect(parseSchema(withParameter(0, { default: fallback })).parameters![0]!.default).toBe(
+        fallback,
+      );
+    }
+  });
+
+  it.each([
+    ['kind', { kind: 'dashboard' }, '$.kind'],
+    ['commit records on a report', { maxCommitRecords: 500 }, '$.maxCommitRecords'],
+  ])('refuses a bad %s', (_, change, path) => {
+    expect(refusal(() => parseSchema({ ...report(), ...change })).path).toBe(path);
+  });
+
+  it('refuses a parameter named twice', () => {
+    const s = report();
+    const parameters = s.parameters as unknown[];
+    expect(
+      refusal(() => parseSchema({ ...s, parameters: [...parameters, parameters[0]] })).path,
+    ).toBe('$.parameters');
+  });
+
+  it.each([
+    ['type', 0, { type: 'month' }, '$.parameters[0].type'],
+    ['date default', 0, { default: 'yesterday' }, '$.parameters[0].default'],
+    ['date default before 1900', 0, { default: '1899-12-31' }, '$.parameters[0].default'],
+    ['date default that does not exist', 0, { default: '2026-02-30' }, '$.parameters[0].default'],
+    ['choice without options', 1, { options: undefined }, '$.parameters[1].options'],
+    ['choice with no option', 1, { options: [] }, '$.parameters[1].options'],
+    [
+      'choice with a repeated value',
+      1,
+      {
+        options: [
+          { value: 'a', label: { en: 'A', ar: 'أ' } },
+          { value: 'a', label: { en: 'B', ar: 'ب' } },
+        ],
+      },
+      '$.parameters[1].options',
+    ],
+    [
+      'option label',
+      1,
+      { options: [{ value: 'a', label: 'A' }] },
+      '$.parameters[1].options[0].label',
+    ],
+    ['choice default not an option', 1, { default: 'weekly' }, '$.parameters[1].default'],
+    ['lookup without a list', 2, { lookup: 'groups' }, '$.parameters[2].lookup'],
+    ['lookup default', 2, { default: 7 }, '$.parameters[2].default'],
+    ['boolean default', 3, { default: 'false' }, '$.parameters[3].default'],
+    ['name', 3, { name: 'include zero' }, '$.parameters[3].name'],
+  ])('refuses a parameter with a bad %s', (_, index, change, path) => {
+    expect(refusal(() => parseSchema(withParameter(index, change))).path).toBe(path);
+  });
+
+  it('refuses an editable field on a report, and a total that is not a sum of numbers', () => {
+    const s = report();
+    const fields = [...(s.fields as Record<string, unknown>[])];
+    const edited = [
+      fields[0],
+      { ...fields[1], editable: true, editReason: undefined },
+      ...fields.slice(2),
+    ];
+    expect(refusal(() => parseSchema({ ...s, fields: edited })).path).toBe('$.fields[1].editable');
+    const text = [{ ...fields[0], total: 'sum' }, ...fields.slice(1)];
+    expect(refusal(() => parseSchema({ ...s, fields: text })).path).toBe('$.fields[0].total');
+    const average = [fields[0], { ...fields[1], total: 'average' }, ...fields.slice(2)];
+    expect(refusal(() => parseSchema({ ...s, fields: average })).path).toBe('$.fields[1].total');
+  });
+
+  const page = (over: Record<string, unknown> = {}) => ({
+    records: [
+      {
+        id: 'V-1001',
+        key: 'V-1001',
+        version: 'AAAAAAAAB9E=',
+        values: { vendorAccount: 'V-1001', balance: '1100.00', band0: '500.00', openItems: 2 },
+      },
+    ],
+    nextCursor: null,
+    total: 1,
+    ...over,
+  });
+
+  it('reads a report’s totals, labels and whether it was cut short', () => {
+    const read = parseSchema(report());
+    const answer = page({
+      totals: { balance: '1100.00', band0: '500.00' },
+      labels: { band0: { en: '0–30 days', ar: 'من 0 إلى 30 يومًا' } },
+      partial: true,
+    });
+    expect(parseQueryResponse(answer, { schema: read })).toEqual(answer);
+    // A report's answer without them, or with nulls, has none.
+    expect(parseQueryResponse(page({ partial: null, totals: null }), { schema: read })).toEqual(
+      page(),
+    );
+  });
+
+  it.each([
+    ['total the schema does not total', { totals: { openItems: 2 } }, '$.totals.openItems'],
+    ['total of no field', { totals: { noSuch: '1.00' } }, '$.totals.noSuch'],
+    ['total as a number', { totals: { balance: 1100 } }, '$.totals.balance'],
+    ['total past its scale', { totals: { balance: '1.005' } }, '$.totals.balance'],
+    ['totals that are no object', { totals: ['1.00'] }, '$.totals'],
+    ['label without Arabic', { labels: { band0: { en: 'Not due' } } }, '$.labels.band0.ar'],
+    ['label of no field', { labels: { noSuch: { en: 'x', ar: 'س' } } }, '$.labels.noSuch'],
+    ['partial', { partial: 'yes' }, '$.partial'],
+  ])('refuses a %s', (_, change, path) => {
+    const read = parseSchema(report());
+    expect(refusal(() => parseQueryResponse(page(change), { schema: read })).path).toBe(path);
+  });
+
+  it('asks for the kinds it knows, and reads only those', () => {
+    expect(connectorsRoute(['entity', 'report'])).toBe(
+      'api/connect/Connectors?kinds=entity,report',
+    );
+    expect(connectorsRoute(null)).toBe('api/connect/Connectors');
+    const summary = (id: string, kind: string) => ({
+      id,
+      kind,
+      label: { en: id, ar: 'س' },
+      schemaVersion: `${id}.1`,
+      access: 'view',
+    });
+    const listed = { connectors: [summary('vendors', 'entity'), summary('apAging', 'report')] };
+    expect(parseConnectors(listed, ['entity', 'report']).connectors).toHaveLength(2);
+    expect(refusal(() => parseConnectors(listed, null)).path).toBe('$.connectors[1].kind');
+    expect(refusal(() => parseConnectors(listed, ['report'])).path).toBe('$.connectors[0].kind');
+  });
+
+  it('takes dates from 1900 to 9999 as a parameter', () => {
+    for (const ok of ['1900-01-01', '2026-10-31', '9999-12-31']) {
+      expect(isParameterDate(ok)).toBe(true);
+    }
+    for (const no of ['1899-12-31', '2026-02-30', '26-10-31', 20261031, null]) {
+      expect(isParameterDate(no)).toBe(false);
+    }
   });
 });
 

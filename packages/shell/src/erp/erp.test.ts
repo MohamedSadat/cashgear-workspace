@@ -202,6 +202,7 @@ describe('an ERP block’s frame', { timeout: 30_000 }, () => {
     fields: null,
     sort: null,
     pageSize: null,
+    parameters: null,
     blockId: 'AbCdEfGhIjKl',
     editable: true,
     setAttrs: vi.fn(),

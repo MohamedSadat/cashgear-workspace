@@ -12,12 +12,14 @@ import {
   parseConflictBody,
   parseConnectCreateTicket,
   parseConnectSession,
+  parseConnectors,
   parseErrorBody,
   parseLinkCreateTicket,
   parseLinkRedeem,
   parseSchema,
   type ConnectSession,
   type ConnectorSchema,
+  type ConnectorSummary,
   type Language,
   type LinkRedeemResponse,
   type QueryRequest,
@@ -36,9 +38,13 @@ export const rateLimits = onMock || env.ERP_TEST_RATE_LIMITS === '1';
  * `full` views every connector, `limited` fewer, `none` none; `admin` links; `other` is another
  * company's. Phase 7: `edit` holds Vendors' Edit privilege, `advEdit` its Edit and AdvEdit.
  * Phase 10: `edit` also Customers' Edit (and no Items on hand), `advEdit` Customers' Edit and
- * AdvEdit and Items' Edit (track-e8-brief.md's table of test users).
+ * AdvEdit and Items' Edit (track-e8-brief.md's table of test users). Phase 12: `scale` views the
+ * three entities of a company holding only the large seed's records, every field and no record
+ * rule, and `scaleAdmin` links that company (on the mock, Kit after `reset {large: true}`:
+ * alice and dan). The reports' roles are the README's.
  */
-export type Role = 'full' | 'limited' | 'none' | 'admin' | 'other' | 'edit' | 'advEdit';
+export type Role =
+  'full' | 'limited' | 'none' | 'admin' | 'other' | 'edit' | 'advEdit' | 'scale' | 'scaleAdmin';
 
 /**
  * The ERP users the suite acts as, by their API keys: on the mock its seeded users (alice, bob,
@@ -53,6 +59,8 @@ export const KEYS: Record<Role, string | undefined> = onMock
       other: 'mock-erin',
       edit: 'mock-gina',
       advEdit: 'mock-faris',
+      scale: 'mock-alice',
+      scaleAdmin: 'mock-dan',
     }
   : {
       full: env.ERP_TEST_KEY_FULL,
@@ -62,6 +70,8 @@ export const KEYS: Record<Role, string | undefined> = onMock
       other: env.ERP_TEST_KEY_OTHER,
       edit: env.ERP_TEST_KEY_EDIT,
       advEdit: env.ERP_TEST_KEY_ADVEDIT,
+      scale: env.ERP_TEST_KEY_SCALE,
+      scaleAdmin: env.ERP_TEST_KEY_SCALE_ADMIN,
     };
 
 export const lacks = (...roles: Role[]) => roles.some((role) => !KEYS[role]);
@@ -293,8 +303,13 @@ export const freshWorkspace = () => `cgw-contract-${randomUUID()}`;
 
 const links = new Map<string, { epoch: number; link: Promise<LinkRedeemResponse> }>();
 
-/** The suite's link for the company of `admin` ('admin' for the main company, 'other'). */
-export function sharedLink(admin: 'admin' | 'other' = 'admin'): Promise<LinkRedeemResponse> {
+/**
+ * The suite's link for the company of `admin` ('admin' for the main company, 'other'; Phase 12,
+ * 'scaleAdmin' for the large seed's).
+ */
+export function sharedLink(
+  admin: 'admin' | 'other' | 'scaleAdmin' = 'admin',
+): Promise<LinkRedeemResponse> {
   const cached = links.get(admin);
   if (cached && cached.epoch === epoch) return cached.link;
   const link = makeLink(admin);
@@ -344,7 +359,10 @@ export async function openSession(
   role: Role = 'full',
   options: TicketOptions & { readonly linkId?: string } = {},
 ): Promise<ConnectSession> {
-  const linkId = options.linkId ?? (await sharedLink(role === 'other' ? 'other' : 'admin')).linkId;
+  const linkId =
+    options.linkId ??
+    (await sharedLink(role === 'other' ? 'other' : role === 'scale' ? 'scaleAdmin' : 'admin'))
+      .linkId;
   const answer = await redeem(await connectTicket(role, linkId, options), options.workspaceId);
   expect(answer.status, 'Session/Redeem').toBe(200);
   return parseConnectSession(answer.json);
@@ -469,6 +487,20 @@ export async function schemaOf(token: string, id: string): Promise<ConnectorSche
   const answer = await send('GET', connectorRoute(id, 'Schema'), { session: token });
   expect(answer.status, `${id}'s Schema`).toBe(200);
   return parseSchema(answer.json);
+}
+
+/**
+ * `Connectors` asking for `kinds` (Phase 12: `api/connect/Connectors?kinds=entity,report`), or
+ * without it (`null`), as a build before 0.12.0 asks.
+ */
+export async function listed(
+  token: string,
+  kinds: string | null = 'entity,report',
+): Promise<ConnectorSummary[]> {
+  const route = kinds === null ? ROUTES.connectors : `${ROUTES.connectors}?kinds=${kinds}`;
+  const answer = await send('GET', route, { session: token });
+  expect(answer.status, route).toBe(200);
+  return [...parseConnectors(answer.json).connectors];
 }
 
 export function query(token: string, id: string, request: Partial<QueryRequest>): Promise<Answer> {

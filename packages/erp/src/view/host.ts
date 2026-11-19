@@ -8,7 +8,8 @@ import type { ErpSessions } from '../session';
 /**
  * An ERP view block's settings (document schema 4, `erpView`), as `@cgw/editor` defines them:
  * which link and connector, and what the person typed or picked, never ERP data. `filter`,
- * `fields` and `sort` are JSON text (`{search?, equals?}`, `string[]`, `{field, direction}[]`).
+ * `fields` and `sort` are JSON text (`{search?, equals?}`, `string[]`, `{field, direction}[]`);
+ * Phase 12's `parameters` too, a report's (`{name: value}` of what the person set).
  */
 export interface ErpBlockAttrs {
   /** Workspace's `ErpLinks` id. */
@@ -19,6 +20,11 @@ export interface ErpBlockAttrs {
   sort: string | null;
   /** Rows a page; null: 50. */
   pageSize: number | null;
+  /**
+   * Phase 12: a report's parameters the person set, JSON text of `{name: value}`; null when none.
+   * An absent parameter takes the report's default (a date's `today` tracks the day).
+   */
+  parameters: string | null;
 }
 
 /** A Workspace link to an ERP company, as Workspace's API lists it (`ErpLink`). */

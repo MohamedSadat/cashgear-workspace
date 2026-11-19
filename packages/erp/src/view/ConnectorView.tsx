@@ -2,15 +2,19 @@
 // settings for an editor, and the query's records with paging by cursor, the time they were
 // loaded, and "Refresh". Phase 7: when the ERP gives this person `edit` on the connector, "Edit
 // data" opens its editable fields' cells; changes wait in the block's draft (memory only) for
-// "Review changes" and "Commit".
+// "Review changes" and "Commit". Phase 12: a report (`kind: 'report'`) shows its parameters above
+// its read-only table, ends the table with its totals, and says when the ERP cut it short; it has
+// no editing and no AI. A query runs when the block is drawn, on Refresh, on a change of a setting
+// or a parameter, and when paging: never on a timer.
 import { CgButton } from '@cashgear/ui';
 import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
-import type {
-  ConnectorSchema,
-  ConnectorSummary,
-  ErpError,
-  Language,
-  QueryResponse,
+import {
+  kindOf,
+  type ConnectorSchema,
+  type ConnectorSummary,
+  type ErpError,
+  type Language,
+  type QueryResponse,
 } from '../contract';
 import { ErpDrafts, type DraftCommitApi, type ErpDraft } from '../drafts';
 import { useErpT } from '../i18n';
@@ -18,8 +22,17 @@ import { AiPreparePanel, ConflictPanel, EditBar, ReviewPanel, reviewing } from '
 import { useConnectors } from './ErpView';
 import type { ErpLinkInfo, ErpViewHost } from './host';
 import { errorText, Message, useWait } from './Message';
+import { formatInteger } from './format';
 import { FieldsPanel, FilterPanel, SortPanel } from './panels';
-import { PAGE_SIZES, DEFAULT_PAGE_SIZE, planQuery, readSettings, type QueryPlan } from './settings';
+import { ReportParameters } from './ReportParameters';
+import {
+  PAGE_SIZES,
+  DEFAULT_PAGE_SIZE,
+  labelOf,
+  planQuery,
+  readSettings,
+  type QueryPlan,
+} from './settings';
 import { RecordsTable } from './RecordsTable';
 
 type Panel = 'fields' | 'filter' | 'sort' | null;
@@ -60,11 +73,12 @@ export function ConnectorView({
     connectors.status === 'ready' ? connectors.value.find((c) => c.id === connectorId) : undefined;
   const name = summary ? summary.label[language] || summary.label.en : connectorId;
 
-  // The settings change with these four attributes only.
-  const { fields, filter, sort, pageSize } = attrs;
+  // The settings change with these five attributes only.
+  const { fields, filter, sort, pageSize, parameters } = attrs;
   const settings = useMemo(
-    () => readSettings({ linkId: null, connectorId: null, fields, filter, sort, pageSize }),
-    [fields, filter, sort, pageSize],
+    () =>
+      readSettings({ linkId: null, connectorId: null, fields, filter, sort, pageSize, parameters }),
+    [fields, filter, sort, pageSize, parameters],
   );
   const wait = useWait(schema.status === 'error' ? schema.error : null);
 
@@ -106,11 +120,15 @@ export function ConnectorView({
       connectors={connectors.status === 'ready' ? connectors.value : []}
       name={name}
       language={language}
-      plan={planQuery(schema.value, settings)}
+      plan={planQuery(schema.value, settings, isReport(schema.value, summary))}
       settings={settings}
     />
   );
 }
+
+/** A report, by its schema's kind or, failing that, its summary's (Phase 12). */
+const isReport = (schema: ConnectorSchema, summary: ConnectorSummary | undefined) =>
+  kindOf(schema) === 'report' || summary?.kind === 'report';
 
 const resetFor = (connectorId: string) => ({
   connectorId,
@@ -118,6 +136,7 @@ const resetFor = (connectorId: string) => ({
   filter: null,
   sort: null,
   pageSize: null,
+  parameters: null,
 });
 
 function ChangeData({
@@ -137,6 +156,14 @@ function ChangeData({
   const { t } = useErpT();
   const id = useId();
   const hint = useId();
+  const option = (c: ConnectorSummary) => (
+    <option key={c.id} value={c.id}>
+      {c.label[language] || c.label.en}
+    </option>
+  );
+  // Phase 12: reports apart from the lists, when there are any.
+  const entities = connectors.filter((c) => c.kind !== 'report');
+  const reports = connectors.filter((c) => c.kind === 'report');
   return (
     <span className="cgw-erp-field">
       <label htmlFor={id}>{t('dataLabel')}</label>
@@ -149,11 +176,14 @@ function ChangeData({
         onChange={(event) => onChange(event.target.value)}
       >
         {!connectors.some((c) => c.id === current) && <option value={current}>{current}</option>}
-        {connectors.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.label[language] || c.label.en}
-          </option>
-        ))}
+        {reports.length ? (
+          <>
+            <optgroup label={t('lists')}>{entities.map(option)}</optgroup>
+            <optgroup label={t('reports')}>{reports.map(option)}</optgroup>
+          </>
+        ) : (
+          connectors.map(option)
+        )}
       </select>
       {locked && (
         <span id={hint} className="cgw-erp-muted">
@@ -171,11 +201,14 @@ function useDraft(
   connectorId: string,
   schema: ConnectorSchema,
   summary: ConnectorSummary | undefined,
+  report: boolean,
 ): { draft: ErpDraft | null; stale: ErpDraft | null } {
   const { drafts, place, audit } = host;
   const blockId = place?.blockId ?? null;
   const pageId = place?.pageId ?? null;
+  // A report is never edited (Phase 12), whatever its schema or summary say.
   const editable =
+    !report &&
     summary?.access === 'edit' &&
     schema.maxCommitRecords > 0 &&
     schema.fields.some((f) => f.editable);
@@ -188,6 +221,7 @@ function useDraft(
         ? held
         : null;
     if (other?.pending()) return { draft: null, stale: other };
+    if (report) return { draft: null, stale: null };
     if (!editable) return { draft: held && !other && held.pending() ? held : null, stale: null };
     const draft = drafts.get(
       key,
@@ -200,7 +234,7 @@ function useDraft(
     );
     return { draft, stale: null };
     // The audit is read when the draft is made: the host is made again every render.
-  }, [drafts, pageId, blockId, link.id, link.workspaceId, connectorId, editable]);
+  }, [drafts, pageId, blockId, link.id, link.workspaceId, connectorId, editable, report]);
 }
 
 /** Re-renders with every change of the draft. */
@@ -243,9 +277,10 @@ function Loaded({
   const pageSizeId = useId();
   const info = sessions.session(link.id);
 
-  // Phase 7: changing the data, when the ERP lets this person.
+  // Phase 7: changing the data, when the ERP lets this person; never a report's (Phase 12).
   const summary = connectors.find((c) => c.id === connectorId);
-  const { draft, stale } = useDraft(host, link, connectorId, schema, summary);
+  const report = isReport(schema, summary);
+  const { draft, stale } = useDraft(host, link, connectorId, schema, summary, report);
   useDraftRev(draft);
   useDraftRev(stale);
   const phase = draft?.phase() ?? null;
@@ -350,6 +385,11 @@ function Loaded({
         <span className="cgw-erp-title" dir="auto" data-testid="erp-title">
           {name}
         </span>
+        {report && (
+          <span className="cgw-erp-tag" data-testid="erp-report">
+            {t('reportTag')}
+          </span>
+        )}
         {info && (
           <span className="cgw-erp-muted cgw-erp-who" dir="auto">
             {t('connectedAs', { company: info.companyName, user: info.user.displayName })}
@@ -442,6 +482,14 @@ function Loaded({
           </CgButton>
         </div>
       )}
+      {report && (
+        <ReportParameters
+          host={host}
+          schema={schema}
+          held={settings.parameters}
+          language={language}
+        />
+      )}
       {draft && (editMode || pending || phase?.kind === 'committed') && (
         <EditBar
           draft={draft}
@@ -477,11 +525,29 @@ function Loaded({
         <Message text={t('filterDenied')} testId="erp-filter-denied" />
       ) : plan.kind === 'filterNotFilterable' ? (
         <Message text={t('filterNotFilterable')} testId="erp-filter-not-filterable" />
+      ) : plan.kind === 'parameterNeeded' ? (
+        <Message
+          text={t('parameterNeeded', { name: labelOf(plan.parameter, language) })}
+          testId="erp-parameter-needed"
+        />
       ) : (
         <>
           {plan.hidden > 0 && (
             <p className="cgw-erp-note" data-testid="erp-hidden">
               {t('fieldsHidden', { count: plan.hidden })}
+            </p>
+          )}
+          {response?.partial && (
+            <p className="cgw-erp-note" data-testid="erp-partial">
+              {t('partial')}
+            </p>
+          )}
+          {response && response.total > schema.maxRecords && (
+            <p className="cgw-erp-note" data-testid="erp-first-n">
+              {t('firstOf', {
+                max: formatInteger(schema.maxRecords, locale),
+                total: formatInteger(response.total, locale),
+              })}
             </p>
           )}
           {result.error && result.key === requestKey ? (

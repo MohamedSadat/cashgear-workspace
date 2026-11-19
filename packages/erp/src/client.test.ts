@@ -122,7 +122,7 @@ describe('createErpClient', () => {
       if (url.endsWith('Session/Redeem')) return json(200, session);
       if (url.endsWith('/Renew')) return json(200, { expiresAt: '2026-11-14T10:40:00Z' });
       if (url.endsWith('/End')) return new Response(null, { status: 204 });
-      if (url.endsWith('/Connectors')) return json(200, { connectors: [] });
+      if (url.endsWith('/Connectors?kinds=entity,report')) return json(200, { connectors: [] });
       if (url.endsWith('/Schema')) return json(200, schema);
       return json(200, { records: [], nextCursor: null, total: 0 });
     });
@@ -132,7 +132,7 @@ describe('createErpClient', () => {
       'POST /api/connect/Session/Redeem',
       'POST /api/connect/Session/Renew',
       'POST /api/connect/Session/End',
-      'GET /api/connect/Connectors',
+      'GET /api/connect/Connectors?kinds=entity,report',
       'GET /api/connect/Connectors/customers/Schema',
       'POST /api/connect/Connectors/customers/Query',
     ]);
@@ -178,6 +178,56 @@ describe('createErpClient', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('asks for entities and reports, or without kinds as a build before 0.12.0 does', async () => {
+    const summary = (id: string, kind: 'entity' | 'report') => ({
+      id,
+      kind,
+      label: { en: id, ar: id },
+      schemaVersion: `${id}.1`,
+      access: 'view',
+    });
+    const { sent, client } = fake(({ url }) =>
+      json(200, {
+        connectors: url.endsWith('kinds=report')
+          ? [summary('apAging', 'report')]
+          : url.includes('kinds=')
+            ? [summary('vendors', 'entity'), summary('apAging', 'report')]
+            : [summary('vendors', 'entity')],
+      }),
+    );
+    expect((await client.connectors(TOKEN)).map((c) => [c.id, c.kind])).toEqual([
+      ['vendors', 'entity'],
+      ['apAging', 'report'],
+    ]);
+    expect((await client.connectors(TOKEN, { kinds: null })).map((c) => c.id)).toEqual(['vendors']);
+    expect((await client.connectors(TOKEN, { kinds: ['report'] })).map((c) => c.id)).toEqual([
+      'apAging',
+    ]);
+    expect(sent.map((s) => s.url.slice(BASE.length))).toEqual([
+      '/api/connect/Connectors?kinds=entity,report',
+      '/api/connect/Connectors',
+      '/api/connect/Connectors?kinds=report',
+    ]);
+  });
+
+  it('refuses a kind it did not ask for', async () => {
+    const report = {
+      id: 'apAging',
+      kind: 'report',
+      label: { en: 'AP aging', ar: 'أعمار الديون' },
+      schemaVersion: 'apAging.1',
+      access: 'view',
+    };
+    const { client } = fake(() => json(200, { connectors: [report] }));
+    expect((await failure(client.connectors(TOKEN, { kinds: null }))).code).toBe(
+      'response.invalid',
+    );
+    expect((await failure(client.connectors(TOKEN, { kinds: ['entity'] }))).code).toBe(
+      'response.invalid',
+    );
+    expect((await client.connectors(TOKEN)).map((c) => c.id)).toEqual(['apAging']);
+  });
+
   it('gives each answer typed', async () => {
     const records = [
       {
@@ -189,7 +239,7 @@ describe('createErpClient', () => {
     ];
     const { client } = fake(({ url }) => {
       if (url.endsWith('Session/Redeem')) return json(200, session);
-      if (url.endsWith('/Connectors'))
+      if (url.includes('/Connectors?'))
         return json(200, {
           connectors: [
             {

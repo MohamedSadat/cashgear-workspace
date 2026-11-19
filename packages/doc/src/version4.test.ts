@@ -17,9 +17,11 @@ const LINK = '01936f6e-0000-7000-8000-0000000000e2';
 const FILTER = '{"search":"Kit","equals":{"city":"Cairo"}}';
 const FIELDS = '["code","name","balance"]';
 const SORT = '[{"field":"name","direction":"desc"}]';
+/** Phase 12: a report's parameters as the person set them. */
+const PARAMETERS = '{"asOf":"2026-10-31","ageBy":"invoiceDate","includeZero":true}';
 
 const SHEET_ATTRS = ['workbookId', 'sheet', 'range', 'chartId', 'height'];
-const ERP_ATTRS = ['linkId', 'connectorId', 'filter', 'fields', 'sort', 'pageSize'];
+const ERP_ATTRS = ['linkId', 'connectorId', 'filter', 'fields', 'sort', 'pageSize', 'parameters'];
 const nulls = (names: string[]) => Object.fromEntries(names.map((name) => [name, null]));
 
 /** An element as the schema's parse rules read it: only `getAttribute`. */
@@ -81,6 +83,7 @@ describe('the version-4 nodes', () => {
       fields: FIELDS,
       sort: SORT,
       pageSize: 25,
+      parameters: PARAMETERS,
     });
     expect(toDOM(erp)).toEqual([
       'div',
@@ -93,6 +96,7 @@ describe('the version-4 nodes', () => {
         'data-fields': FIELDS,
         'data-sort': SORT,
         'data-pagesize': '25',
+        'data-parameters': PARAMETERS,
       },
     ]);
     // Nothing but the body's name when every attribute is null.
@@ -131,6 +135,7 @@ describe('the version-4 nodes', () => {
         'data-fields': FIELDS,
         'data-sort': SORT,
         'data-pagesize': '50',
+        'data-parameters': PARAMETERS,
       }),
     ).toEqual({
       linkId: LINK,
@@ -139,6 +144,7 @@ describe('the version-4 nodes', () => {
       fields: FIELDS,
       sort: SORT,
       pageSize: 50,
+      parameters: PARAMETERS,
     });
     // JSON text is kept as written: the view reads it and ignores what it cannot.
     expect(readErp({ 'data-fields': 'not json', 'data-pagesize': 'many' })).toEqual({
@@ -183,6 +189,35 @@ describe('the version-4 nodes', () => {
       type: 'erpView',
       attrs: { linkId: LINK, connectorId: 'customers' },
     });
+  });
+
+  it('read an older block without `parameters` as none, and keep a report’s through Yjs (Phase 12)', () => {
+    // A 0.11.0 document's block, as stored: no `parameters` attribute at all.
+    const older = {
+      type: 'erpView',
+      attrs: { linkId: LINK, connectorId: 'vendors', pageSize: 25 },
+    };
+    expect(schema.nodeFromJSON(older).attrs).toEqual({
+      ...nulls(ERP_ATTRS),
+      linkId: LINK,
+      connectorId: 'vendors',
+      pageSize: 25,
+    });
+    // A report's block keeps its parameters as written through the binding, and nothing else.
+    const json = docOf(erpView(LINK, 'apAging', { parameters: PARAMETERS }));
+    const doc = new Y.Doc();
+    writeJSON(doc.getXmlFragment(CONTENT), documentSchema(), json);
+    const back = fragmentToJSON(doc.getXmlFragment(CONTENT));
+    expect(back.content![0]!.content![0]).toEqual({
+      type: 'erpView',
+      attrs: { linkId: LINK, connectorId: 'apAging', parameters: PARAMETERS },
+    });
+    expect(documentSchema().nodeFromJSON(back.content![0]!.content![0]!).attrs.parameters).toBe(
+      PARAMETERS,
+    );
+    // Nothing of it is text: a report's settings are not the page's words.
+    expect(plainText(json)).toBe('');
+    expect(toMarkdown(json).trim()).toBe('');
   });
 
   it('write nothing in plain text, which search reads, or in Markdown', () => {

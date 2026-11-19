@@ -158,6 +158,7 @@ describe('the ERP view block', { timeout: 30_000 }, () => {
         filter: null,
         sort: null,
         pageSize: null,
+        parameters: null,
       },
     ]);
     await until(() => !!view!.container.querySelector('table'), 'the table');

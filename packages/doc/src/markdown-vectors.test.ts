@@ -495,6 +495,20 @@ function cases(): Omit<Vector, 'markdown'>[] {
       ),
     },
     {
+      // Phase 12: a report's block, its parameters JSON text too, writes nothing: its settings are
+      // not the page's text, and its answer is never in a document.
+      name: 'ERP reports write nothing',
+      doc: docOf(
+        paragraph('Before'),
+        erpView(LINK, 'apAging', {
+          parameters: '{"asOf":"2026-10-31","ageBy":"invoiceDate","vendorGroup":"*LOCAL* | <b>"}',
+        }),
+        erpView(LINK, 'trialBalance', { parameters: '{"statement":"الميزانية"}', pageSize: 100 }),
+        block({ type: 'erpView', attrs: { linkId: LINK, parameters: 'not json' } }),
+        paragraph('After'),
+      ),
+    },
+    {
       // Schema version 5: a person writes `@` and the name the writer is given, `@` alone without
       // one (the server's derived text and search write `@` alone); a name is escaped as text.
       name: 'user mentions with names',

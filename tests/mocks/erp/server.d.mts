@@ -13,6 +13,10 @@ export interface MockUser {
   readonly hidden?: Readonly<Record<string, readonly string[]>>;
   /** Phase 7 (Vendors), Phase 10 (Customers, Items on hand): Edit, or Edit and AdvEdit. */
   readonly edit?: Readonly<Record<string, 'edit' | 'advEdit'>>;
+  /** Phase 12: the ERP roles its report pages check. */
+  readonly roles?: readonly string[];
+  /** Phase 12: whether the Warehouse balance page shows them cost. */
+  readonly showCost?: boolean;
 }
 
 export declare const USERS: Readonly<
@@ -42,6 +46,11 @@ export declare const COMPANIES: Readonly<
 >;
 export declare const MARKERS: Readonly<Record<'Kit' | 'Dot', readonly string[]>>;
 export declare const CONNECTORS: Readonly<Record<string, { readonly id: string }>>;
+/** Phase 12: the report connectors (reports.mjs). */
+export declare const REPORTS: Readonly<
+  Record<string, { readonly id: string; readonly kind: 'report' }>
+>;
+export declare const REPORT_IDS: readonly string[];
 export declare const LIMITS: {
   readonly ticketMs: number;
   readonly sessionIdleMs: number;
@@ -98,7 +107,13 @@ export declare class MockErp {
   workspaceOrigins: Set<string>;
   clientOrigins: Set<string>;
   readonly workspaceUrl: string;
-  reset(options?: { kitVendors?: number; kitCustomers?: number; locks?: boolean }): void;
+  reset(options?: {
+    kitVendors?: number;
+    kitCustomers?: number;
+    locks?: boolean;
+    /** Phase 12: Kit's records by the large seed's rule (large.mjs), 100,000 a connector. */
+    large?: boolean;
+  }): void;
   now(): number;
   state(): MockState;
 }
@@ -109,6 +124,8 @@ export declare function startMockErp(options?: {
   host?: string;
   workspaceUrl?: string;
   workspaceOrigins?: readonly string[];
+  /** Phase 12: start with the large seed. */
+  large?: boolean;
 }): Promise<{
   readonly apiUrl: string;
   readonly clientUrl: string;

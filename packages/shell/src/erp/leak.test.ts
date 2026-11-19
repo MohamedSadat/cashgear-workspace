@@ -164,6 +164,7 @@ describe('ERP data at rest', { timeout: 60_000 }, () => {
         fields: read('fields') as string | null,
         sort: read('sort') as string | null,
         pageSize: read('pageSize') as number | null,
+        parameters: read('parameters') as string | null,
       };
     };
     const i18n = createI18n('en');
@@ -208,6 +209,33 @@ describe('ERP data at rest', { timeout: 60_000 }, () => {
     await act(async () => button(i18n.t('erp.refresh')).click());
     await until(() => !!frameElement.querySelector('table tbody tr'), 'refreshed');
 
+    // Phase 12: the same block on a report, a parameter changed: its rows and totals are shown,
+    // and only the person's choice is written.
+    const labelled = (text: string) => {
+      const label = [...frameElement.querySelectorAll('label')].find((l) => l.textContent === text);
+      return frameElement.querySelector<HTMLSelectElement>(`[id="${label!.htmlFor}"]`)!;
+    };
+    const choose = async (select: HTMLSelectElement, value: string) =>
+      act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!;
+        setter.call(select, value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    await choose(labelled(i18n.t('erp.dataLabel')), 'apAging');
+    await until(
+      () =>
+        frameElement.querySelector('[data-testid="erp-title"]')?.textContent ===
+          'AP aging by vendor' && !!frameElement.querySelector('[data-testid="erp-totals"]'),
+      'the report’s rows and totals',
+    );
+    await choose(labelled('Aged by'), 'invoiceDate');
+    await until(() => attrs().parameters === '{"ageBy":"invoiceDate"}', 'the parameter written');
+    await until(
+      () => frameElement.querySelector('th[data-field="band0"]')?.textContent === '0–30 days',
+      'the bands by invoice date',
+    );
+    expect(attrs()).toMatchObject({ connectorId: 'apAging', filter: null, fields: null });
+
     // The block shows the mock's values...
     const shown = frameElement.textContent!;
     const markers = [...MARKERS.Kit, ...MARKERS.Dot];
@@ -226,10 +254,12 @@ describe('ERP data at rest', { timeout: 60_000 }, () => {
     ].join('\n');
     expect(atRest.length).toBeGreaterThan(1000);
     for (const marker of markers) expect(atRest, marker).not.toContain(marker);
-    // What the saved document does hold: the link and the connector, which are not ERP data.
+    // What the saved document does hold: the link, the connector and (Phase 12) the report's
+    // parameter as the person chose it, none of which is ERP data.
     const saved = strings(store).join(' ');
     expect(saved).toContain(links[0]!.id);
-    expect(saved).toContain('customers');
+    expect(saved).toContain('apAging');
+    expect(saved).toContain('invoiceDate');
 
     frame.destroy();
     services.dispose();

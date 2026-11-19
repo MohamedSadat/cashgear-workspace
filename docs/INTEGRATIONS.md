@@ -993,7 +993,8 @@ Rules:
   parameter is one error, `field: "parameters.<name>"`, with `required`, `type`, `lookup.notFound`
   (an unknown or inactive code), `range` (a date before 1900-01-01 or after 9999-12-31, or a period
   whose start is after its end) or `request.invalid` (a name the schema does not list).
-  `parameters` on an entity stays 400 `request.invalid`.
+  On an entity, `parameters` absent, `null` or `{}` passes and anything else stays 400
+  `request.invalid`, as in 0.10.0.
 - **Rows.** A report's rows are records: `id` unique in the report, `key` its `keyField`'s value,
   `version` a hash of the values the user sees (`ConnectorRules.ContentVersion`). `filter`, `sort`,
   `fields`, `pageSize` and the cursor work as for an entity, on the report's rows, by the rules

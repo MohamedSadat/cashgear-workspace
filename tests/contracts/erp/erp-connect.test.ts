@@ -854,12 +854,14 @@ describe('the client against the server', () => {
     const session = await client.redeem(await connectTicket('full', link.linkId), WORKSPACE);
     expect(session.linkId).toBe(link.linkId);
     const connectors = await client.connectors(session.token);
-    for (const { id } of connectors) {
+    for (const { id, kind } of connectors) {
       const schema = await client.schema(session.token, id);
+      // Phase 12: a report's query carries its parameters, `{}` for every default.
+      const parameters = kind === 'report' ? { parameters: {} } : {};
       const page = await client.query(
         session.token,
         id,
-        { filter: {}, cursor: null, pageSize: 20 },
+        { filter: {}, cursor: null, pageSize: 20, ...parameters },
         { schema },
       );
       expect(page.records.length).toBeLessThanOrEqual(20);
@@ -867,7 +869,7 @@ describe('the client against the server', () => {
         await client.query(
           session.token,
           id,
-          { filter: {}, cursor: page.nextCursor, pageSize: 20 },
+          { filter: {}, cursor: page.nextCursor, pageSize: 20, ...parameters },
           { schema },
         );
       }

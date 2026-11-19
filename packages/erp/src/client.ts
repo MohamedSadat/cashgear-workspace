@@ -11,7 +11,9 @@ import {
   RETRY_AFTER_HEADER,
   ROUTES,
   SESSION_HEADER,
+  CONNECTOR_KINDS,
   connectorRoute,
+  connectorsRoute,
   commitStatusRoute,
   isServerErrorCode,
   isToken,
@@ -31,6 +33,7 @@ import {
   type CommitResponse,
   type CommitStatusResponse,
   type ConnectSession,
+  type ConnectorKind,
   type ConnectorSchema,
   type ConnectorSummary,
   type ErpErrorCode,
@@ -43,6 +46,14 @@ import {
 export interface ErpRequestOptions {
   /** Cancels the call; it then fails with `aborted`. */
   readonly signal?: AbortSignal;
+}
+
+export interface ErpConnectorsOptions extends ErpRequestOptions {
+  /**
+   * The kinds asked for (Phase 12): every kind this build knows by default, entities and reports.
+   * Null asks without `kinds`, as a build before 0.12.0 does: the ERP lists its entities only.
+   */
+  readonly kinds?: readonly ConnectorKind[] | null;
 }
 
 export interface ErpQueryOptions extends ErpRequestOptions {
@@ -95,8 +106,8 @@ export interface ErpClient {
   renew(token: string, options?: ErpRequestOptions): Promise<RenewResponse>;
   /** `Session/End`; `keepalive` lets it go as the page closes. */
   end(token: string, options?: ErpRequestOptions & { readonly keepalive?: boolean }): Promise<void>;
-  /** The connectors this user may view. */
-  connectors(token: string, options?: ErpRequestOptions): Promise<readonly ConnectorSummary[]>;
+  /** The connectors this user may view, of the kinds asked for (entities and reports). */
+  connectors(token: string, options?: ErpConnectorsOptions): Promise<readonly ConnectorSummary[]>;
   schema(token: string, id: string, options?: ErpRequestOptions): Promise<ConnectorSchema>;
   query(
     token: string,
@@ -358,9 +369,16 @@ export function createErpClient(
     },
 
     async connectors(token, options = {}) {
+      const kinds = options.kinds === undefined ? CONNECTOR_KINDS : options.kinds;
       const answer = await json(
-        { method: 'GET', route: ROUTES.connectors, kind: 'session', token, signal: options.signal },
-        parseConnectors,
+        {
+          method: 'GET',
+          route: connectorsRoute(kinds),
+          kind: 'session',
+          token,
+          signal: options.signal,
+        },
+        (value) => parseConnectors(value, kinds),
       );
       return answer.connectors;
     },

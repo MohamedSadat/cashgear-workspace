@@ -307,7 +307,10 @@ const SheetEmbed = atomBody('sheetEmbed', {
  * Version 4: a live, read-only view of an ERP connector through a workspace's ERP link
  * (INTEGRATIONS.md, "Cash Gear ERP"). Only the link and the settings are stored, never ERP data.
  * `filter`, `fields` and `sort` are JSON text (`{search?, equals?}`, `string[]`,
- * `{field, direction}[]`), read by the view, which ignores what it cannot read.
+ * `{field, direction}[]`), read by the view, which ignores what it cannot read. Phase 12 adds
+ * `parameters`, a report's, JSON text of what the person set (`{name: value}`; absent ones take
+ * the report's defaults): a new optional attribute, so no schema version, as older builds keep it
+ * through the binding patch (Q18). Never a report's answer.
  */
 const ErpView = atomBody('erpView', {
   linkId: { default: null },
@@ -316,6 +319,7 @@ const ErpView = atomBody('erpView', {
   fields: { default: null },
   sort: { default: null },
   pageSize: { default: null, parse: positiveNumber },
+  parameters: { default: null },
 });
 /**
  * Version 6: a block whose body a plugin defines (INTEGRATIONS.md, Plugin blocks): `type` names

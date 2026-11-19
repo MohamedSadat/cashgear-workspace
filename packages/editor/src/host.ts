@@ -233,6 +233,8 @@ export interface ErpBlockAttrs {
   sort: string | null;
   /** Rows a page; null: 50. */
   pageSize: number | null;
+  /** Phase 12: a report's parameters the person set, JSON text of `{name: value}`; null: none. */
+  parameters: string | null;
 }
 
 /** What an ERP view block gives the host to draw into its frame. */

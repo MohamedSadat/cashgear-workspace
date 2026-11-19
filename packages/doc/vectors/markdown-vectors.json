@@ -4194,7 +4194,8 @@
                 "filter": null,
                 "fields": null,
                 "sort": null,
-                "pageSize": null
+                "pageSize": null,
+                "parameters": null
               }
             }
           ]
@@ -4213,7 +4214,8 @@
                 "filter": "{\"search\":\"*Kit* [Trading] | <b>\",\"equals\":{\"city\":\"القاهرة\"}}",
                 "fields": "[\"code\",\"name\",\"balance\"]",
                 "sort": "[{\"field\":\"name\",\"direction\":\"asc\"}]",
-                "pageSize": 50
+                "pageSize": 50,
+                "parameters": null
               }
             }
           ]
@@ -4276,7 +4278,8 @@
                     "filter": null,
                     "fields": null,
                     "sort": null,
-                    "pageSize": null
+                    "pageSize": null,
+                    "parameters": null
                   }
                 }
               ]
@@ -4341,6 +4344,110 @@
       ]
     },
     "markdown": "Before\n\n1. Item\n\n  Child of an ERP view\n\nAfter\n"
+  },
+  {
+    "name": "ERP reports write nothing",
+    "doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Before"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "connectorId": "apAging",
+                "filter": null,
+                "fields": null,
+                "sort": null,
+                "pageSize": null,
+                "parameters": "{\"asOf\":\"2026-10-31\",\"ageBy\":\"invoiceDate\",\"vendorGroup\":\"*LOCAL* | <b>\"}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "connectorId": "trialBalance",
+                "filter": null,
+                "fields": null,
+                "sort": null,
+                "pageSize": 100,
+                "parameters": "{\"statement\":\"الميزانية\"}"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "erpView",
+              "attrs": {
+                "linkId": "01936f6e-0000-7000-8000-0000000000e2",
+                "parameters": "not json"
+              }
+            }
+          ]
+        },
+        {
+          "type": "block",
+          "attrs": {
+            "id": null
+          },
+          "content": [
+            {
+              "type": "textBody",
+              "attrs": {
+                "kind": "paragraph"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "markdown": "Before\n\nAfter\n"
   },
   {
     "name": "user mentions with names",

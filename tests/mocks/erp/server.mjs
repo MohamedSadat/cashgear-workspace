@@ -5,16 +5,40 @@
 // says; the browser tests and `pnpm dev:web` against a local API use it in place of the ERP.
 //
 //   node tests/mocks/erp/server.mjs [--port 4282] [--client-port 4284] [--host 127.0.0.1]
-//                                   [--workspace-url http://127.0.0.1:5273]
+//                                   [--workspace-url http://127.0.0.1:5273] [--large]
 //
 // Ports also come from CGW_MOCK_ERP_PORT and CGW_MOCK_ERP_CLIENT_PORT. `/__mock/*` on the API
 // resets it, moves its clock, injects faults, makes tickets without the pop-up, revokes links,
 // turns Workspace off for a company, sets rate limits and shows its state (never a token).
+//
+// Phase 12 (INTEGRATIONS.md, "Queries paged in the ERP's database" and "Reports"): queries
+// search, match and order by 0.10.0's rules (rules.mjs), page by a keyset cursor and read at
+// most `maxRecords` records through their cursors; `--large` (or `reset {large: true}`) seeds
+// 100,000 records a connector by the rule in large.mjs; three report connectors (reports.mjs),
+// listed only when `Connectors?kinds=` names reports.
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  REPORTS,
+  REPORT_IDS,
+  STOCK_PLACES_CAP,
+  datesIn,
+  runReport,
+  seedLedgers,
+} from './reports.mjs';
+import {
+  compareKeys,
+  decimalOf,
+  fold,
+  isDecimalText,
+  sameWire,
+  sortKeyOf,
+  toUnits,
+  trimNet,
+} from './rules.mjs';
 import {
   COMPANIES,
   CONNECTORS,
@@ -26,6 +50,7 @@ import {
 } from './seed.mjs';
 
 export { COMPANIES, CONNECTORS, MARKERS, USERS } from './seed.mjs';
+export { REPORTS, REPORT_IDS } from './reports.mjs';
 
 /** The contract's lifetimes and sizes. */
 export const LIMITS = {
@@ -124,6 +149,72 @@ const isWire = (v) =>
 const DECIMAL = /^-?(0|[1-9]\d*)(\.(\d+))?$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A calendar date that exists, `YYYY-MM-DD`. */
+function isDate(text) {
+  if (typeof text !== 'string' || !DATE.test(text)) return false;
+  const [y, m, d] = text.split('-').map(Number);
+  const at = new Date(Date.UTC(2000, m - 1, d));
+  at.setUTCFullYear(y);
+  return at.getUTCFullYear() === y && at.getUTCMonth() === m - 1 && at.getUTCDate() === d;
+}
+
+/** A connector of either kind, by id: an entity (seed.mjs) or a report (reports.mjs). */
+const connectorById = (id) =>
+  typeof id !== 'string'
+    ? undefined
+    : Object.hasOwn(CONNECTORS, id)
+      ? CONNECTORS[id]
+      : Object.hasOwn(REPORTS, id)
+        ? REPORTS[id]
+        : undefined;
+
+/**
+ * A connector's own order, which is also its order with no sort and its ties' order: Vendors by
+ * record id, Customers by account (the seed's accounts order alike by the database's collation and
+ * ordinal), Items on hand by item, site, warehouse and location (ordinal), and each report's.
+ * Each part is `{field, as, desc?}`: `number`, `ordinal` (null as ''), or a field type.
+ */
+const OWN_ORDER = {
+  vendors: [{ field: 'id', as: 'number' }],
+  customers: [{ field: 'customerAccount', as: 'ordinal' }],
+  itemsOnHand: ['itemId', 'siteId', 'warehouseId', 'locationId'].map((field) => ({
+    field,
+    as: 'ordinal',
+  })),
+  apAging: [
+    { field: 'balance', as: 'decimal', desc: true },
+    { field: 'vendorName', as: 'text' },
+    { field: 'vendorAccount', as: 'ordinal' },
+  ],
+  stockBalance: ['itemId', 'siteId', 'warehouseId', 'locationId'].map((field) => ({
+    field,
+    as: 'ordinal',
+  })),
+  trialBalance: [
+    { field: 'balance', as: 'decimal', desc: true },
+    { field: 'accountId', as: 'ordinal' },
+  ],
+};
+
+function ownKeyOf(part, value) {
+  if (part.as === 'number') return { n: Number(value) };
+  if (part.as === 'ordinal') return { f: '', t: value ?? '' };
+  return sortKeyOf(part.as, value);
+}
+
+/** Orders two prepared entries: the query's sort keys, then the connector's own order. */
+function compareEntries(a, b, sort, own) {
+  for (let i = 0; i < sort.length; i++) {
+    const order = compareKeys(a.sort[i], b.sort[i]);
+    if (order !== 0) return sort[i].direction === 'desc' ? -order : order;
+  }
+  for (let i = 0; i < own.length; i++) {
+    const order = compareKeys(a.own[i], b.own[i]);
+    if (order !== 0) return own[i].desc ? -order : order;
+  }
+  return 0;
+}
+
 /** Sorted keys at every level, so equal queries hash equally whatever their key order. */
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -154,25 +245,6 @@ function compareDecimal(a, b) {
   const x = BigInt(ai + af.padEnd(width, '0')) * BigInt(sa);
   const y = BigInt(bi + bf.padEnd(width, '0')) * BigInt(sb);
   return x < y ? -1 : x > y ? 1 : 0;
-}
-
-/** Two wire values of one field in the ERP's order; nulls first, as SQL Server sorts them. */
-function compareValues(type, a, b) {
-  if (a === null || b === null) return a === b ? 0 : a === null ? -1 : 1;
-  switch (type) {
-    case 'decimal':
-      return compareDecimal(a, b);
-    case 'integer':
-      return a - b;
-    case 'boolean':
-      return Number(a) - Number(b);
-    case 'dateTime':
-      return Date.parse(a) - Date.parse(b);
-    case 'date':
-      return a < b ? -1 : a > b ? 1 : 0;
-    default:
-      return a.localeCompare(b, 'en', { sensitivity: 'base' });
-  }
 }
 
 /** Why `value` cannot be compared with `field`'s values, or null. */
@@ -241,6 +313,14 @@ export class MockErp {
    */
   reset(options = {}) {
     this.records = seedRecords(options);
+    // Phase 12: the reports' ledgers, always from the usual seed's records (with the large seed,
+    // AP aging finds none of its vendors), and the stock report's cap.
+    this.ledgers = seedLedgers(options.large ? seedRecords() : this.records);
+    this.reportLimits = { stockPlaces: STOCK_PLACES_CAP };
+    /** Rises with every write, so a cached query of the records before it is not used. */
+    this.dataVersion = (this.dataVersion ?? 0) + 1;
+    this.queryCache = new Map();
+    this.foldCache = new Map();
     // Versions after the seed's: one 8-byte counter, as SQL Server's `rowversion` is (Vendors';
     // the others' are made from their values).
     this.version = Object.values(this.records)
@@ -297,10 +377,23 @@ export class MockErp {
     return link;
   }
 
-  /** The fields `user` may see of `connector`, in the ERP's order. */
+  /**
+   * The fields `user` may see of `connector`, in the ERP's order: without those its field rules
+   * keep from them (Customers' national ID from employees; Phase 12, stock balance's cost from
+   * those the Warehouse balance page does not show it to).
+   */
   fieldsFor(user, connector) {
     const hidden = new Set(user.hidden?.[connector.id] ?? []);
+    if (!user.showCost) for (const name of connector.costFields ?? []) hidden.add(name);
     return connector.fields.filter((f) => !hidden.has(f.name));
+  }
+
+  /** Whether `user` may view `connector`: an entity they hold, or a report one of their roles takes. */
+  canView(user, connector) {
+    if (connector.kind === 'report') {
+      return (user.roles ?? []).some((role) => connector.roles.includes(role));
+    }
+    return user.connectors.includes(connector.id);
   }
 
   /**
@@ -474,7 +567,7 @@ export class MockErp {
     if (method('api/connect/Session/Redeem', 'POST')) return this.redeem(ctx);
     if (method('api/connect/Session/Renew', 'POST')) return this.renew(this.session(ctx));
     if (method('api/connect/Session/End', 'POST')) return this.end(this.session(ctx));
-    if (method('api/connect/Connectors', 'GET')) return this.connectors(this.session(ctx));
+    if (method('api/connect/Connectors', 'GET')) return this.connectors(ctx, this.session(ctx));
     const at = /^api\/connect\/connectors\/([^/]+)\/(schema|query|commit)$/.exec(lower);
     if (at) {
       const id = ctx.path.split('/')[3];
@@ -697,14 +790,31 @@ export class MockErp {
   // -------------------------------------------------------------------------------------------
   // Connectors
 
-  connectors(session) {
+  /**
+   * The connectors the user may view, of the kinds `?kinds=` names (Phase 12): without it, the
+   * entities only, as before 0.12.0, so an older build is never shown a report. Kinds the ERP
+   * does not know are left out of the list asked for.
+   */
+  connectors(ctx, session) {
     const user = session.userInfo;
+    const asked = ctx.url.searchParams.get('kinds');
+    const kinds = new Set(
+      asked === null || asked.trim() === '' ? ['entity'] : asked.split(',').map((k) => k.trim()),
+    );
     return new Reply(200, {
-      connectors: CONNECTOR_IDS.filter((id) => user.connectors.includes(id)).map((id) => {
-        const c = CONNECTORS[id];
-        const access = this.grant(user, c) ? 'edit' : 'view';
-        return { id, kind: c.kind, label: c.label, schemaVersion: c.schemaVersion, access };
-      }),
+      connectors: [...CONNECTOR_IDS, ...REPORT_IDS]
+        .map(connectorById)
+        .filter((c) => kinds.has(c.kind) && this.canView(user, c))
+        .map((c) => {
+          const access = this.grant(user, c) ? 'edit' : 'view';
+          return {
+            id: c.id,
+            kind: c.kind,
+            label: c.label,
+            schemaVersion: c.schemaVersion,
+            access,
+          };
+        }),
     });
   }
 
@@ -731,9 +841,9 @@ export class MockErp {
 
   /** The connector named in the route (else 404), which the user may view (else 403). */
   connectorFor(session, id) {
-    const connector = Object.hasOwn(CONNECTORS, id) ? CONNECTORS[id] : undefined;
+    const connector = connectorById(id);
     if (!connector) refuse(404, 'connector.notFound');
-    if (!session.userInfo.connectors.includes(id)) refuse(403, 'privilege.denied');
+    if (!this.canView(session.userInfo, connector)) refuse(403, 'privilege.denied');
     return connector;
   }
 
@@ -746,7 +856,16 @@ export class MockErp {
         type: f.type,
         ...this.fieldEdit(user, connector, f),
       };
-      for (const key of ['required', 'maxLength', 'min', 'max', 'scale', 'lookup', 'scope']) {
+      for (const key of [
+        'required',
+        'maxLength',
+        'min',
+        'max',
+        'scale',
+        'lookup',
+        'scope',
+        'total',
+      ]) {
         if (f[key] !== undefined) out[key] = f[key];
       }
       out.filterable = f.filterable;
@@ -754,11 +873,14 @@ export class MockErp {
       return out;
     });
     const lists = lookups(user.company);
+    const parameters = connector.parameters ?? [];
     const used = Object.fromEntries(
-      fields.filter((f) => f.lookup).map((f) => [f.lookup, lists[f.lookup]]),
+      [...fields, ...parameters].filter((f) => f.lookup).map((f) => [f.lookup, lists[f.lookup]]),
     );
     return new Reply(200, {
       id: connector.id,
+      // Phase 12: a report says so; an entity's schema is as before 0.12.0.
+      ...(connector.kind === 'report' ? { kind: 'report' } : {}),
       schemaVersion: connector.schemaVersion,
       keyField: connector.keyField,
       idField: connector.idField,
@@ -767,7 +889,230 @@ export class MockErp {
       maxCommitRecords: connector.maxCommitRecords,
       fields,
       lookups: used,
+      ...(connector.kind === 'report'
+        ? {
+            parameters: parameters.map((p) => ({
+              name: p.name,
+              label: p.label,
+              type: p.type,
+              required: p.required,
+              ...(p.options ? { options: p.options } : {}),
+              ...(p.lookup ? { lookup: p.lookup } : {}),
+              default: p.default ?? null,
+            })),
+          }
+        : {}),
     });
+  }
+
+  /** `text` folded as `OrdinalIgnoreCase` compares it, each text once (100,000 records). */
+  folded(text) {
+    let out = this.foldCache.get(text);
+    if (out === undefined) {
+      if (this.foldCache.size > 2_000_000) this.foldCache.clear();
+      out = fold(text);
+      this.foldCache.set(text, out);
+    }
+    return out;
+  }
+
+  /**
+   * A report's parameters as the ERP reads them (Phase 12, INTEGRATIONS.md, "Reports"): each
+   * absent (or null) one takes its default (a date's `today` and `monthStart` in the company's time
+   * zone, now), and every wrong one is an error of its own, `field: "parameters.<name>"`.
+   */
+  reportParameters(ctx, user, connector, raw) {
+    if (raw === undefined || raw === null) {
+      refuse(400, 'request.invalid', 'A report takes parameters: {} for every default.');
+    }
+    if (!isObject(raw)) refuse(400, 'request.invalid', 'parameters must be an object.');
+    const known = new Map(connector.parameters.map((p) => [p.name, p]));
+    const errors = [];
+    const wrong = (name, code) => errors.push({ field: `parameters.${name}`, code });
+    for (const name of Object.keys(raw)) if (!known.has(name)) wrong(name, 'request.invalid');
+    const { today, monthStart } = datesIn(COMPANIES[user.company].timeZone, this.now());
+    const lists = lookups(user.company);
+    const out = {};
+    for (const p of connector.parameters) {
+      let value = Object.hasOwn(raw, p.name) ? raw[p.name] : undefined;
+      if (p.type === 'lookup' && value === '') value = null;
+      if (value === undefined || value === null) {
+        const fallback =
+          p.default === 'today' && p.type === 'date'
+            ? today
+            : p.default === 'monthStart' && p.type === 'date'
+              ? monthStart
+              : (p.default ?? null);
+        if (fallback === null && p.required) wrong(p.name, 'required');
+        out[p.name] = fallback;
+        continue;
+      }
+      let problem = null;
+      if (p.type === 'date') {
+        if (!isDate(value)) problem = 'type';
+        else if (value < '1900-01-01' || value > '9999-12-31') problem = 'range';
+      } else if (p.type === 'choice') {
+        if (typeof value !== 'string' || !p.options.some((o) => o.value === value))
+          problem = 'type';
+      } else if (p.type === 'lookup') {
+        if (typeof value !== 'string') problem = 'type';
+        else {
+          const item = (lists[p.lookup] ?? []).find((i) => i.code === value);
+          if (!item || item.active === false) problem = 'lookup.notFound';
+        }
+      } else if (typeof value !== 'boolean') problem = 'type';
+      if (problem) wrong(p.name, problem);
+      out[p.name] = value;
+    }
+    // A period whose start is after its end.
+    const failed = new Set(errors.map((e) => e.field));
+    for (const p of connector.parameters) {
+      if (p.type !== 'date' || !p.after) continue;
+      const from = out[p.after];
+      if (failed.has(`parameters.${p.name}`) || failed.has(`parameters.${p.after}`)) continue;
+      if (from !== null && out[p.name] !== null && out[p.name] < from) wrong(p.name, 'range');
+    }
+    if (errors.length) {
+      const table = TEXT[ctx.language] ?? TEXT.en;
+      return new Reply(400, {
+        message: table['request.invalid'],
+        correlationId: ctx.correlationId,
+        errors: errors.map((e) => ({ ...e, message: table[e.code] ?? e.code })),
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The rows a query runs over, flat (`{id, company, ...values}`), in the connector's own order:
+   * an entity's the user may see, or a report's computed for its parameters (with its labels and
+   * whether a limit cut it).
+   */
+  sourceRows(user, connector, params) {
+    if (connector.kind !== 'report') {
+      // An entity's rows in their own order, made once a write.
+      const key = `${this.dataVersion}|${connector.id}|${user.name}`;
+      if (this.ownRows?.key !== key) {
+        const own = OWN_ORDER[connector.id];
+        const rows = this.rowsFor(user, connector)
+          .map((row) => ({ row, own: own.map((part) => ownKeyOf(part, row[part.field] ?? null)) }))
+          .sort((a, b) => compareEntries(a, b, [], own))
+          .map((e) => e.row);
+        this.ownRows = { key, rows, keys: new Map(), texts: new Map() };
+      }
+      return { rows: this.ownRows.rows, keys: this.ownRows.keys, texts: this.ownRows.texts };
+    }
+    const made = runReport(connector.id, {
+      ledgers: this.ledgers,
+      records: this.records,
+      company: user.company,
+      params,
+      limits: this.reportLimits,
+    });
+    return {
+      rows: made.rows.map((r) => ({ id: r.id, company: user.company, ...r.values })),
+      labels: made.labels,
+      partial: made.partial,
+    };
+  }
+
+  /**
+   * Every match of a query, prepared and in order: searched, matched and sorted by 0.10.0's rules
+   * (rules.mjs), ties in the connector's own order. Kept until the next write, so a query's later
+   * pages, as a sort of 100,000 records, are read from it.
+   */
+  matches(user, connector, fields, q, params) {
+    const key = canonical({
+      v: this.dataVersion,
+      c: connector.id,
+      u: user.name,
+      s: q.search ?? null,
+      e: q.equals,
+      o: q.sort,
+      p: params,
+    });
+    const cached = this.queryCache.get(key);
+    if (cached) {
+      this.queryCache.delete(key);
+      this.queryCache.set(key, cached);
+      return cached;
+    }
+    const byName = new Map(fields.map((f) => [f.name, f]));
+    const source = this.sourceRows(user, connector, params);
+    const search = q.search === undefined ? null : this.folded(q.search);
+    // What the ERP's own list searches, of the fields this user sees (the customer list searches
+    // the national ID only where it shows it), and what it searches that is never sent.
+    const searched = [
+      ...fields.filter((f) => f.search).map((f) => f.name),
+      ...(connector.searchAlso ?? []),
+    ];
+    const equals = Object.entries(q.equals);
+    const sortTypes = q.sort.map((k) => byName.get(k.field).type);
+    const folder = (text) => this.folded(text);
+    // An entity's sort keys by field, made once a write for every query sorting by it.
+    const keysOf = (field, type) => {
+      if (!source.keys) return null;
+      let keys = source.keys.get(field);
+      if (!keys) {
+        keys = source.rows.map((row) => sortKeyOf(type, row[field] ?? null, folder));
+        source.keys.set(field, keys);
+      }
+      return keys;
+    };
+    const sortKeys = q.sort.map((k, i) => keysOf(k.field, sortTypes[i]));
+    // Each row's searched texts, folded, made once a write for every search.
+    let texts = null;
+    if (search !== null && source.texts) {
+      const named = searched.join(',');
+      texts = source.texts.get(named);
+      if (!texts) {
+        texts = source.rows.map((row) =>
+          searched
+            .map((name) => row[name])
+            .filter((value) => typeof value === 'string')
+            .map((value) => this.folded(value)),
+        );
+        source.texts.set(named, texts);
+      }
+    }
+    const list = [];
+    // The source is in the connector's own order: a row's place in it (`rank`) breaks ties, as
+    // its own order would (`compareEntries` with own keys, which a cursor's position uses).
+    source.rows.forEach((row, rank) => {
+      if (
+        search !== null &&
+        !(texts
+          ? texts[rank].some((text) => text.includes(search))
+          : searched.some((name) => {
+              const value = row[name];
+              return typeof value === 'string' && this.folded(value).includes(search);
+            }))
+      )
+        return;
+      if (
+        !equals.every(([name, value]) => sameWire(byName.get(name).type, row[name] ?? null, value))
+      )
+        return;
+      list.push({
+        row,
+        rank,
+        sort: q.sort.map(
+          (k, i) => sortKeys[i]?.[rank] ?? sortKeyOf(sortTypes[i], row[k.field] ?? null, folder),
+        ),
+      });
+    });
+    const directions = q.sort.map((k) => (k.direction === 'desc' ? -1 : 1));
+    list.sort((a, b) => {
+      for (let i = 0; i < directions.length; i++) {
+        const order = compareKeys(a.sort[i], b.sort[i]);
+        if (order !== 0) return order * directions[i];
+      }
+      return a.rank - b.rank;
+    });
+    const made = { list, labels: source.labels, partial: source.partial };
+    this.queryCache.set(key, made);
+    while (this.queryCache.size > 6) this.queryCache.delete(this.queryCache.keys().next().value);
+    return made;
   }
 
   query(ctx, session, connector) {
@@ -775,38 +1120,18 @@ export class MockErp {
     const fields = this.fieldsFor(user, connector);
     const byName = new Map(fields.map((f) => [f.name, f]));
     const q = readQuery(ctx.body, connector, byName);
-
-    const search = q.search?.toLowerCase() ?? '';
-    // What the ERP's own list searches, of the fields this user sees (the customer list searches
-    // the national ID only where it shows it), and what it searches that is never sent.
-    const searched = [
-      ...fields.filter((f) => f.search).map((f) => f.name),
-      ...connector.searchAlso,
-    ];
-    let rows = this.rowsFor(user, connector).filter((row) => {
-      if (
-        search &&
-        !searched.some((name) =>
-          String(row[name] ?? '')
-            .toLowerCase()
-            .includes(search),
-        )
-      )
-        return false;
-      return Object.entries(q.equals).every(([name, value]) => (row[name] ?? null) === value);
-    });
-    if (q.sort.length > 0) {
-      rows = [...rows].sort((a, b) => {
-        for (const { field, direction } of q.sort) {
-          const order = compareValues(byName.get(field).type, a[field] ?? null, b[field] ?? null);
-          if (order !== 0) return direction === 'desc' ? -order : order;
-        }
-        return 0;
-      });
+    let params = null;
+    if (connector.kind === 'report') {
+      params = this.reportParameters(ctx, user, connector, q.parameters);
+      if (params instanceof Reply) return params;
     }
+    const { list, labels, partial } = this.matches(user, connector, fields, q, params);
+    const own = OWN_ORDER[connector.id];
 
-    // The cursor is an offset tied to its query's filter, sort and fields (agreed with Track
-    // E): another query's cursor is refused.
+    // The cursor is a keyset (the last record's sort values and own order), bound to its query's
+    // filter, sort, fields and a report's parameters (agreed with Track E; Phase 12): a record
+    // written between two pages neither repeats nor pushes another off a page, and another
+    // query's cursor is refused. It counts what was read, so a query reads at most `maxRecords`.
     const hash = sha256(
       canonical({
         k: this.cursorKey,
@@ -815,39 +1140,83 @@ export class MockErp {
         equals: q.equals,
         sort: q.sort,
         fields: q.fields,
+        parameters: params,
       }),
     ).slice(0, 24);
-    let offset = 0;
+    let start = 0;
+    let read = 0;
     if (q.cursor !== null) {
-      let read;
-      try {
-        read = JSON.parse(Buffer.from(q.cursor, 'base64url').toString('utf8'));
-      } catch {
-        read = null;
-      }
-      if (!isObject(read) || read.q !== hash || !Number.isSafeInteger(read.o) || read.o < 0) {
+      const at = readCursor(q.cursor);
+      if (!at || at.q !== hash)
         refuse(400, 'request.invalid', 'The cursor is not one of this query’s.');
+      if (at.n >= connector.maxRecords) {
+        refuse(400, 'request.invalid', `A query reads at most ${connector.maxRecords} records.`);
       }
-      offset = read.o;
+      read = at.n;
+      const last = {
+        sort: q.sort.map((k, i) => sortKeyOf(byName.get(k.field).type, at.s[i] ?? null)),
+        own: own.map((part, i) => ownKeyOf(part, at.o[i] ?? null)),
+      };
+      // The first record after the last one read, in the query's order.
+      let lo = 0;
+      let hi = list.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        const entry = list[mid];
+        const at = {
+          sort: entry.sort,
+          own: own.map((part) => ownKeyOf(part, entry.row[part.field] ?? null)),
+        };
+        if (compareEntries(at, last, q.sort, own) <= 0) lo = mid + 1;
+        else hi = mid;
+      }
+      start = lo;
     }
-    const page = rows.slice(offset, offset + q.pageSize);
-    const next = offset + page.length;
+    const take = Math.min(q.pageSize, connector.maxRecords - read);
+    const page = list.slice(start, start + take);
+    const more = start + page.length < list.length && read + page.length < connector.maxRecords;
+    const lastRow = page.at(-1)?.row;
     const names = q.fields ?? fields.map((f) => f.name);
     // A version is of every field the user sees, whichever the query asked for.
     const seen = fields.map((f) => f.name);
-    return new Reply(200, {
-      records: page.map((row) => ({
+    const keyOf = (row) => String(row[connector.keyField]);
+    const answer = {
+      records: page.map(({ row }) => ({
         id: row.id,
-        key: String(row[connector.keyField]),
+        key: keyOf(row),
         version: this.versionOf(connector, row, seen),
         values: Object.fromEntries(names.map((name) => [name, row[name] ?? null])),
       })),
       nextCursor:
-        next < rows.length
-          ? Buffer.from(JSON.stringify({ o: next, q: hash })).toString('base64url')
+        more && lastRow
+          ? writeCursor({
+              q: hash,
+              n: read + page.length,
+              s: q.sort.map((k) => lastRow[k.field] ?? null),
+              o: own.map((part) => lastRow[part.field] ?? null),
+            })
           : null,
-      total: rows.length,
-    });
+      total: list.length,
+    };
+    if (connector.kind === 'report') {
+      // Each summed field of the answer's over every match, whatever the cursor.
+      const totals = {};
+      for (const name of names) {
+        const f = byName.get(name);
+        if (f.total !== 'sum') continue;
+        let sum = 0n;
+        for (const { row } of list) {
+          const value = row[name];
+          if (value === null || value === undefined) continue;
+          sum += f.type === 'integer' ? BigInt(value) : toUnits(value, f.scale);
+        }
+        totals[name] = f.type === 'integer' ? Number(sum) : decimalOf(sum, f.scale);
+      }
+      answer.totals = totals;
+      if (labels) answer.labels = labels;
+      if (partial) answer.partial = true;
+    }
+    return new Reply(200, answer);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1077,6 +1446,7 @@ export class MockErp {
     };
     if (body.dryRun) return new Reply(200, response);
     for (const { row, next } of touched.values()) all[all.indexOf(row)] = next;
+    this.dataVersion++;
     const audit = (row, name, before, after) =>
       this.audit.push({
         company: session.company,
@@ -1173,6 +1543,8 @@ export class MockErp {
             ? { kitCustomers: body.kitCustomers }
             : {}),
           ...(body.locks === false ? { locks: false } : {}),
+          // Phase 12: Kit's records of every connector by the large seed's rule (large.mjs).
+          ...(body.large === true ? { large: true } : {}),
         });
         return ok();
       case 'clock':
@@ -1291,6 +1663,7 @@ export class MockErp {
             table[i] = { ...row, ...sharedValues };
           }
         }
+        this.dataVersion++;
         return ok({
           id: edited.id,
           version: this.versionOf(connector, edited, [...names]),
@@ -1298,6 +1671,55 @@ export class MockErp {
       }
       case 'audit':
         return ok({ audit: this.audit, commits: this.commits.size });
+      case 'cursor': {
+        // Phase 12: a cursor of the mock's own moved to `read` records, so a test can send one
+        // past `maxRecords`, which the mock never gives.
+        const at = typeof body.cursor === 'string' ? readCursor(body.cursor) : null;
+        if (!at || !Number.isSafeInteger(body.read) || body.read < 0) {
+          return bad('cursor (one the mock gave) and read are required.');
+        }
+        return ok({ cursor: writeCursor({ ...at, n: body.read }) });
+      }
+      case 'add-record': {
+        // Phase 12: a record written in the ERP between two pages of a query (a new vendor,
+        // customer or item's place), with the given values over an existing record's.
+        const connector = Object.hasOwn(CONNECTORS, body.connector)
+          ? CONNECTORS[body.connector]
+          : undefined;
+        if (!connector || !Object.hasOwn(COMPANIES, body.company) || !isObject(body.values)) {
+          return bad('connector, company and values are required.');
+        }
+        const table = this.records[connector.id];
+        const like = table.find((row) => row.company === body.company);
+        if (!like) return bad('The company has no record to start from.');
+        const row = { ...like, ...body.values, company: body.company };
+        if (connector.id === 'itemsOnHand') {
+          row.id = [row.itemId, row.siteId ?? '', row.warehouseId ?? '', row.locationId ?? ''].join(
+            '|',
+          );
+        } else {
+          const top = table.reduce((max, r) => Math.max(max, Number(r.id)), 0);
+          row.id = String(top + 1);
+          row[connector.idField] = row.id;
+        }
+        if (connector.versions === 'rowversion') row.version = this.nextVersion();
+        if (table.some((r) => r.company === row.company && r.id === row.id)) {
+          return bad('A record with that id exists.');
+        }
+        table.push(row);
+        this.dataVersion++;
+        return ok({ id: row.id, key: String(row[connector.keyField]) });
+      }
+      case 'report-limits':
+        // Phase 12: the stock report's cap on places (200,000 at the ERP), to make it partial.
+        if ('stockPlaces' in body) {
+          if (!Number.isSafeInteger(body.stockPlaces) || body.stockPlaces < 0) {
+            return bad('stockPlaces must be a whole number.');
+          }
+          this.reportLimits.stockPlaces = body.stockPlaces;
+          this.dataVersion++;
+        }
+        return ok({ ...this.reportLimits });
       default:
         return new Reply(404, {
           message: 'Not found.',
@@ -1387,12 +1809,14 @@ function readQuery(body, connector, byName) {
   for (const key of Object.keys(filter)) {
     if (key !== 'search' && key !== 'equals') no(`filter cannot have ${key}.`);
   }
+  // Phase 12: as 0.10.0's ConnectorQuery reads them. The search is trimmed as .NET trims, then at
+  // most 200 characters; nothing left is no search.
   let search;
   if (filter.search !== undefined && filter.search !== null) {
-    if (typeof filter.search !== 'string' || filter.search.length > 200) {
-      no('filter.search must be text of at most 200 characters.');
-    }
-    search = filter.search === '' ? undefined : filter.search;
+    if (typeof filter.search !== 'string') no('filter.search must be text.');
+    const trimmed = trimNet(filter.search);
+    if (trimmed.length > 200) no('filter.search must be at most 200 characters.');
+    search = trimmed === '' ? undefined : trimmed;
   }
   const equals = {};
   if (filter.equals !== undefined && filter.equals !== null) {
@@ -1400,12 +1824,19 @@ function readQuery(body, connector, byName) {
     for (const [name, value] of Object.entries(filter.equals)) {
       const field = byName.get(name);
       if (!field || !field.filterable) no(`filter.equals cannot use ${name}.`);
-      const problem = valueProblem(field, value);
+      const problem = filterProblem(field, value);
       if (problem) no(`filter.equals.${name} must be ${problem}.`);
-      equals[name] = value === '' ? null : value;
+      equals[name] = value;
     }
   }
-  if (body.parameters !== undefined && body.parameters !== null && connector.kind === 'entity') {
+  // An entity takes no parameters (an empty object is none, as 0.10.0 reads it); a report's are
+  // read with its schema (`reportParameters`).
+  if (
+    connector.kind !== 'report' &&
+    body.parameters !== undefined &&
+    body.parameters !== null &&
+    !(isObject(body.parameters) && Object.keys(body.parameters).length === 0)
+  ) {
     no('Only reports take parameters.');
   }
   let fields = null;
@@ -1443,8 +1874,61 @@ function readQuery(body, connector, byName) {
   ) {
     no(`pageSize must be 1 to ${connector.maxPageSize}.`);
   }
-  return { search, equals, fields, sort, cursor: body.cursor, pageSize: body.pageSize };
+  return {
+    search,
+    equals,
+    fields,
+    sort,
+    cursor: body.cursor,
+    pageSize: body.pageSize,
+    parameters: body.parameters,
+  };
 }
+
+/**
+ * Why an `equals` value cannot be compared with a field's values, as 0.10.0 checks it, or null: a
+ * boolean, a whole number, a decimal as a number or text, or text for the rest; null (and "")
+ * match an empty value.
+ */
+function filterProblem(field, value) {
+  if (value === null) return null;
+  switch (field.type) {
+    case 'boolean':
+      return typeof value === 'boolean' ? null : 'true, false or null';
+    case 'integer':
+      return Number.isSafeInteger(value) ? null : 'a whole number or null';
+    case 'decimal':
+      return (typeof value === 'number' && Number.isFinite(value)) ||
+        value === '' ||
+        isDecimalText(value)
+        ? null
+        : 'a number, a decimal in text, or null';
+    default:
+      return typeof value === 'string' ? null : 'text or null';
+  }
+}
+
+/** A cursor's parts, or null for anything that is not one the mock wrote. */
+function readCursor(cursor) {
+  let read;
+  try {
+    read = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (
+    !isObject(read) ||
+    typeof read.q !== 'string' ||
+    !Number.isSafeInteger(read.n) ||
+    read.n < 0 ||
+    !Array.isArray(read.s) ||
+    !Array.isArray(read.o)
+  )
+    return null;
+  return read;
+}
+
+const writeCursor = (parts) => Buffer.from(JSON.stringify(parts)).toString('base64url');
 
 function readBody(req) {
   return new Promise((done, failed) => {
@@ -1741,8 +2225,10 @@ export async function startMockErp({
   host = '127.0.0.1',
   workspaceUrl,
   workspaceOrigins,
+  large = false,
 } = {}) {
   const mock = new MockErp({ workspaceUrl, workspaceOrigins });
+  if (large) mock.reset({ large: true });
   const api = createServer((req, res) => {
     mock.handle(req, res).catch((error) => {
       if (res.headersSent) return void res.destroy();
@@ -1794,6 +2280,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     ),
     host: option('host', '127.0.0.1'),
     workspaceUrl: option('workspace-url', 'http://127.0.0.1:5273'),
+    large: args.includes('--large'),
   });
   console.log(`Mock Cash Gear ERP: API ${apiUrl}, client ${clientUrl}`);
 }

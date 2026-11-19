@@ -12,6 +12,7 @@ export {
   type ErpClient,
   type ErpClientOptions,
   type ErpCommitStatusOptions,
+  type ErpConnectorsOptions,
   type ErpQueryOptions,
   type ErpRequestOptions,
 } from './client';
