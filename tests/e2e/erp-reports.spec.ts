@@ -360,7 +360,8 @@ test('nothing stored: after each report is shown, none of its values is in any s
     expect(found(device.build, markers), "the app's own files").toEqual([]);
     expect(device.text, 'the page is on this device').toContain('Keeper twelve page');
     expect(found(device.text, markers), device.summary.join('; ')).toEqual([]);
-    const server = await serverPage(scene.api, id, 'Payables to settle.');
+    // The worker's derived document is a moment behind the updates: wait for the block's last change.
+    const server = await serverPage(scene.api, id, '2026-10-31');
     const serverText = [server.json, server.updates, ...server.versions].join('\n');
     expect(found(serverText, markers)).toEqual([]);
     // The block holds only what the person chose: the report and its two dates.
