@@ -922,7 +922,8 @@ Notes
 - Left for later: snapshotting an ERP view into a database (not built: it would store ERP data in
   a Workspace table); Customers and Items on hand editable; AI embeddings (`PageEmbeddings`) and
   the subscription and local-model modes; third-party plugins in sandboxed iframes; the live test
-  against Anthropic (needs your key: `ANTHROPIC_API_KEY`, CLAUDE.md's command).
+  against Anthropic (needs your key: `ANTHROPIC_API_KEY`, CLAUDE.md's command; covered in
+  production on 2026-11-19, "After 0.10.0" below).
 - "Later" reviewed with you on 2026-11-15 (the definition of done's last item): Phases 8 to 10 are
   in `IMPLEMENTATION_PLAN.md`, the answers in `DECISIONS.md`. Customers and Items on hand,
   embeddings and third-party plugins are Phase 10's; the subscription and local-model modes stay
@@ -1317,6 +1318,23 @@ Benchmarks (`bench/phase10.mjs`; the client part in CI's Windows job, the server
 | Retrieval by meaning over 100,000 chunks, warm, p95, less the provider's time | 300 ms | 45.2 ms (Release; the mock provider's own p95 2.1 ms) | 76.3 ms (Release; ranking alone 10 ms) |
 | The same after a change of five pages, p95 | 300 ms | 51.5 ms | 55.9 ms |
 | The first search's load of the workspace's copy | tracked | 1,415.2 ms | 2,120.6 ms |
+
+## After 0.10.0: production
+
+- 2026-11-19: 0.10.0 installed in production with `install.ps1` (Phase6 to Phase10 migrated, the
+  worker updated, the Sites process installed on `pages.` and `plugins.cashgearerp.com`); health
+  200 on the API and the sites, the plugins host's 404 page (OPERATIONS.md, Production as
+  installed).
+- IIS's WebDAV module answered every `PUT` and `DELETE` with 405 (`9ee7dca` removes it from both
+  `web.config`s; the deployed ones were changed by hand the same way, `.bak-20261119` kept beside
+  them).
+- AI against the real providers, in production, with the workspace's own keys (Claude Haiku 5.5,
+  `voyage-4`): summarise, rewrite, ask the workspace (cited sources, the Arabic page among them)
+  and find action items (the strict-JSON path) each answered 200 in 0.9 to 3.3 s; the worker
+  embedded 27 of 27 pages and rows; search by meaning found pages in English and from an Arabic
+  question. Phase 7's live test against Anthropic is covered by this. Anthropic answers an API key
+  sent as `Authorization: Bearer` (what the SDK sends, API version `2026-10-21`) exactly as one
+  sent as `x-api-key`: a wrong key is `invalid x-api-key` either way.
 
 ## Track U: `CashGear.React.UI`
 
