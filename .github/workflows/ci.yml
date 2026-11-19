@@ -275,7 +275,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -332,6 +332,13 @@ jobs:
       # retrieval by meaning runs in the server job.
       - name: Phase 10 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase10 -- --no-server
+      # Phase 12's (bench/phase12.mjs): a chart view of 50,000 rows by count (its first bars), and
+      # pinning a 5,000-row database whose rows all have documents while typing on another page
+      # (until every document is on the device, and the keystroke budget meanwhile), in Chrome
+      # against the server stack above. The ERP's first page of a 100,000-record connector is
+      # Track E10's own measure, taken in the ERP's repository.
+      - name: Phase 12 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase12
       - uses: actions/upload-artifact@v4
         if: always()
         with:
