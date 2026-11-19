@@ -39,7 +39,9 @@ export const WORDS = {
 
 /** The database on its own page. */
 export const fullPage = (page: Page) => page.locator('.cgw-database-page .cgw-db');
-export const grid = (scope: Page | Locator) => scope.locator('[role="grid"].cgw-grid');
+/** The table: a grid, or a tree grid when it is grouped (Phase 12). */
+export const grid = (scope: Page | Locator) =>
+  scope.locator('.cgw-grid:is([role="grid"], [role="treegrid"])');
 /**
  * A view's row count, its foot ("Rows: 3"). Not `getByRole('status')`: each view also holds the
  * `CgLiveAnnouncer` its moves and selections are spoken through, a status region too.
@@ -138,7 +140,10 @@ export async function addProperty(page: Page, type: string, name: string, scope?
   await input.fill(name);
   await input.press('Enter');
   await page.keyboard.press('Escape');
-  await expect(where.getByRole('columnheader', { name: `${name}, ${type}` })).toBeVisible();
+  // A header is named by its property alone (Phase 12), its type its description.
+  const header = where.getByRole('columnheader', { name, exact: true });
+  await expect(header).toBeVisible();
+  await expect(header).toHaveAccessibleDescription(type);
 }
 
 /** Whether every item of the table's "Add a property" menu can be reached in the window. */
@@ -164,9 +169,11 @@ export async function typeMenuInView(page: Page, scope?: Locator) {
   return outside;
 }
 
-/** Opens a property's menu from its column header. */
+/** Opens a property's menu from its column header (of that type: its description). */
 export async function propertyMenu(page: Page, name: string, type: string, scope?: Locator) {
-  await (scope ?? fullPage(page)).getByRole('columnheader', { name: `${name}, ${type}` }).click();
+  const header = (scope ?? fullPage(page)).getByRole('columnheader', { name, exact: true });
+  await expect(header).toHaveAccessibleDescription(type);
+  await header.click();
   const menu = page.getByRole('dialog', { name: `Property: ${name}` });
   await expect(menu).toBeVisible();
   return menu;

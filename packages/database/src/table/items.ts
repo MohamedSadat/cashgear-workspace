@@ -93,6 +93,78 @@ export const itemHeight = (item: TableItem, wrap: boolean) =>
       ? WRAPPED_ROW_HEIGHT
       : ROW_HEIGHT;
 
+/**
+ * How a screen reader counts the table's lines (Phase 12, M12.3), from the query's total rather
+ * than the rows drawn or loaded. Chromium makes every `row` of a grid a row of its count, gives
+ * a row without `aria-rowindex` the one after the row before it, and raises `aria-rowcount` to the
+ * highest index it finds; so:
+ *
+ * - Ungrouped, the count is the header and the query's total; a row's index is its place among
+ *   them. "Load more" stands where the first row not loaded yet will be (so it adds none), and the
+ *   "New" line is no row (index 0: the table hides it from the accessibility tree and says it
+ *   through its live region when it is reached).
+ * - Grouped (a tree grid), each group is a row (level 1, its place among the groups), followed by
+ *   the places of all of its rows when it is expanded, loaded or not (level 2, a row's place in
+ *   its group of the group's count): a group's header must be a row of a tree grid, so it takes a
+ *   place too, and a row's place in its group is what `aria-posinset` and `aria-setsize` say.
+ */
+export interface AriaLayout {
+  /** `aria-rowcount`: the header and every line counted; -1 while the first page is loading. */
+  rowCount: number;
+  /** Each item's `aria-rowindex`, or 0 for an item that is no row (a "New" line). */
+  rowIndex: Int32Array;
+  /** Grouped only: each item's `aria-level` (1 a group, 2 a row or "load more"), else 0. */
+  level: Uint8Array;
+  /** Grouped only: `aria-posinset` (a row's place in its group, a group's among the groups). */
+  posInSet: Int32Array;
+  /** Grouped only: `aria-setsize` (the group's count of rows, or the number of groups). */
+  setSize: Int32Array;
+}
+
+export function ariaLayout(items: readonly TableItem[], snapshot: RowSnapshot): AriaLayout {
+  const n = items.length;
+  const rowIndex = new Int32Array(n);
+  const level = new Uint8Array(n);
+  const posInSet = new Int32Array(n);
+  const setSize = new Int32Array(n);
+  const grouped = snapshot.groups !== null;
+  const groups = grouped
+    ? items.reduce((sum, item) => sum + (item.kind === 'group' ? 1 : 0), 0)
+    : 0;
+  // `next` is the first index not taken (the header is 1); `start` the index of the current
+  // group's first row (ungrouped: of the first row).
+  let start = 2;
+  let next = grouped ? 2 : 2 + Math.max(0, snapshot.total);
+  let size = snapshot.total;
+  let loaded = 0;
+  let groupNo = 0;
+  for (let i = 0; i < n; i++) {
+    const item = items[i];
+    if (item.kind === 'group') {
+      rowIndex[i] = next;
+      level[i] = 1;
+      posInSet[i] = ++groupNo;
+      setSize[i] = groups;
+      start = next + 1;
+      size = item.count;
+      loaded = 0;
+      next = start + (item.collapsed ? 0 : Math.max(0, size));
+    } else if (item.kind === 'row' || item.kind === 'more') {
+      // A "load more" stands for the first row not loaded yet: the place the next row will take.
+      const at = item.kind === 'row' ? ++loaded : loaded + 1;
+      rowIndex[i] = start + at - 1;
+      next = Math.max(next, rowIndex[i] + 1);
+      if (grouped) {
+        level[i] = 2;
+        posInSet[i] = at;
+        setSize[i] = Math.max(size, at);
+      }
+    }
+  }
+  const rowCount = snapshot.loading && !snapshot.rows.length && !snapshot.complete ? -1 : next - 1;
+  return { rowCount, rowIndex, level, posInSet, setSize };
+}
+
 /** The item index of a row (by id, in a group when given), or -1. */
 export function indexOfRow(
   items: readonly TableItem[],

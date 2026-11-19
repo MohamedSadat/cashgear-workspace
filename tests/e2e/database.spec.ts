@@ -105,8 +105,9 @@ test('a database with every property type is made, edited and shown in all five 
   await named.getByRole('textbox', { name: 'Property name' }).fill('Parts');
   await named.getByRole('textbox', { name: 'Property name' }).press('Enter');
   await page.keyboard.press('Escape');
-  await expect(db.getByRole('columnheader', { name: 'Parts, Relation' })).toBeVisible();
-  await expect(db.getByRole('columnheader', { name: 'Part of, Relation' })).toBeVisible();
+  // Headers are named by the property alone (Phase 12), the type their description.
+  await expect(db.getByRole('columnheader', { name: 'Parts', exact: true })).toBeVisible();
+  await expect(db.getByRole('columnheader', { name: 'Part of', exact: true })).toBeVisible();
   await addProperty(page, 'Text', 'Parts total');
   const rollup = await changeType(page, 'Parts total', 'Text', 'Rollup');
   await rollup.getByRole('combobox', { name: 'Relation' }).selectOption({ label: 'Parts' });
@@ -307,8 +308,9 @@ test('a row opens as a page with its properties, and keeps its body', async ({ p
   const db = fullPage(page);
   await showView(db, 'All tasks');
   // By the keys: a picker opened with Enter takes the focus, and what is typed picks in it.
+  // The title is the row's header (Phase 12).
   await grid(db)
-    .getByRole('gridcell', { name: /^Review the budget/ })
+    .getByRole('rowheader', { name: /^Review the budget/ })
     .click();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
@@ -370,7 +372,7 @@ test('an inline database from the slash menu, and a linked view of it', async ({
   // The inline database is a page under this one (no rows in the sidebar).
   await expect(treeRow(page, 'Plans')).toHaveAttribute('aria-expanded', /true|false/);
   // A title, then a value typed in its first row.
-  await grid(inline).getByRole('gridcell').first().click();
+  await grid(inline).getByRole('rowheader').first().click();
   await page.keyboard.press('Enter');
   await page.keyboard.type('Inline row');
   await page.keyboard.press('Enter');
@@ -461,9 +463,10 @@ test('CSV: a file imported as a new database, and a view exported', async ({
   await dialog.getByRole('button', { name: 'Close' }).first().click();
   const db = fullPage(page);
   await expect(db).toBeVisible();
-  await expect(db.getByRole('columnheader', { name: 'Price, Number' })).toBeVisible();
-  await expect(db.getByRole('columnheader', { name: 'In stock, Checkbox' })).toBeVisible();
-  await expect(db.getByRole('columnheader', { name: 'Due, Date' })).toBeVisible();
+  const header = (name: string) => db.getByRole('columnheader', { name, exact: true });
+  await expect(header('Price')).toHaveAccessibleDescription('Number');
+  await expect(header('In stock')).toHaveAccessibleDescription('Checkbox');
+  await expect(header('Due')).toHaveAccessibleDescription('Date');
   await expect(grid(db)).toContainText('Bolt, small');
   await expect(rowCount(db)).toHaveText('Rows: 3');
 
@@ -503,7 +506,7 @@ test('a row trashed and restored comes back with its values', async ({ page }) =
   await showView(db, 'All tasks');
   const row = rowOf(db, 'Review the budget');
   const before = (await row.textContent())!;
-  await row.getByRole('gridcell').first().click();
+  await row.getByRole('rowheader').click();
   await page.keyboard.press('Shift+F10');
   await page.getByRole('menuitem', { name: 'Delete' }).click();
   await expect(row).toHaveCount(0);
@@ -558,7 +561,7 @@ test('deleting a property or an option never corrupts a row', async ({ page, aut
     // The property deleted: hidden everywhere, the row's other values untouched.
     const notes = await propertyMenu(page, 'Notes', 'Text');
     await notes.getByRole('menuitem', { name: 'Delete property' }).click();
-    await expect(db.getByRole('columnheader', { name: 'Notes, Text' })).toHaveCount(0);
+    await expect(db.getByRole('columnheader', { name: 'Notes', exact: true })).toHaveCount(0);
     await expect(row).not.toContainText('Brass, 40 mm');
     await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
     await expect.poll(async () => (await serverRow()).values).toEqual(stored.values);
@@ -567,7 +570,7 @@ test('deleting a property or an option never corrupts a row', async ({ page, aut
     await db.getByRole('button', { name: 'Properties', exact: true }).click();
     await page.getByRole('button', { name: 'Restore Notes' }).click();
     await page.keyboard.press('Escape');
-    await expect(db.getByRole('columnheader', { name: 'Notes, Text' })).toBeVisible();
+    await expect(db.getByRole('columnheader', { name: 'Notes', exact: true })).toBeVisible();
     await expect(row).toContainText('Brass, 40 mm');
     await openRow(page, 'Hinge');
     await expect(rowValue(page, 'Notes')).toHaveText('Brass, 40 mm');

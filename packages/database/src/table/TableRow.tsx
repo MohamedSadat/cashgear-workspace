@@ -3,6 +3,13 @@
 // only when its row, the columns, the active or edited cell in it, or the selected columns of it
 // change. A row's title cell starts with its handle (`CgDragHandle`), which selects the whole row
 // and, dragged, whole rows from it (Phase 8).
+//
+// For a screen reader (Phase 12, M12.3): the title cell is the row's header (`rowheader`, named by
+// the title alone), every other cell a `gridcell`; each row says its place of the query's total
+// (`aria-rowindex`, from `ariaLayout`), and in a tree grid its level and its place in its group.
+// A group's header is a row of the tree grid (expanded or not, named by its group and count);
+// "load more" stands where the next row will be; the "New" line is not in the accessibility tree
+// (the table says it through its live region when the active cell reaches it).
 import { CgDragHandle } from '@cashgear/ui';
 import { memo, useState, type CSSProperties, type ReactNode } from 'react';
 import { renderCell } from '../cells/CellDisplay';
@@ -17,6 +24,11 @@ import type { Range } from './windowing';
 
 export const cellId = (gridId: string, item: number, col: number) => `${gridId}-c${item}-${col}`;
 export const itemDomId = (gridId: string, item: number) => `${gridId}-i${item}`;
+/**
+ * The "load more" line's cell: an id of its own, so when the rows it stood for arrive at its place
+ * the active descendant changes and a screen reader reads the row that is there now.
+ */
+export const moreCellId = (gridId: string, item: number) => `${gridId}-m${item}`;
 export const widthVar = (col: number) => `var(--cgw-w-${col})`;
 
 export interface EditingCell {
@@ -37,11 +49,19 @@ export interface SelectedCols {
 export interface TableRowProps {
   item: TableItem;
   index: number;
+  /** `aria-rowindex` (0: the item is no row of the grid, a "New" line). */
+  rowIndex: number;
+  /** In a tree grid: `aria-level`, `aria-posinset` and `aria-setsize` (0: none, ungrouped). */
+  level: number;
+  posInSet: number;
+  setSize: number;
   top: number;
   height: number;
   gridId: string;
   columns: readonly PropertyDef[];
   env: CellEnv;
+  /** What the cell being edited writes through (the table hears from it whether a value was saved). */
+  editEnv: CellEnv;
   /** The active column when this item holds the active cell. */
   activeCol: number | null;
   /** Columns drawn besides the title (the horizontal window); others are one spacer. */
@@ -87,7 +107,7 @@ function EditingCellView({
     <div
       ref={setAnchor}
       id={id}
-      role="gridcell"
+      role={def.type === 'title' ? 'rowheader' : 'gridcell'}
       aria-colindex={colIndex + 1}
       aria-selected="true"
       className={`${className} is-editing`}
@@ -125,8 +145,13 @@ function EditingCellView({
 function TableRowView(props: TableRowProps) {
   const { item, index, top, height, gridId, columns, env, activeCol, editing, wrap } = props;
   const style: CSSProperties = { insetBlockStart: top, blockSize: height };
-  const rowIndex = index + 2;
+  const { rowIndex } = props;
+  // A tree grid's row: its level, and its place in its group (a group's among the groups).
+  const tree = props.level
+    ? { 'aria-level': props.level, 'aria-posinset': props.posInSet, 'aria-setsize': props.setSize }
+    : null;
   const active = activeCol !== null;
+  const rowDomId = itemDomId(gridId, index);
 
   if (item.kind !== 'row') {
     const span = columns.length;
@@ -153,55 +178,105 @@ function TableRowView(props: TableRowProps) {
               ›
             </span>
           </button>
-          {name}
-          <span className="cgw-group-count">{env.t('group.count', { count: item.count })}</span>
+          <span id={`${rowDomId}-n`}>{name}</span>
+          <span id={`${rowDomId}-c`} className="cgw-group-count">
+            {env.t('group.count', { count: item.count })}
+          </span>
         </span>
       );
-    } else if (item.kind === 'more') {
-      content = (
-        <button
-          type="button"
-          className="cgw-text-button"
-          tabIndex={-1}
-          onClick={() => props.onLoadMore(item.group)}
+      // The group's header is the tree grid's row at level 1: the active descendant when it is
+      // reached (so its expanded state and place are read), named by its group and its count.
+      return (
+        <div
+          role="row"
+          id={rowDomId}
+          aria-rowindex={rowIndex}
+          {...tree}
+          aria-expanded={!item.collapsed}
+          aria-labelledby={`${rowDomId}-n ${rowDomId}-c`}
+          className="cgw-trow cgw-trow-group"
+          style={style}
+          data-item={index}
         >
-          {env.t('table.loadMore')}
-        </button>
+          <div
+            role="gridcell"
+            id={cellId(gridId, index, 0)}
+            aria-colindex={1}
+            aria-colspan={span}
+            className={`cgw-tcell cgw-tcell-wide${active ? ' is-active' : ''}`}
+            data-col={0}
+          >
+            <span className="cgw-sticky-start">{content}</span>
+          </div>
+        </div>
       );
-    } else {
-      content = (
-        <button
-          type="button"
-          className="cgw-new-row"
-          tabIndex={-1}
-          aria-label={
-            props.group && item.group !== null
-              ? env.t('table.newRowIn', {
-                  name: groupText(props.group.def, props.group.rule, item.group, env),
-                })
-              : undefined
-          }
-          onClick={() => props.onNewRow(item.group)}
+    } else if (item.kind === 'more') {
+      // A row at the place of the first row not loaded yet (in a tree grid, at its place in the
+      // group): it stands for the rows to come and adds none to the count.
+      return (
+        <div
+          role="row"
+          id={rowDomId}
+          aria-rowindex={rowIndex}
+          {...tree}
+          className="cgw-trow cgw-trow-more"
+          style={style}
+          data-item={index}
         >
-          <span aria-hidden="true">＋ </span>
-          {env.t('table.newRow')}
-        </button>
+          <div
+            role="gridcell"
+            id={moreCellId(gridId, index)}
+            aria-colindex={1}
+            aria-colspan={span}
+            className={`cgw-tcell cgw-tcell-wide${active ? ' is-active' : ''}`}
+            data-col={0}
+          >
+            <span className="cgw-sticky-start">
+              <button
+                type="button"
+                className="cgw-text-button"
+                tabIndex={-1}
+                onClick={() => props.onLoadMore(item.group)}
+              >
+                {env.t('table.loadMore')}
+              </button>
+            </span>
+          </div>
+        </div>
       );
     }
+    // The "New" line is no row of the grid: a row would be counted (Chromium raises the count to
+    // the highest index), so it is hidden from the accessibility tree. The keys still reach it and
+    // Enter adds a row there; the table's live region says what it is (the toolbar's New is the
+    // same action for a screen reader's browse mode).
+    content = (
+      <button
+        type="button"
+        className="cgw-new-row"
+        tabIndex={-1}
+        aria-label={
+          props.group && item.group !== null
+            ? env.t('table.newRowIn', {
+                name: groupText(props.group.def, props.group.rule, item.group, env),
+              })
+            : undefined
+        }
+        onClick={() => props.onNewRow(item.group)}
+      >
+        <span aria-hidden="true">＋ </span>
+        {env.t('table.newRow')}
+      </button>
+    );
     return (
       <div
-        role="row"
-        id={itemDomId(gridId, index)}
-        aria-rowindex={rowIndex}
-        className={`cgw-trow cgw-trow-${item.kind}`}
+        id={rowDomId}
+        aria-hidden="true"
+        className="cgw-trow cgw-trow-new"
         style={style}
         data-item={index}
       >
         <div
-          role="gridcell"
           id={cellId(gridId, index, 0)}
-          aria-colindex={1}
-          aria-colspan={span}
           className={`cgw-tcell cgw-tcell-wide${active ? ' is-active' : ''}`}
           data-col={0}
         >
@@ -217,8 +292,9 @@ function TableRowView(props: TableRowProps) {
   return (
     <div
       role="row"
-      id={itemDomId(gridId, index)}
+      id={rowDomId}
       aria-rowindex={rowIndex}
+      {...tree}
       aria-selected={sel?.whole || undefined}
       className={`cgw-trow${wrap ? ' is-wrapped' : ''}${sel?.whole ? ' is-row-selected' : ''}`}
       style={style}
@@ -253,8 +329,9 @@ function TableRowView(props: TableRowProps) {
         }${sel?.range && inSel(col) ? ' is-selected' : ''}`;
         const cellStyle: CSSProperties = { inlineSize: widthVar(col) };
         const id = cellId(gridId, index, col);
+        const title = def.type === 'title';
         let content = renderCell(def, row, env);
-        if (def.type === 'title') {
+        if (title) {
           content = (
             <>
               <CgDragHandle
@@ -262,7 +339,7 @@ function TableRowView(props: TableRowProps) {
                 tabIndex={-1}
                 label={env.t('cells.selectRow', { title: row.title || env.t('untitled') })}
               />
-              <span className="cgw-title-text">
+              <span className="cgw-title-text" id={`${id}-t`}>
                 {row.icon ? (
                   <span className="cgw-row-icon" aria-hidden="true">
                     {row.icon}
@@ -292,7 +369,7 @@ function TableRowView(props: TableRowProps) {
               key={def.id}
               def={def}
               item={item}
-              env={env}
+              env={props.editEnv}
               editing={editing}
               onEditDone={props.onEditDone}
               className={className}
@@ -307,7 +384,10 @@ function TableRowView(props: TableRowProps) {
           <div
             key={def.id}
             id={id}
-            role="gridcell"
+            // The title is the row's header: a screen reader names the row by it as one moves
+            // down a column. Named by the title alone, not its handle's or Open's labels.
+            role={title ? 'rowheader' : 'gridcell'}
+            aria-labelledby={title ? `${id}-t` : undefined}
             aria-colindex={col + 1}
             aria-selected={inSel(col) || activeCol === col}
             className={className}

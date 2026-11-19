@@ -114,7 +114,6 @@ export const ar: DatabaseCatalogue = {
       computed: 'محسوبة: لا يمكن تعديلها.',
       automatic: 'تضبطها مساحة العمل: لا يمكن تعديلها.',
       resize: 'غيّر عرض {{name}}',
-      header: '{{name}}، {{type}}',
     },
     format: {
       number: 'رقم',
@@ -180,7 +179,7 @@ export const ar: DatabaseCatalogue = {
     },
     cell: {
       empty: 'فارغ',
-      open: 'فتح',
+      open: 'افتح',
       openRow: 'افتح {{title}}',
       edit: 'عدّل {{name}}',
       checked: 'محدد',

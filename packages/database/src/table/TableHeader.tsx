@@ -3,7 +3,8 @@
 // its inline end. Width changes during a drag are written to the grid's CSS variables directly
 // (nothing React-rendered changes while the pointer moves); the width is written to the view once,
 // when the drag ends. The "+" at the end adds a property. Shift and a click selects the whole
-// column (from the active cell's column), as a row's handle selects the whole row.
+// column (from the active cell's column), as a row's handle selects the whole row. A header is
+// named by its property's name alone, its type its description (Phase 12).
 import { memo, useRef, type PointerEvent } from 'react';
 import type { PropertyDef } from '../core';
 import type { DbT } from '../i18n';
@@ -162,7 +163,11 @@ function TableHeaderView(props: TableHeaderProps) {
             role="columnheader"
             aria-colindex={col + 1}
             aria-sort={sort === '↑' ? 'ascending' : sort === '↓' ? 'descending' : undefined}
-            aria-label={t('property.header', { name: def.name, type: t(`type.${def.type}`) })}
+            // Named by the property alone (a screen reader says it as each column is reached; its
+            // resize handle's label would join a name taken from the contents); the type is said
+            // when the header itself has the focus.
+            aria-label={def.name || t('untitled')}
+            aria-description={t(`type.${def.type}`)}
             aria-haspopup="dialog"
             aria-selected={props.selectedCols ? selected : undefined}
             data-head-col={col}

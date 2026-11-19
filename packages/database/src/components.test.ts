@@ -84,8 +84,8 @@ describe('the table', () => {
     const g = grid();
     const columns = host.database(tasksId)!.properties.length;
     expect(g.getAttribute('aria-colcount')).toBe(String(columns));
-    // Header, 20 rows and the New row.
-    expect(g.getAttribute('aria-rowcount')).toBe('22');
+    // The header and 20 rows (the New line is no row of the grid: Phase 12).
+    expect(g.getAttribute('aria-rowcount')).toBe('21');
     expect(g.querySelectorAll('[role="columnheader"]')).toHaveLength(columns);
     expect(g.querySelector('[role="columnheader"]')!.textContent).toContain('Name');
     expect(container.textContent).toContain('Rows: 20');
@@ -325,7 +325,8 @@ describe('the table', () => {
     await mouse(newItem, 'click');
     await vi.waitFor(() => expect(opsOf(host, 'page.create')).toHaveLength(1));
     await vi.waitFor(() => expect(grid().querySelector('.cgw-inline-editor')).toBeTruthy());
-    expect(grid().getAttribute('aria-rowcount')).toBe('4');
+    // The header and two rows.
+    expect(grid().getAttribute('aria-rowcount')).toBe('3');
   });
 
   it('groups rows in collapsible sections with counts', async () => {
@@ -343,13 +344,15 @@ describe('the table', () => {
       },
     ]);
     await mount(h(DatabaseView, { host, databaseId: tasksId }));
-    const heads = [...grid().querySelectorAll('.cgw-trow-group')];
+    // Grouped, the table is a tree grid (Phase 12).
+    const treegrid = () => container.querySelector<HTMLElement>('[role="treegrid"]')!;
+    const heads = [...treegrid().querySelectorAll('.cgw-trow-group')];
     // "No Status" and the three options.
     expect(heads).toHaveLength(4);
     expect(heads[1].textContent).toContain('Not started');
-    const before = grid().querySelectorAll('.cgw-tbody [role="row"]').length;
+    const before = treegrid().querySelectorAll('.cgw-tbody [role="row"]').length;
     await mouse(heads[1].querySelector('.cgw-group-toggle')!, 'click');
-    expect(grid().querySelectorAll('.cgw-tbody [role="row"]').length).toBeLessThan(before);
+    expect(treegrid().querySelectorAll('.cgw-tbody [role="row"]').length).toBeLessThan(before);
   });
 });
 
@@ -614,10 +617,9 @@ describe('the table adds a property', () => {
     const made = host.database(tasksId)!.properties;
     expect(made).toHaveLength(before + 1);
     expect(made.at(-1)).toMatchObject({ type: 'rollup', rollup: { fn: 'count' } });
-    // Shown in the view, after the last column.
-    const headers = [...container.querySelectorAll('[role="columnheader"]')].map((c) =>
-      c.getAttribute('aria-label'),
-    );
-    expect(headers.at(-1)).toBe('Rollup, Rollup');
+    // Shown in the view, after the last column: named by the property, its type the description.
+    const headers = [...container.querySelectorAll('[role="columnheader"]')];
+    expect(headers.at(-1)!.getAttribute('aria-label')).toBe('Rollup');
+    expect(headers.at(-1)!.getAttribute('aria-description')).toBe('Rollup');
   });
 });

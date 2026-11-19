@@ -11,6 +11,15 @@
 // Escape lets go. The selection is the table's state (selection.ts), so the virtual window
 // scrolls under it. Ctrl+C copies it (TSV and HTML), Ctrl+V pastes into it, Delete clears it, each
 // one batch of operations; the notice after a paste or a clear offers Undo (also Ctrl+Z here).
+//
+// For a screen reader (Phase 12, M12.3): a grouped table is a tree grid (a group's header a row at
+// level 1, expanded or not, its rows at level 2), and the counts are the query's (`ariaLayout`):
+// the row count is the header and the query's total, each row's index its place of it as the
+// virtual window scrolls (in a tree grid every group's header takes a place too). The grid is
+// described by its foot ("Rows: 1,234"). On a group's header Left and Right (mirrored in RTL)
+// collapse and expand it, as Enter and Space toggle it. Editing is said through the live region
+// when it starts, is saved and is cancelled, naming the property and the row's title; so is the
+// "New" line, which is not in the accessibility tree, when the active cell reaches it.
 import {
   CgContextMenu,
   CgLiveAnnouncer,
@@ -33,7 +42,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from 'react';
-import { useCellEnv } from '../cells/env';
+import { useCellEnv, type CellEnv } from '../cells/env';
 import type { EditEnd } from '../cells/InlineEditor';
 import { CellFlyout } from '../cells/CellFlyout';
 import { TITLE_PROPERTY, newPropertyId, type PropertyDef, type PropertyType } from '../core';
@@ -54,9 +63,17 @@ import { newPropertyDef } from '../properties/defs';
 import { NewPropertySetup, SET_UP_FIRST } from '../properties/NewPropertySetup';
 import { PropertyMenu, type PropertyPanel } from '../properties/PropertyMenu';
 import { TypePicker } from '../properties/TypePicker';
+import { groupText } from '../views/GroupLabel';
 import type { ViewProps } from '../views/types';
 import { CellNotice } from './CellNotice';
-import { buildItems, HEADER_HEIGHT, indexOfRow, itemHeight, type TableItem } from './items';
+import {
+  ariaLayout,
+  buildItems,
+  HEADER_HEIGHT,
+  indexOfRow,
+  itemHeight,
+  type TableItem,
+} from './items';
 import { navigate, startsTyping, type GridPos } from './navigation';
 import {
   cellAtPoint,
@@ -71,8 +88,16 @@ import {
   type TableSelection,
 } from './selection';
 import { TableHeader } from './TableHeader';
-import { cellId, TableRow, type EditingCell, type SelectedCols } from './TableRow';
+import {
+  cellId,
+  itemDomId,
+  moreCellId,
+  TableRow,
+  type EditingCell,
+  type SelectedCols,
+} from './TableRow';
 import { useCellCommands } from './useCells';
+import { useGridT } from './words';
 import {
   columnRange,
   layoutOf,
@@ -115,7 +140,27 @@ export function TableView({
 }: ViewProps) {
   const { host, actions, editable } = useDatabaseContext();
   const { t, rtl, locale } = useDbT();
+  const gridT = useGridT();
   const env = useCellEnv(host, actions, editable);
+  // The cell being edited writes through this: a write is what makes an edit "saved" when it
+  // ends (an inline editor commits on Enter, Tab or leaving it; a picker writes its choice when it
+  // closes, Escape included), and none makes it "cancelled". For the title, the title written.
+  const wrote = useRef<{ title: string | null } | null>(null);
+  const editEnv = useMemo<CellEnv>(
+    () => ({
+      ...env,
+      actions: {
+        ...env.actions,
+        setValue: (row, def, value) => {
+          wrote.current = {
+            title: def.type === 'title' && typeof value === 'string' ? value : null,
+          };
+          return env.actions.setValue(row, def, value);
+        },
+      },
+    }),
+    [env],
+  );
   const gridId = useId().replace(/:/g, '');
   const grid = useRef<HTMLDivElement>(null);
   const config = view.config;
@@ -130,6 +175,9 @@ export function TableView({
     previousItems.current = made;
     return made;
   }, [snapshot, collapsed, editable]);
+  // What a screen reader counts: the query's total, each line's place of it (items.ts).
+  const aria = useMemo(() => ariaLayout(items, snapshot), [items, snapshot]);
+  const tree = snapshot.groups !== null;
   // Ungrouped, every row is as tall as the next: the layout changes only with the count.
   const shapeKey = snapshot.groups ? items : `${items.length}:${items[items.length - 1]?.kind}`;
   const layout = useMemo(
@@ -188,6 +236,26 @@ export function TableView({
   // ---- The selection ------------------------------------------------------------------------
   const [selection, setSelection] = useState<TableSelection | null>(null);
   const live = useRef<CgLiveAnnouncerHandle>(null);
+  const say = (text: string) => live.current?.announce(text);
+  /** The property and the row's title an edit is said with, while it lasts. */
+  const editSaid = useRef<{ property: string; title: string } | null>(null);
+  const beginSaying = (def: PropertyDef, title: string) => {
+    wrote.current = null;
+    editSaid.current = { property: def.name || t('untitled'), title: title || t('untitled') };
+    say(gridT('editing', editSaid.current));
+  };
+  // The "New" line is not in the accessibility tree: it is said when the active cell reaches it.
+  const activeEntry = items[activeItem];
+  const newLineGroup = activeEntry?.kind === 'new' ? (activeEntry.group ?? '') : null;
+  useEffect(() => {
+    if (newLineGroup === null || document.activeElement !== grid.current) return;
+    live.current?.announce(
+      group && activeEntry?.kind === 'new' && activeEntry.group !== null
+        ? gridT('newRowIn', { name: groupText(group.def, group.rule, activeEntry.group, env) })
+        : gridT('newRow'),
+    );
+    // Said once as the line is reached, not again as the rows around it change.
+  }, [activeItem, newLineGroup]);
   const activePos: GridPos = { item: activeItem, col: activeCol };
   const rect =
     items.length && (activeItem >= 0 || selection)
@@ -250,22 +318,46 @@ export function TableView({
     const kind = editKind(def.type);
     if (kind === 'toggle') {
       void actions.setValue(entry.row, def, entry.row.values[def.id] !== true);
+      say(
+        gridT('saved', {
+          property: def.name || t('untitled'),
+          title: entry.row.title || t('untitled'),
+        }),
+      );
       return;
     }
     if (kind === 'none') return;
     setActive({ item, col });
     setEditing({ rowId: entry.row.id, group: entry.group, propertyId: def.id, seed });
+    beginSaying(def, entry.row.title);
   };
 
-  const onEditDone = useCallback((end: EditEnd) => {
-    setEditing(null);
-    focusGrid();
-    if (end === 'tab' || end === 'shiftTab')
-      setActive((pos) => {
-        const next = navigate(pos, { key: 'Tab', shiftKey: end === 'shiftTab' }, shapeRef.current);
-        return next && next !== 'leave' ? next : pos;
-      });
-  }, []);
+  const onEditDone = useCallback(
+    (end: EditEnd) => {
+      setEditing(null);
+      focusGrid();
+      if (end === 'tab' || end === 'shiftTab')
+        setActive((pos) => {
+          const next = navigate(
+            pos,
+            { key: 'Tab', shiftKey: end === 'shiftTab' },
+            shapeRef.current,
+          );
+          return next && next !== 'leave' ? next : pos;
+        });
+      // Saved when the editor wrote a value (a title by the one written), else cancelled.
+      const said = editSaid.current;
+      const written = wrote.current;
+      editSaid.current = null;
+      wrote.current = null;
+      if (!said) return;
+      const title = written?.title == null ? said.title : written.title || t('untitled');
+      live.current?.announce(
+        written ? gridT('saved', { ...said, title }) : gridT('cancelled', said),
+      );
+    },
+    [gridT, t],
+  );
 
   // ---- Rows: new, open, more ---------------------------------------------------------------
   const newRow = useCallback(
@@ -295,7 +387,10 @@ export function TableView({
     const entry = items[at] as Extract<TableItem, { kind: 'row' }>;
     setActive({ item: at, col: 0 });
     setEditing({ rowId: id, group: entry.group, propertyId: TITLE_PROPERTY, seed: null });
+    const titleDef = columns.find((c) => c.id === TITLE_PROPERTY);
+    if (titleDef) beginSaying(titleDef, entry.row.title);
     requestAnimationFrame(() => reveal(at, 0));
+    // `beginSaying` and `columns` are read when a row made here first shows, not followed.
   }, [items, reveal]);
 
   const loadMore = useCallback(
@@ -589,6 +684,21 @@ export function TableView({
       }
     }
 
+    // A group's header, as a tree grid's row: forward (Right, or Left in RTL) expands it, back
+    // collapses it.
+    if (
+      entry?.kind === 'group' &&
+      !mod &&
+      !event.altKey &&
+      !event.shiftKey &&
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+    ) {
+      event.preventDefault();
+      const forward = (event.key === 'ArrowRight') !== dirRtl;
+      if (forward === entry.collapsed) toggleGroup(entry.group);
+      return;
+    }
+
     if (entry && entry.kind !== 'row' && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       if (entry.kind === 'group') toggleGroup(entry.group);
@@ -731,7 +841,7 @@ export function TableView({
       x = move.clientX;
       y = move.clientY;
       const target = move.target as HTMLElement | null;
-      const inside = target?.closest?.('[role="grid"]') === grid.current;
+      const inside = target?.closest?.('.cgw-grid') === grid.current;
       to(inside ? cellAt(target) : cellAtClient(x, y));
       if (!frame) frame = requestAnimationFrame(tick);
     };
@@ -825,6 +935,9 @@ export function TableView({
       rendered.push(extra);
       pinned.add(extra);
     }
+  // In their order: Chromium gives a row whose `aria-rowindex` is not above the one before it the
+  // next index instead, so a pinned row drawn after the window would be read with a wrong place.
+  if (pinned.size) rendered.sort((a, b) => a - b);
 
   const totalWidth = widths.reduce((a, b) => a + b, 0) + 48;
   const style = useMemo(() => {
@@ -833,26 +946,33 @@ export function TableView({
     return s as CSSProperties;
   }, [widths, totalWidth]);
 
+  // A row's cell; a group's header row itself (its expanded state and place are the row's); the
+  // "load more" line's cell; nothing on a "New" line (not in the accessibility tree: the live
+  // region says it).
   const activeDescendant =
     activeItem === -1
       ? `${gridId}-h${activeCol}`
-      : items[activeItem]
-        ? items[activeItem].kind === 'row'
-          ? cellId(gridId, activeItem, activeCol)
-          : cellId(gridId, activeItem, 0)
-        : undefined;
+      : activeEntry?.kind === 'row'
+        ? cellId(gridId, activeItem, activeCol)
+        : activeEntry?.kind === 'group'
+          ? itemDomId(gridId, activeItem)
+          : activeEntry?.kind === 'more'
+            ? moreCellId(gridId, activeItem)
+            : undefined;
   const menuDef = menu ? propertyOf(database, menu.propertyId) : undefined;
   const title = host.pageTitle(database.id) || t('untitledDatabase');
   const empty = snapshot.complete && snapshot.rows.length === 0 && !snapshot.loading;
+  const footId = `${gridId}-foot`;
 
   return (
     <div className={`cgw-db-table${embedded ? ' is-embedded' : ''}`}>
       <div
         ref={grid}
-        role="grid"
+        role={tree ? 'treegrid' : 'grid'}
         tabIndex={0}
         aria-label={t('table.label', { name: title })}
-        aria-rowcount={snapshot.complete ? items.length + 1 : -1}
+        aria-describedby={footId}
+        aria-rowcount={aria.rowCount}
         aria-colcount={columns.length}
         aria-readonly={!editable || undefined}
         aria-multiselectable="true"
@@ -899,11 +1019,16 @@ export function TableView({
                 key={i === editingItem || pinned.has(i) ? item.key : `s${i % SLOTS}`}
                 item={item}
                 index={i}
+                rowIndex={aria.rowIndex[i]}
+                level={aria.level[i]}
+                posInSet={aria.posInSet[i]}
+                setSize={aria.setSize[i]}
                 top={layout.offsets[i]}
                 height={layout.offsets[i + 1] - layout.offsets[i]}
                 gridId={gridId}
                 columns={columns}
                 env={env}
+                editEnv={editEnv}
                 activeCol={isActive ? activeCol : null}
                 cols={cols}
                 editing={edit}
@@ -931,7 +1056,7 @@ export function TableView({
       </div>
       {cells.notice ? <CellNotice notice={cells.notice} t={t} onClose={cells.closeNotice} /> : null}
       <CgLiveAnnouncer ref={live} />
-      <div className="cgw-table-foot" role="status">
+      <div className="cgw-table-foot" id={footId} role="status">
         {snapshot.loading && !snapshot.rows.length
           ? t('table.loadingRows')
           : snapshot.complete

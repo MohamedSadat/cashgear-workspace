@@ -71,7 +71,7 @@ test('a database reaches a second device, and offline edits on two devices follo
     await expect(there.getByRole('tab', { name: view })).toBeVisible();
   await showView(there, 'All tasks');
   await expect(rowCount(there)).toHaveText('Rows: 4', { timeout: 30000 });
-  await expect(there.getByRole('columnheader', { name: 'Notes, Text' })).toBeVisible();
+  await expect(there.getByRole('columnheader', { name: 'Notes', exact: true })).toBeVisible();
 
   // Both offline: one row edited on each, a property of its own each and one property on both.
   const here = await network(page, page.context());

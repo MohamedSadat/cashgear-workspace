@@ -114,7 +114,6 @@ export const en = {
       computed: 'Calculated: it cannot be edited.',
       automatic: 'Set by the workspace: it cannot be edited.',
       resize: 'Resize {{name}}',
-      header: '{{name}}, {{type}}',
     },
     format: {
       number: 'Number',

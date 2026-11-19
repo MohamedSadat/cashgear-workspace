@@ -66,11 +66,13 @@ export function installDom(): void {
       removeListener() {},
     });
   target.matchMedia = win.matchMedia;
-  // The table's grid measures its height: jsdom lays nothing out, so give it one.
+  // The table's grid (a tree grid when grouped) measures its height: jsdom lays nothing out, so
+  // give it one.
   Object.defineProperty(win.HTMLElement.prototype, 'clientHeight', {
     configurable: true,
     get() {
-      return (this as HTMLElement).getAttribute('role') === 'grid' ? 600 : 0;
+      const role = (this as HTMLElement).getAttribute('role');
+      return role === 'grid' || role === 'treegrid' ? 600 : 0;
     },
   });
   win.HTMLElement.prototype.scrollIntoView = function scrollIntoView() {};
