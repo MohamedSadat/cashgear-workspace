@@ -1441,6 +1441,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/sso': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getSso'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/sso/domains': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['addSsoDomain'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/sso/domains/{domain}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['removeSsoDomain'];
+    options?: never;
+    head?: never;
+    patch: operations['updateSsoDomain'];
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/sso/domains/{domain}/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['verifySsoDomain'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/sso/provider': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['setSsoProvider'];
+    post?: never;
+    delete: operations['removeSsoProvider'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/tree': {
     parameters: {
       query?: never;
@@ -1860,10 +1940,12 @@ export interface components {
       deviceId: null | string;
       displayName: string;
       email: string;
+      hasPassword: boolean;
       /** Format: uuid */
       id: string;
       locale: string;
       signInUrl: string;
+      ssoRequired: boolean;
     };
     MeaningResultDto: {
       hits: components['schemas']['SearchHitDto'][];
@@ -1909,6 +1991,9 @@ export interface components {
     NewShareLink: {
       /** Format: int32 */
       expiresInDays: null | number | string;
+    };
+    NewSsoDomain: {
+      domain: null | string;
     };
     NewThreadRequest: {
       anchor: components['schemas']['JsonElement'];
@@ -2430,6 +2515,45 @@ export interface components {
       /** Format: int64 */
       upToSeq: number | string;
       url: string;
+    };
+    SsoDomainDto: {
+      domain: string;
+      record: components['schemas']['SsoRecordDto'];
+      required: boolean;
+      /** Format: date-time */
+      verifiedAt: null | string;
+    };
+    SsoDomainUpdate: {
+      required: boolean;
+    };
+    SsoProviderDto: {
+      clientId: string;
+      hasSecret: boolean;
+      issuer: string;
+      joinAsMember: boolean;
+      /** Format: int32 */
+      sessionHours: number | string;
+      /** Format: date-time */
+      testedAt: null | string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    SsoProviderUpdate: {
+      clientId?: null | string;
+      clientSecret?: components['schemas']['JsonElement'];
+      issuer?: null | string;
+      joinAsMember?: null | boolean;
+      /** Format: int32 */
+      sessionHours?: null | number | string;
+    };
+    SsoRecordDto: {
+      name: string;
+      value: string;
+    };
+    SsoSettingsDto: {
+      domains: components['schemas']['SsoDomainDto'][];
+      provider: null | components['schemas']['SsoProviderDto'];
+      redirectUri: string;
     };
     StateHashResponse: {
       /** Format: int32 */
@@ -5724,6 +5848,333 @@ export interface operations {
       };
       /** @description Service Unavailable */
       503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  getSso: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SsoSettingsDto'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  addSsoDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewSsoDomain'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SsoDomainDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  removeSsoDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        domain: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  updateSsoDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        domain: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SsoDomainUpdate'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SsoDomainDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  verifySsoDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        domain: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SsoDomainDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  setSsoProvider: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SsoProviderUpdate'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SsoProviderDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+    };
+  };
+  removeSsoProvider: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

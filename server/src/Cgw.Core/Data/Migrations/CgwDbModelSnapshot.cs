@@ -513,6 +513,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset(3)");
 
+                    b.Property<DateTimeOffset?>("EndsAt")
+                        .HasColumnType("datetimeoffset(3)");
+
                     b.Property<DateTimeOffset>("LastSeenAt")
                         .HasColumnType("datetimeoffset(3)");
 
@@ -528,6 +531,9 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("SsoWorkspaceId")
+                        .HasColumnType("binary(16)");
 
                     b.Property<byte[]>("UserId")
                         .IsRequired()
@@ -1695,6 +1701,124 @@ namespace Cgw.Core.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ShareLinks");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.SsoDomain", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(253)");
+
+                    b.Property<bool>("Required")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset?>("RequiredAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("RequiredBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("VerifiedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Domain")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SsoDomains_Verified")
+                        .HasFilter("[VerifiedAt] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Domain"), new[] { "WorkspaceId", "Required" });
+
+                    b.HasIndex("WorkspaceId", "Domain")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SsoDomains_Workspace");
+
+                    b.ToTable("SsoDomains");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.SsoProvider", b =>
+                {
+                    b.Property<byte[]>("WorkspaceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<bool>("JoinAsMember")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("SecretCipher")
+                        .HasMaxLength(4000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<int>("SessionHours")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("TestedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("TestedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("WorkspaceId");
+
+                    b.ToTable("SsoProviders");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.User", b =>

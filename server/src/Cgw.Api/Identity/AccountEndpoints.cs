@@ -11,7 +11,9 @@ public sealed record RegisterRequest(string Email, string Password, string Displ
 public sealed record ConfirmRequest(Guid UserId, string Code);
 public sealed record ForgotRequest(string Email, string? Locale, string? ReturnUrl);
 public sealed record ResetRequest(Guid UserId, string Code, string Password);
-public sealed record Me(Guid Id, string Email, string DisplayName, string Locale, Guid? DeviceId, string SignInUrl);
+/// <param name="HasPassword">Phase 11: whether the account has a password (one made by single sign-on has none; Settings offers "Set a password" by the reset mail).</param>
+/// <param name="SsoRequired">Phase 11: whether the account's domain requires its workspace's provider (then no password is set or reset).</param>
+public sealed record Me(Guid Id, string Email, string DisplayName, string Locale, Guid? DeviceId, string SignInUrl, bool HasPassword, bool SsoRequired);
 public sealed record MeUpdate(string? DisplayName, string? Locale);
 /// <summary>Whether the caller is signed in, answered 200 either way (browsers log every 401).</summary>
 public sealed record SessionInfo(Me? Account);
@@ -59,7 +61,7 @@ public static class AccountEndpoints
             {
                 var user = await service.CurrentAsync(http.User);
                 if (user is null) return Problems.Of(Codes.AuthRequired, 401, "Not signed in");
-                return TypedResults.Ok(new Me(user.Id, user.Email!, user.DisplayName, user.Locale, http.User.DeviceId(), $"{service.PublicUrl(http)}/account/signin"));
+                return TypedResults.Ok(new Me(user.Id, user.Email!, user.DisplayName, user.Locale, http.User.DeviceId(), $"{service.PublicUrl(http)}/account/signin", user.PasswordHash is not null, await service.SignOnRequiredAsync(user)));
             })
             .WithName("getMe").RequireAuthorization().RequireRateLimiting(RateLimits.User);
 
@@ -69,7 +71,7 @@ public static class AccountEndpoints
                 var user = http.User.Identity?.IsAuthenticated == true ? await service.CurrentAsync(http.User) : null;
                 return TypedResults.Ok(new SessionInfo(user is null
                     ? null
-                    : new Me(user.Id, user.Email!, user.DisplayName, user.Locale, http.User.DeviceId(), $"{service.PublicUrl(http)}/account/signin")));
+                    : new Me(user.Id, user.Email!, user.DisplayName, user.Locale, http.User.DeviceId(), $"{service.PublicUrl(http)}/account/signin", user.PasswordHash is not null, await service.SignOnRequiredAsync(user))));
             })
             .WithName("getSession").AllowAnonymous().RequireRateLimiting(RateLimits.User);
 
@@ -114,11 +116,13 @@ public static class AccountEndpoints
             })
             .WithName("signOut").RequireAuthorization().RequireRateLimiting(RateLimits.User);
 
-        account.MapGet("/devices", async (CgwDb db, HttpContext http) =>
+        account.MapGet("/devices", async (CgwDb db, TimeProvider clock, HttpContext http) =>
             {
                 var userId = http.User.UserId()!.Value;
                 var current = http.User.DeviceId();
-                var list = await db.Devices.AsNoTracking().Where(d => d.UserId == userId && d.RevokedAt == null)
+                // Phase 11: a session of single sign-on past its end is signed out, as a revoked one is.
+                var now = clock.GetUtcNow();
+                var list = await db.Devices.AsNoTracking().Where(d => d.UserId == userId && d.RevokedAt == null && (d.EndsAt == null || d.EndsAt > now))
                     .OrderByDescending(d => d.LastSeenAt).ToListAsync();
                 return TypedResults.Ok(list.Select(d => new DeviceInfo(d.Id, d.Name, d.Platform, d.CreatedAt, d.LastSeenAt, d.Id == current)).ToList());
             })

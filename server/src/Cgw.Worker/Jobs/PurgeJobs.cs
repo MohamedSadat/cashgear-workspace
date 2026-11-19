@@ -137,6 +137,9 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         // Phase 11: groups and their people.
         await db.WorkspaceGroupMembers.ExecuteDeleteAsync(ct);
         await db.WorkspaceGroups.ExecuteDeleteAsync(ct);
+        // Phase 11: single sign-on's domains (freed for another workspace) and the provider.
+        await db.SsoDomains.ExecuteDeleteAsync(ct);
+        await db.SsoProviders.ExecuteDeleteAsync(ct);
         await db.ShareLinks.ExecuteDeleteAsync(ct);
         await db.Favourites.ExecuteDeleteAsync(ct);
         await db.PageVisits.ExecuteDeleteAsync(ct);

@@ -75,6 +75,9 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<WorkspaceGroupMember> WorkspaceGroupMembers => Set<WorkspaceGroupMember>();
     /// <summary>Phase 11: each passkey ceremony's challenge once it is used, so none is used twice.</summary>
     public DbSet<PasskeyChallenge> PasskeyChallenges => Set<PasskeyChallenge>();
+    /// <summary>Phase 11: single sign-on's domains and each workspace's provider.</summary>
+    public DbSet<SsoDomain> SsoDomains => Set<SsoDomain>();
+    public DbSet<SsoProvider> SsoProviders => Set<SsoProvider>();
 
     /// <summary>When a passkey last signed someone in or confirmed them (a shadow property of <c>UserPasskeys</c>).</summary>
     public const string PasskeyLastUsedAt = "LastUsedAt";
@@ -576,6 +579,27 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasIndex(x => new { x.WorkspaceId, x.UserId });
         });
 
+        // Phase 11: single sign-on.
+        b.Entity<SsoDomain>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // A workspace adds a domain once.
+            e.HasIndex(x => new { x.WorkspaceId, x.Domain }).IsUnique().HasDatabaseName("IX_SsoDomains_Workspace");
+            // A verified domain belongs to one workspace: the sign-in page finds it by this index.
+            e.HasIndex(x => x.Domain).IsUnique().HasFilter("[VerifiedAt] IS NOT NULL").IncludeProperties(x => new { x.WorkspaceId, x.Required }).HasDatabaseName("IX_SsoDomains_Verified");
+            e.Property(x => x.Domain).HasMaxLength(253).IsUnicode(false);
+            e.Property(x => x.Token).HasMaxLength(32).IsUnicode(false);
+        });
+        b.Entity<SsoProvider>(e =>
+        {
+            e.HasKey(x => x.WorkspaceId);
+            e.Property(x => x.Issuer).HasMaxLength(500).IsUnicode(false);
+            e.Property(x => x.ClientId).HasMaxLength(256).IsUnicode(false);
+            e.Property(x => x.SecretCipher).HasMaxLength(4000).IsUnicode(false);
+            // Two changes that race: the second is a conflict, not a lost update.
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -620,6 +644,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<PluginFrameTicket>(b);
         Filter<WorkspaceGroup>(b);
         Filter<WorkspaceGroupMember>(b);
+        Filter<SsoDomain>(b);
+        Filter<SsoProvider>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

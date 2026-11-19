@@ -486,6 +486,8 @@ public sealed class AccountSecurityTests(ServerFixture server)
         Assert.Contains(ProductionChecks.Problems(Settings([.. complete, ("Api:PublicUrl", "http://workspace-api.cashgearerp.com")]), production, windows: true), p => p.Contains("https", StringComparison.Ordinal));
         foreach (var key in Shortcuts.Keys)
             Assert.Contains(ProductionChecks.Problems(Settings([.. complete, (key, "true")]), production, windows: true), p => p.Contains("refused in Production", StringComparison.Ordinal));
+        // Phase 11: a domain is proven by DNS itself in Production, never by the mock provider's stand-in.
+        Assert.Contains(ProductionChecks.Problems(Settings([.. complete, ("Sso:DnsBaseUrl", "http://127.0.0.1:4287")]), production, windows: true), p => p.Contains("Sso__DnsBaseUrl", StringComparison.Ordinal));
         // Elsewhere nothing is required.
         Assert.Empty(ProductionChecks.Problems(Settings(), new Env("Staging"), windows: true));
     }

@@ -84,6 +84,8 @@ public static class Modules
     {
         api.MapWorkspaces();
         api.MapGroups();
+        // Phase 11: single sign-on's settings (owners only; the sign-in is the API's pages').
+        api.MapSso();
         api.MapDocs();
         api.MapAssets();
         api.MapSharing();

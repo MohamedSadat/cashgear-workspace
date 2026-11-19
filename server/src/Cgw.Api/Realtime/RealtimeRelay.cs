@@ -447,7 +447,9 @@ public sealed class RealtimeRelay(
         var db = scope.ServiceProvider.GetRequiredService<CgwDb>();
         var (workspaces, pages) = registry.Snapshot(connection);
         var all = workspaces.Concat(pages.Select(p => p.WorkspaceId)).Distinct().ToList();
-        var active = await db.Devices.AsNoTracking().AnyAsync(d => d.Id == connection.DeviceId && d.RevokedAt == null, ct)
+        // Phase 11: a session of single sign-on ends at its device's EndsAt, as a revoked one does.
+        var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
+        var active = await db.Devices.AsNoTracking().AnyAsync(d => d.Id == connection.DeviceId && d.RevokedAt == null && (d.EndsAt == null || d.EndsAt > now), ct)
             && await db.Users.AsNoTracking().AnyAsync(u => u.Id == connection.UserId && u.DeletedAt == null, ct);
         if (!active)
         {

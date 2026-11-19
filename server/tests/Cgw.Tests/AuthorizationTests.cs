@@ -190,6 +190,9 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var thread = await CommentTests.CreateOk(ws.Client, page, CommentTests.NewThread());
         var plugin = (await PluginKit.AddOk(ws.Client, ws.Id, PluginKit.Bundle("acme.secret"))).GetProperty("id").GetGuid();
         var group = await GroupKit.New(ws, "Secret group", member.Id);
+        // Phase 11: a domain of the workspace's single sign-on.
+        var domain = SsoKit.NewDomain();
+        Assert.Equal(HttpStatusCode.Created, (await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/sso/domains", new { domain })).StatusCode);
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -207,6 +210,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["commentId"] = thread.GetProperty("comments")[0].GetProperty("id").GetString()!,
             ["pluginId"] = plugin.ToString(),
             ["groupId"] = group.ToString(),
+            ["domain"] = domain,
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };
@@ -244,6 +248,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         Assert.True(failures.Count == 0, string.Join("\n", failures));
 
         // And none of it touched the workspace.
+        Assert.Contains((await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/sso")).GetProperty("domains").EnumerateArray(), d => d.GetProperty("domain").GetString() == domain);
         Assert.Contains(member.Id, (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/groups")).GetProperty("groups")
             .EnumerateArray().Single(g => g.GetProperty("id").GetGuid() == group).GetProperty("people").EnumerateArray().Select(p => p.GetProperty("userId").GetGuid()));
         Assert.Equal("Secret", (await ws.Tree()).GetProperty("pages").EnumerateArray().Single(p => p.GetProperty("id").GetGuid() == page).GetProperty("title").GetString());

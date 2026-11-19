@@ -74,6 +74,21 @@ public static class Codes
     /// <summary>A bundle of a lower version than the workspace's (400).</summary>
     public const string PluginOlder = "plugin.older";
 
+    // Phase 11: single sign-on (M11.3).
+
+    /// <summary>The domain is verified by another workspace (409).</summary>
+    public const string SsoDomainTaken = "sso.domainTaken";
+    /// <summary>The domain's <c>TXT</c> record is missing or holds another value (400).</summary>
+    public const string SsoDnsNotFound = "sso.dnsNotFound";
+    /// <summary>Sign-on required before an owner has signed in through the provider (400).</summary>
+    public const string SsoNotTested = "sso.notTested";
+    /// <summary>The issuer's discovery document could not be read or is not one the server can use (400).</summary>
+    public const string SsoDiscoveryFailed = "sso.discoveryFailed";
+    /// <summary>A password or passkey sign-in, or a sign-up, of a domain that requires its workspace's provider (403).</summary>
+    public const string SsoRequired = "sso.required";
+    /// <summary>The provider's answer was refused (the callback's page says why in words).</summary>
+    public const string SsoFailed = "sso.failed";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -85,6 +100,7 @@ public static class Codes
         AiDisabled, AiKeyMissing, AiKeyInvalid, AiProvider, AiLimit, AiRefused,
         SlugTaken, PublishingOff,
         PluginInvalid, PluginOlder,
+        SsoDomainTaken, SsoDnsNotFound, SsoNotTested, SsoDiscoveryFailed, SsoRequired, SsoFailed,
     ];
 }
 

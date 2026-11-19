@@ -27,6 +27,16 @@ public sealed class Device
     public DateTimeOffset? RevokedAt { get; set; }
     /// <summary>The desktop's OpenIddict authorization; revoking the device revokes it.</summary>
     public Guid? AuthorizationId { get; set; }
+    /// <summary>
+    /// Phase 11: the workspace whose provider signed this session in (single sign-on), or the one
+    /// whose provider signed in the browser that confirmed a desktop; null for any other sign-in.
+    /// </summary>
+    public Guid? SsoWorkspaceId { get; set; }
+    /// <summary>
+    /// Phase 11: when the session ends whatever it does, for a sign-in through a workspace's
+    /// provider (its <see cref="SsoProvider.SessionHours"/> after that sign-in); null for no end.
+    /// </summary>
+    public DateTimeOffset? EndsAt { get; set; }
 }
 
 /// <summary>A Yjs client id the server issued to a device, or registered for it (Q9).</summary>
@@ -1004,4 +1014,58 @@ public sealed class WorkspaceGroupMember : ITenantOwned
     public Guid WorkspaceId { get; set; }
     public Guid AddedBy { get; set; }
     public DateTimeOffset AddedAt { get; set; }
+}
+
+/// <summary>
+/// An email domain a workspace's owners add for single sign-on (Phase 11, M11.3), proven by a DNS
+/// <c>TXT</c> record <c>cgw-verify=&lt;Token&gt;</c> at <c>_cashgear-workspace.&lt;Domain&gt;</c>. Once
+/// verified it belongs to that workspace alone (one verified row a domain, across workspaces): its
+/// people sign in through the workspace's provider, and with <see cref="Required"/> only that way,
+/// except the workspace's owners. Removing it deletes the row.
+/// </summary>
+public sealed class SsoDomain : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>Lower case, an IDN as punycode, 3 to 253 characters, at least one dot, no wildcard.</summary>
+    public string Domain { get; set; } = "";
+    /// <summary>128 random bits, base64url: shown to owners, the record's value.</summary>
+    public string Token { get; set; } = "";
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
+    public Guid? VerifiedBy { get; set; }
+    /// <summary>Password and passkey sign-ins, resets and sign-ups of the domain refused, except the workspace's owners'.</summary>
+    public bool Required { get; set; }
+    public DateTimeOffset? RequiredAt { get; set; }
+    public Guid? RequiredBy { get; set; }
+}
+
+/// <summary>
+/// A workspace's OpenID Connect provider (Phase 11, M11.3), one at most, set by its owners. The
+/// client secret is kept only as Data Protection's output (purpose <c>Cgw.Sso.ClientSecret.v1</c>,
+/// bound to the workspace), never returned or logged. <see cref="TestedAt"/> is an owner's sign-in
+/// through it, which turning sign-on on as required needs; changing the issuer, client or secret
+/// clears it.
+/// </summary>
+public sealed class SsoProvider : ITenantOwned
+{
+    public Guid WorkspaceId { get; set; }
+    /// <summary>The issuer, exactly as its discovery document names it.</summary>
+    public string Issuer { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    /// <summary>The client secret, protected; null with none (a public client, PKCE only).</summary>
+    public string? SecretCipher { get; set; }
+    /// <summary>A person of a verified domain signing in for the first time joins the workspace as a member.</summary>
+    public bool JoinAsMember { get; set; } = true;
+    /// <summary>How long a session made through the provider lasts, 1 to 720 hours, from its sign-in.</summary>
+    public int SessionHours { get; set; } = 24;
+    public DateTimeOffset? TestedAt { get; set; }
+    public Guid? TestedBy { get; set; }
+    /// <summary>Rises on every change: the <c>If-Match</c> of a change.</summary>
+    public long Version { get; set; } = 1;
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Guid UpdatedBy { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }

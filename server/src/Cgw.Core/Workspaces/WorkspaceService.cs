@@ -123,17 +123,40 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
     // There is no direct add: someone joins by accepting an invitation sent to their address, so
     // nothing an admin does tells them whether an address has an account.
 
-    private async Task JoinAsync(Guid workspaceId, Guid userId, string role, Actor actor, CancellationToken ct)
+    /// <param name="via">Phase 11: how they came when not by an invitation (<c>sso</c>: a first sign-in through the workspace's provider).</param>
+    private async Task JoinAsync(Guid workspaceId, Guid userId, string role, Actor actor, CancellationToken ct, string? via = null)
     {
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         await changes.LockAsync(workspaceId, ct);
         db.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = workspaceId, UserId = userId, Role = role, CreatedAt = clock.GetUtcNow() });
         changes.Add("member", userId, "upsert", 1, actor.UserId);
         changes.Add("access", workspaceId, "grant", 1, actor.UserId, userId);
-        audit.Add(actor, "member.add", workspaceId, "user", userId, new { role });
+        audit.Add(actor, "member.add", workspaceId, "user", userId, via is null ? new { role } : new { role, via });
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// Phase 11 (M11.3): someone of a verified domain signed in through the workspace's provider,
+    /// which lets its people join: they join as a member, with the feed's and the audit's entries an
+    /// accepted invitation writes. False when they are in it already (a guest stays a guest).
+    /// </summary>
+    public async Task<bool> JoinThroughSignOnAsync(Guid workspaceId, Guid userId, Actor actor, CancellationToken ct = default)
+    {
+        db.Scope.Switch(workspaceId);
+        if (await db.WorkspaceMembers.AsNoTracking().AnyAsync(m => m.UserId == userId, ct)) return false;
+        try
+        {
+            await JoinAsync(workspaceId, userId, Roles.Member, actor, ct, via: "sso");
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            // They joined meanwhile (two sign-ins at once).
+            db.ChangeTracker.Clear();
+            return false;
+        }
     }
 
     public async Task<Result<MemberDto>> SetRoleAsync(Member admin, Actor actor, Guid userId, string role, CancellationToken ct = default)

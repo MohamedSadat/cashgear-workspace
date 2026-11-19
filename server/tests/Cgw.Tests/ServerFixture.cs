@@ -46,8 +46,15 @@ public sealed class ServerFixture : IAsyncLifetime
     public int AiPort { get; } = FreePort();
     public string AiMockUrl => $"http://127.0.0.1:{AiPort}";
 
+    /// <summary>Phase 11: the mock OpenID Connect provider (<c>tests/mocks/oidc</c>) and its DNS stand-in.</summary>
+    public int OidcPort { get; } = FreePort();
+    public string OidcMockUrl => $"http://127.0.0.1:{OidcPort}";
+    /// <summary>A provider of a test's own: a realm of the mock (its own issuer, clients, people queued, fault, clock).</summary>
+    public string NewOidcIssuer() => $"{OidcMockUrl}/realms/{Guid.NewGuid():N}";
+
     private Process? azurite;
     private Process? aiMock;
+    private Process? oidcMock;
     public WebApplicationFactory<Program> Api { get; private set; } = null!;
     public IServiceProvider Worker { get; private set; } = null!;
 
@@ -116,6 +123,8 @@ public sealed class ServerFixture : IAsyncLifetime
         ["Ai:EmbeddingsRetryMs"] = "50",
         // Phase 10: the plugins' host (the Sites process's second one).
         ["Plugins:PublicUrl"] = PluginsUrl,
+        // Phase 11: a domain's TXT record is read from the mock provider's DNS stand-in, never from DNS.
+        ["Sso:DnsBaseUrl"] = OidcMockUrl,
     };
 
     /// <summary>Phase 10: the plugins origin, as development has it.</summary>
@@ -153,6 +162,16 @@ public sealed class ServerFixture : IAsyncLifetime
             RedirectStandardError = true,
         }) ?? throw new InvalidOperationException("The mock AI provider did not start.");
         await WaitForPort(AiPort);
+        oidcMock = Process.Start(new ProcessStartInfo("node",
+        [
+            Path.Combine(Root, "tests", "mocks", "oidc", "server.mjs"), "--port", OidcPort.ToString(), "--host", "127.0.0.1",
+        ])
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        }) ?? throw new InvalidOperationException("The mock OpenID Connect provider did not start.");
+        await WaitForPort(OidcPort);
 
         await using (var server = new SqlConnection(ServerConnection))
         {
@@ -201,7 +220,7 @@ public sealed class ServerFixture : IAsyncLifetime
         {
             // A database left behind is dropped by the next run's clean-up of old ones.
         }
-        foreach (var process in new[] { azurite, aiMock })
+        foreach (var process in new[] { azurite, aiMock, oidcMock })
             try
             {
                 process?.Kill(entireProcessTree: true);

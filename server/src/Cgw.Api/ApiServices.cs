@@ -219,6 +219,17 @@ public static class ApiServices
         services.AddScoped<AccountService>();
         services.AddScoped<AccountDeletion>();
         services.AddScoped<Passkeys>();
+        // Phase 11 (M11.3): single sign-on through a workspace's own OpenID Connect provider (Sso*.cs).
+        var sso = SsoOptions.From(configuration, environment);
+        services.AddSingleton(sso);
+        services.AddSingleton<SsoSecrets>();
+        services.AddSingleton<SsoMetadata>();
+        services.AddSingleton<ISsoDns>(sso.DnsBaseUrl is { } dns
+            ? new HttpSsoDns(new HttpClient { Timeout = TimeSpan.FromSeconds(5) }, dns)
+            : new SystemSsoDns());
+        services.AddScoped<SsoPolicy>();
+        services.AddScoped<SsoSettings>();
+        services.AddScoped<SsoSignIn>();
         services.AddSingleton<MailQueue>();
         services.AddSingleton<MailCooldown>();
         services.AddHostedService<MailSender>();

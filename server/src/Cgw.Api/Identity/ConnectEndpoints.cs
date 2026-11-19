@@ -83,7 +83,9 @@ public static class ConnectEndpoints
             var application = await applications.FindByClientIdAsync(request.ClientId!)
                 ?? throw new InvalidOperationException("The client is not registered.");
             var name = request["device_name"]?.ToString();
-            var device = await devices.CreateAsync(user.Id, "desktop", string.IsNullOrWhiteSpace(name) ? "Desktop" : name);
+            // Phase 11: a browser signed in through a workspace's provider signs in a desktop that ends when it does.
+            var browser = cookie.Principal!.DeviceId() is { } browserDevice ? await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == browserDevice) : null;
+            var device = await devices.CreateAsync(user.Id, "desktop", string.IsNullOrWhiteSpace(name) ? "Desktop" : name, browser?.SsoWorkspaceId, browser?.EndsAt);
 
             var identity = Identity(user, device.Id);
             identity.SetScopes(request.GetScopes().Intersect(Allowed));
@@ -104,7 +106,7 @@ public static class ConnectEndpoints
             return Results.SignIn(new ClaimsPrincipal(identity), properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }).AllowAnonymous().RequireRateLimiting(RateLimits.SignIn);
 
-        connect.MapPost("/token", async (HttpContext http, UserManager<User> users, CgwDb db, Devices devices) =>
+        connect.MapPost("/token", async (HttpContext http, UserManager<User> users, CgwDb db, Devices devices, TimeProvider clock) =>
         {
             var request = http.GetOpenIddictServerRequest() ?? throw new InvalidOperationException("Not an OpenID Connect request.");
             if (!request.IsAuthorizationCodeGrantType() && !request.IsRefreshTokenGrantType())
@@ -119,10 +121,15 @@ public static class ConnectEndpoints
             if (user is null || user.DeletedAt is not null
                 || device is null || device.UserId != user.Id || device.RevokedAt is not null)
                 return Forbid(Errors.InvalidGrant, "The device is signed out.");
+            // Phase 11: a desktop signed in through a workspace's provider ends when that sign-in does.
+            var now = clock.GetUtcNow();
+            if (device.EndsAt is { } ends && ends <= now)
+                return Forbid(Errors.InvalidGrant, "The sign-in through the workspace's provider has ended: sign in again.");
             await devices.TouchAsync(device.Id);
             var identity = Identity(user, device.Id);
             identity.SetScopes(principal.GetScopes());
             identity.SetAuthorizationId(principal.GetAuthorizationId());
+            Limit(identity, device.EndsAt, now);
             return Results.SignIn(new ClaimsPrincipal(identity), properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }).AllowAnonymous().RequireRateLimiting(RateLimits.Token);
 
@@ -147,6 +154,21 @@ public static class ConnectEndpoints
         locales?.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(tag => tag.StartsWith("ar", StringComparison.OrdinalIgnoreCase) ? "ar" : tag.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? "en" : null)
             .FirstOrDefault(lang => lang is not null);
+
+    /// <summary>The access token's lifetime (ApiServices: 15 minutes).</summary>
+    private static readonly TimeSpan AccessLifetime = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Phase 11: no token of a desktop signed in through a workspace's provider outlives that sign-in
+    /// (its device's <c>EndsAt</c>): the refresh token ends then, and an access token by then at the latest.
+    /// </summary>
+    private static void Limit(ClaimsIdentity identity, DateTimeOffset? endsAt, DateTimeOffset now)
+    {
+        if (endsAt is not { } end) return;
+        var left = end - now < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : end - now;
+        identity.SetRefreshTokenLifetime(left);
+        identity.SetAccessTokenLifetime(left < AccessLifetime ? left : AccessLifetime);
+    }
 
     private static ClaimsIdentity Identity(User user, Guid deviceId)
     {

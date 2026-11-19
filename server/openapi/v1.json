@@ -1391,6 +1391,439 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/sso": {
+      "get": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "getSso",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SsoSettingsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/sso/domains": {
+      "post": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "addSsoDomain",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSsoDomain"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SsoDomainDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/sso/domains/{domain}/verify": {
+      "post": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "verifySsoDomain",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SsoDomainDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/sso/domains/{domain}": {
+      "patch": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "updateSsoDomain",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SsoDomainUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SsoDomainDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "removeSsoDomain",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/sso/provider": {
+      "put": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "setSsoProvider",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SsoProviderUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SsoProviderDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Single sign-on"
+        ],
+        "operationId": "removeSsoProvider",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/pages/{pageId}/doc/updates": {
       "post": {
         "tags": [
@@ -6045,7 +6478,9 @@
           "displayName",
           "locale",
           "deviceId",
-          "signInUrl"
+          "signInUrl",
+          "hasPassword",
+          "ssoRequired"
         ],
         "type": "object",
         "properties": {
@@ -6071,6 +6506,12 @@
           },
           "signInUrl": {
             "type": "string"
+          },
+          "hasPassword": {
+            "type": "boolean"
+          },
+          "ssoRequired": {
+            "type": "boolean"
           }
         }
       },
@@ -6263,6 +6704,20 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "NewSsoDomain": {
+        "required": [
+          "domain"
+        ],
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -8435,6 +8890,172 @@
           }
         }
       },
+      "SsoDomainDto": {
+        "required": [
+          "domain",
+          "record",
+          "verifiedAt",
+          "required"
+        ],
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/SsoRecordDto"
+          },
+          "verifiedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SsoDomainUpdate": {
+        "required": [
+          "required"
+        ],
+        "type": "object",
+        "properties": {
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SsoProviderDto": {
+        "required": [
+          "issuer",
+          "clientId",
+          "hasSecret",
+          "joinAsMember",
+          "sessionHours",
+          "testedAt",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "joinAsMember": {
+            "type": "boolean"
+          },
+          "sessionHours": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "testedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "SsoProviderUpdate": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clientId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clientSecret": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "joinAsMember": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "sessionHours": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "SsoRecordDto": {
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "SsoSettingsDto": {
+        "required": [
+          "domains",
+          "provider",
+          "redirectUri"
+        ],
+        "type": "object",
+        "properties": {
+          "domains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SsoDomainDto"
+            }
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SsoProviderDto"
+              }
+            ]
+          },
+          "redirectUri": {
+            "type": "string"
+          }
+        }
+      },
       "StateHashResponse": {
         "required": [
           "epoch",
@@ -9652,6 +10273,9 @@
     },
     {
       "name": "Groups"
+    },
+    {
+      "name": "Single sign-on"
     },
     {
       "name": "Documents"

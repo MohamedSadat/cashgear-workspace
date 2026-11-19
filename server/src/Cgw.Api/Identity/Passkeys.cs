@@ -100,7 +100,7 @@ public static class PasskeySetup
 /// copied request would carry again: a challenge that succeeded once is written down and refused
 /// after. At most <see cref="Max"/> an account, added one at a time.
 /// </summary>
-public sealed class Passkeys(UserManager<User> users, SignInManager<User> signIn, AccountService accounts, CgwDb db, Audit audit, TimeProvider clock)
+public sealed class Passkeys(UserManager<User> users, SignInManager<User> signIn, AccountService accounts, SsoPolicy sso, CgwDb db, Audit audit, TimeProvider clock)
 {
     public const int Max = 20;
     public const int NameMax = 60;
@@ -124,6 +124,12 @@ public sealed class Passkeys(UserManager<User> users, SignInManager<User> signIn
         {
             await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "signin.lockedOut", targetType: "user", targetId: user.Id, detail: new { method = AccountService.Methods.Passkey });
             return SignInOutcome.LockedOut;
+        }
+        // Phase 11: a domain that requires its workspace's provider, unless this is one of its owners.
+        if (await sso.RequiredForAsync(user.Email, user.Id) is { } requiring)
+        {
+            await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "signin.fail", requiring, "user", user.Id, new { method = AccountService.Methods.Passkey, reason = Codes.SsoRequired });
+            return SignInOutcome.SsoRequired;
         }
         await users.ResetAccessFailedCountAsync(user);
         await accounts.SignInSessionAsync(user, AccountService.Methods.Passkey, http);
@@ -344,10 +350,23 @@ public sealed class Passkeys(UserManager<User> users, SignInManager<User> signIn
             return false;
         }
         var now = clock.GetUtcNow();
-        var until = now + PasskeySetup.Ceremony + TimeSpan.FromMinutes(1);
+        return await OneUse.TakeAsync(db, hash, now, now + PasskeySetup.Ceremony + TimeSpan.FromMinutes(1));
+    }
+}
+
+/// <summary>
+/// Values that may be used once (Phase 11): a passkey ceremony's challenge, and single sign-on's
+/// <c>state</c> (its hash domain-separated), each kept in <c>PasskeyChallenges</c> by its SHA-256
+/// until the state that carried it could no longer be read.
+/// </summary>
+internal static class OneUse
+{
+    /// <summary>Writes the hash down; false when it was written before. Rows past their time go as new ones come.</summary>
+    public static async Task<bool> TakeAsync(CgwDb db, byte[] hash, DateTimeOffset now, DateTimeOffset until)
+    {
         try
         {
-            // Only the insert's count is told: 1 for a challenge new here, 0 for one seen before.
+            // Only the insert's count is told: 1 for a value new here, 0 for one seen before.
             var written = await db.Database.ExecuteSqlAsync($"""
                 SET NOCOUNT ON;
                 DELETE TOP (100) FROM [PasskeyChallenges] WHERE [ExpiresAt] < {now};
@@ -360,7 +379,7 @@ public sealed class Passkeys(UserManager<User> users, SignInManager<User> signIn
         }
         catch (SqlException e) when (e.Number is 2627 or 2601)
         {
-            // Two of the same answer at the very same moment: the key still lets one through.
+            // Two of the same at the very same moment: the key still lets one through.
             return false;
         }
     }

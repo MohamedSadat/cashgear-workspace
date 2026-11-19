@@ -18,7 +18,12 @@ public enum SignInOutcome
     Invalid,
     LockedOut,
     NotConfirmed,
+    /// <summary>Phase 11: the address's domain requires its workspace's provider (single sign-on).</summary>
+    SsoRequired,
 }
+
+/// <summary>Phase 11: a session made through a workspace's provider: which, when, and when it ends whatever it does.</summary>
+public sealed record SsoSession(Guid WorkspaceId, DateTimeOffset At, DateTimeOffset Until);
 
 /// <summary>
 /// Accounts (M2.2): sign-up with a confirmed email, sign-in with lockout, password reset, sign-out.
@@ -36,6 +41,7 @@ public sealed class AccountService(
     IConfiguration configuration,
     Shortcuts shortcuts,
     CgwDb db,
+    SsoPolicy sso,
     TimeProvider clock)
 {
     public const string DeviceClaim = "device_id";
@@ -51,13 +57,21 @@ public sealed class AccountService(
     {
         public const string Password = "password";
         public const string Passkey = "passkey";
+        /// <summary>Phase 11: a workspace's OpenID Connect provider (single sign-on).</summary>
+        public const string Sso = "sso";
     }
+
+    /// <summary>Phase 11: the workspace whose provider signed the session in (single sign-on only).</summary>
+    public const string SsoWorkspaceClaim = "sso_ws";
+
+    /// <summary>Phase 11: when the provider signed the session in, in Unix seconds (single sign-on only).</summary>
+    public const string SsoTimeClaim = "sso_at";
 
     /// <summary>
     /// The claims a sign-in adds to the user's own; the security-stamp refresh carries them over
     /// (ApiServices, <c>OnRefreshingPrincipal</c>).
     /// </summary>
-    public static readonly string[] SessionClaims = [DeviceClaim, AuthTimeClaim, MethodClaim];
+    public static readonly string[] SessionClaims = [DeviceClaim, AuthTimeClaim, MethodClaim, SsoWorkspaceClaim, SsoTimeClaim];
 
     /// <summary>
     /// Phase 11: how long a sign-in counts as recent, for what must not follow from an open session
@@ -67,6 +81,9 @@ public sealed class AccountService(
 
     /// <summary>The local pages a sign-in may return to, besides the web app's origins.</summary>
     private static readonly string[] LocalReturns = ["/connect/authorize", "/account/delete", "/account/passkeys/new"];
+
+    /// <summary>Phase 11: whether the account's domain requires its workspace's provider (an owner of that workspace is never required).</summary>
+    public async Task<bool> SignOnRequiredAsync(User user) => await sso.RequiredForAsync(user.Email, user.Id) is not null;
 
     /// <summary>A password hash nobody has, checked for an unknown address so it costs what a real one does.</summary>
     private static string? dummyHash;
@@ -150,6 +167,13 @@ public sealed class AccountService(
         if (weak.Count > 0) return Failure.Invalid(string.Join(" ", weak));
 
         var existing = await users.FindByEmailAsync(email);
+        // Phase 11: a domain that requires its workspace's provider makes its accounts there, at the
+        // first sign-in; an owner of that workspace is answered as anyone already registered is.
+        if (await sso.RequiredForAsync(email, existing is { DeletedAt: null } ? existing.Id : null) is { } requiring)
+        {
+            await audit.WriteAsync(http.Actor(), "signup.refused", requiring, detail: new { reason = Codes.SsoRequired });
+            return new Failure(Codes.SsoRequired, 403, "Your organisation signs you in with its own account: sign in with your organisation's account");
+        }
         if (existing is not null)
         {
             // The same answer and the same work as a new account; the owner of the address is told.
@@ -210,6 +234,13 @@ public sealed class AccountService(
     {
         var user = await users.FindByEmailAsync(email.Trim());
         if (user is null || user.DeletedAt is not null) return;
+        // Phase 11: a domain that requires its workspace's provider has no passwords to reset, but
+        // its owners'; the answer is the same as for any address, and nothing is sent.
+        if (await sso.RequiredForAsync(user.Email, user.Id) is { } requiring)
+        {
+            await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "password.resetRefused", requiring, "user", user.Id, new { reason = Codes.SsoRequired });
+            return;
+        }
         var code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(await users.GeneratePasswordResetTokenAsync(user)));
         var link = $"{PublicUrl(http)}/account/reset?userId={user.Id}&code={code}&lang={lang}&returnUrl={Uri.EscapeDataString(SafeReturn(returnUrl))}";
         // An unconfirmed account's name was never the mailbox owner's to vouch for.
@@ -255,6 +286,17 @@ public sealed class AccountService(
     public async Task<SignInOutcome> PasswordSignInAsync(string email, string password, HttpContext http)
     {
         var user = await users.FindByEmailAsync(email.Trim());
+        // Phase 11: a domain that requires its workspace's provider refuses every address in it,
+        // with an account or not (the answer is the domain's, and tells nothing of the account),
+        // except the workspace's owners, who keep their password.
+        var live = user is { DeletedAt: null } ? user : null;
+        if (await sso.RequiredForAsync(email, live?.Id) is { } requiring)
+        {
+            SpendPasswordCheck(password);
+            await audit.WriteAsync(http.Actor() with { UserId = live?.Id }, "signin.fail", requiring, live is null ? null : "user", live?.Id,
+                new { method = Methods.Password, reason = Codes.SsoRequired });
+            return SignInOutcome.SsoRequired;
+        }
         if (user is null || user.DeletedAt is not null)
         {
             SpendPasswordCheck(password);
@@ -299,11 +341,22 @@ public sealed class AccountService(
     /// without its device, so Identity's own sign-ins that add none (<c>PasskeySignInAsync</c>) are
     /// never used. Audited <c>account.signin</c> with the method.
     /// </summary>
-    public async Task<Device> SignInSessionAsync(User user, string method, HttpContext http, IEnumerable<Claim>? extra = null)
+    /// <param name="sso">
+    /// Phase 11: the session is the workspace's provider's: its device remembers which, and ends at
+    /// <see cref="SsoSession.Until"/> whatever happens (the device gate refuses it after); the cookie
+    /// carries the workspace and when the provider signed the person in.
+    /// </param>
+    public async Task<Device> SignInSessionAsync(User user, string method, HttpContext http, IEnumerable<Claim>? extra = null, SsoSession? sso = null)
     {
-        var device = await devices.CreateAsync(user.Id, "web", Devices.NameFromUserAgent(http.Request.Headers.UserAgent));
-        await signIn.SignInWithClaimsAsync(user, isPersistent: true, [.. Session(device.Id, method), .. extra ?? []]);
-        await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "account.signin", targetType: "device", targetId: device.Id, detail: new { platform = "web", method });
+        var device = await devices.CreateAsync(user.Id, "web", Devices.NameFromUserAgent(http.Request.Headers.UserAgent), sso?.WorkspaceId, sso?.Until);
+        Claim[] signOn = sso is null ? [] :
+        [
+            new(SsoWorkspaceClaim, sso.WorkspaceId.ToString()),
+            new(SsoTimeClaim, sso.At.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
+        ];
+        await signIn.SignInWithClaimsAsync(user, isPersistent: true, [.. Session(device.Id, method), .. extra ?? [], .. signOn]);
+        object detail = sso is null ? new { platform = "web", method } : new { platform = "web", method, workspaceId = sso.WorkspaceId, until = sso.Until };
+        await audit.WriteAsync(http.Actor() with { UserId = user.Id }, "account.signin", targetType: "device", targetId: device.Id, detail: detail);
         return device;
     }
 
@@ -340,6 +393,7 @@ public sealed class AccountService(
         if (http.User.DeviceId() is not { } deviceId) return;
         var signedInWith = http.User.FindFirstValue(MethodClaim) ?? method;
         // Any other claim a sign-in added (SessionClaims) stays as it was.
+        // (a sign-on's workspace and time among them: asking again does not move when the session ends).
         var kept = SessionClaims.Except([DeviceClaim, AuthTimeClaim, MethodClaim])
             .SelectMany(type => http.User.FindAll(type))
             .Select(c => new Claim(c.Type, c.Value, c.ValueType));

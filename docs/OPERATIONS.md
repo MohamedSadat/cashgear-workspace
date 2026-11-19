@@ -163,6 +163,7 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*`, `Logging__*` and (Phase 10) the two below |
 | `Plugins__PublicUrl` | Phase 10, the API and the Sites process: the plugins' origin (`https://plugins.cashgearerp.com`). The API builds a frame's address from it (`{origin}/f/{ticket}/{entry}`) and refuses to start in production without an https one; the Sites process answers that host name alone with plugins' files (`install.ps1` sets both from `-PluginsHostName`). Development and e2e: `http://localhost:5291` |
 | `Identity__Passkeys__ServerDomain` | Phase 11, the API: the passkeys' relying party id, the API's own host (`workspace-api.cashgearerp.com`), never a wider domain (the ERP, the sites and the plugins could then ask for assertions). Required in production, and it must be the host of `Api__PublicUrl`, or the API does not start (`install.ps1 -PasskeyDomain`, default `workspace-api.cashgearerp.com`, refused unless it is `-HostName`). A ceremony is accepted only from the origin of `Api__PublicUrl`. Changing it later makes every passkey made for the old name useless (people sign in with their password and add one again). Unset on a developer's machine: the request's host, and the request's own origin too, so the e2e stack's passkey specs run on `http://localhost:5280` |
+| `Sso__DnsBaseUrl` | Phase 11, development and the e2e stack only: a domain's `TXT` record is read from the mock OpenID Connect provider's DNS stand-in (`{base}/__mock/dns?name=`, `tests/mocks/oidc`) instead of DNS. The API refuses to start in Production with it set. In production the API asks the host's own resolvers (DnsClient, no cache, 5 s, two tries, TCP when UDP is cut short) for `TXT _cashgear-workspace.<domain>` when an owner presses Verify, and at no other time: the API host needs DNS on 53 (UDP and TCP) to its resolvers |
 | `Web__Origins__N` (Sites) | Phase 10, the Sites process: the origins a plugin's frame may be framed by (its CSP's `frame-ancestors`): the web app's and the desktop's (`install.ps1` sets the same three as the API's) |
 | `Workbooks__MaxSaveBytes` | The largest version Sheet may save (100 MB; 413 `limit.size` above it). The API's `web.config` lets IIS take bodies up to 110 MB, so the API's own limit answers first |
 | `Erp__ApiBase` | The one ERP API an ERP link may name (`https://api.cashgearerp.com`). Required, https, in production. The server never calls it |
@@ -186,7 +187,33 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 
 Confirmation links last 24 hours and password reset links one hour, and both carry their token in
 the query string: besides the log level above, `install.ps1` leaves the query string (`UriQuery`)
-out of the site's IIS log fields. Keep both if the logging is changed.
+out of the site's IIS log fields. Keep both if the logging is changed. (Phase 11: a provider's
+answer to `/account/sso/callback` carries its one-use code in the query string too.)
+
+### Single sign-on (Phase 11)
+
+Set up per workspace by its owners in the app (Settings, Single sign-on); nothing here is
+configured on the server but the network:
+
+- **What an owner registers at their provider** (a "web" application of Microsoft Entra ID, Google
+  Workspace, Okta and the like): the redirect URI `{Api__PublicUrl}/account/sso/callback`
+  (`https://workspace-api.cashgearerp.com/account/sso/callback`; the app shows it), the
+  authorisation code flow with PKCE (S256), the scopes `openid email profile`, a client secret
+  (sent by `client_secret_basic`, or `client_secret_post` when that is all the provider offers),
+  and id tokens signed RS256, RS384, RS512, ES256, ES384 or PS256 that carry `email` (and, where
+  the provider has it, `email_verified`). Then the owner enters the issuer (exactly as the
+  provider's discovery document names it), the client id and the secret, and proves each email
+  domain with the `TXT` record the app shows.
+- **What the API reaches**: the issuer's `/.well-known/openid-configuration`, its `jwks_uri` (read
+  again hourly) and its `token_endpoint`, over https on whatever port they name; in Production
+  only at public addresses (the link previews' guard), with no redirect followed and 10 seconds
+  and 1 MB at most each. A provider on a private network is refused.
+- **Before turning required sign-on on**, an owner signs in through the provider once (the app
+  says when it has been): that is the test it needs. Owners always keep their password, so a
+  broken provider never locks out whoever can mend it. Turning it on signs out the domain's
+  sessions not made through the provider (each `device.revoke` audited); a session made through
+  the provider ends after the workspace's session length (24 hours unless set), as no one is
+  told when someone leaves the organisation (there is no SCIM).
 
 ## Updating
 
@@ -331,6 +358,7 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 | The worker's lag | `/health/ready` (`worker`); `JobStates` (`LastOkAt` per job) | Degraded: new edits wait to reach other devices (pulls still work). Restart the service; read its event log |
 | Refused updates | Worker log ("Refused N of M updates"); `AuditLog` `doc.forgedClient` | A client sending updates as someone else: look at the device and user |
 | Failed sign-ins and lockouts | `AuditLog` `signin.fail`, `signin.lockedOut` (Phase 11: a passkey's carry `method: "passkey"`; a sign-in is `account.signin` with its `method`) | Many from one IP: block it at the edge. Many `signin.fail` with `reason: "challenge used before"`: someone is sending copied passkey answers |
+| Single sign-on | `AuditLog` `sso.domain.add`, `.verify`, `.require`, `.remove`, `sso.provider.set`, `.remove`, `.tested`, `sso.link`, `sso.account`; `signin.fail` with `method: "sso"` and its `refusal` (`Token`, `Outside`, `Unverified`, `Provider`, `Unavailable`, `Expired`); the API's log: "Single sign-on refused for workspace …", "the discovery of … failed" | `Unavailable` or discovery failures: the provider or the host's way out to it. `Token` (a signature, an issuer, an audience, an expiry): the provider's keys or clock, or someone forging answers. `Provider` with "the client secret could not be read": an owner enters the secret again (the key ring was lost). `Expired` with "state used before": someone replaying a callback |
 | Rate limits | 429 answers with `limit.rate` in the logs | A client in a loop |
 | Storage used | `Workspaces.StorageUsedBytes` (Q10: recorded, not enforced) | — |
 | Retention | `JobStates` for `feedRetention` and `trashRetention` (every 10 minutes); `AuditLog` `page.purgedByRetention` | The change feed keeps 90 days and the trash 60 (DECISIONS.md, Phase 3); a device away longer than 90 days takes the whole tree when it returns (`410 feed.expired`) |

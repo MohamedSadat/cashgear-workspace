@@ -74,6 +74,9 @@ public static class ProductionChecks
             problems.Add("Set Identity__Passkeys__ServerDomain to the API's host (workspace-api.cashgearerp.com).");
         else if (url is not null && !string.Equals(url.Host, serverDomain, StringComparison.OrdinalIgnoreCase))
             problems.Add($"Identity__Passkeys__ServerDomain ({serverDomain}) must be the host of Api__PublicUrl ({url.Host}).");
+        // Phase 11: a domain is proven by DNS itself, never by a stand-in.
+        if (!string.IsNullOrEmpty(configuration[Cgw.Api.Identity.SsoOptions.DnsBaseUrlKey]))
+            problems.Add("Sso__DnsBaseUrl is the mock provider's DNS stand-in, for a developer's machine and the e2e stack, and is refused in Production.");
         foreach (var key in Shortcuts.Keys)
             if (string.Equals(configuration[key], "true", StringComparison.OrdinalIgnoreCase))
                 problems.Add($"{key.Replace(":", "__", StringComparison.Ordinal)} is for a developer's machine and is refused in Production.");
@@ -98,6 +101,9 @@ public sealed record CookieNames(string Session, string Antiforgery)
 {
     /// <summary>Phase 11: a passkey ceremony's state between its options and its answer (five minutes), with the same prefix.</summary>
     public string Passkey => Session.StartsWith("__Host-", StringComparison.Ordinal) ? "__Host-cgw_passkey" : "cgw_passkey";
+
+    /// <summary>Phase 11: a sign-in through a workspace's provider between its start and its callback (ten minutes, one use), with the same prefix.</summary>
+    public string Sso => Session.StartsWith("__Host-", StringComparison.Ordinal) ? "__Host-cgw_sso" : "cgw_sso";
 
     public static CookieNames For(IHostEnvironment environment, Shortcuts shortcuts) =>
         Shortcuts.IsLocal(environment) || shortcuts.AllowHttp

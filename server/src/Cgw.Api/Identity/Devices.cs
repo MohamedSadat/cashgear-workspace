@@ -8,19 +8,26 @@ using OpenIddict.EntityFrameworkCore.Models;
 
 namespace Cgw.Api.Identity;
 
-/// <summary>Whether a session's device is still signed in; checked on every cookie request.</summary>
-public sealed class DeviceGate(CgwDb db, IMemoryCache cache)
+/// <summary>
+/// Whether a session's device is still signed in; checked on every cookie request. Phase 11: a
+/// session made through a workspace's provider also ends at its device's <c>EndsAt</c>, however
+/// often it is used (the cookie's sliding expiry never carries it past).
+/// </summary>
+public sealed class DeviceGate(CgwDb db, IMemoryCache cache, TimeProvider clock)
 {
     private static readonly TimeSpan Fresh = TimeSpan.FromSeconds(15);
 
     public async Task<bool> IsActiveAsync(Guid? deviceId)
     {
         if (deviceId is not { } id) return false;
-        return await cache.GetOrCreateAsync(("device", id), async entry =>
+        var endsAt = await cache.GetOrCreateAsync(("device", id), async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = Fresh;
-            return await db.Devices.AsNoTracking().AnyAsync(d => d.Id == id && d.RevokedAt == null);
+            var row = await db.Devices.AsNoTracking().Where(d => d.Id == id && d.RevokedAt == null).Select(d => new { d.EndsAt }).FirstOrDefaultAsync();
+            // Signed out: the earliest moment there is; signed in for good: none.
+            return row is null ? DateTimeOffset.MinValue : row.EndsAt ?? DateTimeOffset.MaxValue;
         });
+        return endsAt > clock.GetUtcNow();
     }
 
     public void Forget(Guid deviceId) => cache.Remove(("device", deviceId));
@@ -29,7 +36,9 @@ public sealed class DeviceGate(CgwDb db, IMemoryCache cache)
 /// <summary>A desktop install or browser profile (DATA_MODEL.md, Devices); signing one out ends its session.</summary>
 public sealed class Devices(CgwDb db, DeviceGate gate, IOpenIddictAuthorizationManager authorizations, Audit audit, TimeProvider clock, Cgw.Api.Realtime.RealtimeRegistry realtime)
 {
-    public async Task<Device> CreateAsync(Guid userId, string platform, string name)
+    /// <param name="ssoWorkspaceId">Phase 11: the workspace whose provider signed this session in, if one did.</param>
+    /// <param name="endsAt">Phase 11: when the session ends whatever it does (a sign-on's <c>SessionHours</c>).</param>
+    public async Task<Device> CreateAsync(Guid userId, string platform, string name, Guid? ssoWorkspaceId = null, DateTimeOffset? endsAt = null)
     {
         var now = clock.GetUtcNow();
         var device = new Device
@@ -40,6 +49,8 @@ public sealed class Devices(CgwDb db, DeviceGate gate, IOpenIddictAuthorizationM
             Name = Trim(name),
             CreatedAt = now,
             LastSeenAt = now,
+            SsoWorkspaceId = ssoWorkspaceId,
+            EndsAt = endsAt,
         };
         db.Devices.Add(device);
         await db.SaveChangesAsync();

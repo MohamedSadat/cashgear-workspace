@@ -129,6 +129,26 @@ public static class AccountPages
         ["reauthAgain"] = "Sign in again to go on.",
         ["deletePasskey"] = "Delete my account with a passkey",
         ["deleteSignInAgain"] = "To delete your account, sign in again first.",
+        // Phase 11: single sign-on.
+        ["ssoLink"] = "Sign in with your organisation's account",
+        ["ssoBody"] = "Enter your work email. You sign in on your organisation's own page, then come back here.",
+        ["ssoContinue"] = "Continue",
+        ["ssoOtherWay"] = "Sign in another way",
+        ["ssoNone"] = "No organisation sign-in is set up for this address.",
+        ["ssoUnavailable"] = "Your organisation's sign-in cannot be reached now. Try again in a few minutes.",
+        ["ssoRequiredTitle"] = "Your organisation signs you in",
+        ["ssoRequiredBody"] = "Your organisation signs in addresses like this one with its own account, not with a password or a passkey.",
+        ["ssoRequiredSignUp"] = "Your organisation makes the account for an address like this one the first time you sign in with its account.",
+        ["ssoFailedTitle"] = "You are not signed in",
+        ["ssoExpired"] = "This sign-in was started on another page, or took longer than 10 minutes. Start again.",
+        ["ssoCancelled"] = "The sign-in was cancelled on your organisation's page.",
+        ["ssoProvider"] = "Your organisation's sign-in did not complete. Try again, or ask whoever runs it.",
+        ["ssoToken"] = "Your organisation's sign-in answered with something that could not be checked, so you are not signed in. Ask whoever runs it.",
+        ["ssoNoEmail"] = "Your organisation's sign-in did not give your email address.",
+        ["ssoUnverified"] = "Your organisation's sign-in has not confirmed your email address.",
+        ["ssoOutside"] = "Your organisation's sign-in gave an address this workspace does not sign in.",
+        ["ssoAccount"] = "This account cannot be signed in this way.",
+        ["ssoStartAgain"] = "Start again",
     };
 
     private static readonly Dictionary<string, string> Ar = new()
@@ -202,6 +222,26 @@ public static class AccountPages
         ["reauthAgain"] = "سجّل الدخول مرة أخرى للمتابعة.",
         ["deletePasskey"] = "حذف حسابي بمفتاح مرور",
         ["deleteSignInAgain"] = "لحذف حسابك، سجّل الدخول مرة أخرى أولًا.",
+        // Phase 11: تسجيل الدخول الموحّد.
+        ["ssoLink"] = "تسجيل الدخول بحساب مؤسستك",
+        ["ssoBody"] = "أدخل بريدك الإلكتروني في العمل. تسجّل الدخول في صفحة مؤسستك نفسها، ثم تعود إلى هنا.",
+        ["ssoContinue"] = "متابعة",
+        ["ssoOtherWay"] = "تسجيل الدخول بطريقة أخرى",
+        ["ssoNone"] = "لم يُعَدّ تسجيل دخول لمؤسسة لهذا العنوان.",
+        ["ssoUnavailable"] = "تعذّر الوصول إلى تسجيل الدخول في مؤسستك الآن. حاول مرة أخرى بعد بضع دقائق.",
+        ["ssoRequiredTitle"] = "مؤسستك هي التي تسجّل دخولك",
+        ["ssoRequiredBody"] = "تسجّل مؤسستك دخول العناوين مثل هذا العنوان بحسابها الخاص، لا بكلمة مرور ولا بمفتاح مرور.",
+        ["ssoRequiredSignUp"] = "تنشئ مؤسستك الحساب لعنوان مثل هذا العنوان عند أول تسجيل دخول بحسابها.",
+        ["ssoFailedTitle"] = "لم تسجّل الدخول",
+        ["ssoExpired"] = "بدأ تسجيل الدخول هذا في صفحة أخرى، أو استغرق أكثر من ١٠ دقائق. ابدأ من جديد.",
+        ["ssoCancelled"] = "أُلغي تسجيل الدخول في صفحة مؤسستك.",
+        ["ssoProvider"] = "لم يكتمل تسجيل الدخول في مؤسستك. حاول مرة أخرى، أو اسأل المسؤول عنه.",
+        ["ssoToken"] = "أجاب تسجيل الدخول في مؤسستك بما تعذّر التحقق منه، فلم تسجّل الدخول. اسأل المسؤول عنه.",
+        ["ssoNoEmail"] = "لم يُعطِ تسجيل الدخول في مؤسستك عنوان بريدك الإلكتروني.",
+        ["ssoUnverified"] = "لم يؤكّد تسجيل الدخول في مؤسستك عنوان بريدك الإلكتروني.",
+        ["ssoOutside"] = "أعطى تسجيل الدخول في مؤسستك عنوانًا لا تسجّل مساحة العمل هذه دخوله.",
+        ["ssoAccount"] = "لا يمكن تسجيل دخول هذا الحساب بهذه الطريقة.",
+        ["ssoStartAgain"] = "البدء من جديد",
     };
 
     private const string Css = """
@@ -238,7 +278,12 @@ public static class AccountPages
     /// taking a string). Every other page has no script at all.
     /// </param>
     /// <param name="path">The page the other language's link opens, when it is not the request's (a POST answered on another page's behalf).</param>
-    internal static IResult Page(HttpContext http, string lang, string title, string body, IEnumerable<KeyValuePair<string, string>>? query = null, bool script = false, string? path = null)
+    /// <param name="anyForm">
+    /// Phase 11: the page's form goes on to a workspace's own provider (single sign-on), chosen by the
+    /// address typed, so its redirect may leave for any https origin (and http where providers may be
+    /// http, outside Production). Only pages without a password field.
+    /// </param>
+    internal static IResult Page(HttpContext http, string lang, string title, string body, IEnumerable<KeyValuePair<string, string>>? query = null, bool script = false, string? path = null, bool anyForm = false)
     {
         var t = T(lang);
         var dir = lang == "ar" ? "rtl" : "ltr";
@@ -259,8 +304,9 @@ public static class AccountPages
         // desktop's loopback listener through /connect/authorize.
         var origins = string.Join(" ", ApiServices.Origins(http.RequestServices.GetRequiredService<IConfiguration>()));
         var scripts = script ? "script-src 'self'; connect-src 'self'; require-trusted-types-for 'script'; " : "";
+        var providers = anyForm ? (http.RequestServices.GetRequiredService<SsoOptions>().AllowHttp ? " https: http:" : " https:") : "";
         http.Response.Headers.ContentSecurityPolicy =
-            $"default-src 'none'; {scripts}style-src 'self'; img-src 'self'; form-action 'self' {origins} http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'";
+            $"default-src 'none'; {scripts}style-src 'self'; img-src 'self'; form-action 'self' {origins} http://127.0.0.1:*{providers}; frame-ancestors 'none'; base-uri 'none'";
         http.Response.Headers.CacheControl = "no-store";
         return Results.Content(html, "text/html; charset=utf-8", Encoding.UTF8);
     }
@@ -322,7 +368,7 @@ public static class AccountPages
             <label for="password">{E(t["password"])}</label><input id="password" name="Password" type="password" autocomplete="current-password" required dir="ltr">
             <button type="submit">{E(t["signIn"])}</button></form>
             <div data-passkey-show hidden><p class="or">{E(t["or"])}</p>{passkey}</div>
-            <div class="links"><a href="/account/signup{Q(returnUrl, lang)}">{E(t["signUp"])}</a><a href="/account/forgot{Q(returnUrl, lang)}">{E(t["forgot"])}</a></div>
+            <div class="links"><a href="/account/sso{Q(returnUrl, lang)}">{E(t["ssoLink"])}</a><a href="/account/signup{Q(returnUrl, lang)}">{E(t["signUp"])}</a><a href="/account/forgot{Q(returnUrl, lang)}">{E(t["forgot"])}</a></div>
             """, fromPasskey ? new[] { KeyValuePair.Create("returnUrl", returnUrl ?? "") } : null, script: true, path: fromPasskey ? "/account/signin" : null);
     }
 
@@ -446,6 +492,8 @@ public static class AccountPages
             {
                 SignInOutcome.Ok => Results.Redirect(service.SafeReturn(form.ReturnUrl)),
                 SignInOutcome.NotConfirmed => SignInPage(http, af, lang, form.ReturnUrl, "notConfirmed", form.Email),
+                // Phase 11: the address's domain signs in through its workspace's provider.
+                SignInOutcome.SsoRequired => SsoPage(http, af, lang, form.ReturnUrl, form.Email, "ssoRequiredTitle", "ssoRequiredBody", null),
                 // A locked account reads as a wrong password: the lockout is no sign the account exists.
                 _ => SignInPage(http, af, lang, form.ReturnUrl, "invalid", form.Email),
             };
@@ -467,6 +515,9 @@ public static class AccountPages
             var form = new Form(posted);
             var lang = L(http, form.Lang);
             var result = await service.RegisterAsync(form.Email ?? "", form.DisplayName ?? "", form.Password ?? "", lang, form.ReturnUrl, http);
+            // Phase 11: a domain that requires its workspace's provider makes its accounts there.
+            if (!result.Ok && result.Failure!.Code == Codes.SsoRequired)
+                return SsoPage(http, af, lang, form.ReturnUrl, form.Email, "ssoRequiredTitle", "ssoRequiredSignUp", null);
             if (!result.Ok) return SignUp(http, af, lang, form.ReturnUrl, result.Failure!.Title, form.Email, form.DisplayName);
             var t = T(lang);
             return Message(http, lang, t["checkMail"], t["checkMailBody"]);
@@ -568,6 +619,78 @@ public static class AccountPages
         }).AllowAnonymous().RequireRateLimiting(Infrastructure.RateLimits.SignIn);
 
         MapPasskeyPages(pages, L);
+        MapSsoPages(pages, L);
+    }
+
+    /// <summary>
+    /// Phase 11 (M11.3): "Sign in with your organisation's account". The address chooses the
+    /// provider (its verified domain's workspace's), so the page's form may go on to any https
+    /// origin; it has no password field. Refusals read the same for an unknown domain and one with
+    /// no provider; the callback's say why in words and never show the provider's answer.
+    /// </summary>
+    private static void MapSsoPages(RouteGroupBuilder pages, Func<HttpContext, string?, string> L)
+    {
+        pages.MapGet("/sso", (HttpContext http, IAntiforgery af, string? returnUrl, string? lang) =>
+            SsoPage(http, af, L(http, lang), returnUrl, null, null, "ssoBody", null)).AllowAnonymous();
+
+        pages.MapPost("/sso", async (HttpContext http, IAntiforgery af, SsoSignIn sso, IFormCollection posted) =>
+        {
+            var form = new Form(posted);
+            var lang = L(http, form.Lang);
+            var started = await sso.StartAsync(form.Email, form.ReturnUrl, lang, http, http.RequestAborted);
+            return started.RedirectTo is { } url
+                ? Results.Redirect(url)
+                : SsoPage(http, af, lang, form.ReturnUrl, form.Email, null, "ssoBody", started.Refusal);
+        }).AllowAnonymous().RequireRateLimiting(Infrastructure.RateLimits.SignIn);
+
+        // The provider sends the browser back here (response_mode=query): a GET, as Lax cookies allow.
+        pages.MapGet("/sso/callback", async (HttpContext http, SsoSignIn sso) =>
+        {
+            var outcome = await sso.CallbackAsync(http, http.RequestAborted);
+            if (outcome.RedirectTo is { } url) return Results.Redirect(url);
+            var t = T(outcome.Lang);
+            return Page(http, outcome.Lang, t["ssoFailedTitle"], $"""
+                <p class="error" role="alert" data-code="{Codes.SsoFailed}">{E(t[RefusalKey(outcome.Refusal)])}</p>
+                <div class="links"><a href="/account/sso{Q(outcome.ReturnUrl, outcome.Lang)}">{E(t["ssoStartAgain"])}</a><a href="/account/signin{Q(outcome.ReturnUrl, outcome.Lang)}">{E(t["ssoOtherWay"])}</a></div>
+                """, outcome.ReturnUrl is null ? [] : [KeyValuePair.Create("returnUrl", outcome.ReturnUrl)], path: "/account/sso");
+        }).AllowAnonymous().RequireRateLimiting(Infrastructure.RateLimits.SignIn);
+    }
+
+    private static string RefusalKey(SsoRefusal refusal) => refusal switch
+    {
+        SsoRefusal.NoProvider => "ssoNone",
+        SsoRefusal.Unavailable => "ssoUnavailable",
+        SsoRefusal.Expired => "ssoExpired",
+        SsoRefusal.Cancelled => "ssoCancelled",
+        SsoRefusal.Provider => "ssoProvider",
+        SsoRefusal.Token => "ssoToken",
+        SsoRefusal.NoEmail => "ssoNoEmail",
+        SsoRefusal.Unverified => "ssoUnverified",
+        SsoRefusal.Outside => "ssoOutside",
+        _ => "ssoAccount",
+    };
+
+    /// <summary>
+    /// The address that chooses the organisation's sign-in: on its own (<paramref name="title"/> null),
+    /// or saying why a password, a passkey or a sign-up was refused (<c>sso.required</c>), or why the
+    /// address has no provider. Its form goes on to the provider.
+    /// </summary>
+    private static IResult SsoPage(HttpContext http, IAntiforgery af, string lang, string? returnUrl, string? email, string? title, string body, SsoRefusal? refusal)
+    {
+        var t = T(lang);
+        var required = title == "ssoRequiredTitle"
+            ? $"""<p class="error" role="alert" data-code="{Codes.SsoRequired}">{E(t[body])}</p>"""
+            : "";
+        var message = refusal is { } why && why != SsoRefusal.None ? $"""<p class="error" role="alert">{E(t[RefusalKey(why)])}</p>""" : "";
+        var intro = required.Length > 0 ? "" : $"""<p>{E(t[body])}</p>""";
+        var query = string.IsNullOrEmpty(returnUrl) ? [] : new[] { KeyValuePair.Create("returnUrl", returnUrl) };
+        return Page(http, lang, t[title ?? "ssoLink"], $"""
+            {required}{message}{intro}
+            <form method="post" action="/account/sso">{Hidden(af, http, ("ReturnUrl", returnUrl), ("Lang", lang))}
+            <label for="email">{E(t["email"])}</label><input id="email" name="Email" type="email" autocomplete="username" required value="{E(email)}" dir="ltr">
+            <button type="submit">{E(t["ssoContinue"])}</button></form>
+            <div class="links"><a href="/account/signin{Q(returnUrl, lang)}">{E(t["ssoOtherWay"])}</a></div>
+            """, query, path: "/account/sso", anyForm: true);
     }
 
     /// <summary>What can prove the signed-in person again: their password, a passkey, or (with neither) a recent sign-in.</summary>
@@ -625,9 +748,13 @@ public static class AccountPages
             var form = new Form(posted);
             var lang = L(http, form.Lang);
             var outcome = await passkeys.SignInAsync(form.Credential, http);
-            return outcome == SignInOutcome.Ok
-                ? Results.Redirect(service.SafeReturn(form.ReturnUrl))
-                : SignInPage(http, af, lang, form.ReturnUrl, "passkeyRefused", null, fromPasskey: true);
+            return outcome switch
+            {
+                SignInOutcome.Ok => Results.Redirect(service.SafeReturn(form.ReturnUrl)),
+                // Phase 11: the passkey's account is of a domain that signs in through its workspace's provider.
+                SignInOutcome.SsoRequired => SsoPage(http, af, lang, form.ReturnUrl, null, "ssoRequiredTitle", "ssoRequiredBody", null),
+                _ => SignInPage(http, af, lang, form.ReturnUrl, "passkeyRefused", null, fromPasskey: true),
+            };
         }).AllowAnonymous().RequireRateLimiting(Infrastructure.RateLimits.SignIn);
 
         // Adding a passkey, opened from Settings (?return= an address of the app to go back to).
