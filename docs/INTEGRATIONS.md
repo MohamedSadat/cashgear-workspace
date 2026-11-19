@@ -887,6 +887,238 @@ workspace audit row, Vendors' too, now holds the record's id as sent (`SheetChan
 tenant script `Add_WorkspaceCommitRecordId.sql`, after `Add_WorkspaceCommitAudit.sql`): it must run
 in a tenant's database before Workspace is turned on for that company.
 
+### Queries paged in the ERP's database (Phase 12, Track E10)
+
+Written in full on 2026-11-19 (Phase 12, M12.5), before either side ships it. Until then each
+connector's `Query` read every row the user may see into memory and searched, sorted and paged in
+C# (`ConnectorQuery.Run`). From Track E10 the ERP filters, sorts and pages in its database with a
+keyset cursor, so a large table is never read whole, and its answers stay exactly 0.10.0's
+(decisions, 2026-11-19). `erp-connect.1` stays the contract's name.
+
+**0.10.0's answers, as read in the ERP (Track E10 keeps each).**
+
+- `search` is trimmed at its ends (at most 200 characters after) and matches a record when any of
+  the connector's search texts contains it, ignoring case as .NET's `OrdinalIgnoreCase` does. There
+  is no Arabic folding: alef forms, hamza, taa marbuta, alef maqsura and yaa, diacritics and tatweel
+  each match only themselves, as the ERP's own lists do. The texts: Vendors' account, name, group
+  code, mobile and phone; Customers' account, name, search name, mobile, second mobile, governorate,
+  city and, only for a user who may see it, national ID; Items on hand's item id, name and search
+  name.
+- `equals`: an empty value and `null` are equal; booleans, integers and decimals by value; text,
+  lookups, dates and date-times exactly (ordinal).
+- `sort`: empty values first ascending and last descending; text, lookups and dates by
+  `OrdinalIgnoreCase`, ties by ordinal order; decimals by value; date-times as instants; then the
+  connector's own order, which is also the order with no `sort`: Vendors by record id, Customers by
+  account as the database orders it, Items on hand by item, site, warehouse and location (ordinal).
+- `total` counts every match, whatever the cursor (now a count in the database).
+
+**What changes.**
+
+- The cursor stays opaque and bound to its query's filter, sort and fields (another query's is 400
+  `request.invalid`). It is a keyset (the last record's sort values and id), so a record written
+  between two pages neither repeats nor pushes another off a page, where an offset could.
+- `maxRecords` is enforced (10,000 for each connector): a query reads at most `maxRecords` records
+  through its cursors. The page that reaches it answers `nextCursor: null`, a cursor past it is 400
+  `request.invalid`, and `total` still counts every match. Workspace's block says "the first N of
+  M" there.
+- Unchanged: the record and field rules (Customers' ownership rule, a national ID hidden from
+  employees, Items on hand's value), values on the wire, the codes, `Commit` and `CommitStatus`.
+
+**Tests.** Track E10's oracle test in the ERP keeps 0.10.0's C# path as a reference and compares
+every page of the SQL path's answers with it, on the same 100,000 records a connector on LocalDB,
+for random queries (English and Arabic searches with each letter form above and mixed case, `equals`
+on each filterable field, every sortable field in both directions with ties and empty values, page
+sizes 1 to `maxPageSize`). The suite (`tests/contracts/erp`) gains cases at 100,000 records a
+connector, against the mock and against UnifiedAPI on LocalDB, both seeded by one rule the suite
+knows (its README): pages read to the end hold each match once, in order, `total` by count, the
+page at `maxRecords` and a cursor past it, a search's matches all containing it. Budget (Track E10's
+own measure, at the ERP): the first page of a 100,000-record connector within 500 ms, the memory a
+query takes not growing with the table.
+
+### Reports (Phase 12, Track E11)
+
+Written in full on 2026-11-19 (Phase 12, M12.6), before either side ships it: three read-only
+report connectors over services the ERP already has, AP aging by vendor, stock balance on a date
+and a trial balance (decisions, 2026-11-19). The ERP has no AR aging, so there is none.
+
+**A report connector.** What is new for a report, beside the contract above:
+
+```ts
+// GET api/connect/Connectors?kinds=entity,report
+// Reports are listed only when `kinds` names them: a build before 0.12.0 asks without it and is
+// shown its entities, as before. `kind` is 'report' for them.
+
+interface ConnectorSchema {
+  // …as above, and:
+  kind?: 'entity' | 'report';           // absent: 'entity'
+  parameters?: ReportParameter[];       // a report's, in the order they are shown
+  // A report's fields are all `editable: false` (`notEditable`); `maxCommitRecords` is 0.
+}
+
+interface ReportParameter {
+  name: string;
+  label: { en: string; ar: string };
+  type: 'date' | 'choice' | 'lookup' | 'boolean';
+  required: boolean;
+  options?: { value: string; label: { en: string; ar: string } }[];  // 'choice'
+  lookup?: string;                      // 'lookup': a key of the schema's `lookups`
+  default?: string | boolean | null;    // used when the parameter is absent; a date's is
+                                        // 'today', 'monthStart' or 'YYYY-MM-DD', read in the
+                                        // company's time zone when the query runs
+}
+
+// A report's field may carry, beside the field attributes above:
+//   total?: 'sum'                       // summed over every match into the answer's `totals`
+
+interface QueryRequest {
+  // …as above, and for a report (required, an object, `{}` for every default):
+  parameters: Record<string, string | boolean | null>;   // dates 'YYYY-MM-DD', choices and lookups by value
+}
+
+interface QueryResponse {
+  // …as above, and for a report:
+  totals?: Record<string, WireValue>;   // each `total: 'sum'` field over every match, whatever the cursor
+  labels?: Record<string, { en: string; ar: string }>;   // field labels these parameters give (AP aging's bands)
+  partial?: boolean;                    // true when an ERP limit of its own cut the report (stock balance's)
+}
+```
+
+Rules:
+
+- **Read-only.** `Commit` on a report is 403 `privilege.denied` (check 3); `CommitStatus` answers
+  `unknown`.
+- **Parameters.** An absent parameter takes its `default`; a required one without a default must be
+  sent. A report's query without `parameters` (an older build's) is 400 `request.invalid`, so a
+  build that does not know reports never shows one with parameters it did not choose. Each wrong
+  parameter is one error, `field: "parameters.<name>"`, with `required`, `type`, `lookup.notFound`
+  (an unknown or inactive code), `range` (a date before 1900-01-01 or after 9999-12-31, or a period
+  whose start is after its end) or `request.invalid` (a name the schema does not list).
+  `parameters` on an entity stays 400 `request.invalid`.
+- **Rows.** A report's rows are records: `id` unique in the report, `key` its `keyField`'s value,
+  `version` a hash of the values the user sees (`ConnectorRules.ContentVersion`). `filter`, `sort`,
+  `fields`, `pageSize` and the cursor work as for an entity, on the report's rows, by the rules
+  above; with no `sort` a report has its own order (below). `maxPageSize` 1,000 and `maxRecords`
+  10,000 for each report, enforced as above.
+- **Computed per query.** The ERP computes a report from its parameters for each query; it may
+  keep one computed report per session and parameters for at most 60 seconds to answer its later
+  pages. Workspace keeps none of it (Principle 3).
+- **Access.** Each report is the ERP's own page for it: the same roles, and a field that page hides
+  from the user is not in the schema for them (Phase 5's field rule). The session's connectors
+  include the reports the user may view.
+- **Load.** Workspace runs a report's query when its block is drawn and on Refresh or a change of
+  its parameters, never on a timer. The ERP may limit report queries per session more tightly than
+  an entity's (429 `rate.limited` with `Retry-After`).
+- Amounts are in the company's currency, decimals as strings, as every value on the wire.
+
+**AP aging by vendor (`apAging`, `apAging.1`).** `ApAgingQueryService.ReadAsync` and
+`ApAgingRules.Build`, as the ERP's AP aging page (`/purch/ap-aging`) shows them, without its
+ledger comparison. Access: the page's roles (admin, owner, accountmgr, payable, account, tax).
+
+| Parameter | Type | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `asOf` | date | yes | `today` | Transactions and settlements up to and including the day ("As of" / "حتى تاريخ") |
+| `ageBy` | choice `dueDate`, `invoiceDate` | no | `dueDate` | "Aged by" / "العمر حسب": due date ("تاريخ الاستحقاق"), invoice date ("تاريخ الفاتورة") |
+| `basis` | choice `oldestFirst`, `openItems` | no | `oldestFirst` | Payments applied to the oldest first ("الأقدم أولًا"), or to the open items they settle ("البنود المفتوحة") ("Basis" / "الأساس") |
+| `vendorGroup` | lookup `vendorGroups` | no | `null` (every group) | The page's group filter ("Vendor group" / "مجموعة الموردين") |
+
+One row a vendor with a position, as the page keeps them; `id` and `key` the vendor's account
+(trimmed); `keyField` `vendorAccount`. Order: `balance` descending, then `vendorName` by
+`OrdinalIgnoreCase`.
+
+| Field | Type | Label | Total | Filter, sort, search |
+| --- | --- | --- | --- | --- |
+| `vendorAccount` | text | Vendor account / حساب المورد | | sort, search |
+| `vendorName` | text | Vendor / المورد | | sort, search |
+| `vendorGroup` | lookup `vendorGroups` | Group / المجموعة | | filter, sort |
+| `balance` | decimal | Balance / الرصيد | sum | sort |
+| `band0` to `band4` | decimal | By `ageBy` (below) | sum | sort |
+| `unapplied` | decimal | Unapplied / غير مخصص | sum | sort |
+| `overdue` | decimal | Overdue / متأخر السداد | sum | sort |
+| `openItems` | integer | Open items / البنود المفتوحة | | sort |
+| `oldestDays` | integer | Oldest, days / الأقدم بالأيام | | sort |
+| `lastInvoice` | date | Last invoice / آخر فاتورة | | sort |
+| `lastPayment` | date | Last payment / آخر دفعة | | sort |
+| `lastPaymentAmount` | decimal | Last payment amount / مبلغ آخر دفعة | | sort |
+
+The bands, in the schema by due date and in the answer's `labels` for the `ageBy` asked: by due
+date Not due / غير مستحق, 1–30 days / من 1 إلى 30 يومًا, 31–60 days / من 31 إلى 60 يومًا, 61–90 days /
+من 61 إلى 90 يومًا, Over 90 days / أكثر من 90 يومًا; by invoice date 0–30 days / من 0 إلى 30 يومًا,
+31–60 days, 61–90 days, 91–120 days / من 91 إلى 120 يومًا, Over 120 days / أكثر من 120 يومًا. A
+balance is positive when payable; `unapplied` is 0 on the oldest-first basis.
+
+**Stock balance on a date (`stockBalance`, `stockBalance.1`).** `WarehouseBalanceService`'s
+leaves (item and storage place), as the ERP's Warehouse balance page (`/inv/balance`) shows them,
+active items only. Access: the page's roles (admin, owner, warehouse, warehousemgr, account, purch,
+oper, accountmgr, prod, plan, tax); `cost` and `unitCost` only for a user the page shows cost to
+(Exec, or AdvView on unit 4006).
+
+| Parameter | Type | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `asOf` | date | yes | `today` | Stock moved up to and including the day ("As of" / "حتى تاريخ") |
+| `siteId` | lookup `sites` | no | `null` (every site) | "Site" / "الموقع" |
+| `warehouseId` | lookup `warehouses` | no | `null` (every warehouse) | "Warehouse" / "المخزن" |
+| `includeZero` | boolean | no | `false` | Places whose quantity and cost are both 0 ("Include zero balances" / "إظهار الأرصدة الصفرية") |
+
+One row an item and storage place; `id` `item|site|warehouse|location` and `key` the item, as Items
+on hand's; `keyField` `itemId`. Order: item, site, warehouse, location (ordinal). `partial` is true
+when the service's own cap (200,000 places) cut the report.
+
+| Field | Type | Label | Total | Filter, sort, search |
+| --- | --- | --- | --- | --- |
+| `itemId` | text | Item / الصنف | | sort, search |
+| `itemName` | text | Item name / اسم الصنف | | sort, search |
+| `unit` | text | Unit / الوحدة | | sort |
+| `categoryId` | text | Category / الفئة | | filter, sort |
+| `siteId` | lookup `sites` | Site / الموقع | | filter, sort |
+| `warehouseId` | lookup `warehouses` | Warehouse / المخزن | | filter, sort |
+| `locationId` | text | Location / المكان | | sort |
+| `quantity` | decimal | Quantity / الكمية | sum | sort |
+| `cost` | decimal | Cost / التكلفة | sum | sort |
+| `unitCost` | decimal | Unit cost / تكلفة الوحدة | | sort |
+| `salesValue` | decimal | Sales value / قيمة البيع | sum | sort |
+
+**Trial balance (`trialBalance`, `trialBalance.1`).** `LedgerTransQueryService.GenFinStatmentAsync`,
+as the ERP's Trial balance page (`/gl/trialbalance`) shows it: each account's movement in the
+period, for one statement. Access: the page's roles (admin, owner, accountmgr, dev).
+
+| Parameter | Type | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `dateFrom` | date | yes | `monthStart` | The period's first day ("From" / "من") |
+| `dateTo` | date | yes | `today` | Its last day, included, as the page reads its dates ("To" / "إلى"); before `dateFrom` is `range` |
+| `statement` | choice `profitLoss`, `balanceSheet` | no | `profitLoss` | "Statement" / "القائمة": profit and loss ("الأرباح والخسائر"), balance sheet ("الميزانية العمومية") |
+
+One row an account with lines in the period; `id` and `key` the account; `keyField` `accountId`.
+Order: `balance` descending.
+
+| Field | Type | Label | Total | Filter, sort, search |
+| --- | --- | --- | --- | --- |
+| `accountId` | text | Account / الحساب | | sort, search |
+| `accountName` | text | Account name / اسم الحساب | | sort, search |
+| `accountType` | text | Type / النوع | | filter, sort |
+| `accountGroup` | text | Group / المجموعة | | filter, sort |
+| `category` | text | Category / التصنيف | | filter, sort |
+| `balance` | decimal | Movement / الحركة | sum | sort |
+| `share` | decimal | Share / النسبة | | sort |
+
+`balance` is the sum of the account's ledger amounts in the period; `share` its part of the
+statement's total, as the page's rate (`null` when the total is 0).
+
+**The mock and the suite.** The mock ERP (`tests/mocks/erp`) serves the three reports from seeded
+ledgers, with its users given the pages' roles; the suite's report cases run against it and against
+UnifiedAPI on LocalDB (Track E11): listing only with `kinds`, each parameter's checks and defaults,
+totals over every match whatever the page, AP aging's labels by `ageBy`, the field rule for cost,
+each role's access, `Commit` refused, the answers the ERP's own services give for the same
+parameters (against UnifiedAPI).
+
+**Workspace's block.** A report's block lists among the ERP's connectors as a report. Its parameters
+show above the table (a date picker, a choice or a lookup as a list, a switch) and are stored in the
+`erpView` block's new `parameters` attribute (JSON text of what the person set, `null` by default:
+absent ones take the report's defaults; an attribute, so no schema version, as older builds keep
+it). The table is read-only, pages as an entity's, ends with its totals, takes `labels`, says when the
+report is partial or stops at `maxRecords`, and refreshes only on Refresh or a parameter's change.
+Nothing of a report's answer is written anywhere: not the document, the store, search, history or
+the server.
+
 ### Track E: work in the ERP repo
 
 | # | Work | Why |
@@ -900,6 +1132,8 @@ in a tenant's database before Workspace is turned on for that company.
 | E7 | The contract test suite against UnifiedAPI | As Sheet does |
 | E8 | Customers and Items on hand editable (Phase 10): their `Commit` and `CommitStatus` through the one commit path Vendors uses, the `scope` attribute, the audit naming the page | Level 2 for both |
 | E9 | The suite's Phase 10 commit cases against UnifiedAPI on LocalDB | As E7 |
+| E10 | The connectors' `Query` filtered, sorted and paged in SQL with a keyset cursor, 0.10.0's answers kept, `maxRecords` enforced (Phase 12) | A 100,000-record table is never read whole |
+| E11 | Report connectors: AP aging by vendor, stock balance on a date, trial balance (Phase 12) | ERP reports as read-only blocks |
 
 Workspace builds against a mock ERP that behaves as this document says, as Sheet's
 `tests/erp-mock` does, so Phase 5 can start before Track E lands.
