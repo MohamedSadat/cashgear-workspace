@@ -17,13 +17,14 @@ namespace Cgw.Tests;
 /// </summary>
 public sealed partial class AuthorizationTests(ServerFixture server)
 {
-    private sealed record Setup(string Name, bool Restricted, string? Member, string? Guest, string? Workspace)
+    /// <summary>Phase 11: <paramref name="Group"/> is the row of a group the member (and the admin) are in.</summary>
+    private sealed record Setup(string Name, bool Restricted, string? Member, string? Guest, string? Workspace, string? Group = null)
     {
         /// <summary>The level each role should end with (DATA_MODEL.md, Permissions).</summary>
         public string Level(string role) => role switch
         {
             "owner" or "admin" => "full",
-            "member" => Member ?? Workspace ?? (Restricted ? "none" : "edit"),
+            "member" => Member ?? Group ?? Workspace ?? (Restricted ? "none" : "edit"),
             _ => Guest ?? "none",
         };
     }
@@ -36,6 +37,9 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         new("rows: full", false, "full", "full", null),
         new("restricted", true, null, null, null),
         new("restricted, workspace view", true, null, null, "view"),
+        new("restricted to a group: edit", true, null, null, null, "edit"),
+        new("a group's view over the workspace's edit", false, null, null, "edit", "view"),
+        new("their own full over their group's view", true, "full", null, null, "view"),
     ];
 
     private static readonly string[] Roles = ["owner", "admin", "member", "guest"];
@@ -93,6 +97,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var people = new Dictionary<string, Account> { ["owner"] = ws.Account };
         foreach (var role in Roles.Skip(1)) people[role] = await Kit.Join(server, ws, role);
         await Kit.Register(ws.Client, ws.Id);
+        var group = await GroupKit.New(ws, "The member's group", people["member"].Id, people["admin"].Id);
         var failures = new List<string>();
 
         foreach (var setup in Setups)
@@ -101,10 +106,11 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             if (setup.Member is { } m) entries.Add(("user", people["member"].Id, m));
             if (setup.Guest is { } g) entries.Add(("user", people["guest"].Id, g));
             if (setup.Workspace is { } w) entries.Add(("workspace", ws.Id, w));
+            if (setup.Group is { } gl) entries.Add(("group", group, gl));
             async Task<Guid> Page(string title)
             {
                 var id = (await ws.NewPage($"{setup.Name}: {title}")).GetProperty("id").GetGuid();
-                if (setup.Restricted || entries.Count > 0) await Kit.Share(ws, id, setup.Restricted, [.. entries]);
+                if (setup.Restricted || entries.Count > 0) await GroupKit.Share(ws, id, setup.Restricted, [.. entries]);
                 return id;
             }
             var page = await Page("page");
@@ -119,7 +125,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
                 await ws.Push(ws.Op("page.trash", delete[role], new { }));
             }
             await CheckAssets(ws.Id, asset);
-            var body = Kit.Entries(setup.Restricted, [.. entries]);
+            var body = GroupKit.Entries(setup.Restricted, [.. entries]);
 
             foreach (var role in Roles)
             {
@@ -131,7 +137,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
                     if (expected != actual) failures.Add($"[{setup.Name}] {role} ({level}) {endpoint}: expected {expected}, got {actual}");
                 }
 
-                var permissions = await client.GetAsync($"/api/v1/pages/{page}/permissions");
+                var permissions = await client.GetAsync($"/api/v1/pages/{page}/permissions?principals=group");
                 Check("permissions.get", Status(permissions));
                 if (permissions.IsSuccessStatusCode)
                 {
@@ -183,6 +189,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var workbook = (await Books.Create(ws, "Secret book")).GetProperty("id").GetGuid();
         var thread = await CommentTests.CreateOk(ws.Client, page, CommentTests.NewThread());
         var plugin = (await PluginKit.AddOk(ws.Client, ws.Id, PluginKit.Bundle("acme.secret"))).GetProperty("id").GetGuid();
+        var group = await GroupKit.New(ws, "Secret group", member.Id);
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -199,6 +206,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["threadId"] = thread.GetProperty("id").GetString()!,
             ["commentId"] = thread.GetProperty("comments")[0].GetProperty("id").GetString()!,
             ["pluginId"] = plugin.ToString(),
+            ["groupId"] = group.ToString(),
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };
@@ -236,6 +244,8 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         Assert.True(failures.Count == 0, string.Join("\n", failures));
 
         // And none of it touched the workspace.
+        Assert.Contains(member.Id, (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/groups")).GetProperty("groups")
+            .EnumerateArray().Single(g => g.GetProperty("id").GetGuid() == group).GetProperty("people").EnumerateArray().Select(p => p.GetProperty("userId").GetGuid()));
         Assert.Equal("Secret", (await ws.Tree()).GetProperty("pages").EnumerateArray().Single(p => p.GetProperty("id").GetGuid() == page).GetProperty("title").GetString());
         Assert.Contains(member.Id, (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/members")).EnumerateArray().Select(m => m.GetProperty("userId").GetGuid()));
     }

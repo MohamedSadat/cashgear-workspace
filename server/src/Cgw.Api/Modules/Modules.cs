@@ -29,6 +29,8 @@ public static class Modules
         services.AddScoped<OpsService>();
         services.AddScoped<FeedService>();
         services.AddScoped<WorkspaceService>();
+        // Phase 11: groups.
+        services.AddScoped<GroupService>();
         services.AddScoped<DocService>();
         services.AddScoped<AssetService>();
         services.AddScoped<LinkPreviews>();
@@ -81,6 +83,7 @@ public static class Modules
     public static RouteGroupBuilder MapCgwModules(this RouteGroupBuilder api)
     {
         api.MapWorkspaces();
+        api.MapGroups();
         api.MapDocs();
         api.MapAssets();
         api.MapSharing();

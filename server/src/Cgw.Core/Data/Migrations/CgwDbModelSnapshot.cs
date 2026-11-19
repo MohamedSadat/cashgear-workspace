@@ -2177,6 +2177,79 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("WorkspaceExports");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.WorkspaceGroup", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("SearchName")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UpdatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "SearchName")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WorkspaceGroups_Name");
+
+                    b.ToTable("WorkspaceGroups");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WorkspaceGroupMember", b =>
+                {
+                    b.Property<byte[]>("GroupId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("UserId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("AddedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("GroupId", "UserId");
+
+                    b.HasIndex("WorkspaceId", "UserId");
+
+                    b.ToTable("WorkspaceGroupMembers");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.WorkspaceInvite", b =>
                 {
                     b.Property<byte[]>("Id")

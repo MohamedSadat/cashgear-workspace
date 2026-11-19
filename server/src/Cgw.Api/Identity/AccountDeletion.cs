@@ -183,6 +183,8 @@ public sealed class AccountDeletion(
         await db.PageVisits.Where(v => v.UserId == userId).ExecuteDeleteAsync(ct);
         await db.PagePermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
         await db.WorkbookPermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        // Phase 11: they leave every group of the workspace.
+        await Cgw.Core.Workspaces.GroupService.LeaveAllAsync(db, userId, userId, now, ct);
         await db.FileSessions.Where(s => s.UserId == userId && s.EndedAt == null).ExecuteUpdateAsync(s => s.SetProperty(x => x.EndedAt, now), ct);
         // Their inbox goes; their comments stay, shown as "Deleted user", as their edits do.
         await db.Notifications.Where(n => n.UserId == userId).ExecuteDeleteAsync(ct);

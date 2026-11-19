@@ -156,7 +156,7 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
     /// with the gate's read and the push's transaction in one round trip when the gate's read alone
     /// decides that the caller may edit (a live page, not a row, in a section found, and the caller
     /// the private section's owner, or in a shared one an owner or admin, or a member no page of the
-    /// chain decides for: no restricted page and no row for them or the workspace) and nothing about
+    /// chain decides for: no restricted page and no row for them, a group they are in or the workspace) and nothing about
     /// the request alone would refuse it. Otherwise the gate decides on the row the batch read (no
     /// second read), then the push runs as before. The same checks in the same order, so the same
     /// answers and texts. The page's rate is counted before the batch and given back if the push is
@@ -263,8 +263,9 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
             const string bin = CgwDb.BinaryCollation;
             // The gate's read, and Access's decision where the read alone makes it (Full for the
             // private section's owner and for owners and admins in a shared one; a member's default,
-            // Edit, when no page of the chain is restricted or has a row for them or the workspace).
-            // Anything else is left to PageGate (Undecided), with what was read.
+            // Edit, when no page of the chain is restricted or has a row for them, for a group they
+            // are in (Phase 11) or for the workspace). Anything else is left to PageGate (Undecided),
+            // with what was read.
             var gate = gated
                 ? $"""
                     DECLARE @found int = 0, @kind nvarchar(20), @section binary(16), @parent binary(16), @deleted datetimeoffset(3),
@@ -293,7 +294,10 @@ public sealed class DocService(CgwDb db, BlobStore blob, IMemoryCache cache, Tim
                                         SELECT 1 FROM [PagePermissions] r
                                         WHERE r.[PageId] = p.[Id] AND r.[WorkspaceId] = @ws
                                             AND ((r.[PrincipalType] COLLATE {bin} = N'user' AND r.[PrincipalId] = @user)
-                                                OR r.[PrincipalType] COLLATE {bin} = N'workspace')))))))))
+                                                OR r.[PrincipalType] COLLATE {bin} = N'workspace'
+                                                OR (r.[PrincipalType] COLLATE {bin} = N'group' AND EXISTS (
+                                                    SELECT 1 FROM [WorkspaceGroupMembers] g
+                                                    WHERE g.[GroupId] = r.[PrincipalId] AND g.[UserId] = @user AND g.[WorkspaceId] = @ws)))))))))))
                     BEGIN
                         IF @rowEpoch <> @epoch SELECT @outcome = {GateEpoch}, @value = @rowEpoch;
                         ELSE IF @version < @schema SET @outcome = {GateVersion};

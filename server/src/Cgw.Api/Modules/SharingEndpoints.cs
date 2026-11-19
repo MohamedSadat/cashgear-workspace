@@ -23,11 +23,12 @@ public static class SharingEndpoints
     {
         var page = api.MapGroup("/pages/{pageId:guid}").WithTags("Sharing").RequireAuthorization().AddEndpointFilter<PageFilter>();
 
-        page.MapGet("/permissions", async (SharingService sharing, HttpContext http) =>
+        // Phase 11: group rows only with ?principals=group (0.10.0 asks without it, and is never sent one).
+        page.MapGet("/permissions", async (string[]? principals, SharingService sharing, HttpContext http) =>
             {
                 var access = http.PageAccess();
                 http.Response.Headers.ETag = $"\"{access.Page.Version}\"";
-                return TypedResults.Ok(await sharing.PermissionsAsync(access.Page, access.Level));
+                return TypedResults.Ok(await sharing.PermissionsAsync(access.Page, access.Level, SharingService.KnowsGroups(access.Member, principals)));
             })
             .WithName("getPermissions").RequireRateLimiting(RateLimits.User);
 

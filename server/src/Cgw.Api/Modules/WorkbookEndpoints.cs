@@ -121,11 +121,12 @@ public static class WorkbookEndpoints
             })
             .WithName("deleteWorkbook");
 
-        one.MapGet("/permissions", async (WorkbookService workbooks, HttpContext http) =>
+        // Phase 11: group rows only with ?principals=group, as a page's list.
+        one.MapGet("/permissions", async (string[]? principals, WorkbookService workbooks, HttpContext http) =>
             {
                 var caller = http.Workbook();
                 http.Response.Headers.ETag = RecordTag(caller.Workbook.Version);
-                return TypedResults.Ok(await workbooks.PermissionsAsync(caller.Workbook, caller.Level, http.RequestAborted));
+                return TypedResults.Ok(await workbooks.PermissionsAsync(caller.Workbook, caller.Level, SharingService.KnowsGroups(caller.Member, principals), http.RequestAborted));
             })
             .WithName("getWorkbookPermissions");
 

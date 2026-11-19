@@ -128,6 +128,45 @@ public sealed class TreeAccessTests(ServerFixture server)
         Assert.Equal("edit", await Level(other.Client, memo));
     }
 
+    /// <summary>
+    /// Phase 11: a group's row on the chain is kept as a group's row; someone in two groups whose
+    /// nearer row is the lower keeps the lower, by a row of their own.
+    /// </summary>
+    [Fact]
+    public async Task A_page_moved_from_under_a_groups_page_keeps_what_each_of_its_people_had()
+    {
+        var ws = await Ws.Create(server);
+        var a = await Kit.Join(server, ws, "member");
+        var b = await Kit.Join(server, ws, "member");
+        var c = await Kit.Join(server, ws, "member");
+        var sales = await GroupKit.New(ws, "Sales", a.Id, b.Id);
+        var leads = await GroupKit.New(ws, "Leads", a.Id);
+        var hr = await Page(ws, ws.Client, "HR", ws.Shared);
+        await GroupKit.Share(ws, hr, true, ("group", sales, "view"), ("group", leads, "full"));
+        var team = await Page(ws, ws.Client, "Team", ws.Shared, hr);
+        await GroupKit.Share(ws, team, false, ("group", sales, "comment"));
+        var salaries = await Page(ws, ws.Client, "Salaries", ws.Shared, team);
+        var open = await Page(ws, ws.Client, "Open", ws.Shared, orderKey: "a5");
+        // The nearer row decides, the lower though it is.
+        Assert.Equal("comment", await Level(a.Client, salaries));
+        Assert.Equal("comment", await Level(b.Client, salaries));
+        Assert.Equal("none", await Level(c.Client, salaries));
+        // A group's people may not take it from under the page that decides; full access may.
+        Assert.Equal("access.denied", (await Op(ws, a.Client, ws.Op("page.move", salaries, Move(ws.Shared, open)))).Code);
+        Assert.Equal("applied", (await Op(ws, ws.Client, ws.Op("page.move", salaries, Move(ws.Shared, open)))).Status);
+        Assert.Equal("comment", await Level(a.Client, salaries));
+        Assert.Equal("comment", await Level(b.Client, salaries));
+        Assert.Equal("none", await Level(c.Client, salaries));
+        var listed = (await Kit.Json(await ws.Client.GetAsync($"/api/v1/pages/{salaries}/permissions?principals=group"))).GetProperty("entries").EnumerateArray()
+            .Select(e => (e.GetProperty("principalType").GetString(), e.GetProperty("principalId").GetGuid(), e.GetProperty("level").GetString())).ToHashSet();
+        Assert.Equal([("group", sales, "comment"), ("group", leads, "full"), ("user", a.Id, "comment")], listed);
+        // Its groups still decide: their people change, and so does who sees it.
+        Assert.Equal(HttpStatusCode.OK, (await GroupKit.SetPeople(ws.Client, ws.Id, sales, [a.Id])).StatusCode);
+        Assert.Equal("none", await Level(b.Client, salaries));
+        Assert.Equal(HttpStatusCode.OK, (await GroupKit.SetPeople(ws.Client, ws.Id, leads, [a.Id, c.Id])).StatusCode);
+        Assert.Equal("full", await Level(c.Client, salaries));
+    }
+
     [Fact]
     public async Task A_page_restored_after_its_restricted_parent_was_binned_stays_restricted()
     {

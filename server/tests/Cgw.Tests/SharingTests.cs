@@ -233,4 +233,98 @@ public sealed class SharingTests(ServerFixture server)
         var mine = (await ws.NewPage("Mine", section: ws.Personal)).GetProperty("id").GetGuid();
         Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PostAsJsonAsync($"/api/v1/pages/{mine}/share-links", new { })).StatusCode);
     }
+
+    private static List<(string Type, Guid Id)> Listed(JsonElement permissions) =>
+        permissions.GetProperty("entries").EnumerateArray().Select(e => (e.GetProperty("principalType").GetString()!, e.GetProperty("principalId").GetGuid())).ToList();
+
+    /// <summary>
+    /// Phase 11: 0.10.0's share dialog knows people and the workspace only. It is never sent a
+    /// group's row, and its save (no <c>principals</c>) keeps every one as it was; a client that says
+    /// it knows groups reads them (with their names and sizes) and replaces them.
+    /// </summary>
+    [Fact]
+    public async Task An_older_build_is_never_sent_a_groups_row_and_its_save_keeps_them()
+    {
+        var ws = await Ws.Create(server);
+        var member = await Kit.Join(server, ws, "member");
+        var other = await Kit.Join(server, ws, "member");
+        var finance = await GroupKit.New(ws, "Finance", member.Id, ws.Account.Id);
+        var elsewhere = await GroupKit.New(await Ws.Create(server, ws.Account), "Another workspace's");
+        var page = (await ws.NewPage("Payroll")).GetProperty("id").GetGuid();
+        await GroupKit.Share(ws, page, true, ("group", finance, "edit"), ("user", other.Id, "view"), ("workspace", ws.Id, "none"));
+        DateTimeOffset Stored(CgwDb db) => db.PagePermissions.AsNoTracking().Single(r => r.PageId == page && r.PrincipalId == finance).CreatedAt;
+        DateTimeOffset made;
+        await using (var db = server.NewDb(ws.Id)) made = Stored(db);
+
+        // Asked as 0.10.0 asks: the people and the workspace only.
+        Assert.Equal([("workspace", ws.Id), ("user", other.Id)], Listed(await Kit.Json(await ws.Client.GetAsync(Url(page)))));
+        // Asked for groups: the workspace, then groups, then people; a group by its name and size.
+        var asked = await Kit.Json(await ws.Client.GetAsync(Url(page) + "?principals=group"));
+        Assert.Equal([("workspace", ws.Id), ("group", finance), ("user", other.Id)], Listed(asked));
+        var group = asked.GetProperty("entries")[1];
+        Assert.Equal("Finance", group.GetProperty("displayName").GetString());
+        Assert.Equal(JsonValueKind.Null, group.GetProperty("email").ValueKind);
+        Assert.Equal(2, group.GetProperty("peopleCount").GetInt32());
+        Assert.Equal("edit", group.GetProperty("level").GetString());
+        Assert.Equal(JsonValueKind.Null, asked.GetProperty("entries")[2].GetProperty("peopleCount").ValueKind);
+        Assert.Equal("edit", await TreeAccessTests.Level(member.Client, page));
+
+        // A 0.10.0 save changes what it shows and keeps the group's row as it was.
+        var saved = await ws.Client.PutAsJsonAsync(Url(page), Kit.Entries(true, ("user", other.Id, "comment")));
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        Assert.Equal([("user", other.Id)], Listed(await Kit.Json(saved)));
+        Assert.Equal("edit", await TreeAccessTests.Level(member.Client, page));
+        Assert.Equal("comment", await TreeAccessTests.Level(other.Client, page));
+        await using (var db = server.NewDb(ws.Id)) Assert.Equal(made, Stored(db));
+        // Its save may not name a group, nor a kind of principal this server does not know.
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(Url(page), Kit.Entries(true, ("group", finance, "view")))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(Url(page), new { restricted = true, entries = Array.Empty<object>(), principals = new[] { "role" } })).StatusCode);
+        // A group entry names a live group of this workspace.
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(Url(page), GroupKit.Entries(true, ("group", Guid.CreateVersion7(), "view")))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(Url(page), GroupKit.Entries(true, ("group", elsewhere, "view")))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(Url(page), GroupKit.Entries(true, ("group", finance, "view"), ("group", finance, "edit")))).StatusCode);
+
+        // A save that knows groups replaces theirs: the group's row gone is a revoke, as a person's is.
+        var cursor = await GroupKit.Cursor(ws);
+        var replaced = await ws.Client.PutAsJsonAsync(Url(page), GroupKit.Entries(true, ("user", other.Id, "comment")));
+        Assert.Equal(HttpStatusCode.OK, replaced.StatusCode);
+        Assert.Equal([("user", other.Id)], Listed(await Kit.Json(replaced)));
+        Assert.Equal("none", await TreeAccessTests.Level(member.Client, page));
+        var access = Assert.Single((await ws.Changes(cursor)).GetProperty("changes").EnumerateArray(), c => c.GetProperty("entityType").GetString() == "access");
+        Assert.Equal("revoke", access.GetProperty("kind").GetString());
+        // And back: a grant.
+        cursor = await GroupKit.Cursor(ws);
+        await GroupKit.Share(ws, page, true, ("user", other.Id, "comment"), ("group", finance, "full"));
+        Assert.Equal("grant", Assert.Single((await ws.Changes(cursor)).GetProperty("changes").EnumerateArray(), c => c.GetProperty("entityType").GetString() == "access").GetProperty("kind").GetString());
+        Assert.Equal("full", await TreeAccessTests.Level(member.Client, page));
+        await using (var db = server.NewDb(ws.Id))
+        {
+            var last = await db.AuditLog.Where(a => a.Action == "sharing.change" && a.TargetId == page).OrderByDescending(a => a.CreatedAt).FirstAsync();
+            Assert.Contains(finance.ToString(), last.Detail, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task A_guest_is_never_told_a_group_and_never_changes_one()
+    {
+        var ws = await Ws.Create(server);
+        var guest = await Kit.Join(server, ws, "guest");
+        var member = await Kit.Join(server, ws, "member");
+        var finance = await GroupKit.New(ws, "Finance", member.Id);
+        var page = (await ws.NewPage("Shared with a guest")).GetProperty("id").GetGuid();
+        await GroupKit.Share(ws, page, false, ("user", guest.Id, "full"), ("group", finance, "view"));
+
+        // A guest with full access is shown the people on the list, never a group, even asking for them.
+        Assert.Equal([("user", guest.Id)], Listed(await Kit.Json(await guest.Client.GetAsync(Url(page) + "?principals=group"))));
+        // Their save keeps the group's row whatever it says, and may not name one.
+        var saved = await guest.Client.PutAsJsonAsync(Url(page), GroupKit.Entries(false, ("user", guest.Id, "full")));
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        Assert.Equal([("user", guest.Id)], Listed(await Kit.Json(saved)));
+        Assert.Equal("view", await TreeAccessTests.Level(member.Client, page));
+        Assert.Equal(HttpStatusCode.BadRequest, (await guest.Client.PutAsJsonAsync(Url(page), GroupKit.Entries(false, ("user", guest.Id, "full"), ("group", finance, "edit")))).StatusCode);
+        // The directory a guest sees names no one for a group's row.
+        var people = (await guest.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/members")).EnumerateArray().Select(m => m.GetProperty("userId").GetGuid()).ToList();
+        Assert.DoesNotContain(member.Id, people);
+        Assert.Contains(guest.Id, people);
+    }
 }

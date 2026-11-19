@@ -676,7 +676,12 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
     private async Task<List<AccessRow>> AccessToKeepAsync(Member member, Guid? from)
     {
         var rows = await access.EffectiveRowsAsync(member.WorkspaceId, from);
-        if (Access.LevelUnder(member, rows) == Levels.None) rows.Add(new AccessRow("user", member.UserId, Levels.Full));
+        if (Access.LevelUnder(member, await access.GroupsAsync(member), rows) == Levels.None)
+        {
+            // Their own row of none, if the chain gave them one, makes way for it.
+            rows.RemoveAll(r => r.PrincipalType == "user" && r.PrincipalId == member.UserId);
+            rows.Add(new AccessRow("user", member.UserId, Levels.Full));
+        }
         return rows;
     }
 

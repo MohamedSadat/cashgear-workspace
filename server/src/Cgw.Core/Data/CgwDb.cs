@@ -71,6 +71,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<EmbeddingChange> EmbeddingChanges => Set<EmbeddingChange>();
     public DbSet<WorkspacePlugin> WorkspacePlugins => Set<WorkspacePlugin>();
     public DbSet<PluginFrameTicket> PluginFrameTickets => Set<PluginFrameTicket>();
+    public DbSet<WorkspaceGroup> WorkspaceGroups => Set<WorkspaceGroup>();
+    public DbSet<WorkspaceGroupMember> WorkspaceGroupMembers => Set<WorkspaceGroupMember>();
 
     /// <summary>Order keys compare byte by byte (D19): default collations ignore case.</summary>
     public const string BinaryCollation = "Latin1_General_100_BIN2";
@@ -531,6 +533,22 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.BundleHash).HasMaxLength(64).IsUnicode(false);
         });
 
+        // Phase 11: groups and their people.
+        b.Entity<WorkspaceGroup>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // One group a name in a workspace, by search's normalisation, compared exactly.
+            e.HasIndex(x => new { x.WorkspaceId, x.SearchName }).IsUnique().HasDatabaseName("IX_WorkspaceGroups_Name");
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.SearchName).HasMaxLength(400).UseCollation(BinaryCollation);
+        });
+        b.Entity<WorkspaceGroupMember>(e =>
+        {
+            e.HasKey(x => new { x.GroupId, x.UserId });
+            // A person's groups in a workspace: what every access check reads.
+            e.HasIndex(x => new { x.WorkspaceId, x.UserId });
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -573,6 +591,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<EmbeddingChange>(b);
         Filter<WorkspacePlugin>(b);
         Filter<PluginFrameTicket>(b);
+        Filter<WorkspaceGroup>(b);
+        Filter<WorkspaceGroupMember>(b);
     }
 
     private void Filter<T>(ModelBuilder b)

@@ -155,4 +155,80 @@ public sealed class WorkbookAccessTests(ServerFixture server)
         var foreign = await ws.Client.PutAsJsonAsync($"/api/v1/workbooks/{book}/permissions", Kit.Entries(false, ("workspace", theirs.Id, "view")));
         Assert.Equal(HttpStatusCode.BadRequest, foreign.StatusCode);
     }
+
+    private static List<(string Type, Guid Id)> Listed(JsonElement permissions) =>
+        permissions.GetProperty("entries").EnumerateArray().Select(e => (e.GetProperty("principalType").GetString()!, e.GetProperty("principalId").GetGuid())).ToList();
+
+    private async Task<string> Access(HttpClient client, Guid book)
+    {
+        var response = await client.GetAsync($"/api/v1/workbooks/{book}");
+        return response.StatusCode == HttpStatusCode.NotFound ? "none" : (await Kit.Json(response)).GetProperty("access").GetString()!;
+    }
+
+    /// <summary>Phase 11: a group's row on a workbook decides as on a page; 0.10.0 is never sent one and its save keeps them.</summary>
+    [Fact]
+    public async Task A_workbooks_group_rows_decide_as_a_pages_and_an_older_build_keeps_them()
+    {
+        var ws = await Ws.Create(server);
+        var a = await Kit.Join(server, ws, "member");
+        var b = await Kit.Join(server, ws, "member");
+        var guest = await Kit.Join(server, ws, "guest");
+        var readers = await GroupKit.New(ws, "Readers", a.Id);
+        var editors = await GroupKit.New(ws, "Editors", a.Id);
+        var book = await Books.WithVersion(server, ws, "Budget");
+        var url = $"/api/v1/workbooks/{book}/permissions";
+        Assert.Equal(HttpStatusCode.OK, (await ws.Client.PutAsJsonAsync(url, GroupKit.Entries(true, ("group", readers, "view"), ("group", editors, "edit")))).StatusCode);
+
+        // The highest of their groups'; nothing for anyone else.
+        Assert.Equal("edit", await Access(a.Client, book));
+        Assert.Equal("none", await Access(b.Client, book));
+        Assert.Equal("none", await Access(guest.Client, book));
+        Assert.Contains((await a.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/workbooks")).GetProperty("workbooks").EnumerateArray(), w => w.GetProperty("id").GetGuid() == book);
+        Assert.DoesNotContain((await b.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/workbooks")).GetProperty("workbooks").EnumerateArray(), w => w.GetProperty("id").GetGuid() == book);
+
+        // Shown only to a client that asks, with their names and sizes.
+        Assert.Empty(Listed(await Kit.Json(await ws.Client.GetAsync(url))));
+        var asked = await Kit.Json(await ws.Client.GetAsync(url + "?principals=group"));
+        Assert.Equal([("group", editors), ("group", readers)], Listed(asked));
+        Assert.All(asked.GetProperty("entries").EnumerateArray(), e => Assert.Equal(1, e.GetProperty("peopleCount").GetInt32()));
+
+        // A 0.10.0 save keeps them, and may not name one.
+        Assert.Equal(HttpStatusCode.OK, (await ws.Client.PutAsJsonAsync(url, Kit.Entries(true, ("user", b.Id, "comment")))).StatusCode);
+        Assert.Equal("edit", await Access(a.Client, book));
+        Assert.Equal("comment", await Access(b.Client, book));
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(url, Kit.Entries(true, ("group", readers, "full")))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ws.Client.PutAsJsonAsync(url, GroupKit.Entries(true, ("group", Guid.CreateVersion7(), "full")))).StatusCode);
+
+        // Their own row over their groups'.
+        Assert.Equal(HttpStatusCode.OK, (await ws.Client.PutAsJsonAsync(url, GroupKit.Entries(true, ("group", readers, "view"), ("group", editors, "edit"), ("user", a.Id, "view")))).StatusCode);
+        Assert.Equal("view", await Access(a.Client, book));
+        // A group deleted takes its row away; a save that knows groups replaces the rest.
+        Assert.Equal(HttpStatusCode.OK, (await ws.Client.PutAsJsonAsync(url, GroupKit.Entries(true, ("group", readers, "view"), ("group", editors, "edit")))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ws.Client.DeleteAsync($"{GroupKit.Url(ws.Id)}/{editors}")).StatusCode);
+        Assert.Equal("view", await Access(a.Client, book));
+        Assert.Equal(HttpStatusCode.OK, (await ws.Client.PutAsJsonAsync(url, GroupKit.Entries(true))).StatusCode);
+        Assert.Equal("none", await Access(a.Client, book));
+    }
+
+    /// <summary>A database's export takes its place's access, a group's row as a group's row.</summary>
+    [Fact]
+    public async Task A_database_exported_from_under_a_groups_page_is_that_groups()
+    {
+        var ws = await Ws.Create(server);
+        var a = await Kit.Join(server, ws, "member");
+        var b = await Kit.Join(server, ws, "member");
+        var team = await GroupKit.New(ws, "Team", a.Id, b.Id);
+        var parent = (await ws.NewPage("Team space")).GetProperty("id").GetGuid();
+        await GroupKit.Share(ws, parent, true, ("group", team, "edit"), ("user", b.Id, "view"));
+        var database = await DatabaseTests.NewDatabase(ws, "Leads", parent: parent);
+        var made = await a.Client.PostAsJsonAsync($"/api/v1/databases/{database}/workbooks", new { name = "Leads export" });
+        Assert.True(made.StatusCode == HttpStatusCode.Created, await made.Content.ReadAsStringAsync());
+        var book = (await Kit.Json(made)).GetProperty("id").GetGuid();
+        Assert.Equal("edit", await Access(a.Client, book));
+        Assert.Equal("view", await Access(b.Client, book));
+        Assert.Contains(("group", team), Listed(await Kit.Json(await ws.Client.GetAsync($"/api/v1/workbooks/{book}/permissions?principals=group"))));
+        // The team's people change: the workbook follows.
+        Assert.Equal(HttpStatusCode.OK, (await GroupKit.SetPeople(ws.Client, ws.Id, team, [b.Id])).StatusCode);
+        Assert.Equal("none", await Access(a.Client, book));
+    }
 }

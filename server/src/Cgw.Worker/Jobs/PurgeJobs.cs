@@ -134,6 +134,9 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.PageLinks.ExecuteDeleteAsync(ct);
         await db.AssetRefs.ExecuteDeleteAsync(ct);
         await db.PagePermissions.ExecuteDeleteAsync(ct);
+        // Phase 11: groups and their people.
+        await db.WorkspaceGroupMembers.ExecuteDeleteAsync(ct);
+        await db.WorkspaceGroups.ExecuteDeleteAsync(ct);
         await db.ShareLinks.ExecuteDeleteAsync(ct);
         await db.Favourites.ExecuteDeleteAsync(ct);
         await db.PageVisits.ExecuteDeleteAsync(ct);

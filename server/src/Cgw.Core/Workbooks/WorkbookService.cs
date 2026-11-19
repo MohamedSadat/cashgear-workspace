@@ -102,7 +102,7 @@ public sealed class WorkbookService(
         var query = db.Workbooks.AsNoTracking();
         query = trashed ? query.Where(w => w.TrashedAt != null) : query.Where(w => w.TrashedAt == null);
         if (TextNormaliser.Normalise(q ?? "") is { Length: > 0 } term) query = query.Where(w => w.SearchName.Contains(term));
-        // A guest reads only what names them.
+        // A guest reads only what names them (a guest is never in a group: only their own row can).
         if (member.IsGuest)
             query = query.Where(w => db.WorkbookPermissions.Any(r => r.WorkbookId == w.Id && r.PrincipalType == Principals.User && r.PrincipalId == member.UserId));
         var books = await query.OrderByDescending(w => w.UpdatedAt).ThenBy(w => w.Id).Take(MaxList).ToListAsync(ct);
@@ -335,33 +335,22 @@ public sealed class WorkbookService(
 
     // The access list ---------------------------------------------------------------------------------
 
-    /// <summary>The list, to those who may change it (full); everyone else learns whether it is restricted and their own level.</summary>
-    public async Task<PermissionsDto> PermissionsAsync(Workbook book, string yourLevel, CancellationToken ct = default)
+    /// <summary>
+    /// The list, to those who may change it (full); everyone else learns whether it is restricted
+    /// and their own level. Group rows only when <paramref name="groups"/> (<see cref="SharingService.KnowsGroups"/>).
+    /// </summary>
+    public async Task<PermissionsDto> PermissionsAsync(Workbook book, string yourLevel, bool groups, CancellationToken ct = default)
     {
         if (yourLevel != Levels.Full) return new PermissionsDto(book.Restricted, yourLevel, []);
-        var rows = await db.WorkbookPermissions.AsNoTracking().Where(r => r.WorkbookId == book.Id).ToListAsync(ct);
-        var userIds = rows.Where(r => r.PrincipalType == Principals.User).Select(r => r.PrincipalId).ToList();
-        var users = await db.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
-            .Select(u => new { u.Id, u.DisplayName, u.Email, u.DeletedAt }).ToDictionaryAsync(u => u.Id, ct);
+        var rows = (await db.WorkbookPermissions.AsNoTracking().Where(r => r.WorkbookId == book.Id).ToListAsync(ct))
+            .Select(r => new AccessRow(r.PrincipalType, r.PrincipalId, r.Level)).ToList();
         var workspace = await db.Workspaces.AsNoTracking().Where(w => w.Id == book.WorkspaceId).Select(w => w.Name).FirstAsync(ct);
-        var entries = rows
-            .Select(r =>
-            {
-                if (r.PrincipalType == Principals.Workspace) return new PermissionEntryDto(r.PrincipalType, r.PrincipalId, r.Level, workspace, null);
-                var user = users.GetValueOrDefault(r.PrincipalId);
-                return user is null || user.DeletedAt is not null
-                    ? new PermissionEntryDto(r.PrincipalType, r.PrincipalId, r.Level, "Deleted user", null)
-                    : new PermissionEntryDto(r.PrincipalType, r.PrincipalId, r.Level, user.DisplayName, user.Email);
-            })
-            .OrderBy(e => e.PrincipalType == Principals.Workspace ? 0 : 1)
-            .ThenBy(e => e.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-            .ThenBy(e => e.PrincipalId)
-            .ToList();
-        return new PermissionsDto(book.Restricted, yourLevel, entries);
+        return new PermissionsDto(book.Restricted, yourLevel, await SharingService.EntriesAsync(db, rows, workspace, groups, ct));
     }
 
     /// <summary>
-    /// Replaces the list (full access), as a page's: people of the workspace and the workspace
+    /// Replaces the list (full access), as a page's: people of the workspace, its groups (Phase 11,
+    /// kept as they were unless the request says <c>principals: ["group"]</c>) and the workspace
     /// itself at the five levels, and whether the workbook is restricted to its list. The version
     /// rises and the change is audited. Every open file session sees it on its next request.
     /// </summary>
@@ -369,16 +358,9 @@ public sealed class WorkbookService(
     {
         if (level != Levels.Full) return Failure.Denied("Sharing this workbook needs full access");
         var entries = request.Entries ?? [];
-        if (entries.Count > MaxEntries) return Failure.Invalid($"A workbook has at most {MaxEntries} entries");
-        foreach (var entry in entries)
-        {
-            if (entry is null) return Failure.Invalid("An entry is empty");
-            if (entry.PrincipalType is not (Principals.User or Principals.Workspace)) return Failure.Invalid("principalType is user or workspace");
-            if (!Levels.All.Contains(entry.Level)) return Failure.Invalid("level is full, edit, comment, view or none");
-            if (entry.PrincipalType == Principals.Workspace && entry.PrincipalId != member.WorkspaceId)
-                return Failure.Invalid("A workspace entry names this workspace");
-        }
-        if (entries.GroupBy(e => (e.PrincipalType, e.PrincipalId)).Any(g => g.Count() > 1)) return Failure.Invalid("Each principal appears once");
+        if (SharingService.CheckPrincipals(request.Principals) is { } principals) return principals;
+        var groups = SharingService.KnowsGroups(member, request.Principals);
+        if (SharingService.CheckEntries(member, entries, groups, MaxEntries, "workbook") is { } invalid) return invalid;
         var named = entries.Where(e => e.PrincipalType == Principals.User).Select(e => e.PrincipalId).Distinct().ToList();
         var members = await db.WorkspaceMembers.AsNoTracking().Where(m => named.Contains(m.UserId)).Select(m => m.UserId).ToListAsync(ct);
         var stranger = named.Except(members).FirstOrDefault();
@@ -393,14 +375,21 @@ public sealed class WorkbookService(
         if (current.TrashedAt is not null) return Failure.Conflict(Codes.Conflict, "The workbook is in the trash");
         if (ifVersion is { } expected && expected != current.Version)
             return Failure.Conflict(Codes.VersionConflict, $"The workbook is at version {current.Version}");
-        var before = await db.WorkbookPermissions.AsNoTracking().Where(r => r.WorkbookId == book.Id).ToListAsync(ct);
+        // Under the lock: a group deleted meanwhile is not named.
+        if (await SharingService.CheckGroupsAsync(db, entries, ct) is { } unknown) return unknown;
+        var before = (await db.WorkbookPermissions.AsNoTracking().Where(r => r.WorkbookId == book.Id).ToListAsync(ct))
+            .Select(r => new AccessRow(r.PrincipalType, r.PrincipalId, r.Level)).ToList();
+        var after = SharingService.After(entries, before, groups);
+        if (after.Count > MaxEntries) return Failure.Invalid($"A workbook has at most {MaxEntries} entries");
         var same = current.Restricted == request.Restricted
-            && before.Count == entries.Count
-            && entries.All(e => before.Any(b => b.PrincipalType == e.PrincipalType && b.PrincipalId == e.PrincipalId && b.Level == e.Level));
+            && before.Count == after.Count
+            && after.All(e => before.Any(b => b.PrincipalType == e.PrincipalType && b.PrincipalId == e.PrincipalId && b.Level == e.Level));
         if (!same)
         {
             var wasRestricted = current.Restricted;
-            await db.WorkbookPermissions.Where(r => r.WorkbookId == book.Id).ExecuteDeleteAsync(ct);
+            // Group rows the request does not speak for stay as they were.
+            if (groups) await db.WorkbookPermissions.Where(r => r.WorkbookId == book.Id).ExecuteDeleteAsync(ct);
+            else await db.WorkbookPermissions.Where(r => r.WorkbookId == book.Id && r.PrincipalType != Principals.Group).ExecuteDeleteAsync(ct);
             var now = clock.GetUtcNow();
             foreach (var entry in entries)
                 db.WorkbookPermissions.Add(new WorkbookPermission
@@ -419,13 +408,13 @@ public sealed class WorkbookService(
             audit.Add(actor, "workbook.permissions", member.WorkspaceId, "workbook", book.Id, new
             {
                 restricted = request.Restricted,
-                entries = entries.Select(e => new { e.PrincipalType, e.PrincipalId, e.Level }),
+                entries = after.Select(e => new { e.PrincipalType, e.PrincipalId, e.Level }),
                 before = new { restricted = wasRestricted, entries = before.Select(b => new { b.PrincipalType, b.PrincipalId, b.Level }) },
             });
             await db.SaveChangesAsync(ct);
         }
         await tx.CommitAsync(ct);
-        return await PermissionsAsync(current, await levels.LevelAsync(member, current, ct), ct);
+        return await PermissionsAsync(current, await levels.LevelAsync(member, current, ct), groups, ct);
     }
 
     // Pictures ----------------------------------------------------------------------------------------
@@ -733,11 +722,11 @@ public sealed class WorkbookService(
         return (book, version);
     }
 
-    /// <summary>The rows that give everyone what <paramref name="rows"/> gives them, and the maker at least edit.</summary>
-    private static List<AccessRow> WithMaker(Member member, bool restricted, IEnumerable<AccessRow> rows)
+    /// <summary>The rows that give everyone what <paramref name="rows"/> gives them, and the maker (in these groups) at least edit.</summary>
+    private static List<AccessRow> WithMaker(Member member, IReadOnlySet<Guid> groups, bool restricted, IEnumerable<AccessRow> rows)
     {
         var list = rows.ToList();
-        if (!Levels.AtLeast(WorkbookAccess.Decide(member, restricted, list), Levels.Edit))
+        if (!Levels.AtLeast(WorkbookAccess.Decide(member, groups, restricted, list), Levels.Edit))
         {
             list.RemoveAll(r => r.PrincipalType == Principals.User && r.PrincipalId == member.UserId);
             list.Add(new AccessRow(Principals.User, member.UserId, Levels.Edit));
@@ -762,9 +751,10 @@ public sealed class WorkbookService(
         }
         var rows = (await db.WorkbookPermissions.AsNoTracking().Where(r => r.WorkbookId == original.Id).ToListAsync(ct))
             .Select(r => new AccessRow(r.PrincipalType, r.PrincipalId, r.Level));
-        var list = WithMaker(member, original.Restricted, rows);
+        var groups = await access.GroupsAsync(member, ct);
+        var list = WithMaker(member, groups, original.Restricted, rows);
         var (book, version) = await CreateWithVersionAsync(member, actor, stem + suffix, bytes, original.Restricted, list, "workbook.copy", new { from = original.Id, size = bytes.Length }, ct);
-        return (book, version, WorkbookAccess.Decide(member, book.Restricted, list));
+        return (book, version, WorkbookAccess.Decide(member, groups, book.Restricted, list));
     }
 
     // Export ------------------------------------------------------------------------------------------
@@ -795,10 +785,11 @@ public sealed class WorkbookService(
         if (bytes.Length > settings.MaxSaveBytes)
             return new Failure(Codes.LimitSize, 413, "The workbook would be larger than a version may be") { Extensions = new Dictionary<string, object?> { ["limit"] = settings.MaxSaveBytes } };
         var (restricted, rows) = await DatabaseAccessAsync(member, database, ct);
-        var list = WithMaker(member, restricted, rows);
+        var groups = await access.GroupsAsync(member, ct);
+        var list = WithMaker(member, groups, restricted, rows);
         var (book, _) = await CreateWithVersionAsync(member, actor, name, bytes, restricted, list, "workbook.export",
             new { databaseId = database.Id, viewId = request.ViewId, rows = export.Rows.Count }, ct);
-        return await DtoAsync(book, WorkbookAccess.Decide(member, restricted, list), ct);
+        return await DtoAsync(book, WorkbookAccess.Decide(member, groups, restricted, list), ct);
     }
 
     /// <summary>What the database's place in the tree gives everyone, as a workbook's list says it.</summary>

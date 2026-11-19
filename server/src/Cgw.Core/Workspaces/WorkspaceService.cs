@@ -99,6 +99,7 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
         if (caller.IsGuest)
         {
             var levels = await access.AllLevelsAsync(caller);
+            // People by name only: a group's row names no one (and no group) to a guest (Phase 11).
             var named = await db.PagePermissions.AsNoTracking().Where(r => r.PrincipalType == "user")
                 .Select(r => new { r.PageId, r.PrincipalId }).ToListAsync(ct);
             shown = named.Where(r => levels.GetValueOrDefault(r.PageId, Levels.None) != Levels.None).Select(r => r.PrincipalId).ToHashSet();
@@ -148,10 +149,12 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
             return Failure.Conflict(Codes.Conflict, "A workspace keeps at least one owner");
         var before = row.Role;
         row.Role = role;
+        // Phase 11: a guest is in no group.
+        var left = role == Roles.Guest ? await GroupService.LeaveAllAsync(db, userId, admin.UserId, clock.GetUtcNow(), ct) : [];
         changes.Add("member", userId, "upsert", 1, admin.UserId);
         // A role change can widen or narrow what the member sees: their client refetches the tree.
         changes.Add("access", admin.WorkspaceId, Roles.IsAdmin(role) || before == Roles.Guest ? "grant" : "revoke", 1, admin.UserId, userId);
-        audit.Add(actor, "member.role", admin.WorkspaceId, "user", userId, new { from = before, to = role });
+        audit.Add(actor, "member.role", admin.WorkspaceId, "user", userId, left.Count > 0 ? (object)new { from = before, to = role, groups = left } : new { from = before, to = role });
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);
@@ -175,6 +178,8 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
         // Nothing waits for them if they come back: no rows of theirs, no invitation still open.
         await db.PagePermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
         await db.WorkbookPermissions.Where(r => r.PrincipalType == "user" && r.PrincipalId == userId).ExecuteDeleteAsync(ct);
+        // Phase 11: nor any group of the workspace.
+        var left = await GroupService.LeaveAllAsync(db, userId, caller.UserId, clock.GetUtcNow(), ct);
         // Their file sessions in Sheet end (each request checks membership anyway).
         await db.FileSessions.Where(s => s.UserId == userId && s.EndedAt == null).ExecuteUpdateAsync(s => s.SetProperty(x => x.EndedAt, clock.GetUtcNow()), ct);
         // Their inbox here (never shown to a non-member anyway); their comments stay, as their edits do.
@@ -186,7 +191,7 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
                 .ExecuteUpdateAsync(s => s.SetProperty(i => i.RevokedAt, now), ct);
         changes.Add("member", userId, "delete", 1, caller.UserId);
         changes.Add("access", caller.WorkspaceId, "revoke", 1, caller.UserId, userId);
-        audit.Add(actor, "member.remove", caller.WorkspaceId, "user", userId);
+        audit.Add(actor, "member.remove", caller.WorkspaceId, "user", userId, left.Count > 0 ? new { groups = left } : null);
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);

@@ -385,13 +385,23 @@ public sealed class RealtimeTests(ServerFixture server)
         var member = await Kit.Join(server, ws, "member");
         var parent = await NewPage(ws, "Restricted parent");
         await Kit.Share(ws, parent, true, ("user", member.Id, "edit"));
+        // Phase 11: the member is in 20 groups; a group's row decides only for its people.
+        var groups = new List<Guid>();
+        for (var i = 0; i < 20; i++) groups.Add(await GroupKit.New(ws, $"Group {i}", member.Id));
+        var others = await GroupKit.New(ws, "Not the member's", admin.Id);
+        var theirs = await NewPage(ws, "A group's");
+        await GroupKit.Share(ws, theirs, false, ("group", groups[7], "edit"));
+        var notTheirs = await NewPage(ws, "Another group's");
+        await GroupKit.Share(ws, notTheirs, false, ("group", others, "view"));
         var cases = new (string Name, HttpClient Client, Guid Page, int Batches)[]
         {
             ("the owner", ws.Client, await NewPage(ws, "Owner's"), 1),
             ("an admin", admin.Client, await NewPage(ws, "Admin's"), 1),
-            ("a member no page decides for", member.Client, await NewPage(ws, "Member's"), 1),
+            ("a member in 20 groups no page decides for", member.Client, await NewPage(ws, "Member's"), 1),
+            ("a member a group they are not in has a row above", member.Client, (await ws.NewPage("Under another group's", notTheirs)).GetProperty("id").GetGuid(), 1),
             ("the private section's owner", ws.Client, await NewPage(ws, "Private", ws.Personal), 1),
             ("a member a page's row decides for", member.Client, (await ws.NewPage("Child", parent)).GetProperty("id").GetGuid(), 2),
+            ("a member one of their groups' rows decides for", member.Client, (await ws.NewPage("Under a group's", theirs)).GetProperty("id").GetGuid(), 2),
         };
         using var commands = SqlCommands.Watch();
         var failures = new List<string>();
@@ -743,6 +753,40 @@ public sealed class RealtimeTests(ServerFixture server)
         HubClient.Drain(theirs.Changes);
         await ws.NewPage("After they left");
         await HubClient.None(theirs.Changes, Quiet);
+    }
+
+    /// <summary>Phase 11: out of the group, or the group deleted, and its page goes at once, as for a revoke.</summary>
+    [Fact]
+    public async Task Leaving_a_group_or_its_deletion_takes_its_page_away_at_once()
+    {
+        var ws = await Ws.Create(server);
+        var member = await Kit.Join(server, ws, "member");
+        var sales = await GroupKit.New(ws, "Sales", member.Id);
+        var leads = await GroupKit.New(ws, "Leads", member.Id);
+        var forecast = await NewPage(ws, "Forecast");
+        await GroupKit.Share(ws, forecast, true, ("group", sales, "edit"));
+        var pipeline = await NewPage(ws, "Pipeline");
+        await GroupKit.Share(ws, pipeline, true, ("group", leads, "view"));
+        await using var theirs = await HubClient.Connect(server.Api, member.Client);
+        await theirs.Ok("JoinWorkspaces", new[] { ws.Id });
+        await theirs.Ok("JoinPage", forecast.ToString());
+        await theirs.Ok("JoinPage", pipeline.ToString());
+
+        // The re-check is every 60 seconds; the group's change in the feed makes it now.
+        var clock = Stopwatch.StartNew();
+        Assert.Equal(HttpStatusCode.OK, (await GroupKit.SetPeople(ws.Client, ws.Id, sales, [])).StatusCode);
+        var revoked = await HubClient.Next(theirs.Revoked);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(20), $"Revoked after {clock.Elapsed}");
+        Assert.Equal(forecast, revoked.GetProperty("pageId").GetGuid());
+        Assert.Equal("access.denied", revoked.GetProperty("reason").GetString());
+        Assert.Equal((404, "not.found"), Short(await theirs.Refused("JoinPage", forecast.ToString())));
+
+        clock.Restart();
+        Assert.Equal(HttpStatusCode.NoContent, (await ws.Client.DeleteAsync($"{GroupKit.Url(ws.Id)}/{leads}")).StatusCode);
+        revoked = await HubClient.Next(theirs.Revoked);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(20), $"Revoked after {clock.Elapsed}");
+        Assert.Equal(pipeline, revoked.GetProperty("pageId").GetGuid());
+        Assert.Equal((404, "not.found"), Short(await theirs.Refused("JoinPage", pipeline.ToString())));
     }
 
     [Fact]

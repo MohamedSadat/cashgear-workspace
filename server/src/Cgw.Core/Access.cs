@@ -1,4 +1,5 @@
 using Cgw.Core.Data;
+using Cgw.Core.Sharing;
 using Cgw.Core.Sync;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,12 +18,18 @@ public sealed record Member(Guid WorkspaceId, Guid UserId, string Role)
 /// 2. owners and admins have full on everything in shared sections;
 /// 3. a private section is its owner's only;
 /// 4. otherwise the nearest page, walking up from the page, that is restricted or has a row for
-///    the caller decides; failing that, the role's default (member: edit, guest: none);
-/// 5. so a guest sees only what was shared with them by name.
-/// A row for the whole workspace counts for members (not guests).
+///    the caller decides: a row for the caller is their own, one of a group they are in (Phase 11),
+///    or the whole workspace's (not for a guest). There their own row gives their level; else the
+///    highest of their groups' rows; else the workspace's; else (restricted) none. Failing that, the
+///    role's default (member: edit, guest: none);
+/// 5. so a guest sees only what was shared with them by name (guests are never in a group).
+/// A row of a database takes its database's level. Every copy below decides through
+/// <see cref="Speaks"/>; the caller's groups are read with their rows, or once a call for many people.
 /// </summary>
 public sealed class Access(CgwDb db)
 {
+    private static readonly IReadOnlySet<Guid> NoGroups = new HashSet<Guid>();
+
     public async Task<Member?> MemberAsync(Guid workspaceId, Guid userId)
     {
         var row = await db.WorkspaceMembers.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
@@ -31,6 +38,55 @@ public sealed class Access(CgwDb db)
             .FirstOrDefaultAsync();
         return row is null ? null : new Member(row.WorkspaceId, row.UserId, row.Role);
     }
+
+    /// <summary>The groups this person is in, in their workspace; none for a guest (guests are never in a group).</summary>
+    public async Task<HashSet<Guid>> GroupsAsync(Member member, CancellationToken ct = default)
+    {
+        if (member.IsGuest) return [];
+        var groups = await db.WorkspaceGroupMembers.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(g => g.WorkspaceId == member.WorkspaceId && g.UserId == member.UserId)
+            .Select(g => g.GroupId).ToListAsync(ct);
+        return [.. groups];
+    }
+
+    /// <summary>Each of these people's groups (none for a guest), in a query a thousand people.</summary>
+    private async Task<Dictionary<Guid, HashSet<Guid>>> GroupsOfAsync(IReadOnlyList<Member> members, CancellationToken ct)
+    {
+        var result = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var member in members) result.TryAdd(member.UserId, []);
+        foreach (var workspace in members.Where(m => !m.IsGuest).GroupBy(m => m.WorkspaceId))
+        {
+            var id = workspace.Key;
+            foreach (var chunk in Chunked.Of(workspace.Select(m => m.UserId).Distinct()))
+                foreach (var row in await db.WorkspaceGroupMembers.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+                             .Where(g => g.WorkspaceId == id && chunk.Contains(g.UserId))
+                             .Select(g => new { g.UserId, g.GroupId }).ToListAsync(ct))
+                    result[row.UserId].Add(row.GroupId);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The page rows that may speak for one person: their own, the workspace's and (not for a
+    /// guest) those of the groups they are in, the groups read in the same query.
+    /// </summary>
+    private IQueryable<PagePermission> RowsFor(Member member)
+    {
+        var user = member.UserId;
+        var workspace = member.WorkspaceId;
+        var grouped = !member.IsGuest;
+        return db.PagePermissions.AsNoTracking().Where(r =>
+            (r.PrincipalType == Principals.User && r.PrincipalId == user)
+            || r.PrincipalType == Principals.Workspace
+            || (grouped && r.PrincipalType == Principals.Group
+                && db.WorkspaceGroupMembers.Any(g => g.GroupId == r.PrincipalId && g.UserId == user && g.WorkspaceId == workspace)));
+    }
+
+    /// <summary>The groups of rows read by <see cref="RowsFor"/>: each is one the person is in.</summary>
+    private static HashSet<Guid> GroupsIn(IEnumerable<PagePermission> rows) =>
+        rows.Where(r => r.PrincipalType == Principals.Group).Select(r => r.PrincipalId).ToHashSet();
+
+    private static AccessRow Row(PagePermission row) => new(row.PrincipalType, row.PrincipalId, row.Level);
 
     /// <summary>The caller's level on one page; <c>none</c> when it is not visible.</summary>
     public async Task<string> PageLevelAsync(Member member, Guid pageId)
@@ -68,13 +124,12 @@ public sealed class Access(CgwDb db)
             .Join(db.Pages, a => a.AncestorPageId, p => p.Id, (a, p) => new { p.Id, p.Restricted, a.Depth })
             .OrderBy(x => x.Depth).ToListAsync();
         var ids = chain.Select(c => c.Id).ToList();
-        var rows = await db.PagePermissions.AsNoTracking()
-            .Where(r => ids.Contains(r.PageId)
-                && ((r.PrincipalType == "user" && r.PrincipalId == member.UserId) || r.PrincipalType == "workspace"))
-            .ToListAsync();
+        var rows = await RowsFor(member).Where(r => ids.Contains(r.PageId)).ToListAsync();
+        var groups = GroupsIn(rows);
+        var byPage = rows.ToLookup(r => r.PageId, Row);
         foreach (var link in chain)
         {
-            var decided = Decide(member, link.Restricted, rows.Where(r => r.PageId == link.Id));
+            var decided = Decide(member, groups, link.Restricted, byPage[link.Id]);
             if (decided is not null) return decided;
         }
         return Default(member);
@@ -126,7 +181,7 @@ public sealed class Access(CgwDb db)
         return users.ToDictionary(u => u, u => levels.GetValueOrDefault((pageId, u), Levels.None));
     }
 
-    /// <summary>One person's level on each of these pages, in four queries: the feed's pages.</summary>
+    /// <summary>One person's level on each of these pages, in five queries: the feed's pages.</summary>
     public async Task<Dictionary<Guid, string>> LevelsAsync(Member member, IReadOnlyCollection<Guid> pageIds, CancellationToken ct = default) =>
         (await LevelsAsync([member], pageIds, ct)).ToDictionary(l => l.Key.Page, l => l.Value);
 
@@ -165,14 +220,19 @@ public sealed class Access(CgwDb db)
             var known = pages.Select(p => p.Id).ToHashSet();
             await ReadAsync(rowPages.Select(r => r.Database).Where(id => !known.Contains(id)).Distinct().ToList());
         }
+        // Everyone's groups at once, then the rows of the chains for any of them.
+        var groupsOf = pages.Count > 0 ? await GroupsOfAsync(members, ct) : [];
         var people = members.Select(m => m.UserId).ToList();
+        var groupIds = groupsOf.Values.SelectMany(g => g).Distinct().ToList();
         var rows = new List<PagePermission>();
         foreach (var chunk in Chunked.Of(chains.Select(c => c.Ancestor).Distinct()))
             rows.AddRange(await db.PagePermissions.AsNoTracking()
                 .Where(r => chunk.Contains(r.PageId)
-                    && ((r.PrincipalType == "user" && people.Contains(r.PrincipalId)) || r.PrincipalType == "workspace"))
+                    && ((r.PrincipalType == Principals.User && people.Contains(r.PrincipalId))
+                        || r.PrincipalType == Principals.Workspace
+                        || (r.PrincipalType == Principals.Group && groupIds.Contains(r.PrincipalId))))
                 .ToListAsync(ct));
-        var byPage = rows.ToLookup(r => r.PageId);
+        var byPage = rows.ToLookup(r => r.PageId, Row);
         var chainOf = chains.ToLookup(c => c.Page);
         foreach (var page in pages)
         {
@@ -185,8 +245,9 @@ public sealed class Access(CgwDb db)
                 else
                 {
                     level = null;
+                    IReadOnlySet<Guid> groups = groupsOf.GetValueOrDefault(member.UserId) ?? NoGroups;
                     foreach (var link in chain)
-                        if ((level = Decide(member, link.Restricted, byPage[link.Ancestor])) is not null)
+                        if ((level = Decide(member, groups, link.Restricted, byPage[link.Ancestor])) is not null)
                             break;
                 }
                 result[(page.Id, member.UserId)] = level ?? Default(member);
@@ -207,19 +268,34 @@ public sealed class Access(CgwDb db)
 
     private static string Default(Member member) => member.IsGuest ? Levels.None : Levels.Edit;
 
-    /// <summary>The level one page gives, or null when it does not decide.</summary>
-    private static string? Decide(Member member, bool restricted, IEnumerable<PagePermission> rows)
+    /// <summary>
+    /// What one page's or one workbook's rows give someone, by the rule's order: their own row;
+    /// else the highest of the rows of groups they are in; else the workspace's (not for a guest);
+    /// null when no row speaks for them. Every copy of the rule decides through this.
+    /// </summary>
+    public static string? Speaks(Member member, IReadOnlySet<Guid> groups, IEnumerable<AccessRow> rows)
     {
-        string? user = null, workspace = null;
+        string? group = null, workspace = null;
         foreach (var row in rows)
         {
-            if (row.PrincipalType == "user" && row.PrincipalId == member.UserId) user = row.Level;
-            else if (row.PrincipalType == "workspace" && !member.IsGuest) workspace = row.Level;
+            switch (row.PrincipalType)
+            {
+                case Principals.User when row.PrincipalId == member.UserId:
+                    return row.Level;
+                case Principals.Group when !member.IsGuest && groups.Contains(row.PrincipalId):
+                    if (group is null || Levels.Rank(row.Level) > Levels.Rank(group)) group = row.Level;
+                    break;
+                case Principals.Workspace when !member.IsGuest:
+                    workspace = row.Level;
+                    break;
+            }
         }
-        if (user is not null) return user;
-        if (workspace is not null) return workspace;
-        return restricted ? Levels.None : null;
+        return group ?? workspace;
     }
+
+    /// <summary>The level one page gives, or null when it does not decide.</summary>
+    private static string? Decide(Member member, IReadOnlySet<Guid> groups, bool restricted, IEnumerable<AccessRow> rows) =>
+        Speaks(member, groups, rows) ?? (restricted ? Levels.None : null);
 
     /// <summary>
     /// Every page and database of the workspace with the caller's level: for the change feed, the
@@ -232,10 +308,9 @@ public sealed class Access(CgwDb db)
         var pages = await db.Pages.AsNoTracking().Where(p => p.Kind != PageKinds.Row && p.DeletedAt == null)
             .Select(p => new { p.Id, p.ParentPageId, p.SectionId, p.Restricted }).ToListAsync();
         var sections = await db.Sections.AsNoTracking().ToDictionaryAsync(s => s.Id, s => (s.Visibility, s.OwnerUserId));
-        var rows = (await db.PagePermissions.AsNoTracking()
-                .Where(r => (r.PrincipalType == "user" && r.PrincipalId == member.UserId) || r.PrincipalType == "workspace")
-                .ToListAsync())
-            .ToLookup(r => r.PageId);
+        var all = await RowsFor(member).ToListAsync();
+        var groups = GroupsIn(all);
+        var rows = all.ToLookup(r => r.PageId, Row);
         var byId = pages.ToDictionary(p => p.Id);
         var levels = new Dictionary<Guid, string>(pages.Count);
 
@@ -257,7 +332,7 @@ public sealed class Access(CgwDb db)
                 if (!sections.TryGetValue(page.SectionId, out var section)) found = Levels.None;
                 else if (section.Visibility == "private") found = section.OwnerUserId == member.UserId ? Levels.Full : Levels.None;
                 else if (member.IsAdmin) found = Levels.Full;
-                else found = Decide(member, page.Restricted, rows[id]);
+                else found = Decide(member, groups, page.Restricted, rows[id]);
                 if (found is null)
                     cursor = page.ParentPageId is { } parent && byId.ContainsKey(parent) && path.Count < 100_000 ? parent : null;
             }
@@ -290,10 +365,8 @@ public sealed class Access(CgwDb db)
                 .Select(p => new { p.ParentPageId, p.Restricted, p.DeletedAt }).FirstOrDefaultAsync();
             if (node is null) break;
             if (node.DeletedAt is null) return await PageLevelAsync(member, id);
-            var rows = await db.PagePermissions.AsNoTracking()
-                .Where(r => r.PageId == id && ((r.PrincipalType == "user" && r.PrincipalId == member.UserId) || r.PrincipalType == "workspace"))
-                .ToListAsync();
-            if (Decide(member, node.Restricted, rows) is { } decided) return decided;
+            var rows = await RowsFor(member).Where(r => r.PageId == id).ToListAsync();
+            if (Decide(member, GroupsIn(rows), node.Restricted, rows.Select(Row)) is { } decided) return decided;
             cursor = node.ParentPageId;
         }
         return Default(member);
@@ -319,8 +392,11 @@ public sealed class Access(CgwDb db)
 
     /// <summary>
     /// The rows a restricted page needs to give everyone what the chain from <paramref name="from"/>
-    /// (that page and its ancestors) gives a page under it now: the workspace's level, and each
-    /// person whose own row decides theirs. Nothing (only admins) when there is no chain.
+    /// (that page and its ancestors) gives a page under it now: the workspace's level; each group's
+    /// nearest row (a group's row is copied as a group row, as a person's is as theirs); each person
+    /// whose own row decides theirs; and a row for each other person those copies would not give
+    /// exactly what they have (someone in two groups whose nearer row is the lower, say). Nothing
+    /// (only admins) when there is no chain.
     /// </summary>
     public async Task<List<AccessRow>> EffectiveRowsAsync(Guid workspaceId, Guid? from)
     {
@@ -333,52 +409,79 @@ public sealed class Access(CgwDb db)
         var cut = chain.TakeWhile(c => !c.Restricted).ToList();
         if (cut.Count < chain.Count) cut.Add(chain[cut.Count]);
         var ids = cut.Select(c => c.Id).ToList();
-        var rows = (await db.PagePermissions.AsNoTracking().Where(r => ids.Contains(r.PageId)).ToListAsync()).ToLookup(r => r.PageId);
+        var rows = (await db.PagePermissions.AsNoTracking().Where(r => ids.Contains(r.PageId)).ToListAsync()).ToLookup(r => r.PageId, Row);
 
-        // A member with no row of their own: the first workspace row, else what the chain ends in.
+        // A member with no row of their own or of their groups: the first workspace row, else what the chain ends in.
         var workspace = cut[^1].Restricted ? Levels.None : Levels.Edit;
         foreach (var link in cut)
-            if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == "workspace") is { } row)
+            if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == Principals.Workspace) is { } row)
             {
                 workspace = row.Level;
                 break;
             }
         var result = new List<AccessRow>();
-        if (workspace != Levels.None) result.Add(new AccessRow("workspace", workspaceId, workspace));
+        if (workspace != Levels.None) result.Add(new AccessRow(Principals.Workspace, workspaceId, workspace));
 
-        var people = rows.SelectMany(g => g).Where(r => r.PrincipalType == "user").Select(r => r.PrincipalId).Distinct().ToList();
-        var roles = await db.WorkspaceMembers.AsNoTracking().Where(m => people.Contains(m.UserId)).ToDictionaryAsync(m => m.UserId, m => m.Role);
+        // Each group's nearest row, unless the workspace's row or a restriction decides for all its
+        // people first (no one is decided by a group's row above them).
+        var groupIds = rows.SelectMany(g => g).Where(r => r.PrincipalType == Principals.Group).Select(r => r.PrincipalId).Distinct().Order().ToList();
+        foreach (var group in groupIds)
+            foreach (var link in cut)
+            {
+                if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == Principals.Group && r.PrincipalId == group) is { } row)
+                {
+                    result.Add(row);
+                    break;
+                }
+                if (link.Restricted || rows[link.Id].Any(r => r.PrincipalType == Principals.Workspace)) break;
+            }
+        var shared = result.ToList();
+
+        // Everyone the chain's rows may decide for: people with a row of their own, and the people of
+        // those groups.
+        var groupsOf = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var chunk in Chunked.Of(groupIds))
+            foreach (var m in await db.WorkspaceGroupMembers.AsNoTracking().Where(g => chunk.Contains(g.GroupId)).Select(g => new { g.UserId, g.GroupId }).ToListAsync())
+            {
+                if (!groupsOf.TryGetValue(m.UserId, out var set)) groupsOf[m.UserId] = set = [];
+                set.Add(m.GroupId);
+            }
+        var people = rows.SelectMany(g => g).Where(r => r.PrincipalType == Principals.User).Select(r => r.PrincipalId)
+            .Concat(groupsOf.Keys).Distinct().Order().ToList();
+        var roles = new Dictionary<Guid, string>();
+        foreach (var chunk in Chunked.Of(people))
+            foreach (var m in await db.WorkspaceMembers.AsNoTracking().Where(m => chunk.Contains(m.UserId)).Select(m => new { m.UserId, m.Role }).ToListAsync())
+                roles[m.UserId] = m.Role;
         foreach (var person in people)
         {
             // Someone no longer in the workspace has nothing to keep.
             if (!roles.TryGetValue(person, out var role)) continue;
             var member = new Member(workspaceId, person, role);
+            IReadOnlySet<Guid> groups = member.IsGuest ? NoGroups : groupsOf.GetValueOrDefault(person) ?? NoGroups;
+            string? level = null;
+            var own = false;
             foreach (var link in cut)
             {
-                if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == "user" && r.PrincipalId == person) is { } own)
+                if (rows[link.Id].FirstOrDefault(r => r.PrincipalType == Principals.User && r.PrincipalId == person) is { } mine)
                 {
-                    result.Add(new AccessRow("user", person, own.Level));
+                    level = mine.Level;
+                    own = true;
                     break;
                 }
-                // Decided by the workspace's row or a restriction: the rows above say the same.
-                if (Decide(member, link.Restricted, rows[link.Id]) is not null) break;
+                if ((level = Decide(member, groups, link.Restricted, rows[link.Id])) is not null) break;
             }
+            level ??= Default(member);
+            if (own) result.Add(new AccessRow(Principals.User, person, level));
+            // Decided by their groups' rows or the workspace's: kept by the copies above, unless
+            // those give them something else here.
+            else if (!member.IsAdmin && LevelUnder(member, groups, shared) != level) result.Add(new AccessRow(Principals.User, person, level));
         }
         return result;
     }
 
-    /// <summary>What a restricted page holding <paramref name="rows"/> gives someone.</summary>
-    public static string LevelUnder(Member member, IEnumerable<AccessRow> rows)
-    {
-        if (member.IsAdmin) return Levels.Full;
-        string? workspace = null;
-        foreach (var row in rows)
-        {
-            if (row.PrincipalType == "user" && row.PrincipalId == member.UserId) return row.Level;
-            if (row.PrincipalType == "workspace" && !member.IsGuest) workspace = row.Level;
-        }
-        return workspace ?? Levels.None;
-    }
+    /// <summary>What a restricted page holding <paramref name="rows"/> gives someone in these groups.</summary>
+    public static string LevelUnder(Member member, IReadOnlySet<Guid> groups, IEnumerable<AccessRow> rows) =>
+        member.IsAdmin ? Levels.Full : Speaks(member, groups, rows) ?? Levels.None;
 }
 
 /// <summary>A row of a page's access list: who, and at which level.</summary>

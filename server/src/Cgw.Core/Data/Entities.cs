@@ -346,7 +346,7 @@ public static class Levels
 public sealed class PagePermission : ITenantOwned
 {
     public Guid PageId { get; set; }
-    /// <summary><c>user</c> or <c>workspace</c>.</summary>
+    /// <summary><c>user</c>, <c>workspace</c> or (Phase 11) <c>group</c>.</summary>
     public string PrincipalType { get; set; } = "user";
     public Guid PrincipalId { get; set; }
     public string Level { get; set; } = Levels.View;
@@ -530,11 +530,11 @@ public sealed class WorkbookVersion : ITenantOwned
     public DateTimeOffset SavedAt { get; set; }
 }
 
-/// <summary>A workbook's own access list: people and the whole workspace, at the five levels.</summary>
+/// <summary>A workbook's own access list: people, groups (Phase 11) and the whole workspace, at the five levels.</summary>
 public sealed class WorkbookPermission : ITenantOwned
 {
     public Guid WorkbookId { get; set; }
-    /// <summary><c>user</c> or <c>workspace</c>.</summary>
+    /// <summary><c>user</c>, <c>workspace</c> or (Phase 11) <c>group</c>.</summary>
     public string PrincipalType { get; set; } = "user";
     public Guid PrincipalId { get; set; }
     public string Level { get; set; } = Levels.View;
@@ -960,4 +960,36 @@ public sealed class PluginFrameTicket : ITenantOwned
     public DateTimeOffset ExpiresAt { get; set; }
     public Guid CreatedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// A group of a workspace's people (Phase 11, M11.1): given access to pages and workbooks as a
+/// person is (a <c>group</c> row in <see cref="PagePermission"/> or <see cref="WorkbookPermission"/>).
+/// Owners and admins make and manage groups; members, admins and owners may be in one, never guests.
+/// Deleting a group deletes its row, its people and its access rows (no tombstone).
+/// </summary>
+public sealed class WorkspaceGroup : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>1 to 100 characters, trimmed.</summary>
+    public string Name { get; set; } = "";
+    /// <summary>The name as search normalises it: unique among the workspace's groups.</summary>
+    public string SearchName { get; set; } = "";
+    /// <summary>Rises on every change (its name, its people): the <c>If-Match</c> of a change.</summary>
+    public long Version { get; set; } = 1;
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Guid UpdatedBy { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>One person in a group (Phase 11): a member, admin or owner of the group's workspace.</summary>
+public sealed class WorkspaceGroupMember : ITenantOwned
+{
+    public Guid GroupId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid AddedBy { get; set; }
+    public DateTimeOffset AddedAt { get; set; }
 }

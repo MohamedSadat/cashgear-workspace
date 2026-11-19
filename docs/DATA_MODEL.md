@@ -228,6 +228,8 @@ workspace (a test fails if a table with `WorkspaceId` lacks it).
 | `Workspaces` | `Id`, `Name`, `Icon`, `OwnerUserId`, `ChangeSeq`, `Version`, `StorageQuotaBytes`, `StorageUsedBytes`, `PublishingEnabled`, `DeletedAt` | `ChangeSeq` is the head of the change feed, given out under the row's lock. The quota is recorded and shown, not enforced (Q10). `PublishingEnabled` (Phase 9, on by default, every workspace before it too): off, every live site of the workspace is unpublished at once and none may be published; on again, none comes back |
 | `WorkspaceMembers` | (`WorkspaceId`, `UserId`), `Role` | `owner`, `admin`, `member`, `guest` |
 | `WorkspaceInvites` | `Id`, `WorkspaceId`, `Email`, `Role`, `TokenHash`, `ExpiresAt`, `AcceptedAt` | The token is stored hashed |
+| `WorkspaceGroups` | `Id`, `WorkspaceId`, `Name`, `SearchName`, `Version`, `CreatedBy`, `CreatedAt`, `UpdatedBy`, `UpdatedAt` | Phase 11: a group of the workspace's people, given access as a person is (Permissions). `Name` 1 to 100 characters; `SearchName` the name as search normalises it, binary-collated, unique in the workspace (`IX_WorkspaceGroups_Name`); `Version` rises on every change (its name, its people), the `If-Match` of a change. At most 200 a workspace. Deleting one deletes its row, its people and its rows in `PagePermissions` and `WorkbookPermissions` (no tombstone) |
+| `WorkspaceGroupMembers` | (`GroupId`, `UserId`), `WorkspaceId`, `AddedBy`, `AddedAt` | Members, admins and owners, never guests; at most 5,000 a group. Indexed by (`WorkspaceId`, `UserId`): a person's groups, which every access check reads. Someone made a guest, removed from the workspace or deleting their account leaves every group (the groups' versions rise); the workspace's purge takes them all |
 
 ### Tree
 
@@ -284,7 +286,7 @@ Reading an asset needs read access to a page that references it, or to be its up
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `PagePermissions` | (`PageId`, `PrincipalType`, `PrincipalId`), `Level` | `PrincipalType` is `user`, `workspace` or `link`. `Level` is `full`, `edit`, `comment`, `view` or `none` |
+| `PagePermissions` | (`PageId`, `PrincipalType`, `PrincipalId`), `Level` | `PrincipalType` is `user`, `workspace` or (Phase 11) `group` (`PrincipalId` the group's id); a share link is a `ShareLinks` row, not a principal here. `Level` is `full`, `edit`, `comment`, `view` or `none` |
 | `ShareLinks` | `Id`, `PageId`, `TokenHash`, `Level`, `ExpiresAt`, `RevokedAt`, `CreatedBy` | Off unless a person creates one. `view` only at first |
 
 How access is decided, on the server, for every request:
@@ -293,9 +295,12 @@ How access is decided, on the server, for every request:
 2. Workspace `owner` and `admin` have `full` on everything in shared sections.
 3. A private section is visible to its owner only.
 4. Otherwise the level comes from the nearest page, walking up from the page through its
-   ancestors, that has `Restricted` set or an explicit row for the caller; failing that, the
-   workspace default for the caller's role (`member`: edit, `guest`: none).
-5. A `guest` sees only pages shared with them by name.
+   ancestors, that has `Restricted` set or a row for the caller: their own (`user`), one of a
+   group they are in (`group`, Phase 11), or the workspace's (`workspace`, not for a guest).
+   There: their own row; else the highest of their groups' rows; else the workspace's; else
+   (restricted) `none`. Failing that, the workspace default for the caller's role (`member`:
+   edit, `guest`: none).
+5. A `guest` sees only pages shared with them by name (guests are never in a group).
 
 As built in Phase 2 (`Cgw.Core/Access.cs`, `Cgw.Core/Sharing`): a page in a private section takes
 no access list and no link. Changing a page's list raises its `Version` (`GET` sends it as an
@@ -327,9 +332,34 @@ removed member's rows and waiting invitations go with them; a used invitation wo
 while its person is still a member. The worker refuses a pushed update whose author can no longer
 edit the page when it decides, so a revoke cannot be outrun by a push.
 
-Granularity stops at the page (D8). Field names in `PagePermissions` leave room for groups as a
-`PrincipalType` later. A database's rows take its access: a row has no access list, no share link
-and no `Restricted` of its own (Phase 4).
+Granularity stops at the page (D8). A database's rows take its access: a row has no access list,
+no share link and no `Restricted` of its own (Phase 4).
+
+As built in Phase 11 (`Cgw.Core/Workspaces/GroupService.cs`, `Cgw.Core/Access.cs`): owners and
+admins make, rename and delete a workspace's groups and set their people (the whole list, with
+`If-Match`); members, admins and owners read every group and who is in it; a guest is shown none.
+A group's row is a row for each of its people: every path that decides access reads it
+(`Access`'s every method, which all decide through one function, `Access.Speaks`; the push's own
+SQL in `DocService`, which leaves to the full check any push whose chain holds a row of a group
+the caller is in; `WorkbookAccess`; the hub's re-checks, through the page gate), and
+`AccessOracleTests` holds them all to a reference implementation of the rule over random
+workspaces. The caller's groups are read with their rows (one query) for one person, once a call
+for many. A change of a group's people, or its deletion, writes an `access` change targeted at
+each person who joined or left (`revoke` when the group holds a row anywhere, else `grant`), so
+their tabs fetch their tree again and the hub and the worker check them again; a rename changes no
+one's access. Each is audited (`group.create`, `group.rename`, `group.people` with who was added
+and removed, `group.delete`).
+
+A page's or workbook's list sends group rows only to a client that asks
+(`GET …/permissions?principals=group`), each with the group's name and `peopleCount`; a `PUT`
+replaces the group rows only when its body says `principals: ["group"]`, and otherwise may hold
+no group entry and keeps every stored group row as it was (0.10.0's share dialog knows people and
+the workspace only). Group entries name a live group of the workspace. A guest is never told a
+group: their list (even with full access) leaves group rows out, their save keeps them, and the
+guest's directory names only people. Keeping access on a move (above) copies a group's nearest row on the chain as a
+group row, as a person's is copied as theirs, and adds a row of their own for anyone the copies
+would give something else (someone in two groups whose nearer row is the lower). A database's
+export to a workbook takes the same rows.
 
 ### Databases (Phase 4)
 
@@ -472,7 +502,7 @@ As built (`server/src/Cgw.Core/Workbooks`, migration `Phase5Workbooks`); every t
 | --- | --- | --- |
 | `Workbooks` | `Id`, `WorkspaceId`, `Name`, `SearchName`, `CurrentVersionId`, `Restricted`, `Version`, `CreatedBy`, `CreatedAt`, `UpdatedAt`, `TrashedAt`, `TrashedBy` | A document in its own right, not owned by any page. No version until Sheet's first save. The content's ETag is `"<CurrentVersionId>"`; `Version` is the record's (rename, trash, restore, its list), sent as `ETag` by `GET /workbooks/{id}`. Not in the change feed, not in search |
 | `WorkbookVersions` | `Id`, `WorkbookId`, `BlobKey`, `SizeBytes`, `Sha256`, `SavedBy`, `SavedAt` | The xlsx bytes, at most 100 MB; `Sha256` is lower-case hex over the stored bytes (Sheet's lost-answer rule). The newest 10 are kept |
-| `WorkbookPermissions` | (`WorkbookId`, `PrincipalType`, `PrincipalId`), `Level` | Its own access list, by person or for the whole workspace, at the pages' five levels (decided by `WorkbookAccess`) |
+| `WorkbookPermissions` | (`WorkbookId`, `PrincipalType`, `PrincipalId`), `Level` | Its own access list, by person, by group (Phase 11) or for the whole workspace, at the pages' five levels (decided by `WorkbookAccess`, by the pages' rule with no ancestors) |
 | `WorkbookPreviews` | (`WorkbookId`, `ViewHash`), `VersionId`, `BlobKey`, `Width`, `Height`, `SizeBytes`, `MadeBy`, `MadeAt` | A PNG of one view (a range or a chart, in the file's own colours), sent by someone who may edit the workbook: at most 2 MB and 4,096 px a side, the newest one per view, at most 100 a workbook. Its own blob, not an asset, so the unreferenced-asset clean-up never takes it |
 | `WorkbookTickets` | `Id`, `WorkbookId`, `UserId`, `Access`, `Target`, `TokenHash`, `ExpiresAt`, `UsedAt` | A launch ticket: 256 random bits kept only as SHA-256, 120 seconds, one use. `Target` (Phase 9) is `web` or `desktop`: a desktop ticket is redeemed only from `Sheet__DesktopOrigins`, a web one only from `Sheet__Origins`; one offered at the other kind is used up and refused |
 | `FileSessions` | `Id`, `WorkbookId`, `UserId`, `Access`, `TokenHash`, `Language`, `IdleExpiresAt`, `MaxExpiresAt`, `EndedAt`, `Renews` | Sheet's file session: the token kept only as SHA-256, 30 minutes idle, 10 hours at most; a copy moves it to the copy |
@@ -673,8 +703,8 @@ workspace's records as creates. A workspace made while signed in is uploaded at 
   30 days (the worker's `purgeWorkspaces` job). Its audit rows stay: the log is append-only.
 - Deleting a page for good (from the trash) leaves a tombstone row; the worker purges its
   document, versions, derived rows and blobs (`purgePages`, `Pages.PurgedAt`).
-- Deleting an account removes the user's memberships, their private sections and their personal
-  data, revokes every device and token, and keeps their edits in shared pages under "Deleted
+- Deleting an account removes the user's memberships (from Phase 11 their place in every group
+  too), their private sections and their personal data, revokes every device and token, and keeps their edits in shared pages under "Deleted
   user". It is refused while the user is the only owner of a workspace others are in: they hand
   it over first. Workspaces no one else is in are deleted with the account.
 - As built in Phase 2, the server's export (`POST /workspaces/{id}/exports`, owners and admins)
