@@ -935,6 +935,32 @@ page at `maxRecords` and a cursor past it, a search's matches all containing it.
 own measure, at the ERP): the first page of a 100,000-record connector within 500 ms, the memory a
 query takes not growing with the table.
 
+As built on Workspace's side (Phase 12, M12.5; Track E10 itself is the ERP's, still to come): the
+mock ERP (`tests/mocks/erp/rules.mjs`) searches, matches and orders by 0.10.0's rules as
+`ConnectorQuery.cs` has them, read in the ERP's source and nothing run there: .NET's `Trim()` set of
+white space; `OrdinalIgnoreCase` as each UTF-16 unit's simple upper case, then ordinal; decimals by
+value; empty first; `equals` empty as null, numbers by value, text, lookups and dates exactly; a
+search over 200 characters after trimming is 400; `equals` on a decimal takes a number, a decimal
+string or `""`, on a date or date-time any string. Its keyset cursor holds the last record's sort
+values and its own-order key (Vendors' record id, Customers' account, Items on hand's tuple) and
+counts the records read: the page that reaches `maxRecords` is cut there and answers
+`nextCursor: null`, and a cursor at or past it is 400 `request.invalid`. `--large` (or
+`/__mock/reset {large: true}`) replaces Kit's records of the three connectors with 100,000 each by
+one rule, `tests/mocks/erp/large.mjs`, which the suite's README writes out for the ERP's own seed
+(Dot keeps its records; a vendor with no debit limit has `0.00`, the ERP's column not being
+nullable). The suite's `scale.test.ts` (20 cases; `rules.ts`, its own reading of the rules, written
+apart from the mock's) holds the rule's records and values on a first page of 1,000; every match
+counted and at most `maxRecords` read (10 pages of 1,000, the tenth with no cursor; 999 a page, 11
+pages, the last of 10); every sortable field both ways, and three at once, against its reference
+order; searches ignoring case (`qorvath` in three cases, trimmed, a key prefix, a group code, a
+phone and a search name never sent, and one with no match), each Arabic letter form matching only
+itself; `equals` on every filterable field with its commonest value, `null` and `""`; and on the
+mock only, a cursor past `maxRecords` refused and a record written between two pages
+(`/__mock/add-record`) repeating nothing. Against UnifiedAPI it needs `ERP_TEST_KEY_SCALE` (a user
+of a company holding only the large seed, seeing every field with no record rule) and
+`ERP_TEST_KEY_SCALE_ADMIN` (who links it), else it skips. The block says "the first N of M" whenever
+`total` is above the schema's `maxRecords`, for entities and reports alike.
+
 ### Reports (Phase 12, Track E11)
 
 Written in full on 2026-11-19 (Phase 12, M12.6), before either side ships it: three read-only
@@ -1120,6 +1146,46 @@ report is partial or stops at `maxRecords`, and refreshes only on Refresh or a p
 Nothing of a report's answer is written anywhere: not the document, the store, search, history or
 the server.
 
+As built on Workspace's side (Phase 12, M12.6; Track E11 itself is the ERP's, still to come).
+`@cgw/erp`'s contract has every attribute above with its guards (each parameter's shape and default,
+unique names; a report with no editable field and `maxCommitRecords` 0; `total` only on a decimal or
+integer field; totals only of summed fields, each valid for its field; labels only of the schema's
+fields; `parseConnectors` refuses a kind it did not ask for), and the client asks
+`Connectors?kinds=entity,report` (`kinds: null` asks without, as an older build). Readings the
+contract leaves open, which the mock follows and the suite's README writes out: `kinds` is a
+comma-separated list, absent or empty `entity`, names the ERP does not know left out, reports after
+the entities; `null` for a parameter is as absent, `""` for a lookup `null`; a choice value not
+among its options is `type`; `dateTo` before `dateFrom` is one `range` on `parameters.dateTo`, not
+checked when either date is already wrong; `totals` holds each summed field among the answer's
+fields (the request's `fields`, else every field the user may see) and is always on a report's
+answer; AP aging sends all five bands' labels whatever `fields` asks; a report's cursor is bound to
+its parameters as resolved, so another day's is refused; ties end on a final key (AP aging's name by
+ordinal, then the account; the trial balance's account), so the keyset is total; `idField` is null.
+The mock serves the three reports from seeded ledgers (`tests/mocks/erp/reports.mjs`: Kit's `V-1001`
+to `V-1007` and `ITM-0001` to `ITM-0003` written out), reads today and the month's first day in the
+company's time zone (Africa/Cairo) at its clock, writes quantities at scale 3, unit cost at 4 (cost
+over quantity, half away from zero, `null` at 0) and the other amounts and `share` (a percentage,
+`null` at a total of 0) at 2, and gives its users the pages' roles: alice and erin `accountmgr` with
+cost, bob `warehouse` without, gina `payable`, faris `warehousemgr` with cost, carol and dan none
+(`/__mock/report-limits {stockPlaces}` lowers stock balance's cap to make it partial). The suite's
+`reports.test.ts` (41 cases) holds listing by `kinds` and each role's listing; each schema's fields
+and parameters as the tables give them; a query without `parameters` or with `[]` refused and `{}`
+answered; defaults (`{}` and every parameter `null` the same answer); every wrong parameter named
+and none run; totals on every page, of the matches only and of the fields asked; paging, sorting,
+filtering and another day's cursor; each report's roles, and `Commit` refused with `CommitStatus`
+`unknown`; AP aging's labels by `ageBy`; stock balance's cost rule and `includeZero`; the trial
+balance's `range`; exact values on the mock only, since comparing with the ERP's own services is
+Track E11's test there. Against UnifiedAPI its `ERP_TEST_*` users need report roles (the README).
+The block (`view/ReportParameters.tsx`, `RecordsTable.tsx`, `settings.ts`): the picker's "Lists" and
+"Reports", a "Report" tag by the title; the parameters read-only for a reader who may not edit the
+page (the report runs with the stored ones); only what differs from a default stored (an absent date
+shows its default as a placeholder, so `today` keeps tracking the day), and a stored value the view
+cannot use left out of the query and kept; a totals row (`<th scope="row">` "Total"); no editing and
+no AI; its words with the first ERP block (`i18n/reports.ts`). `tests/e2e/erp-reports.spec.ts`
+checks that the document, the stores, search, history and the server hold nothing of a report after
+each is shown, and the wire for a build before 0.12.0: listing without `kinds` gives no report, and
+a report's query without `parameters` is 400.
+
 ### Track E: work in the ERP repo
 
 | # | Work | Why |
@@ -1196,7 +1262,8 @@ the editor's `nodeviews/plugin.ts`):
   component given `{props, editable, newer, setProps, data, blockId, language}` and loaded with the
   first block of its type on screen. `data` is `{databases: DatabaseHost | null, pickDatabase?}`:
   the open workspace's database host, null on a page shared by link (where a chart or a board says
-  where it is shown, as a database block does). The registry (`FIRST_PARTY`) holds chart, then
+  where it is shown, as a database block does; from Phase 9 a share link gives them its read-only
+  host, `cloud/sharedDatabase.ts`). The registry (`FIRST_PARTY`) holds chart, then
   kanban; a type is a dotted lower-case name, a version a whole number from 1.
 - `EditorHost.plugins` is `{has(type), mount(element, options)}`; the editor mounts the frame by
   the lazy frame's rules (near the viewport, mounted again only for a new type, block id or
@@ -1221,6 +1288,26 @@ the editor's `nodeviews/plugin.ts`):
   `plugin-frame.1`, below).
 - Charts, kanban, calendar, timeline and embedded presentations are planned as first-party
   definitions on this interface.
+
+As built in Phase 12 (`packages/database/src/views/chart/`; DATA_MODEL.md, Databases, "A chart
+view"):
+
+- The chart block draws by the chart view's pieces: its arithmetic (`aggregate.ts`), drawing
+  (`ChartCanvas.tsx` over `CgChart`, in a chunk of its own loaded with the first chart), settings
+  controls (`ChartControls.tsx`, given the block's own classes and its "Group by", so its DOM is
+  unchanged) and words moved out of `@cgw/plugins`, its props and behaviour as they were. Its words
+  are `database.chart.*` (were `plugins.chart.*`), merged with the first chart drawn, and
+  `CgChart`'s own (its data table, its points' names, its keys) are passed in Arabic too.
+- A chart view on a share link reads only its title, group and measure, grouped and counted by the
+  server; one the link may not read is refused `chart.hidden` (403), which the view and the block
+  say in the chart, with no retry. On a site a chart view is drawn by the chart block's routine
+  (`SiteDatabaseHtml`), or its placeholder ("This chart is not published") when refused or with no
+  group; sums and averages there, the block's too, read at most 5,000 rows in all, group by group,
+  and say so past that.
+- A chart or board block whose source view is a chart view meets that view's narrower rows on a
+  share link and a site: grouped or measured by another property it gets nothing of it, on a site
+  its placeholder, and over a refused chart view `chart.hidden` too (the server cannot tell the
+  block from the view). A block's source is normally a table.
 
 ## Third-party plugins: `plugin-frame.1` (Phase 10)
 

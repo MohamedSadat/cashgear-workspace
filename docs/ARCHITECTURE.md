@@ -196,8 +196,8 @@ Package level only. Files inside are decided by the phase that creates them.
 | `packages/store-web` (`@cgw/store-web`) | `LocalStore` on IndexedDB; from Phase 8 the device's own writes strict and its document updates journalled in the Origin Private File System (`journal/`, a worker; SYNC_DESIGN.md, Local durability) | 1 |
 | `packages/shell` (`@cgw/shell`) | App frame and everything around the editor | 1 |
 | `packages/api` (`@cgw/api`) | Client generated from the server's OpenAPI document | 2 |
-| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost`; from Phase 8 cell selection, copy and paste in the table, board columns and gallery cards in an order of their own; from Phase 9 the timeline over the library's `CgTimeline`, and a calendar and a timeline reading their own rows by a date window (`ownRows`) | 4 |
-| `packages/erp` (`@cgw/erp`) | ERP connector client and the ERP view | 5 (built) |
+| `packages/database` (`@cgw/database`) | Database views and cell editors, given a `DatabaseHost`; from Phase 8 cell selection, copy and paste in the table, board columns and gallery cards in an order of their own; from Phase 9 the timeline over the library's `CgTimeline`, and a calendar and a timeline reading their own rows by a date window (`ownRows`); from Phase 12 the chart view, with the chart's arithmetic, drawing, settings and words, which the chart block draws by, and the table for a screen reader | 4 |
+| `packages/erp` (`@cgw/erp`) | ERP connector client and the ERP view; from Phase 12 report connectors and their block | 5 (built) |
 | `crates/cgw-store` | `LocalStore` on SQLite, with FTS5 | 1 |
 | `crates/cgw-native` | Desktop helpers without Tauri: deep links read into routes, safe file names; the keychain in Phase 2 | 1 |
 | `crates/cgw-ydoc` | Bytes-in, bytes-out Yjs functions over `yrs` | 0 (spike), 2 |
@@ -320,13 +320,68 @@ the session in order: assets (the engine uploads them), operations 500 at a time
 first document with the session's client id. Everything goes under one new page; on a failure or
 a Stop that page is trashed and deleted for good in one batch, and its search entries removed.
 
+### The chart view (Phase 12)
+
+The seventh view type (`packages/database/src/views/chart/`): a view's own groups as bars, a line or
+a pie, by a count, a sum or an average (DATA_MODEL.md, Databases). The chart block's arithmetic
+(`aggregate.ts`), drawing (`ChartCanvas.tsx`, the only module that imports `CgChart`, loaded by
+`lazy()` from `drawing.tsx` with the first chart drawn, so `CgChart` is a chunk of its own),
+settings controls (`ChartControls.tsx`), config reading (`config.ts`) and words moved here from
+`@cgw/plugins`, and the block draws by them. A count is `DatabaseView`'s own query's group counts at
+any size; a sum or an average opens a query of its own, 500 rows a page, group by group up to 5,000.
+The view type says its own failures (`ownErrors`): `DatabaseView` shows no notice above it, and a
+share link's `chart.hidden` is said once, in the chart's words. A share link draws it over the
+link's read-only host as the app does, the server grouping its rows; a site draws it on the server
+by the chart block's routine (`SiteDatabaseHtml`: SVG and its numbers as a table).
+
+### The grid with a screen reader (Phase 12)
+
+The table (`table/TableView.tsx`, `TableRow.tsx`, `TableHeader.tsx`, and `items.ts`'s pure
+`ariaLayout`) is a `grid` named "<database>: table" and described by its foot ("Rows: 300",
+"Rows: 100 of 5200"). Its `aria-rowcount` is the header and the query's total (`RowSnapshot.total`,
+the server's for a database it answers), and each row's `aria-rowindex` its place of that total as
+the virtual window scrolls (rows kept in ascending DOM order). The title cell is the row's
+`rowheader`, named by its text; every other cell a `gridcell`; a column header is named by its
+property and described by its type. "Load more" is a row at the index of the first row not loaded;
+the "New" line is no row (`aria-hidden`), reached by the keys and said by the live region. A grouped
+table is a `treegrid`: each group a row at level 1 (expanded or not, its place among the groups,
+named by its group and count, itself the active descendant; Left collapses and Right expands it,
+mirrored in Arabic), its rows at level 2 with their place in the group of its count
+(`aria-posinset`, `aria-setsize`). Chromium numbers every row of a grid, so a grouped table's
+indices count the groups' headers too (DECISIONS.md, Phase 12). Editing is said through the table's
+`CgLiveAnnouncer` when it starts, is saved and is cancelled, naming the property and the row. CI
+checks what Chromium computes (`tests/e2e/grid-a11y.spec.ts`); the readers are checked by hand
+(`docs/SCREEN_READERS.md`).
+
+### Report blocks (Phase 12)
+
+An ERP block may show a report connector (INTEGRATIONS.md, Reports). `ErpView`'s picker lists
+"Lists" and "Reports" (`Connectors?kinds=entity,report`); a report's parameters
+(`view/ReportParameters.tsx`: a date, a choice or a lookup, a switch; read-only for a reader who may
+not edit the page) sit above a read-only table (`RecordsTable.tsx`) that ends with a totals row,
+takes the answer's labels, and says when the report is partial or stops at `maxRecords`. The
+parameters are the block's `parameters` attribute (DATA_MODEL.md); the answer is held in memory
+only, as every ERP answer. It is asked for when drawn, on Refresh and on a parameter's change;
+never edited, never given to AI.
+
+### Words that come with their screens (Phases 11 and 12)
+
+The initial JavaScript (350 kB, gated) holds the shell's catalogues, which merge the database
+views', the ERP's and the plugins' catalogues at start. A new screen's words come with it instead:
+sections of the shell's catalogue added when their screen first draws (`i18n/sections.ts`; Phase
+11's groups, passkeys and single sign-on, Phase 12's `offlineRows` for Settings → Offline's row
+documents), and catalogues a lazily loaded package merges into the app's instance with
+`addResourceBundle` when it first draws (Phase 12: `database.chart`, `views/chart/words.ts`, with
+the first chart; `database.grid`, `table/words.ts`, the table's announcements, with the first table;
+the ERP's report words under `erp`, `packages/erp/src/i18n/reports.ts`, with the first ERP block).
+
 ## The backend
 
 One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites process from Phase 9).
 
 | Process | Does | Never |
 | --- | --- | --- |
-| API | Authentication, authorisation, operations, change feed, document push and pull, asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
+| API | Authentication, authorisation, operations, change feed, document push and pull (Phase 12: a batch pull of up to 100 pages, `Cgw.Core/Documents/DocPulls.cs`), asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
 | Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap) | Serves requests |
 | Sites (Phase 9) | Published pages as HTML on an origin of its own (`server/src/Cgw.Sites`, IIS site `CashGearWorkspaceSites`, `pages.cashgearerp.com`; `http://localhost:5290` in development), rendered on the server from the worker's derived JSON; `robots.txt`; a page's files by a redirect to a short signed URL checked on every request. From Phase 10 also the plugins origin, a second host name of the same site (`plugins.cashgearerp.com`; `http://localhost:5291` in development): a third-party plugin's bundle files under a frame ticket found by its hash, with a CSP of no network | Signs anyone in, sets or reads a cookie, sends script on the pages origin, loads a Yjs library or Data Protection, writes anything |
 
@@ -341,14 +396,16 @@ the operations on databases, views and rows, and the query engine: a database's 
 memory per database and rows version, evaluated by the ported `queryRows`, keyset paged.
 
 Phase 9's Sites (`Cgw.Core/Sites`): `PublishingService` (the site records, the workspace's switch,
-the audit), `SiteReader` and `SiteCache` (what the Sites process reads and holds) and
-`SiteRenderer` with its parts (a page as HTML). What a site shows is a share link's scope decided
-at read time (`SharedReader`), its databases through their views (`Sharing/SharedDatabases.cs`,
-which a share link reads too: the view's shown and layout properties' values only, never a
-person's), and its files by a checked redirect. The Sites process keeps a slug's site and scope at
-most 30 s and drawn pages by a key of everything they are drawn from; every answer is `no-cache`
-with a strong ETag and a strict CSP (`default-src 'none'`, one hashed stylesheet, images from the
-site and the blob account). It reads SQL and Blob with the API's configuration names.
+the audit), `SiteReader` and `SiteCache` (what the Sites process reads and holds) and `SiteRenderer`
+with its parts (a page as HTML). What a site shows is a share link's scope decided at read time
+(`SharedReader`), its databases through their views (`Sharing/SharedDatabases.cs`, which a share
+link reads too: the view's shown and layout properties' values only, never a person's; from Phase 12
+a chart view's exactly its title, group and measure, `Sharing/ChartViews.cs`, drawn by the chart
+block's routine or its placeholder), and its files by a checked redirect. The Sites process keeps a
+slug's site and scope at most 30 s and drawn pages by a key of everything they are drawn from; every
+answer is `no-cache` with a strong ETag and a strict CSP (`default-src 'none'`, one hashed
+stylesheet, images from the site and the blob account). It reads SQL and Blob with the API's
+configuration names.
 
 Conventions:
 
@@ -453,8 +510,9 @@ Paint does not wait for storage, and storage does not wait for the network.
 2. The local store opens and the mirror draws the tree; the account this device last signed in
    with comes from the store's prefs, so the app is signed in and says "Offline, N changes
    waiting".
-3. Pages this device holds (opened before, or pinned) open from the store; any other says it is
-   not on this device yet and opens by itself when the network returns.
+3. Pages this device holds (opened before, or pinned; from Phase 12 a pinned database's rows' pages
+   too) open from the store; any other says it is not on this device yet and opens by itself
+   when the network returns.
 4. The sync loop backs off; the network returning, focus, or a timer that fires late (the machine
    slept) runs a pass at once.
 
@@ -508,7 +566,7 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Link previews | Server-side fetch behind an SSRF guard: public addresses only, no redirects to private ranges, size and time limits |
 | Content Security Policy | `default-src 'self'`; `script-src 'self'` (plus `'wasm-unsafe-eval'` only if WASM is loaded); `frame-src` the one Sheet origin of the build (`VITE_CGW_SHEET`) and, from Phase 10, the plugins origin (`VITE_CGW_PLUGINS`); `img-src 'self' blob: data:`; `connect-src` the API bases (`https://workspace-api.cashgearerp.com`, and `http://127.0.0.1:5280` for development) and their `wss:`/`ws:` forms for the hub (Phase 6), the blob host (`https://*.blob.core.windows.net`, Azurite in development) and the ERP's API (`VITE_CGW_ERP_API`, Phase 5). No COEP. On the web it is made from the build's API address (`apps/web/vite.config.ts`): `vite preview` sends it, so e2e runs under it, and the build writes it into `staticwebapp.config.json` with `nosniff`, a referrer policy and `frame-ancestors 'none'`; the desktop's is in `tauri.conf.json`. The API's own sign-in pages send a CSP of their own (forms only to itself, the web app and the loopback listener; no script at all, except, from Phase 11, on the pages that run a passkey ceremony: `script-src 'self'` for the one script the API serves, `/account/passkey.js`, with its integrity in the page, `connect-src 'self'` and `require-trusted-types-for 'script'`; never inline script, never `unsafe-*`). Phase 11: the pages whose form goes on to a workspace's provider (`/account/sso` and its refusals, none with a password field) allow `form-action` to any https origin (and http outside Production), as the provider is chosen by the address typed and Chrome applies `form-action` to a form's redirects |
 | Tauri | Minimal capabilities; typed commands only; no command takes SQL, a path outside the app's data directory, or a URL to fetch; `frame-src` as on the web. The macOS acceptance run drives the app through a test-only bridge (cargo feature `e2e-bridge`): `build.rs` refuses it in a release build and the release check fails a binary that holds it |
-| Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption (`ticket`, per address), push and search; Sheet's session routes in a bucket of their own (`sheet`); hub tickets (`realtime`, per person), and the hub's pushes against a budget the size of `push` |
+| Rate limiting | ASP.NET Core rate limiter: per IP on anonymous routes, per user and per workspace on the rest, tighter on sign-in, ticket redemption (`ticket`, per address), push and search; Sheet's session routes in a bucket of their own (`sheet`); hub tickets (`realtime`, per person), and the hub's pushes against a budget the size of `push`; the batch pull of documents (Phase 12, `pull`, 120 a minute) apart from the single pull's `user`. As built, the policies meant per user partition by address: the limiter runs before authentication, which OpenIddict's token routes need first (CLAUDE.md, Phase 12; a follow-up) |
 | Audit | Append-only log of sign-ins, member and role changes, group changes (Phase 11: made, renamed, their people, deleted), sharing changes, exports, restores, permanent deletions, ERP link changes, with a correlation id. Phase 11's single sign-on: `sso.domain.add`, `.verify`, `.require` (with the sessions it ended), `.remove`, `sso.provider.set` (the secret only as `set`, `kept` or `removed`), `.remove`, `.tested`, `sso.link`, `sso.account`, `account.signin` with `method: "sso"`, `signin.fail` with its refusal (never the code or a token) |
 | Token storage | Web: cookie only. Desktop: OS keychain. ERP and file sessions: memory only. Tickets and sessions are stored hashed on the server |
 | Secrets | Not in the repo and not in settings files. Environment or a secret store; managed identity for Blob where the host allows it. A check fails on a secret in the repository (`scripts/check-secrets.mjs`, first in `pnpm check` and in CI): private keys, storage keys and SAS signatures, tokens, the updater's key, connection-string passwords, key and environment files |
@@ -618,7 +676,9 @@ cold start and the kill tests' durability; a figure over its budget, or worse th
   to reorder is replaced by "Move up" and "Move down" there. A native mobile app is not planned.
 - **Accessibility.** WCAG 2.2 AA as the target: roles and names on every control, visible focus,
   contrast from the tokens, reduced motion respected, Axe run in CI on the main screens, and a
-  screen-reader pass per phase.
+  screen-reader pass per phase. From Phase 12 the database grid's accessibility tree is checked in
+  CI as Chromium computes it, and NVDA, Narrator and VoiceOver read it by hand from a script
+  (`docs/SCREEN_READERS.md`).
 - **High-DPI.** Vector icons, no bitmap chrome, images drawn at the device's pixel ratio.
 
 ## Risks and trade-offs

@@ -109,7 +109,7 @@ Text kinds are one node, `textBody`, told apart by `kind` (spike S1).
 | Child page | `childPage` | `pageId` | No | Yes |
 | Table of contents | `tableOfContents` | none | No | Phase 3 (schema version 2): drawn as the page's headings, each a link to its block; Markdown and plain text write nothing for it |
 | Embedded spreadsheet | `sheetEmbed` | `workbookId`, `sheet`, `range`, `chartId`, `height` (all null by default) | No | Phase 5 (schema version 4): an atom body drawn by the host lazily near the viewport (the stored picture, then the live embed); deleting the block never deletes the workbook; Markdown and plain text write nothing for it |
-| Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize` (all null by default; `filter`, `fields` and `sort` are JSON text) | No | Phase 5 (schema version 4): an atom body holding settings only, never ERP data; drawn from each reader's own ERP session; Markdown and plain text write nothing for it |
+| Embedded ERP view | `erpView` | `linkId`, `connectorId`, `filter`, `fields`, `sort`, `pageSize`, `parameters` (Phase 12) (all null by default; `filter`, `fields`, `sort` and `parameters` are JSON text) | No | Phase 5 (schema version 4): an atom body holding settings only, never ERP data; drawn from each reader's own ERP session; Markdown and plain text write nothing for it. Phase 12: `parameters` is a report connector's, `{name: value}` of what the person set (absent ones take the report's defaults; a value equal to its default is not stored, and none left is `null`), never the report's answer; a value the view cannot use is left out of the query and kept |
 | Database view | `databaseView` | `databaseId`, `viewId` (null: the database's first view) | No | Phase 4 (schema version 3): an inline database or a linked view, drawn by the host lazily near the viewport; deleting the block never deletes the database; Markdown and plain text write nothing for it |
 | Plugin block | `pluginBlock` | `type` (the definition: `cashgear.chart`, `cashgear.kanban`), `version` (the definition's version that last wrote `props`, a whole number), `props` (JSON text of ids and settings, never data); all null by default | No | Phase 7 (schema version 6): an atom body drawn by the host's definition of `type` lazily near the viewport (`@cgw/plugins`); a type the build has no definition of draws a placeholder naming it and the node is never changed; a later version than the build's definition is drawn read-only; search, the server's Markdown and plain text write nothing for it, a client that knows the definition writes its line in copy and export (INTEGRATIONS.md, Plugin blocks) |
 
@@ -208,6 +208,10 @@ read-only with each plugin block as a placeholder, kept (`migrations.test.ts`, a
 without the definition draws a placeholder. A copy of a page that copies a database rewrites a
 plugin block's `databaseId` and `viewId` in its props, by the convention the first-party
 definitions keep, and leaves every other prop as it was.
+
+As built in Phase 12: `erpView` gains `parameters`, an optional attribute with a null default, so
+no version and no step: older builds keep it through the binding patch (Q18), and the Markdown
+vectors' case "ERP reports write nothing" holds that it writes nothing.
 
 ## Relational records
 
@@ -329,7 +333,12 @@ also reads the databases among those pages, through one of their views (`SharedD
 view's shown properties and the ones it lays rows out by (its group, a calendar's date, a
 timeline's start, end and lane, a gallery's cover), never a person, a created-by or edited-by, a
 formula reading one, or a rollup reaching outside the scope; a related row only in a database the
-link holds; paged by an opaque offset. A published site's scope is the same.
+link holds; paged by an opaque offset. A published site's scope is the same. From Phase 12 a chart
+view shows exactly its title, its group's property and its measure's (a sum or average of a number,
+formula or rollup), whatever its `properties` say (`ChartView.Shown`, `Sharing/ChartViews.cs`), for
+its rows and the files they may read, so a property added after the view never leaves through it;
+its rows come grouped by its own group. One whose group or measure is a value a link never sends
+is refused, 403 `chart.hidden`; one with no group is answered ungrouped, titles only.
 
 A guest sees only themselves and the people named on pages they can see (no addresses but their
 own), only sections that hold a page they can see, and no other member's changes in the feed. A
@@ -377,7 +386,7 @@ in C# (`server/src/Cgw.Core/Databases/`), held together by the shared vectors
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `Databases` | `PageId` (its page, kind `database`), `WorkspaceId`, `Properties` (JSON array, in display order, deleted ones included), `Version`, `RowCount`, `RowsVersion`, `ComputePending`, `CreatedAt`, `UpdatedAt` | Exactly one property of type `title`, id `title`: the row's page title. `Version` rises on every change to the properties; `RowsVersion` on any write to its rows (the query cache's check). `RowCount` counts rows not trashed and not templates |
-| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`, and from Phase 9 `timeline`; `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap; a board's column order (`group.order`: group keys, those named first, the rest in the group's own order; Phase 8; queries ignore it); a timeline's `timeline: {start, end?, lane?, scale?, undated?}` (Phase 9). A `view.upsert` without `viewTypes` (a build before 0.9.0) that says `table` for a type it cannot know keeps the stored type, and keeps every stored config key such a build does not know and did not send; one with `viewTypes` is taken as sent |
+| `DatabaseViews` | `Id`, `WorkspaceId`, `DatabaseId`, `Name`, `Type`, `OrderKey` (binary collation), `Config` (JSON), `Version` | `Type` is `table`, `board`, `list`, `calendar`, `gallery`, from Phase 9 `timeline` and from Phase 12 `chart` (`KNOWN_VIEW_TYPES` in that order; C#'s `DatabaseOps.ViewTypeOrder`); `Config` holds the filter, sorts, group, shown and hidden properties with widths, the calendar's date property, the gallery's cover and card size, wrap; a board's column order (`group.order`: group keys, those named first, the rest in the group's own order; Phase 8; queries ignore it); a timeline's `timeline: {start, end?, lane?, scale?, undated?}` (Phase 9); a chart's `chart: {kind?, measure?, title?}` (Phase 12, below). A `view.upsert` carries `viewTypes`, the number of types its build knows (absent: 5, every build before 0.9.0; 6 from 0.9.0 to 0.11.0; 7 from 0.12.0; anything but a positive whole number, or 1 to 4, reads as 5). From a build of N types fewer than the server knows, one that says `table` for a stored type at index N or later keeps the stored type, and every stored config key a build of N types does not know and did not send is kept (`ConfigKeysByTypes`: 5 → `filter`, `sorts`, `group`, `properties`, `calendarBy`, `cover`, `cardSize`, `wrap`; 6 → `timeline`; 7 → `chart`); a change to another type it knows is taken. From a build that knows every type the view is taken as sent |
 | `DatabaseRows` | `PageId` (its page, kind `row`), `WorkspaceId`, `DatabaseId`, `Values` (JSON by property id), `PropertyVersions` (JSON by property id), `Computed` (JSON), `ComputedVersion`, `Seq` | The row's title, icon, cover, order key, trash and document are its page's. `Seq` is the `RowsVersion` it was last written at. Indexes (`DatabaseId`, `PageId`), (`DatabaseId`, `Seq`) |
 
 A database page sits anywhere a page may; only rows sit under it, and nothing sits under a row.
@@ -454,6 +463,18 @@ Rules (both sides, in the vectors):
   days and as many again each side; their rows with no date come by a query of their own (a filter
   `isEmpty`, or `undated` on a share link). The shared vectors hold it (`db-query-vectors.json`,
   "the date window").
+- **A chart view** (Phase 12): `ViewConfig.chart` holds `kind` (`'bar' | 'line' | 'pie'`), `measure`
+  (`{kind: 'count'}`, or `{kind: 'sum' | 'average', propertyId}`) and `title` (a string or null),
+  each optional (default bars, a count, and the title made from the measure and the group, "Count by
+  Status"); a kind the build does not know is drawn as bars, a measure it cannot read is a count, a
+  title is cut to 200 characters. Its points are the view's own groups (`group`, with its `dateBy`,
+  `hidden` and `hideEmpty`) of the rows its `filter` matches, in the query's group order; with no
+  group the view says to choose one. A count is the query's group counts at any size; a sum or an
+  average reads a number, formula or rollup property over at most 5,000 rows on the device, group by
+  group, and says it is partial past that, as the chart block. Its `properties` show the title, the
+  group's property and the measure's, in that order, and hide every other, written so by the client
+  on every write of the view (it has no Properties menu), so an older build's table shows what the
+  chart draws.
 
 A value is first read as what it holds by its old type, then written as the new type:
 
@@ -587,7 +608,9 @@ workspace, what is under either, and trashed pages; the root trashed, deleted or
 private section, or the workspace's switch off or the workspace deleted, and every address of the
 site answers 404. Its pages are the worker's derived JSON drawn as HTML; its databases are read
 through the view a block names (`SharedDatabases`, as a share link's are: only the view's shown
-and layout properties' values, never a person); its files are checked on every request. Nothing of
+and layout properties' values, never a person; from Phase 12 a chart view's exactly its title,
+group and measure, drawn as the chart block is, or its placeholder when a link would refuse it or it
+has no group); its files are checked on every request. Nothing of
 comments, presence, history or the Yjs updates is reachable from it. The Sites process keeps a
 slug's site and scope at most 30 s, and drawn pages by a key of everything they are drawn from.
 
@@ -647,7 +670,7 @@ Both local stores hold the same logical data, behind the `LocalStore` interface.
 | `assets` | Asset metadata (with `uploaded` once the server holds the bytes), cached bytes, and uploads not yet sent |
 | `searchIndex` | Desktop: an FTS5 table. Browser: rebuilt in memory from `pages` and cached text |
 | `prefs` | Theme, language, sidebar state, toggle state, the Yjs client-id pool, the signed-in account (no credential: id, email, name, device id), so the app starts signed in while offline |
-| `pins` (Phase 3) | Pages kept on this device for offline use: one record per pin, with `subtree` when the pages under it (later ones included) are kept too |
+| `pins` (Phase 3) | Pages kept on this device for offline use: one record per pin, with `subtree` when the pages under it (later ones included) are kept too. From Phase 12 a pin over a database also holds its rows' documents (SYNC_DESIGN.md, Offline availability); nothing new is stored for it |
 | `quarantine` (Phase 3) | Logs set aside so nothing typed is lost: the page's snapshot and every update, its title, the reason (`doc.epochMismatch`, `page.gone`, `access.denied`, `page.removed`) and whether it became a recovered page. Entries outlive their page and workspace |
 | `repairs` (Phase 3) | Per page, the last state-hash check: epoch, the head it matched at, repairs made there |
 | `databases`, `views` (Phase 4) | Every database and view record of the workspace the account may see, as the tree and the feed give them; `readMirror` returns them with the pages |

@@ -299,6 +299,39 @@ GET /api/v1/pages/{pageId}/doc?after=1040
 - Workspace-wide: the change feed (channel 2) says which pages have a new head sequence, so a
   client pulls only pages it holds and that changed.
 
+**Batch pull** (Phase 12)
+
+```
+POST /api/v1/workspaces/{workspaceId}/docs/pull
+{ "pages": [ { "pageId": "…", "after": 1040 }, … ] }   // 1 to 100 distinct pages of the workspace
+
+200 { "docs": [                                        // one a page, in the request's order
+  { "pageId": "…", "status": 200, "pull": <GET /doc?after=1040> },
+  { "pageId": "…", "status": 404, "code": "not.found" },
+  { "pageId": "…", "status": 0, "code": "deferred" }   // not read in this answer: ask again
+] }
+```
+
+- Each page is checked and answered exactly as `GET /pages/{pageId}/doc?after=` would answer it
+  (`PageGate.OpenInAsync`: the page gate, a row's level its database's, decided once a database a
+  request), so one page's refusal (404 `not.found`, 410 `page.gone`) never fails the batch. A page
+  of another workspace is 404 in its item, even when the caller can read it there.
+- At most 8 MiB of update bytes an answer: the page that would pass it and every page after it are
+  `deferred`, unread; a page is answered whole when nothing before it in the answer carried updates,
+  so a first page bigger than that pages by its own `more`.
+- 400 `request.invalid` for 0 pages, more than 100, a repeated page or no `pages`; 404 for someone
+  not in the workspace. Its own rate limit, `pull` (120 batches a minute), apart from the single
+  route's.
+- The client (`SyncApi.pullDocs`, in the HTTP client and the in-memory server, held to one suite,
+  `sync/pullDocs.test.ts`) uses it for pinned pages not held, pinned databases' row documents
+  (Offline availability) and held pages whose head moved when more than one did; an item with
+  neither a pull nor a code reads as deferred, and deferred pages are asked again first. A page
+  whose cursor moved between the request and the answer (a hub frame, an opening), or of another
+  epoch, is pulled by its own route. A 400, 404 or 405 on the request itself turns the batch off
+  for the session and pages go one by one: an older server has no such route, and its 404
+  `not.found` is the code of a workspace the account no longer has, which the pass would take as
+  the workspace gone.
+
 **Repair.** If a client suspects it is missing something (a checksum of the state vector differs
 from the one the worker publishes with each snapshot), it sends its full state and pulls from
 `after=0`. This is the only use of state vectors.
@@ -434,11 +467,14 @@ this list):
   a row's file only once it holds the bytes, and refused the operation that named one sent before
   them); push the outbox; push unsent document updates in batches; pull the feed to its end;
   reconcile the tree if a subtree operation was answered; pull held pages whose head or epoch
-  moved, and a bounded number of pinned pages not held yet; up to four state-hash checks. Passes
+  moved, and a bounded number of pinned pages not held yet (from Phase 12 both by the batch pull,
+  above: moved heads at most 10 requests a pass, pins 2); up to four state-hash checks. Passes
   come every 1.5 s, 100 ms after a pass that left work, 50 ms when a change came during one.
 - **Backoff** after a failure: `min(5 min, 1 s × 2^(n−1)) × (0.5 + random)`, never shorter than the
   server's `Retry-After` (sent on every 429 and 503), even when the network returning or the
-  window's focus kicks a pass. A local change does not cut a backoff short.
+  window's focus kicks a pass. A local change does not cut a backoff short. From Phase 12 a 429 or
+  503 on the pins' batch pull is not a failure of the pass: only the pins wait, for its
+  `Retry-After` (60 s if none), and the status stays as it was.
 - **Sleep:** timers are chains of at most 15 s; one that fires more than 90 s late means the
   machine slept or the clock jumped, and a pass runs at once with the backoff reset.
 - **Signed in while offline:** the account (id, email, name, device id; no credential) is kept in
@@ -490,11 +526,14 @@ are in `DATA_MODEL.md` (Databases).
   `order`), `view.upsert`, `view.delete`, `row.update` (values merged per property, null clears),
   and the page operations on rows (title, icon, cover, reorder among the database's rows, trash,
   restore, delete). No `baseVersion` on the database ones: the last to reach the server wins, per
-  property. From Phase 9 a build sends `viewTypes` (the number of view types it knows, 6) in every
-  `view.upsert`. An upsert without it (every build before 0.9.0) that says `table` for a type it
-  cannot know (`timeline`) keeps the stored type, and keeps every stored setting such a build does
-  not know and did not send; one with it is taken as sent. The answers carry `entityType` `database`, `view` or `row` (a database's create carries
-  its page and its record).
+  property. From Phase 9 a build sends `viewTypes`, the number of view types it knows (6 to 0.11.0;
+  7 from 0.12.0, with `chart`), in every `view.upsert`, and from Phase 12 the server reads it as a
+  count (absent: 5, every build before 0.9.0). An upsert from a build that knows fewer types than
+  the server, and says `table` for a stored type it cannot know (a `chart` from 0.9.0 to 0.11.0; a
+  `timeline` or a `chart` before), keeps the stored type, and keeps every stored setting such a
+  build does not know and did not send (DATA_MODEL.md, `DatabaseViews`); one from a build that knows
+  every type is taken as sent. The answers carry `entityType` `database`, `view` or `row` (a
+  database's create carries its page and its record).
 - **Tree and feed**: the tree holds every database and view record the account may see and never a
   row. The feed carries `database`, `view` and `row` changes; every change to a row (its values, its
   page, its document's head) is a `row` change, never a `page` one, and a row made or removed also
@@ -515,7 +554,8 @@ are in `DATA_MODEL.md` (Databases).
   its root incomplete, and a feed past its retention marks all, so they are fetched again; a fetched
   page also removes held rows the server no longer has.
 - **Rows' documents** are pages' documents: pushed, pulled when their head moves, set aside on 410,
-  as any page's. Pins hold the databases under them, not every row's document.
+  as any page's. Pins hold the databases under them, and from Phase 12 their rows' documents too, up
+  to 5,000 a database (Offline availability).
 - **Refusals**: a refused database, view or row operation takes the server's entity, as a page's
   does. What the local planner changed beyond that entity (reverse relation values, rows converted by
   a type change, a reverse property added to another database) is taken back by fetching what it
@@ -547,11 +587,26 @@ again.
 - A page is available offline when the device holds its document. Opening a page caches it. A
   user can pin a page or a subtree; pinned pages are fetched in the background and kept fresh.
   As built: a pin is a page, or a page with every live page under it, pages added later included
-  (no "whole workspace" pin). Each pass fetches at most 24 pinned pages not held, four at a time,
-  and the next pass follows in 100 ms while some remain, so a 500-page subtree is held in about 21
-  short passes and typing never waits on it. Held pages stay fresh as every held page does (their
-  head moves in the feed). Unpinning keeps what is held. Settings shows the pins, what is still
-  to fetch, and the storage this device uses.
+  (no "whole workspace" pin). Each pass fetched at most 24 pinned pages not held, four at a time,
+  and the next pass followed in 100 ms while some remained, so a 500-page subtree was held in about
+  21 short passes and typing never waited on it. From Phase 12 they come by the batch pull, 100
+  pages a request and at most 2 requests a pass, the next pass still 100 ms later, so in 3 passes
+  (24 one by one a pass still, against a server without the batch route). Held pages stay fresh
+  as every held page does (their head moves in the feed). Unpinning keeps what is held. Settings
+  shows the pins, what is still to fetch, and the storage this device uses.
+- **A pinned database's rows** (Phase 12): a pin over a database, or over a page above one, holds
+  the document of each live row that has one (`docHeadSeq > 0`): its templates, then at most 5,000
+  rows (`PIN_ROW_DOCS`) in row order (order key, then id); a database held in part (above 5,000
+  rows) gives those of the rows this device holds, so the whole table is never read to choose. They
+  come with the pinned pages, after them, by the same batches, and stay fresh as held pages do. Once
+  all are held the database's rows are not read whole again until its hold or record changes, a row
+  is removed, or a changed row lacks its document (a database held in part is read on any change).
+  A page the batch refused (403, 404, 410) is not asked for again until its record comes anew (the
+  feed, a tree, a rows page). A 429 or 503 holds only the pins. Unpinning fetches nothing more and
+  stops counting them, and evicts nothing. The offline status counts them apart from pages
+  (`OfflineProgress.rows`, `rowsHeld`, `rowsToFetch`), and Settings → Offline adds a line for them
+  when there are some. A pin of 5,000 row documents is 50 requests in about 25 passes (budget 120 s
+  with the keystroke budget held, `bench/phase12-pins.mjs`).
 - The metadata mirror covers the whole workspace, so the tree, breadcrumbs and title search work
   offline for every page, cached or not. An uncached page says so when opened offline.
 - Pages can be created offline: ids are made on the client, so the page, its document and its
