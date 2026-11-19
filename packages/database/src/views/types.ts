@@ -49,6 +49,11 @@ export interface ViewTypeDefinition {
    */
   ownRows?: boolean;
   /**
+   * The view says its query's failures itself, with Try again (the chart: a share link's refusal in
+   * its own words; Phase 12): `DatabaseView` shows no failure notice above it.
+   */
+  ownErrors?: boolean;
+  /**
    * The view type's own layout settings (the calendar's date property, the gallery's picture and
    * card size), shown by the toolbar's Layout button; absent when it has none (views stream).
    */

@@ -1,12 +1,15 @@
-// The view types a database can be shown as: table, board, list, calendar, gallery and (Phase 9)
-// timeline. Each sets its `component` and, where it differs, its default configuration and what
-// its toolbar offers; the calendar and the timeline read their rows by queries of their own (a date
-// window: `ownRows`).
+// The view types a database can be shown as: table, board, list, calendar, gallery, (Phase 9)
+// timeline and (Phase 12) chart. Each sets its `component` and, where it differs, its default
+// configuration and what its toolbar offers; the calendar and the timeline read their rows by
+// queries of their own (a date window: `ownRows`).
 import { TITLE_PROPERTY, type DatabaseRecord, type ViewType } from '../core';
 import { isDateType, isGroupable, liveProperties } from '../model/properties';
 import { emptyConfig } from '../model/viewConfig';
 import { TableView } from '../table/TableView';
 import { BoardView } from './board/BoardView';
+import { ChartSettings } from './chart/ChartSettings';
+import { ChartView } from './chart/ChartView';
+import { defaultChartGroup, withChart } from './chart/config';
 import { CalendarSettings } from './calendar/CalendarSettings';
 import { CalendarView } from './calendar/CalendarView';
 import { GallerySettings } from './gallery/GallerySettings';
@@ -113,6 +116,22 @@ export const VIEW_TYPES: Record<ViewType, ViewTypeDefinition> = {
     supports: { group: false, wrap: false, properties: false },
     ownRows: true,
   },
+  // Phase 12: the view's groups as bars, a line or a pie, by a count, a sum or an average. Its
+  // group is the toolbar's; its properties follow the group and the measure (no Properties menu).
+  chart: {
+    type: 'chart',
+    glyph: '▟',
+    component: ChartView,
+    settings: ChartSettings,
+    defaultConfig: (database) =>
+      withChart(
+        database,
+        { ...emptyConfig('chart'), group: defaultChartGroup(database) },
+        { kind: 'bar', measure: { kind: 'count' }, title: null },
+      ),
+    supports: { group: true, wrap: false, properties: false },
+    ownErrors: true,
+  },
 };
 
 export const VIEW_ORDER: readonly ViewType[] = [
@@ -122,6 +141,7 @@ export const VIEW_ORDER: readonly ViewType[] = [
   'calendar',
   'gallery',
   'timeline',
+  'chart',
 ];
 
 export const viewType = (type: ViewType): ViewTypeDefinition =>

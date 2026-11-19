@@ -23,6 +23,7 @@
 import { remapRefs, toMarkdown, workbookRefs, type DocJSON } from '@cgw/doc';
 import { FIRST_PARTY, pluginText } from '@cgw/plugins';
 import {
+  KNOWN_VIEW_TYPES,
   STORED_TYPES,
   TITLE_PROPERTY,
   computeRow,
@@ -514,14 +515,8 @@ export interface ImportResult {
   skippedWorkbooks: number;
 }
 
-const VIEW_TYPES: readonly ViewRecord['type'][] = [
-  'table',
-  'board',
-  'list',
-  'calendar',
-  'gallery',
-  'timeline',
-];
+// Every view type this build knows (Phase 12: the workspace's own list, so a chart is kept).
+const VIEW_TYPES: readonly ViewRecord['type'][] = KNOWN_VIEW_TYPES;
 
 /** Rows per `apply` while importing (each a transaction of the store). */
 const ROW_BATCH = 500;

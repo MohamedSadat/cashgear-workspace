@@ -156,13 +156,14 @@ export interface DatabaseRecord {
 /** At or below this many rows a device holds every row and queries locally (DECISIONS.md, Phase 4). */
 export const LOCAL_ROW_LIMIT = 5000;
 
-export type ViewType = 'table' | 'board' | 'list' | 'calendar' | 'gallery' | 'timeline';
+export type ViewType = 'table' | 'board' | 'list' | 'calendar' | 'gallery' | 'timeline' | 'chart';
 
 /**
- * Every view type this build knows, in the order they were added (Phase 9: `timeline`, the sixth).
- * A type not in it is drawn as a table (never dropped). Its length is the `viewTypes` a
- * `view.upsert` carries to the server (DECISIONS.md, 2026-11-17: an upsert without it, from an
- * older build, keeps a stored type and settings it does not know).
+ * Every view type this build knows, in the order they were added (Phase 9: `timeline`, the sixth;
+ * Phase 12: `chart`, the seventh). A type not in it is drawn as a table (never dropped). Its
+ * length is the `viewTypes` a `view.upsert` carries to the server (DECISIONS.md, 2026-11-17: an
+ * upsert from an older build, which says `table` for a type it does not know, keeps the stored
+ * type and the settings that build does not know).
  */
 export const KNOWN_VIEW_TYPES: readonly ViewType[] = [
   'table',
@@ -171,7 +172,27 @@ export const KNOWN_VIEW_TYPES: readonly ViewType[] = [
   'calendar',
   'gallery',
   'timeline',
+  'chart',
 ];
+
+/** How a chart view draws its points (Phase 12). */
+export type ChartKind = 'bar' | 'line' | 'pie';
+
+/**
+ * What a chart measures for each group: a count of its rows, or a sum or an average of a number,
+ * formula or rollup property's numbers (the chart block's measure, the same shape).
+ */
+export type ChartMeasure = { kind: 'count' } | { kind: 'sum' | 'average'; propertyId: PropertyId };
+
+/** A chart view's settings (`ViewConfig.chart`; Phase 12). Its rows are grouped by the view's own `group`. */
+export interface ChartConfig {
+  /** Default 'bar'. */
+  kind?: ChartKind;
+  /** Default a count. A sum or an average reads a number, formula or rollup property. */
+  measure?: ChartMeasure;
+  /** Null or absent: "Count by Status", from the measure and the group (the chart block's words). */
+  title?: string | null;
+}
 
 /** A timeline's zoom: a fixed width per day for each. */
 export type TimelineScale = 'day' | 'week' | 'month' | 'quarter';
@@ -222,6 +243,11 @@ export interface ViewConfig {
   wrap?: boolean;
   /** Timeline: its dates, lanes, zoom and the undated list (Phase 9). */
   timeline?: TimelineConfig;
+  /**
+   * Chart: its kind, measure and title (Phase 12). Grouped by `group`; its `properties` show the
+   * title, the group's and the measure's properties and hide every other.
+   */
+  chart?: ChartConfig;
 }
 
 // ---------------------------------------------------------------------------------------------

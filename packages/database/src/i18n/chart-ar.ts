@@ -1,0 +1,63 @@
+// The chart's Arabic strings (Phase 12): the same keys as `chart-en.ts`; its type checks them. The
+// chart block's words are moved from `@cgw/plugins` as they were.
+import type { ChartCatalogue } from '../views/chart/words';
+
+export const chartAr: ChartCatalogue = {
+  name: 'مخطط',
+  label: 'مخطط {{title}}',
+  kind: 'نوع المخطط',
+  kinds: { bar: 'أعمدة', line: 'خطي', pie: 'دائري', number: 'رقم' },
+  groupBy: 'التجميع حسب',
+  groupNone: 'لا شيء (رقم واحد)',
+  measure: 'القياس',
+  count: 'عدد الصفوف',
+  sum: 'المجموع',
+  average: 'المتوسط',
+  measureOf: 'للخاصية',
+  noNumber: 'لا توجد خاصية رقمية',
+  title: 'العنوان',
+  titlePlaceholder: 'من القياس والتجميع',
+  titles: {
+    count: 'العدد حسب {{group}}',
+    sum: 'مجموع {{measure}} حسب {{group}}',
+    average: 'متوسط {{measure}} حسب {{group}}',
+    countAll: 'عدد الصفوف',
+    sumAll: 'مجموع {{measure}}',
+    averageAll: 'متوسط {{measure}}',
+  },
+  partial: 'محسوب من أول {{count}} صف.',
+  chooseGroup: 'اختر من الإعدادات خاصية للتجميع حسبها.',
+  noRows: 'لا توجد صفوف لعرضها في المخطط.',
+  noValue: 'بلا قيمة',
+  plainText: 'مخطط: {{title}}',
+  hidden:
+    'لا يعرض هذا الرابط هذا المخطط: فهو مجمَّع أو مقيس حسب أشخاص، أو حسب قيم لا يشاركها الرابط.',
+  view: {
+    chooseGroup: 'يرسم المخطط صفوفه حسب التجميع: اختر خاصية من «تجميع» في شريط الأدوات.',
+    noGroup: 'لا خاصية يُجمَّع هذا المخطط حسبها بعد.',
+    groupHint: 'نقاطه هي مجموعات طريقة العرض: «تجميع» في شريط الأدوات.',
+    drawing: 'جارٍ رسم المخطط…',
+  },
+  canvas: {
+    chart: 'مخطط',
+    series: 'سلسلة',
+    point: 'نقطة بيانات',
+    tooSmall: 'لا تكفي المساحة لرسم هذا المخطط',
+    table: 'بيانات المخطط',
+    tableToggle: 'بيانات المخطط',
+    argument: 'الفئة',
+    percentage: 'النسبة المئوية',
+    legend: 'سلاسل المخطط',
+    thousand: ' ألف',
+    million: ' مليون',
+    billion: ' مليار',
+    seriesShown: 'ظهرت {series}',
+    seriesHidden: 'أُخفيت {series}',
+    pointSelected: 'حُدّدت {series}، {argument}، {value}',
+    selectionCleared: 'أُلغي التحديد',
+    pointLabel: '{series}، {argument}، {value}',
+    seriesLabel: '{series}، النقاط: {count}',
+    keyboard:
+      'استخدم مفتاحي السهم الأيمن والأيسر للتنقل بين نقاط البيانات، والسهمين للأعلى وللأسفل لتغيير السلسلة، وEnter أو Space للتفعيل، وEsc لإخفاء التلميح.',
+  },
+};

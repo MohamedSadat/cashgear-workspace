@@ -25,6 +25,7 @@ import {
 import type { DatabaseHost } from './host';
 import { valuesForNewRow } from './model/newRow';
 import { placeProperty } from './model/viewConfig';
+import { chartProperties } from './views/chart/config';
 
 /** A key between two order keys that never throws on ties or a wrong order. */
 export function safeKeyBetween(a: string | null, b: string | null): string {
@@ -261,8 +262,12 @@ export function createActions(host: DatabaseHost, databaseId: Id) {
 
     // ---- Views ------------------------------------------------------------------------------
     updateView(view: ViewRecord, config: ViewConfig): Promise<void> {
-      if (sameValue(view.config, config)) return Promise.resolve();
-      return send([viewUpsert({ ...view, config })]);
+      // Phase 12: a chart's properties follow its group and its measure, whoever changed them
+      // (the toolbar's Group writes here too): it has no Properties menu.
+      const db = view.type === 'chart' ? database() : null;
+      const next = db ? { ...config, properties: chartProperties(db, config) } : config;
+      if (sameValue(view.config, next)) return Promise.resolve();
+      return send([viewUpsert({ ...view, config: next })]);
     },
     renameView(view: ViewRecord, name: string): Promise<void> {
       if (view.name === name) return Promise.resolve();

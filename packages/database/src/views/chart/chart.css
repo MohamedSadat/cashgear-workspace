@@ -1,0 +1,56 @@
+/* The chart view (Phase 12): its title, the chart drawn by `CgChart` (`ChartCanvas`, loaded on its
+   own), its messages and notes. Classes are `cgw-db-chart-*`; logical properties throughout. */
+
+.cgw-db-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-block: 8px;
+  padding-inline: 12px;
+  color: var(--cg-text);
+}
+
+.cgw-db-chart-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.cgw-db-chart-body {
+  min-block-size: 64px;
+}
+
+.cgw-db-chart-canvas {
+  inline-size: 100%;
+}
+
+.cgw-db-chart-message {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--cg-surface-subtle);
+}
+
+.cgw-db-chart-message.cgw-db-error {
+  background: var(--cg-danger-soft, var(--cg-surface-subtle));
+  color: var(--cg-danger-text);
+}
+
+.cgw-db-chart-drawing,
+.cgw-db-chart-note,
+.cgw-db-chart-hint {
+  margin: 0;
+  font-size: var(--cg-font-size-sm, 12px);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-db-chart-drawing {
+  padding: 12px;
+}
+
+.cgw-db-chart-hint {
+  margin-block-start: 8px;
+}

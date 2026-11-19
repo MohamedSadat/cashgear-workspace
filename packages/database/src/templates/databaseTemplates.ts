@@ -258,6 +258,24 @@ function projects(ctx: MakeContext): Shape {
           timeline: { start: span.id, end: null, lane: status.id, scale: 'month', undated: true },
         },
       },
+      {
+        // Phase 12: the average progress of each status, as bars.
+        name: t('templates.projects.viewChart'),
+        type: 'chart',
+        config: {
+          group: { propertyId: status.id },
+          properties: {
+            order: [TITLE_PROPERTY, status.id, progress.id],
+            hidden: [owner.id, span.id, p.def.id],
+            widths: {},
+          },
+          chart: {
+            kind: 'bar',
+            measure: { kind: 'average', propertyId: progress.id },
+            title: null,
+          },
+        },
+      },
     ],
     rows: [
       {

@@ -558,7 +558,8 @@ export function DatabaseView({
             {t('localOnly')}
           </p>
         ) : null}
-        {snapshot.error ? (
+        {/* A view type that says its query's failures itself (the chart, in its own words). */}
+        {snapshot.error && !definition.ownErrors ? (
           <p className="cgw-db-notice cgw-db-error" role="alert">
             {t('loadFailed')}{' '}
             <button type="button" className="cgw-text-button" onClick={() => source?.retry()}>

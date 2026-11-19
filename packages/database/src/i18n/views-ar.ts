@@ -210,6 +210,7 @@ export const viewsAr: Strings<typeof viewsEn> = {
       row1: 'تجديد الموقع',
       row2: 'تدقيق نهاية العام',
       row3: 'إطلاق تطبيق الجوال',
+      viewChart: 'الإنجاز حسب الحالة',
     },
     readingList: {
       name: 'قائمة القراءة',

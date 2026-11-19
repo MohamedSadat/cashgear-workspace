@@ -4,6 +4,9 @@
 export type {
   CellError,
   CellValue,
+  ChartConfig,
+  ChartKind,
+  ChartMeasure,
   DatabaseRecord,
   DateValue,
   DateWindow,

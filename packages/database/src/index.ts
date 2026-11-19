@@ -68,3 +68,51 @@ export { createFromTemplate, createTemplate, rowTemplateItems } from './template
 export { ImportDialog, type ImportDialogProps } from './csv/ImportDialog';
 export { exportView, exportFileName, type ExportResult } from './csv/exportView';
 export type { CsvImportRequest, CsvImportResult, WorkbookExportResult } from './host';
+
+// Phase 12: the chart view, and the chart's drawing, settings controls, words and arithmetic, moved
+// from the chart block (`@cgw/plugins`), which draws by them too. `ChartDrawing` loads `CgChart`
+// on its own, with the first chart drawn.
+export { ChartView, CHART_HIDDEN, MEASURE_PAGE } from './views/chart/ChartView';
+export { ChartDrawing, type ChartDrawingProps } from './views/chart/drawing';
+export {
+  ChartControls,
+  ChartSelect,
+  VIEW_LOOK,
+  measurableProperties,
+  type ChartControlsLook,
+  type ChartControlsProps,
+} from './views/chart/ChartControls';
+export {
+  CHART_VIEW_KINDS,
+  TITLE_LIMIT,
+  chartOf,
+  chartProperties,
+  chartTitle,
+  defaultChartGroup,
+  groupProperty,
+  readMeasure,
+  withChart,
+  type ChartSettingsValue,
+} from './views/chart/config';
+export {
+  GROUPABLE,
+  MEASURABLE,
+  ROW_CAP,
+  measureProperty,
+  needsRows,
+  nextToLoad,
+  numberOf,
+  pointsOf,
+  totalOf,
+  type ChartData,
+  type ChartPoint,
+} from './views/chart/aggregate';
+export {
+  addChartWords,
+  chartAr,
+  chartEn,
+  useChartT,
+  type ChartCatalogue,
+  type ChartKey,
+  type ChartT,
+} from './views/chart/words';

@@ -52,6 +52,11 @@
 // v0.10.0 does not know. Its share dialog reads the list without asking for groups, so it is never
 // sent the group's row; a person's level changed there and saved goes up without `principals`, and
 // the server keeps the group's row exactly as it was (the older-build rule, as for Phase 9's views).
+//
+// Phase 12 (v0.10.0 on :4270 with `viewTypes: 6`, and v0.8.0 on :4272 with none): a chart view,
+// which neither knows, is drawn as a table there; renamed and its filter changed there, it goes up
+// as a table, and the server keeps it a chart with its `chart` settings (`viewTypes` read as the
+// count of types the build knows).
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1175,3 +1180,138 @@ test('the v0.10.0 build changes a person’s level in a page’s sharing, and th
   for (const other of others) await other.dispose();
   await api.dispose();
 });
+
+// Phase 12 (v0.10.0 on :4270, six view types and `viewTypes: 6`; v0.8.0 on :4272, five and no
+// `viewTypes`): a chart view, which neither knows, is drawn there as a table (their fallback); it is
+// renamed there and its filter changed, each going up as a `view.upsert` of type `table`, and the
+// server keeps the stored type and the chart's settings (the older-build rule read as a count of
+// types): this build shows a chart again, with its settings, the new name and the filter.
+for (const tag of ['v0.10.0', 'v0.8.0'] as const)
+  test(`the ${tag} build edits a chart view as a table, and the server keeps it a chart with its settings`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240000);
+    const OLD = await serve(tag);
+    const account = await newAccount(`Chart and ${tag}`);
+    const api = await apiSession(account);
+
+    // This build: a Tasks database with a chart view, a pie of its rows by status, titled.
+    const current = await browser.newContext();
+    const now = await current.newPage();
+    const nowErrors = watchAppErrors(now);
+    await now.goto('/');
+    await signIn(now, account);
+    await signedIn(now, account);
+    await now.getByLabel('Workspace name').fill(`Chart ${tag}`);
+    await now.getByRole('button', { name: 'Create workspace' }).click();
+    await expect(editor(now)).toBeVisible();
+    await newDatabase(now, 'Tasks');
+    const db = fullPage(now);
+    await addView(db, now, 'Chart');
+    await expect(db.locator('section.cgw-db-chart [data-cg-chart-point]').first()).toBeVisible({
+      timeout: 20000,
+    });
+    await db.getByRole('button', { name: 'Layout', exact: true }).click();
+    const layout = now.getByRole('dialog', { name: 'Layout' });
+    await layout.getByLabel('Chart', { exact: true }).selectOption('pie');
+    await layout.getByLabel('Title', { exact: true }).fill('Tasks by status');
+    await layout.getByLabel('Title', { exact: true }).press('Enter');
+    await now.keyboard.press('Escape');
+    await expect(db.locator('section.cgw-db-chart')).toHaveAttribute('data-chart', 'pie');
+    await expect(syncStatus(now)).toHaveAttribute('data-state', 'synced', { timeout: 30000 });
+    const workspaceId = (
+      (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+    ).find((w) => w.name === `Chart ${tag}`)!.id;
+    await expect
+      .poll(async () => (await serverView(api, workspaceId, 'Chart'))?.config.chart, {
+        timeout: 30000,
+      })
+      .toEqual({ kind: 'pie', measure: { kind: 'count' }, title: 'Tasks by status' });
+    const made = await serverView(api, workspaceId, 'Chart');
+    expect(made.type).toBe('chart');
+    expect(made.config.filter).toBeNull();
+    expect(nowErrors).toEqual([]);
+    await current.close();
+
+    // The older build, signed in as the same person: the chart is a table there.
+    const oldContext = await browser.newContext({ baseURL: OLD });
+    const old = await oldContext.newPage();
+    const oldErrors: string[] = [];
+    old.on('pageerror', (error) => oldErrors.push(error.message));
+    const upserts: { type: string; payload: Record<string, unknown> }[] = [];
+    old.on('request', (request) => {
+      if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+      for (const op of (request.postDataJSON()?.ops ?? []) as {
+        type: string;
+        payload: Record<string, unknown>;
+      }[])
+        if (op.type === 'view.upsert') upserts.push(op);
+    });
+    await old.goto(`${OLD}/`);
+    await signIn(old, account, `${OLD}/`);
+    await signedIn(old, account);
+    await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+    await old
+      .getByRole('tree', { name: 'Pages' })
+      .getByRole('treeitem', { name: /Tasks/ })
+      .click({ timeout: 30000 });
+    const oldDb = fullPage(old);
+    await showView(oldDb, 'Chart');
+    await expect(grid(oldDb)).toBeVisible({ timeout: 20000 });
+    await expect(oldDb.locator('section.cgw-db-chart')).toHaveCount(0);
+    // Renamed there, from its tab.
+    await oldDb.getByRole('tab', { name: 'Chart', exact: true }).dblclick();
+    const name = old.getByLabel('View name', { exact: true });
+    await name.fill('Status chart');
+    await name.press('Enter');
+    await expect(oldDb.getByRole('tab', { name: 'Status chart', exact: true })).toBeVisible();
+    // Its filter changed there: Status is Not started.
+    await oldDb.getByRole('button', { name: 'Filter', exact: true }).click();
+    const filters = old.getByRole('dialog', { name: 'Filters' });
+    await filters.getByRole('button', { name: 'Add a filter', exact: true }).click();
+    await filters.getByRole('combobox', { name: 'Property' }).selectOption({ label: 'Status' });
+    await filters.getByRole('combobox', { name: 'Value' }).selectOption({ label: 'Not started' });
+    await old.keyboard.press('Escape');
+    await expect(oldDb.getByRole('button', { name: 'Filters: 1' })).toBeVisible();
+    await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+    await expect.poll(() => upserts.length, { timeout: 30000 }).toBeGreaterThan(1);
+    // It sent the view as a table, saying the types it knows (v0.10.0: six) or nothing (v0.8.0).
+    expect(upserts.every((op) => op.payload.type === 'table')).toBe(true);
+    if (tag === 'v0.10.0') expect(upserts.every((op) => op.payload.viewTypes === 6)).toBe(true);
+    else expect(upserts.some((op) => 'viewTypes' in op.payload)).toBe(false);
+    expect(oldErrors).toEqual([]);
+    await oldContext.close();
+
+    // The server kept the type and the chart's settings, and took the name and the filter.
+    await expect
+      .poll(async () => (await serverView(api, workspaceId, 'Status chart'))?.config.filter, {
+        timeout: 30000,
+      })
+      .toBeTruthy();
+    const kept = await serverView(api, workspaceId, 'Status chart');
+    expect(kept.type).toBe('chart');
+    expect(kept.config.chart).toEqual(made.config.chart);
+    expect(kept.config.group).toEqual(made.config.group);
+    expect(JSON.stringify(kept.config.filter)).toContain('"condition"');
+
+    // This build again: a pie, titled, by the old build's name and with its filter.
+    const again = await browser.newContext();
+    const back = await again.newPage();
+    const backErrors = watchAppErrors(back);
+    await back.goto('/');
+    await signIn(back, account);
+    await signedIn(back, account);
+    await back
+      .getByRole('tree', { name: 'Pages' })
+      .getByRole('treeitem', { name: /Tasks/ })
+      .click();
+    const backDb = fullPage(back);
+    await showView(backDb, 'Status chart');
+    const chart = backDb.locator('section.cgw-db-chart');
+    await expect(chart).toHaveAttribute('data-chart', 'pie', { timeout: 20000 });
+    await expect(chart).toHaveAttribute('aria-label', 'Chart of Tasks by status');
+    await expect(backDb.getByRole('button', { name: 'Filters: 1' })).toBeVisible();
+    expect(backErrors).toEqual([]);
+    await again.close();
+    await api.dispose();
+  });

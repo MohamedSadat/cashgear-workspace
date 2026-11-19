@@ -2,8 +2,8 @@
 // query or summed and averaged from the rows (numbers and formula results, empty cells left out),
 // one number for every row, which rows still need loading, and the cap.
 import { describe, expect, it } from 'vitest';
-import type { RowGroup, RowSnapshot } from '@cgw/database';
 import type { DatabaseRecord, RowRecord } from '@cgw/workspace';
+import type { RowGroup, RowSnapshot } from '../../host';
 import { ROW_CAP, measureProperty, nextToLoad, numberOf, pointsOf, totalOf } from './aggregate';
 
 const database: DatabaseRecord = {

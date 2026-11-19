@@ -208,6 +208,7 @@ export const viewsEn = {
       row1: 'Website refresh',
       row2: 'Year-end audit',
       row3: 'Mobile app launch',
+      viewChart: 'Progress by status',
     },
     readingList: {
       name: 'Reading list',

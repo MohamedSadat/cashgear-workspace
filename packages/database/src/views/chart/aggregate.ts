@@ -1,9 +1,10 @@
 // What a chart draws, from a database view's rows: one point per group of the group property (in
 // the query's group order, with its count from the query itself), measured by a count, a sum or an
-// average of a number property; or one number for all rows. Pure: no React, no host.
-import type { RowGroup, RowSnapshot } from '@cgw/database';
-import { cellValue, type DatabaseRecord, type PropertyDef, type RowRecord } from '@cgw/workspace';
-import type { ChartMeasure } from './props';
+// average of a number property; or one number for all rows. Pure: no React, no host. Moved from the
+// chart block (`@cgw/plugins`) in Phase 12: the chart block and the chart view both draw by it.
+import { cellValue, type RowRecord } from '@cgw/workspace';
+import type { ChartMeasure, DatabaseRecord, PropertyDef } from '../../core';
+import type { RowGroup, RowSnapshot } from '../../host';
 
 /** Sums and averages read at most this many rows (counts come from the query, every row). */
 export const ROW_CAP = 5000;

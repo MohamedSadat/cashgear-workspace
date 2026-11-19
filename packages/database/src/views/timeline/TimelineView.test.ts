@@ -154,7 +154,16 @@ const plus = (date: string, days: number) => dateOfDay(dayOfDate(date)! + days);
 
 describe('the timeline', () => {
   it('is the sixth view type, offered after the gallery', () => {
-    expect(VIEW_ORDER).toEqual(['table', 'board', 'list', 'calendar', 'gallery', 'timeline']);
+    expect(VIEW_ORDER).toEqual([
+      'table',
+      'board',
+      'list',
+      'calendar',
+      'gallery',
+      'timeline',
+      // Phase 12.
+      'chart',
+    ]);
     expect(VIEW_TYPES.timeline.ownRows).toBe(true);
     expect(VIEW_TYPES.calendar.ownRows).toBe(true);
   });
