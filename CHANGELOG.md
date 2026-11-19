@@ -4,6 +4,37 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.11.0] - 2026-11-19
+
+Share with groups of people at once, sign in with a passkey, and let a company's people sign in
+with their organisation's own account.
+
+- **Groups.** Owners and admins can make groups of a workspace's members in Settings → Members →
+  Groups, and a page or a workbook can be shared with a group as with a person: everyone in it gets
+  the group's access. A person's own access on a page still comes first, then the best of their
+  groups', then the workspace's. Taking someone out of a group takes away what it gave them at
+  once, in an open tab too. Guests are never in a group and never see one.
+- **Passkeys.** Add a passkey in Settings → Account (on the sign-in page, where the browser makes
+  it), then sign in with it instead of a password, in the browser and from the desktop app's
+  sign-in. Your browser may also offer it as you type your address. Rename or remove passkeys in
+  Settings; your password stays.
+- **Single sign-on.** A workspace's owners can let people with the company's email addresses sign
+  in through the company's own identity provider (Microsoft Entra ID, Google Workspace, Okta or any
+  OpenID Connect provider): prove the domain with a DNS record, set the provider in Settings →
+  Single sign-on, and someone of that domain signs in with no password, joining the workspace as a
+  member the first time if you allow it. You can then require it for the domain: its people's
+  passwords and passkeys stop working (owners keep theirs), and a session through the provider
+  lasts the hours you choose before the provider is asked again. An account made this way can set
+  a password by mail when its domain does not require sign-on.
+- **Older versions.** 0.10.0 and earlier never show a group on a page's sharing, and keep the
+  group's access when they change it.
+- **For whoever runs the server.** The update adds the groups', passkeys' and single sign-on's
+  tables (`docs/OPERATIONS.md`). The API needs `Identity__Passkeys__ServerDomain`, the API's own
+  host name (`install.ps1 -PasskeyDomain`, default `workspace-api.cashgearerp.com`), or it does not
+  start in Production. Single sign-on reads a domain's `TXT` record through the host's DNS and calls
+  the providers owners name over https; each provider registers
+  `https://workspace-api.cashgearerp.com/account/sso/callback` as its redirect address.
+
 ## [0.10.0] - 2026-11-18
 
 Edit customers and items from a page as you edit vendors, find pages by what they mean and not
