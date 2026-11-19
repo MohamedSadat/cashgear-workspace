@@ -127,17 +127,18 @@ API's host and no token is in JavaScript (Q5).
 
 ## Production as installed
 
-Installed 2026-11-14. Names only; no setting here is a secret.
+Installed 2026-11-14 (0.5.0); updated to 0.10.0 on 2026-11-19 with `install.ps1`, which also
+installed the Sites process. Names only; no setting here is a secret.
 
 | Part | Where |
 | --- | --- |
 | Web app | Static Web App `cashgear-workspace-web` (Free plan) in resource group `rg-cashgear-workspace`, custom domain `workspace.cashgearerp.com`; deployed by `.github/workflows/azure-static-web-apps-ambitious-field-02a19e810.yml` on every push to `main` |
-| API and worker | The IIS host behind `api.cashgearerp.com` (Windows Server 2022, workgroup): site and app pool `CashGearWorkspaceApi`, service `CashGearWorkspaceWorker`, files under `C:\CashGearWorkspace`, built-in identities |
-| HTTPS | The `*.cashgearerp.com` certificate in `WebHosting`, bound to `workspace-api.cashgearerp.com` by SNI |
+| API and worker | The IIS host behind `api.cashgearerp.com` (Windows Server 2022, workgroup): site and app pool `CashGearWorkspaceApi`, service `CashGearWorkspaceWorker`, files under `C:\CashGearWorkspace`, built-in identities; deploy packages unpacked under `C:\CashGearWorkspace\packages`, and a copy-only backup before each update in SQL Server's own backup folder (`CashGearWorkspace-pre-<version>-<date>.bak`) |
+| HTTPS | The `*.cashgearerp.com` certificate in `WebHosting` (valid until 2027-01-02), bound by SNI to `workspace-api.`, `pages.` and `plugins.cashgearerp.com` |
 | Database | `CashGearWorkspace` on the host's `MSSQLSERVER01` instance (SQL Server 2019 Standard, no Full-Text Search: search uses `LIKE`) |
 | Blob Storage | Storage account `cashgearworkspace` (Spain Central, Standard LRS, no public access, soft delete and container soft delete 30 days, versioning), container `workspace`, CORS as in step 3 |
 | Blob identity | App registration `cashgear-workspace-api` with Storage Blob Data Contributor and Storage Blob Delegator on that account only; its certificate made on the host, PFX in `C:\CashGearWorkspace\secrets` (expires 2028-11-14; the app registration accepts it until 2027-11-14, so upload it again or make a new one before then) |
-| Sites | Not installed yet (0.9.0): `pages.cashgearerp.com`'s DNS record and running `install.ps1` with the new package are the owner's steps |
+| Sites | Site and app pool `CashGearWorkspaceSites` (from 2026-11-19), bound to `pages.cashgearerp.com` and `plugins.cashgearerp.com`, both pointed at the host by DNS |
 | Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account), with its own Google app password named "Cash Gear Workspace", entered on the host only. Gmail answers a wrong one with `535 5.7.8` (in the event log as "A confirm mail was not sent: AuthenticationException…"); test a new password from the host (an SMTP `AUTH` alone sends nothing) before storing it in the app pool's and the worker's `Smtp__Password` |
 
 ## Configuration
@@ -189,7 +190,10 @@ out of the site's IIS log fields. Keep both if the logging is changed.
 ## Updating
 
 Build the new package, then run `install.ps1` with the same parameters. The migrations run
-first; the site and the worker stop for the copy (about a minute). Clients keep working offline
+first; the site and the worker stop for the copy (about a minute). Never copy a package's `api`
+folder over by hand: that skips the migrations, the worker and the settings a version adds (on
+2026-11-18 it left the API refusing to start for want of `Sites__PublicUrl` and
+`Plugins__PublicUrl`, against a database still at 0.5.0's migrations). Clients keep working offline
 in the meantime and push what waited when the API answers again. A migration is never edited
 once released; a change ships as a new one.
 
