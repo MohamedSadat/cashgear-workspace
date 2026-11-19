@@ -239,8 +239,11 @@ export async function groupsScreens(
   const box = dialog.getByRole('combobox', { name: words.picker });
   await box.click();
   await box.press('ArrowDown');
-  await expect(page.getByRole('option').first()).toBeVisible();
-  await expect(page.getByRole('option', { name: /^Writers/ })).toBeVisible();
+  // The picker's own list (the level selects' <option>s are options too, never shown).
+  await expect(box).toHaveAttribute('aria-expanded', 'true');
+  const list = page.locator(`[id="${await box.getAttribute('aria-controls')}"]`);
+  await expect(list.getByRole('option').first()).toBeVisible();
+  await expect(list.getByRole('option', { name: /^Writers/ })).toBeVisible();
   await check('share dialog, a group listed and the picker open');
   // Escape closes the list, then the dialog.
   await box.press('Escape');
