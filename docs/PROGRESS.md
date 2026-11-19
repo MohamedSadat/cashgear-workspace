@@ -20,6 +20,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 8: Hardening and moving in | Done, 2026-11-16 (0.8.0; Chrome's own IndexedDB loss answered by a journal; the Chromium report, drafted, is yours to file; one notice keeps its own component) | `phase-8`, `v0.8.0` |
 | Phase 9: Publishing and views | Done, 2026-11-18 (0.9.0; the site's origin, DNS and certificate, and its install on the host are yours; Sheet's real desktop app proven on the reference machine) | `phase-9`, `v0.9.0` |
 | Phase 10: Editable Customers and Items, search by meaning, third-party plugins | Done, 2026-11-18 (0.10.0; proven against the mocks in CI and against the real ERP run locally; the plugins origin's DNS and certificate, pushing Track E8 and E9 and the ERP's tenant script are yours; Voyage proven live) | `phase-10`, `v0.10.0` |
+| Phase 11: Sign-in and permissions | Planned 2026-11-19, with Phases 12 and 13; building | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `0490cbd` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), committed there and not pushed | |

@@ -1,7 +1,8 @@
 # Cash Gear Workspace: implementation plan
 
 > Approved for planning on 2026-11-11. Phases 8 to 10 added on 2026-11-15, chosen from "Later"
-> after 0.7.0. No phase starts until you say so.
+> after 0.7.0. Phases 11 to 13 added on 2026-11-19, from the themes chosen after 0.10.0. No phase
+> starts until you say so.
 
 ## Context
 
@@ -72,6 +73,9 @@ benchmarks run in CI on every push to `main`.
 | 8 | Hardening and moving in: reliability, the library's components, bulk cell editing, import, email notifications | `v0.8.0` |
 | 9 | Publishing and views: a public page site, the timeline view, workbooks in the export and their history | `v0.9.0` |
 | 10 | Editable Customers and Items on hand, AI search by embeddings, third-party plugin blocks | `v0.10.0` |
+| 11 | Sign-in and permissions: groups, passkeys, single sign-on | `v0.11.0` |
+| 12 | Databases and ERP at scale: a chart view, lanes on the timeline, the grid with a screen reader, row documents in pins, ERP reports, the ERP's queries paged in SQL | `v0.12.0` |
+| 13 | AI and plugins: a plugin's own network, plugins in the change feed, property values by meaning, an approximate index, a local embedding model, AI by subscription | `v0.13.0` |
 
 Changes from the brief's suggested phases, and why:
 
@@ -81,6 +85,9 @@ Changes from the brief's suggested phases, and why:
 - Collaboration (Phase 6) ships alone; ERP editing, plugins and AI move to Phase 7.
 - Phases 8 to 10 were chosen from "Later" and the earlier phases' deferrals on 2026-11-15, after
   0.7.0, and split into three releases (`DECISIONS.md`).
+- Phases 11 to 13 are the four themes chosen on 2026-11-18, after 0.10.0, sized against the code
+  on 2026-11-19 and proposed as three releases: about two of Phase 10 in all, with the riskiest
+  change to the server's core (who may read what) first, before more is built on it.
 
 ## Track U: missing components in `CashGear.React.UI`
 
@@ -107,6 +114,7 @@ Axe). Each is needed by the milestone named.
 | U16 | A file picker that only gives the file | M4.7 |
 | U17 | An editable area with a suggestion list (the comment composer's "@") | M6.4 |
 | U18 | A timeline: bars over a date axis, lanes, drag to move and resize, zoom | M9.2 |
+| U19 | `CgTimeline`: a bar moved to another lane by pointer and keys, the lane in its move's details, right to left | M12.2 |
 
 Until a component lands, the milestone uses a local stand-in behind the same props and replaces
 it when the pin moves. Stand-ins are listed in `PROGRESS.md` so none is forgotten. U9 to U17 are
@@ -127,6 +135,10 @@ in the ERP client, E4 read-only connectors, E5 rate limiting and CORS, E6 editab
 E7 the contract suite. E1 to E5 are needed by Phase 5; E6 by Phase 7. Added on 2026-11-15: E8,
 Customers and Items on hand editable with the audit, and E9, their cases in the contract suite,
 needed by Phase 10 once E1 to E7 are pushed; `INTEGRATIONS.md` gains them when Phase 10 starts.
+Added on 2026-11-19: E10, the connectors' `Query` filtered, sorted and paged in SQL rather than
+over every row of the company in memory (as 0.10.0's connectors do), and E11, report connectors
+(`kind: 'report'`, with parameters), both needed by Phase 12; `INTEGRATIONS.md` gains them when
+Phase 12 starts.
 
 ---
 
@@ -1552,19 +1564,396 @@ document schema rise.
 
 ---
 
+## Phase 11: Sign-in and permissions
+
+**Goals**
+
+Give access to groups of people as well as to each person; sign in with a passkey; sign in through
+a workspace's own identity provider.
+
+**Dependencies**
+
+Phase 2's identity (ASP.NET Core Identity 10.0.15, which has passkeys built in, and OpenIddict
+7.8.0) and Phase 6's hub, which re-checks access. No other repository. An OpenID Connect provider
+for the live check (yours: a test app in Microsoft Entra ID or Google Workspace); CI runs against a
+mock provider beside `tests/mocks`.
+
+Sized against the code on 2026-11-19: groups touch every place access is decided (six copies of
+the rule in `Access.cs`, the push's own SQL in `DocService`, workbooks' copy), so they are the
+phase's risk; passkeys are Identity's own, with the sign-in pages gaining their first script;
+single sign-on is the largest part (domains, a provider per workspace, accounts with no password).
+
+**Questions for you (one batch)**
+
+- How the four themes chosen after 0.10.0 are split (default: three releases, each planned now and
+  built one at a time: Phase 11 sign-in and permissions, Phase 12 databases and ERP at scale,
+  Phase 13 AI and plugins).
+- Groups: who makes them, who may be in one, and what a group's row means beside a person's own
+  (default: owners and admins make and manage them; members, admins and owners, never guests; a
+  group is given access to pages and workbooks as a person is; at the page that decides, a
+  person's own row first, then the highest of their groups' rows, then the workspace's).
+- Single sign-on: the protocol and who sets it up (default: OpenID Connect, set up per workspace
+  by its owners for email domains the workspace has proven by a DNS record; an account made at the
+  first sign-in; the workspace may require it for those domains; no SAML in 0.11.0).
+- Passkeys: beside the password or instead of it (default: beside it; added in Settings on the
+  API's own page, then sign in with either; a passkey answers wherever the password is asked
+  again).
+
+**Tasks**
+
+*M11.1 Groups*
+
+- [ ] Groups of a workspace and their people: owners and admins make, rename and delete a group
+      and add and remove its people; members read the groups and who is in them, guests none;
+      audited.
+- [ ] `group` as a principal in `PagePermissions` and `WorkbookPermissions`, decided by one rule
+      in every path that decides access: `Access.cs`'s copies, the push's SQL fast path
+      (`DocService`), workbooks, the hub's re-checks. One oracle test holds every path to the same
+      answers over a random matrix of pages, rows, groups and roles.
+- [ ] A group's people changed, or the group deleted: an `access` change for each person
+      affected, so their tabs fetch their tree again and the hub re-checks their connections.
+- [ ] The share dialog and a workbook's access take people and groups in one picker, a group shown
+      with its number of people; Settings → Members gains Groups.
+- [ ] An older build never drops a group's row: none is sent to a client that does not ask for
+      groups, and a list saved by one keeps the stored rows of principals it did not send (as the
+      server keeps a view's settings, Phase 9).
+
+*M11.2 Passkeys*
+
+- [ ] Identity's passkeys (its schema version 3, `UserPasskeys`), the relying party the API's own
+      host; every ceremony on the API's own pages, which gain one script of their own
+      (`script-src 'self'`) and nothing else.
+- [ ] "Sign in with a passkey", and the browser's autofill of passkeys where it offers it, on the
+      web and through the desktop's system browser; each sign-in makes a device, as a password's
+      does.
+- [ ] Settings → Account lists passkeys (name, added, last used); adding one opens the API's page,
+      after a recent sign-in; rename and remove; audited. A passkey answers wherever the password
+      is asked again (deleting the account).
+
+*M11.3 Single sign-on*
+
+- [ ] Domains: an owner adds an email domain and proves it with a DNS `TXT` record the server
+      reads; a domain belongs to one workspace.
+- [ ] A workspace's OpenID Connect provider: its issuer (read by discovery), client id and secret
+      (under Data Protection, never returned); the authorisation code flow with PKCE, `state` and
+      `nonce`; the id token checked for its signature by the provider's published keys, issuer,
+      audience, expiry and nonce; the email must be in a verified domain of the workspace.
+- [ ] "Sign in with your organisation's account": the email first, then that domain's provider. The
+      first sign-in makes the account, with no password, and, if the workspace allows it, a
+      membership as a member; an existing account with that email is linked to the provider.
+- [ ] Sign-on required for a domain: its accounts' password and passkey sign-ins refused, except
+      the workspace owners'; a session goes back to the provider after `SsoSessionHours` (24), the
+      desktop's refresh tokens likewise; turning it on needs a sign-in through the provider first.
+- [ ] Removing a provider or a domain, audited; people keep their accounts and may set a password
+      by the reset mail.
+
+**Files and modules**
+
+`server/`: `Cgw.Core/Access.cs`, `Sharing/`, `Workbooks/WorkbookAccess.cs`, `Documents/DocService.cs`
+and the hub's re-checks; a Groups module; Identity (`AccountService`, `AccountPages`, the connect
+endpoints) and a sign-on module. `@cgw/shell`: `cloud/ShareDialog.tsx`, `CloudUi.tsx` (members,
+groups, the account's passkeys, single sign-on), `sheet/WorkbookPermissions.tsx`. `@cgw/api`
+regenerated. `tests/mocks/oidc`: a mock OpenID Connect provider. No document, store or sync
+change.
+
+**API contracts**
+
+- `GET`, `POST /workspaces/{id}/groups`; `PATCH`, `DELETE /workspaces/{id}/groups/{groupId}`;
+  `PUT /workspaces/{id}/groups/{groupId}/members` (the whole list, with `If-Match`).
+- A page's and a workbook's permissions take `group` rows; their `GET` sends them only when asked
+  (`?principals=group`).
+- `GET /account/passkeys`, `PATCH`, `DELETE /account/passkeys/{id}`; the ceremonies' options and
+  results on the API's own pages.
+- `GET`, `POST /workspaces/{id}/sso/domains`, `POST …/domains/{domain}/verify`, `DELETE`;
+  `GET`, `PUT`, `DELETE /workspaces/{id}/sso/provider`; the API's pages for the sign-in and its
+  callback.
+
+**Database changes**
+
+`WorkspaceGroups`, `WorkspaceGroupMembers`; `group` rows in `PagePermissions` and
+`WorkbookPermissions`; Identity's `UserPasskeys`; `SsoDomains`, `SsoProviders`; `UserLogins`, which
+Identity has mapped since Phase 2, used for the first time.
+
+**Acceptance criteria**
+
+- A page restricted to a group is read and edited by exactly that group's people, at the group's
+  level, through every path (the routes, a push, the hub, search and search by meaning, Ask AI's
+  sources, the change feed, an export, a mail); a person's own row still decides over their
+  groups'; removing someone from the group takes the page away at once in their open tab and live
+  connection; a 0.10.0 build that edits the page's access keeps the group's row.
+- A person signs in with a passkey added in Settings, in Chrome and Edge and through the desktop's
+  system browser; a passkey of another account, or made for another site, is refused; one removed
+  stops at once.
+- A person of a verified domain signs in through the workspace's provider with no password, the
+  first time making their account; an unverified domain, an id token with a wrong signature,
+  issuer, audience, nonce or expiry, and an email outside the domains are each refused; with
+  sign-on required, that domain's password and passkey sign-ins are refused and sessions go back
+  to the provider after the limit.
+
+**Automated tests**
+
+- The access oracle over every path, groups among the principals; `AuthorizationTests`,
+  `TreeAccessTests` and `RealtimeTests` with groups; v0.10.0 meeting a group's row
+  (`old-build.spec.ts`).
+- Passkeys through a virtual authenticator (the browser's WebAuthn testing domain); the server's
+  refusals (another origin, another relying party, a challenge used twice, a counter going back).
+- Single sign-on against the mock provider: every refusal above, `alg: none`, a key the provider
+  never published, a `state` used twice; the DNS check through a fake resolver.
+- Axe and the Arabic check on the new screens and the API's pages.
+
+**Performance benchmarks**
+
+- The server's CPU per push within 10 % of 0.10.0's, the push's fast path deciding for a person in
+  20 groups (`bench/phase8-server.mjs`'s method).
+- Search, and the tree's access read, at 10,000 pages for a person in 20 groups with 500 group
+  rows: within Phase 2's budgets (search p95 ≤ 300 ms; 1,000 changes of the feed ≤ 500 ms).
+- A sign-in by passkey and one through single sign-on: the API's own time, p95 ≤ 200 ms each, the
+  authenticator and the provider apart.
+
+**Risks**
+
+- One path decides access without groups: one oracle over every path, and every copy of the rule
+  listed before building.
+- An older build drops a group's row: it is never sent one, and its save keeps them.
+- Taking over an account through a workspace's provider: only domains proven by DNS, the email
+  checked against them, the id token checked in full.
+- Everyone locked out by a broken provider: owners keep their password, and required sign-on is
+  turned on only after a sign-in through the provider.
+- WebAuthn takes no IP address as its relying party, and development runs on `127.0.0.1`: the
+  passkey specs run against a build of the app on `localhost`.
+- Someone removed at the provider keeps a session: sessions capped by `SsoSessionHours`; no SCIM
+  in 0.11.0.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven; single sign-on against the mock in CI, and against a
+  real provider when you have one.
+- `DATA_MODEL.md`, `ARCHITECTURE.md` and `OPERATIONS.md` updated.
+- Tags `phase-11` and `v0.11.0`; a card for Phase 12.
+
+---
+
+## Phase 12: Databases and ERP at scale
+
+**Goals**
+
+A chart view for databases; timeline bars moved between lanes; a database grid a screen reader
+reads well; pins that hold every row's document; ERP reports as read-only blocks; the ERP's
+queries filtered, sorted and paged in its database, not over a company's whole table.
+
+**Dependencies**
+
+Phase 11. Track U19 in `CashGear.React.UI` (`CgTimeline` has lanes but no drop on another lane).
+Tracks E10 and E11 in `CashGear`.
+
+Sized on 2026-11-19: the chart block's drawing and settings already exist (`@cgw/plugins`) and the
+site already draws charts as SVG; an older build reads an unknown view type as a table and could
+send it back as one, which the server must catch by the types that build knew. 0.10.0's connectors
+read every row the user may see and then search, sort and page in C#, keeping Arabic away from the
+database's collation; `maxRecords` is advertised and not enforced. The ERP has AP aging, stock
+balance on a date and a trial balance as services, and no AR aging.
+
+**Questions for you (one batch)**
+
+- The reports (default: AP aging by vendor, stock balance on a date, trial balance).
+- Tracks U19, E10 and E11: who builds them (default: sessions of their own in those repositories,
+  the ERP's on LocalDB only, as before).
+- The ERP's order and search once paged in SQL (default: exactly 0.10.0's answers, the same
+  records in the same order and Arabic searched as now, held by the suite against both).
+- A chart view over a large database (default: counts from the query's group counts at any size;
+  sums and averages over at most 5,000 rows on the device, marked partial past that, as the chart
+  block).
+- Pins of row documents (default: every row's document of a pinned database that has one, up to
+  5,000 a database, through a batch pull).
+- Screen readers (default: NVDA and Narrator on Windows and VoiceOver on the Mac, each by hand once,
+  and the grid's accessibility tree checked in CI).
+
+**Tasks**
+
+*M12.1 Chart view*
+
+- [ ] A seventh view type, `chart`: bars, a line or a pie, grouped by the view's group, measured by
+      a count or a number, formula or rollup; the chart block's drawing and settings move into
+      `@cgw/database` and the block uses them from there.
+- [ ] `ViewType` in TypeScript and C#; an older build's `viewTypes` read as the types it knew, so
+      6 keeps a `chart` it sent back as a table; v0.10.0 in the old-build spec; share links and
+      sites draw it as the block, a measure on a property no view shows refused on both.
+
+*M12.2 Lanes*
+
+- [ ] Track U19; a bar dropped on another lane writes the lane's property with its dates in one
+      `row.update`, by pointer and keys, right to left.
+
+*M12.3 The grid with a screen reader*
+
+- [ ] Row count and indices from the query's total (group, load-more and new-row lines not
+      counted); the title as each row's header; headers named without their type; groups as a
+      tree grid; editing announced when it starts, is saved and is cancelled.
+
+*M12.4 Pins with row documents*
+
+- [ ] A pinned database holds each row's document that has one, up to 5,000; a batch pull, so a
+      pin stays inside the person's rate limit; Settings' progress counts them.
+
+*M12.5 The ERP's queries paged in SQL (Track E10)*
+
+- [ ] Filter, sort and page in SQL with a keyset cursor: the same records in the same order as
+      0.10.0, `total` by a count, the field and record rules unchanged, `maxRecords` enforced; the
+      suite's cases at 100,000 records against UnifiedAPI on LocalDB.
+
+*M12.6 Reports (Track E11)*
+
+- [ ] Report connectors in `erp-connect.1`, written in full first: parameters in `Schema` and
+      `Query`, a key per row, read-only; the mock ERP's reports; the suite's cases.
+- [ ] The ERP block's parameters (dates, lookups) and its report table; nothing of a report
+      stored anywhere (the hard limit).
+
+**Acceptance criteria**
+
+- A chart view draws from its database's rows in the app, on a share link and on a site; an older
+  build that edits it keeps it a chart.
+- A bar moved to another lane by pointer and by keys changes its lane and dates in one edit, in
+  both directions.
+- NVDA, Narrator and VoiceOver read a row's title, its position of the true total and the column
+  as one moves; editing is announced.
+- A pinned database of 5,000 rows opens every row's document offline.
+- The ERP answers a query of a 100,000-record table without reading it whole, with 0.10.0's
+  records and order; each report reads with its parameters, as the ERP lets the user see it, and
+  none of it is stored.
+
+**Performance benchmarks**
+
+- A chart view of 50,000 rows by count: first drawn ≤ 1 s.
+- Pinning a 5,000-row database with its documents ≤ 120 s, the keystroke budget held meanwhile.
+- The ERP's first page of a 100,000-record connector ≤ 500 ms at the ERP, its memory not growing
+  with the table (Track E10's own measure).
+
+**Risks**
+
+- An older build turns a chart into a table: the server reads `viewTypes` as a count of types.
+- The SQL path orders or matches Arabic differently from 0.10.0: the suite compares both on the
+  same records.
+- A report is heavy on a large ledger: `maxRecords` and the ERP's own limits; the block asks once
+  per Refresh.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven, against the real ERP on LocalDB for M12.5 and M12.6.
+- `INTEGRATIONS.md`, `DATA_MODEL.md` and `ARCHITECTURE.md` updated.
+- Tags `phase-12` and `v0.12.0`; a card for Phase 13.
+
+---
+
+## Phase 13: AI and plugins
+
+**Goals**
+
+Plugins that may reach hosts an admin approved; plugins learned of through the change feed; rows
+found by their property values as well as their text; search by meaning past what an exact search
+holds; a local embedding model on the host; AI on Cash Gear's own subscription.
+
+**Dependencies**
+
+Phase 10. A spike before M13.4: an open-weight model on the host's processor, measured. Cash Gear's
+own provider keys for the subscription, on the host only.
+
+Sized on 2026-11-19: the plugins origin's CSP is one for every plugin (`connect-src 'none'`), so a
+host list means a CSP per bundle; the plugin list already takes the change feed's lock and adds no
+change; a row's values are JSON beside its row and never read by the `embed` job; the exact search
+holds about 1,000,000 chunks a process in 1 GB and ranks 100,000 in about 10 ms; no model runs on
+the host today, and the question is embedded in the API, so a local model loads there too.
+
+**Questions for you (one batch)**
+
+- A plugin's network (default: https hosts named in its manifest, approved by an admin when it is
+  added and whenever an update changes them; a plugin with a view's rows and a network approved
+  for both together, told that it can send what it is shown).
+- Property values (default: text, number, select, status, date, checkbox, URL and email values in
+  the row's own chunks; never a person, created-by or edited-by, or a formula or rollup of one).
+- The approximate index (default: in the API process past 200,000 chunks a workspace, exact
+  below; at least 0.95 of the exact search's first ten found).
+- The local model (default: after the spike, `voyage-4-nano` on ONNX Runtime in the worker and the
+  API, on the processor, as a third choice in Settings beside Voyage's API; AI's local-model mode
+  on the desktop stays on "Later").
+- The subscription (default: Cash Gear's own Anthropic and Voyage keys from the host's
+  environment; a workspace chooses its own key or Cash Gear's; a monthly allowance per workspace
+  set by whoever runs the server, reserved before each call; no billing in 0.13.0).
+
+**Tasks**
+
+*M13.1 A plugin's network*
+
+- [ ] The manifest's hosts, shown and approved in Settings → Plugins; the plugins origin's CSP per
+      bundle (`connect-src` those hosts); the hostile plugin still blocked from every other host.
+
+*M13.2 Plugins in the change feed*
+
+- [ ] A `plugin` change for each add, update, switch and removal; a tab's list read again on it;
+      older builds ignore the type.
+
+*M13.3 Property values by meaning*
+
+- [ ] The `embed` job reads a row's values by the default above, and embeds it again when they
+      change, formulas and rollups included.
+
+*M13.4 The approximate index and a local model*
+
+- [ ] The index past the threshold, fed by `EmbeddingChanges`, over-fetching for the permission
+      filter.
+- [ ] The spike, then the local model behind `IEmbeddingProvider`: its own model's vectors, a model
+      change embedding everything again, as Phase 10's.
+
+*M13.5 AI by subscription*
+
+- [ ] A workspace's choice of key; the allowance, reserved before a call and settled after it;
+      usage shown against it; refused past it (`ai.limit`).
+
+**Acceptance criteria**
+
+- A plugin reaches the hosts an admin approved and no other; a new host in an update waits for
+  approval.
+- An added, updated, switched or removed plugin reaches an open tab without a reload.
+- A question finds a row by a property value its text does not hold, never by a person's.
+- At 1,000,000 chunks, search by meaning answers within budget, and finds at least 0.95 of the
+  exact search's first ten.
+- With the local model, no text leaves the host for embeddings.
+- A workspace on the subscription uses AI with no key of its own, and is refused past its
+  allowance.
+
+**Performance benchmarks**
+
+- Retrieval by meaning over 1,000,000 chunks, p95 ≤ 300 ms, less the provider's time.
+- The local model: the spike sets the budget for a chunk and a question on the host's processor.
+- Typing between ten plugin frames within Phase 10's budget, with networked plugins.
+
+**Risks**
+
+- A plugin with rows and a network sends them away: approval names both together, and an admin
+  can turn it off at once.
+- An approximate index misses a page the exact search finds: recall measured, exact below the
+  threshold.
+- A local model is too slow on the host: the spike decides before anything is built on it.
+- Subscription use runs past an allowance with calls at once: tokens reserved before each call.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `INTEGRATIONS.md`, `DATA_MODEL.md`, `ARCHITECTURE.md` and `OPERATIONS.md` updated.
+- Tags `phase-13` and `v0.13.0`; "Later" reviewed with you.
+
+---
+
 ## Later
 
 Not planned in any phase; listed so they are not lost. Reviewed on 2026-11-15: what was chosen
 went to Phases 8 to 10, and the earlier phases' deferrals that were not chosen are listed here.
 Reviewed again on 2026-11-18, after 0.10.0: sign-in and permissions, ERP at scale, AI and plugins,
-and the database items were chosen for Phase 11, which a session of its own plans (`DECISIONS.md`);
-they stay listed here until that plan takes them.
+and the database items were chosen, and went to Phases 11 to 13 on 2026-11-19 (`DECISIONS.md`).
 
-- A chart view type for databases (the chart plugin block exists from 0.7.0).
 - Embedded presentations, once that app exists.
-- Groups in permissions; single sign-on; passkeys.
 - Comments offline (online only from 0.6.0).
-- AI's subscription mode and its local-model mode on the desktop.
+- AI's local-model mode on the desktop (completions; Phase 13 runs an embedding model on the host).
+- SAML and SCIM for single sign-on (OpenID Connect only is proposed for 0.11.0).
 - Linux desktop build; a mobile app.
 - A shared `@cashgear/app-kit` for the platform split, theme and shortcuts (D1: once a third app
   needs it).
@@ -1572,22 +1961,13 @@ they stay listed here until that plan takes them.
 - Yjs 14, when its binding is stable.
 - A SignalR backplane or Azure SignalR Service, past about 5,000 to 10,000 connections on a node
   (Q17).
-- ERP reports (Q16); the ERP's Query paging without reading a company's whole table (Track E,
-  before large tenants).
-- Pins that hold every row's document, not only a database's rows; a screen-reader pass on the
-  database grid (Axe only so far); an end-to-end test of access lost without a feed change (the
-  hub's 60 s re-check).
+- An end-to-end test of access lost without a feed change (the hub's 60 s re-check).
 - Left by Phase 8: a Notion export's people columns as members (text in 0.8.0) and its relations
   to pages outside the export; an attachment's bytes fetched before it is first opened, so a
   second device has them offline.
 - Left by Phase 9: custom domains for published sites; a rate limit in the Sites process; publishing
   changes in the change feed (the dialog and Settings read them); an index of row files for the
-  site's file check (a `LIKE` over a database's rows in 0.9.0); moving a timeline bar to another
-  lane by dragging (Track U: `CgTimeline` has no lanes to drop on).
-- Left by Phase 10: plugins in the change feed (a tab learns of one added or removed on its next
-  read of the list); a plugin's own network access (refused by its CSP in 0.10.0); embedding
-  database property values, not only text; an approximate vector index past what one API process
-  holds; `voyage-4-nano` run on the host instead of Voyage's API.
+  site's file check (a `LIKE` over a database's rows in 0.9.0).
 - Not while the hard limit stands: snapshotting an ERP view into a database, which would store ERP
   data in a Workspace table.
 
@@ -1615,6 +1995,11 @@ they stay listed here until that plan takes them.
 | An older build rewrites a timeline view | 9 | The old-build spec; the server keeps what an older client does not send |
 | Embeddings leak content across permissions | 10 | Filtered at query time; the permission matrix |
 | A third-party plugin reaches the document or the session | 10 | A sandboxed iframe on its own origin, a message contract, no network |
+| A path decides access without a group's row, or an older build drops one | 11 | One rule held by an oracle over every path; rows an older build did not send kept |
+| An account taken over through a workspace's own provider | 11 | Domains proven by DNS, the email checked against them, the id token checked in full |
+| An older build turns a chart view into a table | 12 | `viewTypes` read as the types that build knew; the old-build spec |
+| The ERP's paged queries answer differently from 0.10.0's | 12 | The suite compares both on the same records (Track E10) |
+| A plugin with a network sends away what it is shown | 13 | Hosts approved by an admin, rows and network approved together |
 
 ## Verification
 

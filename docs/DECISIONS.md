@@ -1370,3 +1370,44 @@ later (added to it the same day), was put to you in one batch, grouped by theme.
 | How many phases | Left to Phase 11's planning: four themes may be one phase or split into releases, as Phases 8 to 10 were | The planning session sizes them against the code, and asks |
 | ERP reports and Query paging | Planned with Track E work in `CashGear` (E10 onward) as an agreed track | The hard limits change other repos only as agreed tracks |
 | Moving a bar between lanes | Its component work in Track U (`CgTimeline`) | The hard limits put generic components in `CashGear.React.UI` |
+
+## 2026-11-19: Phase 11
+
+The four themes chosen after 0.10.0 were sized against the code and this repository's ERP partner
+(read only, nothing run): groups touch every place access is decided (six copies of the rule in
+`Access.cs`, the push's own SQL in `DocService`, workbooks' copy in `WorkbookAccess`); the
+framework (ASP.NET Core Identity 10.0.15) has passkeys built in, unused; nothing signs in from
+outside today (`UserLogins` is mapped and empty); 0.10.0's ERP connectors read every row the user
+may see and search, sort and page in C#; the ERP has AP aging, stock balance on a date and a trial
+balance as services; Track E8's four commits are on the ERP's `origin/main`. The plan's Phases 11
+to 13 follow from it (`IMPLEMENTATION_PLAN.md`).
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| How the themes split | Three releases, all planned now and built one at a time: Phase 11 (`v0.11.0`) groups, passkeys and single sign-on; Phase 12 (`v0.12.0`) the chart view, lanes on the timeline, the grid with a screen reader, row documents in pins, ERP reports and the ERP's queries paged in SQL; Phase 13 (`v0.13.0`) a plugin's network, plugins in the change feed, property values by meaning, an approximate index, a local embedding model, AI by subscription |
+| Groups | Owners and admins make and manage groups; a group holds members, admins and owners, never guests; a group is given access to pages and workbooks as a person is; at the page that decides, the person's own row first, then the highest of their groups' rows, then the workspace's (today's rule, extended) |
+| Single sign-on | OpenID Connect, set up per workspace by its owners for email domains the workspace proves by a DNS `TXT` record; the first sign-in makes the account with no password; the workspace may require it for those domains, owners keeping their password; no SAML. Proven against a mock provider, and against a real one when you have a test app |
+| Passkeys | Beside the password: added in Settings, the ceremony on the API's own sign-in pages, then sign in with either; a passkey answers where the password is asked again (deleting the account); every account keeps its password |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The deciding page with groups | The nearest page, walking up, that is restricted or has a row for the caller: their own, one of a group they are in, or the workspace's (not for a guest). There: their own row; else the highest of their groups' rows; else the workspace's; else, restricted, none | Your answer; a group row is a row for each of its people, as a person's is for them |
+| Who is in a group | Members, admins and owners; a member made a guest, or removed, leaves every group, with an `access` change | Your answer: never guests |
+| A group's name and limits | 1 to 100 characters, unique in the workspace by search's normalisation; at most 200 groups a workspace; a group may be empty | Bounded; two groups read alike would be shared by mistake |
+| What members see | Every group's name and people (as they see members); guests see no group, and a group's row on a page a guest can open is not named to them | Members choose groups in the share dialog; a guest sees only people named on pages they can see |
+| A group's change | Its people changed or the group deleted: one `access` change for each person who gained or lost a membership (targeted at them, as a member's role change is), so the four feed readers stay as they are; deleting a group deletes its rows on pages and workbooks | Their tabs fetch their tree again and the hub re-checks them; a row naming no group means nothing |
+| Older builds and group rows | A permissions `GET` sends group rows only with `?principals=group`; a `PUT` that does not say `principals: ["group"]` keeps every stored group row | 0.10.0's share dialog knows only people and the workspace, and its save would delete what it was never shown (Phase 9's rule for views) |
+| The relying party for passkeys | The API's own host (`workspace-api.cashgearerp.com`), every ceremony on the API's own pages; user verification required, no attestation, discoverable credentials | A wider id (`cashgearerp.com`) would let the ERP, the sites and the plugins origin ask for assertions; the app's own origin is not the API's |
+| Adding a passkey | On the API's page, opened from Settings, within 10 minutes of a sign-in (else that page asks for one first); at most 20 an account, named by the person | An open session alone must not be enough to add a way in |
+| Passkeys in development | WebAuthn takes no IP address as its relying party: the passkey specs run against a build of the app and the API on `localhost` | The app and the API are on `127.0.0.1` in development for their cookies (Phase 2) |
+| Proving a domain | A `TXT` record `cgw-verify=<token>` at `_cashgear-workspace.<domain>`, the token 128 random bits shown to owners; read through `DnsClient` (Apache-2.0); a domain verified by one workspace cannot be by another until it removes it | .NET has no `TXT` lookup; the server tests run on Linux in CI, so no Windows API |
+| Reading the provider | Its discovery document and keys through `Microsoft.IdentityModel.Protocols.OpenIdConnect`, which the server already carries; the code flow written in the sign-on module (no handler per workspace at start) | Providers are added at run time; no new package for the protocol |
+| The email from the provider | The id token's `email`, any case, in a verified domain of the provider's workspace; `email_verified: false` refused; the account linked by (provider, `sub`) in `UserLogins` from then on | The domain's owner controls its people's identities; a changed email at the provider keeps the same account |
+| A first sign-in | Makes the account (display name from `name`, else the email's local part; locale from the browser as a sign-up's) with no password, and a membership as a member when the workspace allows it (on by default) | Your answer |
+| Sign-on required | Per domain; refuses that domain's password and passkey sign-ins, password resets and new password sign-ups, except for the workspace's owners; a session through the provider lasts `SsoSessionHours` (24) from that sign-in, then the provider is asked again; a desktop's refresh token ends with it | Your answer; no SCIM, so the session's length is what bounds someone removed at the provider |
+| Who sets up sign-on | Owners only; admins and members do not see the section | The settings decide who can sign in as whom |
+| Version | `v0.11.0`, `v0.12.0`, `v0.13.0` | One version per phase |
