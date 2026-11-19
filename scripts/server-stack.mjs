@@ -48,10 +48,13 @@ const origins = [
   'http://127.0.0.1:5273',
   'http://localhost:4273',
   'http://localhost:5273',
+  // Phase 11: the app built against the API on `localhost`, for the passkey specs
+  // (scripts/web-localhost.mjs): WebAuthn takes no IP address as its relying party.
+  'http://localhost:4268',
   'http://tauri.localhost',
   'tauri://localhost',
   // The old web builds that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs): v0.2.0,
-  // v0.3.0, v0.4.0, v0.5.0, v0.6.0, v0.7.0, v0.8.0 and v0.9.0.
+  // v0.3.0, v0.4.0, v0.5.0, v0.6.0, v0.7.0, v0.8.0, v0.9.0 and v0.10.0.
   'http://127.0.0.1:4279',
   'http://127.0.0.1:4278',
   'http://127.0.0.1:4277',
@@ -60,6 +63,7 @@ const origins = [
   'http://127.0.0.1:4274',
   'http://127.0.0.1:4272',
   'http://127.0.0.1:4271',
+  'http://127.0.0.1:4270',
 ];
 
 const children = [];
@@ -206,6 +210,10 @@ const env = {
   Ai__AnthropicBaseUrl:
     process.env.CGW_AI_BASE_URL ?? `http://127.0.0.1:${process.env.CGW_MOCK_AI_PORT ?? 4286}`,
   Ai__VoyageBaseUrl: voyageUrl,
+  // Phase 11: a domain's TXT record is read from the mock provider's DNS stand-in (tests/mocks/oidc,
+  // started by Playwright or by hand), never from real DNS, unless CGW_SSO_DNS_BASE_URL names another.
+  Sso__DnsBaseUrl:
+    process.env.CGW_SSO_DNS_BASE_URL ?? `http://127.0.0.1:${process.env.OIDC_MOCK_PORT ?? 4287}`,
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   ...(e2e
     ? {

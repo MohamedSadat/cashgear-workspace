@@ -173,8 +173,9 @@ jobs:
       # person, and the feed's comments and notifications), v0.6.0 (Phase 7: a schema-6 page
       # with plugin blocks), v0.7.0 and v0.8.0 (Phase 9: a timeline view, a type neither
       # knows, drawn as a table there and kept a timeline with its settings), and v0.9.0
-      # (Phase 10: a third-party plugin block, a placeholder there and kept as it is).
-      - name: The old builds (v0.2.0's to v0.9.0's web apps)
+      # (Phase 10: a third-party plugin block, a placeholder there and kept as it is), and v0.10.0
+      # (Phase 11: a page whose access holds a group's row, kept by its save).
+      - name: The old builds (v0.2.0's to v0.10.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs

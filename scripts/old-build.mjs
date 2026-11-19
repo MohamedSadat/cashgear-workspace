@@ -6,8 +6,9 @@
 // (Phase 9's: a timeline view, a type neither knows, drawn as a table there and kept a timeline
 // with its settings on the server), and v0.9.0 (Phase 10's: a page holding a third-party plugin
 // block, a `pluginBlock` of a type v0.9.0 has no definition for, so it draws the editor's own
-// placeholder and never changes the node). Each is the
-// web build of its tag: the same document code (@cgw/doc at that release's schema version, its
+// placeholder and never changes the node), and v0.10.0 (Phase 11's: a page whose access holds a
+// group's row, a principal v0.10.0 does not know, which its share dialog never sees and whose
+// save keeps it). Each is the web build of its tag: the same document code (@cgw/doc at that release's schema version, its
 // gate and its sync engine) as that release's desktop app, which embeds this very build.
 //   node scripts/old-build.mjs                 every tag's tree into target/old-build/<tag>,
 //                                              installed from its own lockfile, and its web app
@@ -19,7 +20,8 @@
 //                                              Content Security Policy): v0.2.0 on 4279, v0.3.0
 //                                              on 4278, v0.4.0 on 4277, v0.5.0 on 4276,
 //                                              v0.6.0 on 4275, v0.7.0 on 4274, v0.8.0 on
-//                                              4272, v0.9.0 on 4271 (4273 is this build's preview)
+//                                              4272, v0.9.0 on 4271, v0.10.0 on 4270 (4273 is
+//                                              this build's preview)
 // The API a build talks to is fixed at build time: VITE_CGW_API, 127.0.0.1:5280 (the e2e stack,
 // which must allow each build's origin: scripts/server-stack.mjs) unless set.
 import { spawn, spawnSync } from 'node:child_process';
@@ -39,6 +41,7 @@ export const OLD_BUILDS = {
   // 4273 is this build's own preview.
   'v0.8.0': { port: 4272 },
   'v0.9.0': { port: 4271 },
+  'v0.10.0': { port: 4270 },
 };
 export const OLD_TAG = 'v0.2.0';
 export const originOf = (tag = OLD_TAG) => `http://127.0.0.1:${OLD_BUILDS[tag].port}`;

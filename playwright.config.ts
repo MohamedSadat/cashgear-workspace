@@ -36,6 +36,13 @@ export const mocks = [
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
+  // Phase 11: the mock OpenID Connect provider (single sign-on) and the DNS stand-in the API asks.
+  {
+    command: 'node tests/mocks/oidc/server.mjs',
+    url: 'http://127.0.0.1:4287/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 ];
 
 // Chrome and Edge are the first-class browsers, as in Sheet. E2E_BASE_URL points the specs at a

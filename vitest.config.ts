@@ -9,6 +9,8 @@ export default defineConfig({
       'bench/**/*.test.ts',
       // Contract suites, against the mocks they start (tests/contracts/*/README.md).
       'tests/contracts/**/*.test.ts',
+      // Phase 11: the mocks' own tests (tests/mocks/oidc).
+      'tests/mocks/**/*.test.ts',
     ],
     exclude: ['**/node_modules/**', '**/dist/**'],
     environment: 'node',
