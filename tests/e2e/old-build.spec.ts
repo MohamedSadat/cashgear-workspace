@@ -47,6 +47,11 @@
 // ("needs a newer version", naming the type), the rest of the page editable (the schema is the
 // same, so the page is not read-only); nothing of that block is sent, the server's bytes are kept,
 // and this build draws the block's frame again with its props exactly as it wrote them.
+//
+// Phase 11 (v0.10.0 on :4270, no groups): a page whose access holds a group's row, a principal
+// v0.10.0 does not know. Its share dialog reads the list without asking for groups, so it is never
+// sent the group's row; a person's level changed there and saved goes up without `principals`, and
+// the server keeps the group's row exactly as it was (the older-build rule, as for Phase 9's views).
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1031,5 +1036,142 @@ test('the v0.9.0 build shows a third-party plugin block as a placeholder, sends 
   await expect(back.locator('[data-body="pluginBlock"] iframe')).toHaveCount(1, { timeout: 30000 });
   expect(backErrors).toEqual([]);
   await again.close();
+  await api.dispose();
+});
+
+/** A page's access list as the server holds it, the groups' rows with it. */
+type AccessList = {
+  restricted: boolean;
+  entries: {
+    principalType: string;
+    principalId: string;
+    level: string;
+    displayName: string | null;
+    peopleCount?: number | null;
+  }[];
+};
+
+test('the v0.10.0 build changes a person’s level in a page’s sharing, and the server keeps the group’s row', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.10.0');
+  const account = await newAccount('Groups and v0.10.0');
+  const api = await apiSession(account);
+  const others: Api[] = [];
+
+  // This build: a workspace and a page.
+  const current = await browser.newContext();
+  const now = await current.newPage();
+  const nowErrors = watchAppErrors(now);
+  await now.goto('/');
+  await signIn(now, account);
+  await signedIn(now, account);
+  await now.getByLabel('Workspace name').fill('Groups v0.10.0');
+  await now.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(now)).toBeVisible();
+  await newPage(now, 'Shared with a group');
+  await now.keyboard.type('Read by the reviewers.');
+  await waitSaved(now);
+  const pageId = pageIdOf(now);
+  await expect(syncStatus(now)).toHaveText('Synced', { timeout: 30000 });
+  const workspaceId = (
+    (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
+  ).find((w) => w.name === 'Groups v0.10.0')!.id;
+  expect(nowErrors).toEqual([]);
+  await current.close();
+
+  // Ben and Cy join by invitation; a group of Cy; the page restricted to Ben at view and the group
+  // at comment, as this build's share dialog saves it.
+  const ben = await newAccount('Ben');
+  const cy = await newAccount('Cy');
+  others.push(await invite(api, workspaceId, ben), await invite(api, workspaceId, cy));
+  const members = (await api.get(`/api/v1/workspaces/${workspaceId}/members`)) as {
+    userId: string;
+    email: string;
+  }[];
+  const idOf = (email: string) =>
+    members.find((m) => m.email.toLowerCase() === email.toLowerCase())!.userId;
+  const group = (await api.post(`/api/v1/workspaces/${workspaceId}/groups`, {
+    name: 'Reviewers',
+    people: [idOf(cy.email)],
+  })) as { id: string };
+  await api.put(`/api/v1/pages/${pageId}/permissions`, {
+    restricted: true,
+    principals: ['group'],
+    entries: [
+      { principalType: 'user', principalId: idOf(ben.email), level: 'view' },
+      { principalType: 'group', principalId: group.id, level: 'comment' },
+    ],
+  });
+  const before = (await api.get(
+    `/api/v1/pages/${pageId}/permissions?principals=group`,
+  )) as AccessList;
+  const groupRow = before.entries.find((e) => e.principalType === 'group')!;
+  expect(groupRow).toMatchObject({
+    principalId: group.id,
+    level: 'comment',
+    displayName: 'Reviewers',
+    peopleCount: 1,
+  });
+  // Without asking for groups, the list is 0.10.0's: no group's row.
+  expect(
+    ((await api.get(`/api/v1/pages/${pageId}/permissions`)) as AccessList).entries.some(
+      (e) => e.principalType === 'group',
+    ),
+  ).toBe(false);
+
+  // v0.10.0, the owner: its share dialog lists Ben and never the group; Ben's level changed to
+  // edit and saved.
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const reads: string[] = [];
+  const saves: Record<string, unknown>[] = [];
+  old.on('request', (request) => {
+    if (!/\/api\/v1\/pages\/[^/]+\/permissions/.test(request.url())) return;
+    if (request.method() === 'GET') reads.push(request.url());
+    if (request.method() === 'PUT') saves.push(request.postDataJSON() as Record<string, unknown>);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await old
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /Shared with a group/ })
+    .click({ timeout: 30000 });
+  await expect(editor(old)).toContainText('Read by the reviewers.', { timeout: 20000 });
+  await old.locator('.cgw-topbar-button[aria-label="Page actions"]').click();
+  await old.getByRole('menuitem', { name: 'Share…' }).click();
+  const dialog = old.getByRole('dialog', { name: /Share/ });
+  const list = dialog.getByTestId('share-entries');
+  await expect(list.getByRole('listitem')).toHaveCount(1, { timeout: 20000 });
+  await expect(list).toContainText('Ben');
+  await expect(list).not.toContainText('Reviewers');
+  await dialog.getByLabel('Access of Ben').selectOption('edit');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog.getByText('Sharing saved.')).toBeVisible();
+  // It asked for no groups and said nothing of them.
+  expect(reads.length).toBeGreaterThan(0);
+  expect(reads.some((url) => url.includes('principals'))).toBe(false);
+  expect(saves).toHaveLength(1);
+  expect(saves[0]).not.toHaveProperty('principals');
+  expect(JSON.stringify(saves[0])).not.toContain(group.id);
+  expect(oldErrors).toEqual([]);
+  await oldContext.close();
+
+  // The server: Ben at edit, the page still restricted, the group's row exactly as it was.
+  const after = (await api.get(
+    `/api/v1/pages/${pageId}/permissions?principals=group`,
+  )) as AccessList;
+  expect(after.restricted).toBe(true);
+  expect(
+    after.entries.find((e) => e.principalType === 'user' && e.principalId === idOf(ben.email))!
+      .level,
+  ).toBe('edit');
+  expect(after.entries.find((e) => e.principalType === 'group')).toEqual(groupRow);
+  for (const other of others) await other.dispose();
   await api.dispose();
 });

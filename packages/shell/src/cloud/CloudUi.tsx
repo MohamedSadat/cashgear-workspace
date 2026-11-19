@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { avatarColours } from '../collab/colour';
@@ -255,7 +256,7 @@ export function UploadBanner({ cloud, session }: { cloud: Cloud; session: Worksp
 }
 
 type Device = Awaited<ReturnType<Cloud['devices']>>[number];
-type MemberRow = Awaited<ReturnType<Cloud['members']>>[number];
+export type MemberRow = Awaited<ReturnType<Cloud['members']>>[number];
 type InviteRow = Awaited<ReturnType<Cloud['invites']>>[number];
 
 /** Settings: who is signed in, the devices signed in, and signing out. */
@@ -348,8 +349,20 @@ const roleKey = (role: string) =>
         ? 'cloud.roleGuest'
         : 'cloud.roleMember';
 
-/** Settings: the open workspace's members and invitations (owners and admins change them). */
-export function MembersSettings({ cloud, session }: { cloud: Cloud; session: WorkspaceSession }) {
+/**
+ * Settings: the open workspace's members and invitations (owners and admins change them). Phase 11:
+ * `groups` draws the workspace's groups at the section's end, given the members as read here
+ * (Settings passes it, so the groups' code loads with Settings, not with the app).
+ */
+export function MembersSettings({
+  cloud,
+  session,
+  groups,
+}: {
+  cloud: Cloud;
+  session: WorkspaceSession;
+  groups?: (members: readonly MemberRow[] | null) => ReactNode;
+}) {
   const { t } = useTranslation();
   const account = useAccount(cloud);
   const workspace = session.current;
@@ -494,6 +507,7 @@ export function MembersSettings({ cloud, session }: { cloud: Cloud; session: Wor
               </ul>
             </>
           )}
+          {groups?.(members)}
         </>
       )}
     </section>

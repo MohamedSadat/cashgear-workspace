@@ -2,12 +2,33 @@
 // people listed, and view links. The server decides access on every request; this dialog only
 // shows and asks (ARCHITECTURE.md: hiding a control is never the check). Phase 9: for someone with
 // full access, a second view of the dialog, "Publish to the web" (PublishSection.tsx).
+//
+// Phase 11: groups beside people. The list is read with the groups' rows (`?principals=group`) and
+// saved with `principals: ["group"]`, so its group entries replace the page's group rows; one
+// picker offers the workspace, the groups (with their number of people) and the people
+// (principals.tsx). For a guest (never told of groups) the list and the picker hold no group, and
+// their save says nothing of groups, so the server keeps every group row as it is.
 import { CgCheckBox } from '@cashgear/ui';
-import type { Id, PageRecord } from '@cgw/workspace';
+import { SyncHttpError, type Id, type PageRecord } from '@cgw/workspace';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../Dialog';
 import type { Cloud } from './cloud';
+import {
+  EntryList,
+  PrincipalPicker,
+  candidatesOf,
+  entriesIn,
+  entriesOf,
+  entryFor,
+  groupChoices,
+  refusalOf,
+  withoutGroups,
+  type Entry,
+  type GroupChoice,
+  type Level,
+  type Person,
+} from './principals';
 import { publishingApi } from './publishing';
 
 /** The publish view, loaded when it is first shown (not with the app: Phase 1's initial budget). */
@@ -15,37 +36,34 @@ const PublishSection = lazy(() =>
   import('./PublishSection').then((m) => ({ default: m.PublishSection })),
 );
 
-type Level = 'full' | 'edit' | 'comment' | 'view' | 'none';
-const LEVELS: Level[] = ['full', 'edit', 'comment', 'view', 'none'];
-const levelKey = (level: string) =>
-  level === 'full'
-    ? 'share.levelFull'
-    : level === 'edit'
-      ? 'share.levelEdit'
-      : level === 'comment'
-        ? 'share.levelComment'
-        : level === 'view'
-          ? 'share.levelView'
-          : 'share.levelNone';
-
-interface Entry {
-  principalType: 'user' | 'workspace';
-  principalId: Id;
-  level: Level;
-  name: string;
-}
-
 interface Link {
   id: Id;
   expiresAt: string | null;
 }
+
+/** What the dialog needs of the cloud (a fake in tests). */
+export type ShareCloud = Pick<
+  Cloud,
+  | 'permissions'
+  | 'setPermissions'
+  | 'members'
+  | 'groups'
+  | 'knowsGroups'
+  | 'shareLinks'
+  | 'createShareLink'
+  | 'revokeShareLink'
+  | 'shareUrl'
+  | 'api'
+>;
+
+const codeOf = (error: unknown) => (error instanceof SyncHttpError ? error.code : 'server.error');
 
 export function ShareDialog({
   cloud,
   page,
   onClose,
 }: {
-  cloud: Cloud;
+  cloud: ShareCloud;
   page: PageRecord;
   onClose: () => void;
 }) {
@@ -53,8 +71,8 @@ export function ShareDialog({
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [restricted, setRestricted] = useState(false);
   const [mine, setMine] = useState<Level>('view');
-  const [members, setMembers] = useState<{ userId: Id; displayName: string; email: string }[]>([]);
-  const [adding, setAdding] = useState<Id | ''>('');
+  const [members, setMembers] = useState<Person[]>([]);
+  const [groups, setGroups] = useState<GroupChoice[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [made, setMade] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -65,53 +83,58 @@ export function ShareDialog({
   const canPublish = full && page.kind !== 'row';
   const [view, setView] = useState<'share' | 'publish'>('share');
   const shown = canPublish ? view : 'share';
+  // Members, admins and owners are told of groups; a guest never is (nor asks: the route refuses).
+  const knowsGroups = cloud.knowsGroups(page.workspaceId);
+  const everyone = t('share.everyone');
 
   useEffect(() => {
-    void cloud.permissions(page.id).then(
+    let live = true;
+    void cloud.permissions(page.id, knowsGroups).then(
       (answer) => {
+        if (!live) return;
         setRestricted(answer.restricted);
         setMine(answer.yourLevel as Level);
-        setEntries(
-          answer.entries.map((e) => ({
-            principalType: e.principalType === 'workspace' ? 'workspace' : 'user',
-            principalId: e.principalId,
-            level: e.level as Level,
-            name:
-              e.principalType === 'workspace'
-                ? t('share.everyone')
-                : (e.displayName ?? e.email ?? ''),
-          })),
-        );
+        setEntries(entriesOf(answer.entries, everyone, knowsGroups));
         if (answer.yourLevel === 'full')
           void cloud.shareLinks(page.id).then(
-            (list) => setLinks(list.map((l) => ({ id: l.id, expiresAt: l.expiresAt ?? null }))),
+            (list) =>
+              live && setLinks(list.map((l) => ({ id: l.id, expiresAt: l.expiresAt ?? null }))),
             () => undefined,
           );
       },
-      () => setMessage(t('cloud.requestFailed')),
+      () => live && setMessage(t('cloud.requestFailed')),
     );
-    void cloud.members(page.workspaceId).then(setMembers, () => undefined);
-  }, [cloud, page.id, page.workspaceId, t]);
+    void cloud.members(page.workspaceId).then(
+      (list) => live && setMembers(list),
+      () => undefined,
+    );
+    if (knowsGroups)
+      void cloud.groups(page.workspaceId).then(
+        (answer) => live && setGroups(groupChoices(answer.groups)),
+        () => undefined,
+      );
+    return () => {
+      live = false;
+    };
+  }, [cloud, page.id, page.workspaceId, knowsGroups, everyone, t]);
 
   const save = () =>
     void cloud
-      .setPermissions(page.id, {
-        restricted,
-        entries: (entries ?? []).map(({ principalType, principalId, level }) => ({
-          principalType,
-          principalId,
-          level,
-        })),
-      })
+      .setPermissions(page.id, { restricted, entries: entriesIn(entries ?? []) }, knowsGroups)
       .then(
         () => setMessage(t('share.saved')),
-        () => setMessage(t('cloud.requestFailed')),
+        (error: unknown) =>
+          void refusalOf(codeOf(error), knowsGroups, entries ?? [], async () =>
+            groupChoices((await cloud.groups(page.workspaceId)).groups),
+          ).then((refusal) => {
+            if (refusal.groups) setGroups(refusal.groups);
+            const drop = refusal.drop;
+            if (drop) setEntries((list) => withoutGroups(list ?? [], drop));
+            setMessage(t(refusal.message));
+          }),
       );
 
-  const candidates = members.filter(
-    (m) => !(entries ?? []).some((e) => e.principalType === 'user' && e.principalId === m.userId),
-  );
-  const everyone = (entries ?? []).some((e) => e.principalType === 'workspace');
+  const candidates = candidatesOf(entries ?? [], members, groups, page.workspaceId, everyone);
 
   return (
     <Dialog title={t('share.title', { title: page.title || t('page.untitled') })} onClose={onClose}>
@@ -152,84 +175,21 @@ export function ShareDialog({
             disabled={!full}
             onCheckedChange={(checked) => setRestricted(checked === true)}
           />
-          <ul className="cgw-list cgw-share-entries" data-testid="share-entries">
-            {(entries ?? []).map((entry, i) => (
-              <li key={`${entry.principalType}:${entry.principalId}`} className="cgw-list-row">
-                <span>{entry.name}</span>
-                <select
-                  className="cgw-input"
-                  aria-label={t('share.levelFor', { name: entry.name })}
-                  value={entry.level}
-                  disabled={!full}
-                  onChange={(e) =>
-                    setEntries((list) =>
-                      list!.map((x, j) => (j === i ? { ...x, level: e.target.value as Level } : x)),
-                    )
-                  }
-                >
-                  {LEVELS.map((level) => (
-                    <option key={level} value={level}>
-                      {t(levelKey(level))}
-                    </option>
-                  ))}
-                </select>
-                {full && (
-                  <button
-                    type="button"
-                    className="cgw-button"
-                    onClick={() => setEntries((list) => list!.filter((_, j) => j !== i))}
-                  >
-                    {t('share.remove')}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <EntryList
+            entries={entries ?? []}
+            full={full}
+            testId="share-entries"
+            onLevel={(index, level) =>
+              setEntries((list) => list!.map((x, j) => (j === index ? { ...x, level } : x)))
+            }
+            onRemove={(index) => setEntries((list) => list!.filter((_, j) => j !== index))}
+          />
           {full && (
-            <div className="cgw-inline-form">
-              <label htmlFor="cgw-share-person">{t('share.person')}</label>
-              <select
-                id="cgw-share-person"
-                className="cgw-input"
-                value={adding}
-                onChange={(e) => setAdding(e.target.value)}
-              >
-                <option value="" />
-                {!everyone && <option value="*">{t('share.everyone')}</option>}
-                {candidates.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.displayName} ({m.email})
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="cgw-button"
-                disabled={!adding}
-                onClick={() => {
-                  const member = members.find((m) => m.userId === adding);
-                  setEntries((list) => [
-                    ...(list ?? []),
-                    adding === '*'
-                      ? {
-                          principalType: 'workspace',
-                          principalId: page.workspaceId,
-                          level: 'view',
-                          name: t('share.everyone'),
-                        }
-                      : {
-                          principalType: 'user',
-                          principalId: adding as Id,
-                          level: 'view',
-                          name: member?.displayName ?? '',
-                        },
-                  ]);
-                  setAdding('');
-                }}
-              >
-                {t('share.add')}
-              </button>
-            </div>
+            <PrincipalPicker
+              id="cgw-share-person"
+              candidates={candidates}
+              onAdd={(candidate) => setEntries((list) => [...(list ?? []), entryFor(candidate)])}
+            />
           )}
           {full && (
             <section aria-labelledby="cgw-share-links">

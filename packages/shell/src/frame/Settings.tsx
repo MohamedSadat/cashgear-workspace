@@ -8,6 +8,7 @@ import { DataPanel } from '../exchange/DataPanel';
 import type { WorkspaceSession } from '../session';
 import { UpdateCheck, type UpdatesState } from './Updates';
 import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
+import { GroupsSection } from '../cloud/GroupsSettings';
 import { OfflineSettings } from '../cloud/OfflineSettings';
 import { MailSettings } from '../cloud/MailSettings';
 import { ErpSettingsSection } from '../erp/SettingsSection';
@@ -62,7 +63,13 @@ export function Settings({
       />
       {cloud && <AccountSettings cloud={cloud} />}
       {cloud && <MailSettings cloud={cloud} />}
-      {cloud && session.workspaceId && <MembersSettings cloud={cloud} session={session} />}
+      {cloud && session.workspaceId && (
+        <MembersSettings
+          cloud={cloud}
+          session={session}
+          groups={(members) => <GroupsSection cloud={cloud} session={session} members={members} />}
+        />
+      )}
       {cloud && session.workspaceId && (
         <Suspense fallback={null}>
           <PublishingSettings cloud={cloud} session={session} />

@@ -53,11 +53,14 @@ export interface WorkbookSheet {
 }
 
 export interface PermissionEntry {
-  principalType: 'user' | 'workspace';
+  /** Phase 11: `group` too, when the list was asked for with groups. */
+  principalType: 'user' | 'workspace' | 'group';
   principalId: Id;
   level: string;
   displayName?: string | null;
   email?: string | null;
+  /** A group's number of people (null for a person or the workspace). */
+  peopleCount?: number | null;
 }
 
 export interface WorkbookPermissions {
@@ -337,33 +340,51 @@ export function workbookApi(api: ApiClient) {
       );
       return { sheet: answer.sheet, range: answer.range ?? null, csv: answer.csv };
     },
-    permissions: async (workbookId: Id): Promise<WorkbookPermissions> => {
+    /**
+     * The access list. Phase 11: with `groups`, the groups' rows too (`?principals=group`);
+     * without, as 0.10.0 read it.
+     */
+    permissions: async (workbookId: Id, groups = true): Promise<WorkbookPermissions> => {
       const answer = await data(
-        api.GET('/api/v1/workbooks/{workbookId}/permissions', path(workbookId)),
+        api.GET('/api/v1/workbooks/{workbookId}/permissions', {
+          params: {
+            path: { workbookId },
+            ...(groups ? { query: { principals: ['group'] } } : {}),
+          },
+        }),
       );
       return {
         restricted: answer.restricted,
         yourLevel: answer.yourLevel,
         entries: answer.entries.map((e) => ({
-          principalType: e.principalType === 'workspace' ? 'workspace' : 'user',
+          principalType:
+            e.principalType === 'workspace' || e.principalType === 'group'
+              ? e.principalType
+              : 'user',
           principalId: e.principalId,
           level: e.level,
           displayName: e.displayName ?? null,
           email: e.email ?? null,
+          peopleCount: num(e.peopleCount),
         })),
       };
     },
+    /**
+     * Saves the list. Phase 11: with `groups` (`principals: ["group"]`), its group entries replace
+     * the stored group rows; without, the server keeps them all.
+     */
     setPermissions: async (
       workbookId: Id,
       body: {
         restricted: boolean;
         entries: { principalType: string; principalId: Id; level: string }[];
       },
+      groups = true,
     ) => {
       await data(
         api.PUT('/api/v1/workbooks/{workbookId}/permissions', {
           params: { path: { workbookId } },
-          body,
+          body: groups ? { ...body, principals: ['group'] } : body,
         }),
       );
     },

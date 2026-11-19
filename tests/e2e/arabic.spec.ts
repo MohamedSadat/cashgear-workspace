@@ -8,6 +8,7 @@ import { phase7Scene, phase7Screens } from './phase7';
 import { pluginScene, pluginScreens } from './plugins';
 import { ERP10_THEIRS, erp10Scene, erp10Screens } from './erp10';
 import { meaningScene, meaningScreens } from './meaning';
+import { groupsScene, groupsScreens } from './groups';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -508,5 +509,44 @@ test('the Arabic plugin block and Settings → Plugins have no English of their 
     expect(errors).toEqual([]);
   } finally {
     await scene.api.dispose();
+  }
+});
+
+// Phase 11's groups in Arabic: Settings → Members → Groups (a group being changed, its delete
+// asked), the share dialog with a group's row and its one picker's list open, and a workbook's
+// access with a group; against the server stack (groups.ts's scene, made in English). The groups',
+// the people's, the page's and the workbook's names are theirs.
+test('the Arabic groups in Settings, the share dialog and a workbook’s access have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop, 'Members invited by mail; the screens are the web build’s');
+  test.setTimeout(300000);
+  const cloud = signers();
+  const errors = watchAppErrors(page);
+  const scene = await groupsScene(page, 'Sami', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(editor(page)).toBeVisible({ timeout: 30000 });
+    const theirs = {
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await groupsScreens(page, scene, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
+    await scene.dispose();
+    await cloud.close();
   }
 });

@@ -4,6 +4,8 @@
 import { test, expect, desktop } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus, mailTo, link } from './cloud';
+import { escapeRegExp } from './ecosystem';
+import { pickPrincipal } from './groups';
 
 test.skip(desktop, 'The browser signs in with a cookie; the guest is a second browser profile');
 
@@ -46,8 +48,8 @@ test('a page shared to view opens read-only and switches when edit is given', as
   await page.locator('.cgw-topbar-button[aria-label="Page actions"]').click();
   await page.getByRole('menuitem', { name: 'Share…' }).click();
   const dialog = page.getByRole('dialog', { name: /Share/ });
-  await dialog.getByLabel('Person').selectOption({ label: `Guest (${guest.email})` });
-  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  // Phase 11: one picker of people and groups, searched by name or address.
+  await pickPrincipal(page, dialog, guest.email, new RegExp(escapeRegExp(guest.email)));
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog.getByText('Sharing saved.')).toBeVisible();
   await page.keyboard.press('Escape');

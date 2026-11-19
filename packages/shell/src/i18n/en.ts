@@ -625,7 +625,15 @@ export const en = {
     restricted: 'Only the people below can open this page',
     everyone: 'Everyone in the workspace',
     add: 'Add',
-    person: 'Person',
+    // Phase 11: one picker of the workspace, groups and people (cloud/principals.tsx), in place of
+    // the people's list.
+    personOrGroup: 'Person or group',
+    groupPeople: 'Group · People: {{number}}',
+    noMatch: 'No one by that name',
+    refine: 'Type more of the name to see the rest.',
+    clearChoice: 'Clear the choice',
+    showChoices: 'Show people and groups',
+    groupGone: 'A group in the list was deleted meanwhile, so it was taken out. Save again.',
     levelFor: 'Access of {{name}}',
     levelFull: 'Full access',
     levelEdit: 'Can edit',

@@ -7,6 +7,8 @@ import { test, expect, desktop } from './fixtures';
 import { createWorkspace, editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus, mailTo, link } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
+import { escapeRegExp } from './ecosystem';
+import { pickPrincipal } from './groups';
 
 test.skip(desktop, 'The desktop signs in through the system browser: desktop-cloud.spec.ts');
 
@@ -284,8 +286,8 @@ test('a guest sees only the page shared with them; a view link opens it read-onl
   await page.getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: 'Share…' }).click();
   const dialog = page.getByRole('dialog', { name: /Share/ });
-  await dialog.getByLabel('Person').selectOption({ label: `Guest (${guest.email})` });
-  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  // Phase 11: one picker of people and groups, searched by name or address.
+  await pickPrincipal(page, dialog, guest.email, new RegExp(escapeRegExp(guest.email)));
   await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog.getByText('Sharing saved.')).toBeVisible();
 

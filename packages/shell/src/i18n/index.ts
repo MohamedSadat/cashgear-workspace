@@ -5,14 +5,23 @@ import { initReactI18next } from 'react-i18next';
 import { ar } from './ar';
 import { directionOf, type Language } from './catalogue';
 import { en } from './en';
+import type { groupsEn } from '../cloud/groupsWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
 
+/**
+ * The sections screens bring with them when they load (`sections.ts`, Phase 11): typed here as
+ * the catalogue's own keys are, merged into the instance by the screen that uses them.
+ */
+interface Sections {
+  groups: typeof groupsEn;
+}
+
 declare module 'i18next' {
   interface CustomTypeOptions {
     defaultNS: 'translation';
-    resources: { translation: typeof en };
+    resources: { translation: typeof en & Sections };
   }
 }
 

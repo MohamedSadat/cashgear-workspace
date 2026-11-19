@@ -664,23 +664,101 @@ export class Cloud {
     return workspace;
   }
 
-  // Sharing (M2.6) ----------------------------------------------------------------------------------
+  // Groups (Phase 11) -------------------------------------------------------------------------------
+  // A workspace's groups and their people: its members read them, owners and admins change them, a
+  // guest is refused (and never asks). The feed has no group entity, so a group's name and people
+  // are read again whenever Settings or a dialog that shows them opens.
 
-  permissions(pageId: Id) {
+  /** The account's role in a workspace, as the server last said; undefined while unknown. */
+  roleIn(workspaceId: Id) {
+    return this.session.mirror.workspaces.get(workspaceId)?.role;
+  }
+
+  /** Whether this account is told the workspace's groups: its members, admins and owners are. */
+  knowsGroups(workspaceId: Id): boolean {
+    const role = this.roleIn(workspaceId);
+    return role === 'owner' || role === 'admin' || role === 'member';
+  }
+
+  groups(workspaceId: Id) {
     return data(
-      this.api.GET('/api/v1/pages/{pageId}/permissions', { params: { path: { pageId } } }),
+      this.api.GET('/api/v1/workspaces/{workspaceId}/groups', {
+        params: { path: { workspaceId } },
+      }),
     );
   }
 
+  createGroup(workspaceId: Id, name: string, people: Id[] = []) {
+    return data(
+      this.api.POST('/api/v1/workspaces/{workspaceId}/groups', {
+        params: { path: { workspaceId } },
+        body: { name, people },
+      }),
+    );
+  }
+
+  /** `version` is the group's as read: a stale one is refused (`version.conflict`). */
+  renameGroup(workspaceId: Id, groupId: Id, name: string, version?: number) {
+    return data(
+      this.api.PATCH('/api/v1/workspaces/{workspaceId}/groups/{groupId}', {
+        params: { path: { workspaceId, groupId } },
+        body: { name },
+        ...(version !== undefined ? { headers: { 'If-Match': `"${version}"` } } : {}),
+      }),
+    );
+  }
+
+  /** The group's whole list of people; `version` as for a rename. */
+  setGroupPeople(workspaceId: Id, groupId: Id, people: Id[], version?: number) {
+    return data(
+      this.api.PUT('/api/v1/workspaces/{workspaceId}/groups/{groupId}/people', {
+        params: { path: { workspaceId, groupId } },
+        body: { people },
+        ...(version !== undefined ? { headers: { 'If-Match': `"${version}"` } } : {}),
+      }),
+    );
+  }
+
+  deleteGroup(workspaceId: Id, groupId: Id) {
+    return data(
+      this.api.DELETE('/api/v1/workspaces/{workspaceId}/groups/{groupId}', {
+        params: { path: { workspaceId, groupId } },
+      }),
+    );
+  }
+
+  // Sharing (M2.6) ----------------------------------------------------------------------------------
+
+  /**
+   * A page's access list. Phase 11: with `groups`, the groups' rows too (`?principals=group`);
+   * without, the list is 0.10.0's (people and the workspace).
+   */
+  permissions(pageId: Id, groups = true) {
+    return data(
+      this.api.GET('/api/v1/pages/{pageId}/permissions', {
+        params: { path: { pageId }, ...(groups ? { query: { principals: ['group'] } } : {}) },
+      }),
+    );
+  }
+
+  /**
+   * Saves a page's access list. Phase 11: with `groups` (`principals: ["group"]`), its group
+   * entries replace the page's group rows; without, the server keeps every stored group row, as it
+   * does for a 0.10.0 build, and takes no group entry.
+   */
   setPermissions(
     pageId: Id,
     body: {
       restricted: boolean;
       entries: { principalType: string; principalId: Id; level: string }[];
     },
+    groups = true,
   ) {
     return data(
-      this.api.PUT('/api/v1/pages/{pageId}/permissions', { params: { path: { pageId } }, body }),
+      this.api.PUT('/api/v1/pages/{pageId}/permissions', {
+        params: { path: { pageId } },
+        body: groups ? { ...body, principals: ['group'] } : body,
+      }),
     );
   }
 

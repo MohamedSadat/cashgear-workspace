@@ -1,0 +1,107 @@
+/* Phase 11: groups. The access lists' rows and their one picker of the workspace, groups and
+   people (principals.tsx, in the share dialog and a workbook's access), and Settings → Members →
+   Groups (GroupsSettings.tsx). Logical properties only, so right to left needs nothing of its own;
+   colours from the theme's variables, so dark needs nothing either. The database package styles
+   `cgw-group-*`: these are `cgw-principal-*` and `cgw-groups-*`. */
+
+.cgw-principal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.cgw-principal-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 50%;
+  background: var(--cg-surface-subtle);
+  color: var(--cg-text-secondary);
+}
+
+.cgw-principal-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cgw-principal-detail::before {
+  content: '·';
+  margin-inline-end: 6px;
+}
+
+.cgw-principal-picker {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+}
+
+/* Settings → Members → Groups. */
+.cgw-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cgw-groups h3,
+.cgw-groups h4,
+.cgw-groups p {
+  margin: 0;
+}
+
+.cgw-groups-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.cgw-groups-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-groups-head > .cgw-principal {
+  flex: 1 1 12rem;
+}
+
+.cgw-groups-names {
+  margin: 0;
+  padding-inline-start: 30px;
+  color: var(--cg-text-secondary);
+}
+
+.cgw-groups-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: 8px;
+}
+
+.cgw-groups-form .cgw-input {
+  max-inline-size: 24rem;
+}
+
+.cgw-groups-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-block-size: 16rem;
+  margin: 0;
+  padding: 4px 8px;
+  overflow: auto;
+  border: 1px solid var(--cg-border);
+  border-radius: 6px;
+}
+
+.cgw-groups-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

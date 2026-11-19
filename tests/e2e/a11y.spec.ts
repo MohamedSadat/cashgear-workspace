@@ -27,6 +27,7 @@ import { pluginScene, pluginScreens } from './plugins';
 import { phase7Scene, phase7Screens } from './phase7';
 import { erp10Scene, erp10Screens } from './erp10';
 import { meaningScene, meaningScreens } from './meaning';
+import { groupsScene, groupsScreens } from './groups';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -604,6 +605,42 @@ test.describe('accessibility of Phase 10’s plugins', () => {
       expect(problems, problems.join('\n')).toEqual([]);
     } finally {
       await scene.api.dispose();
+    }
+  });
+});
+
+// Phase 11: Axe on the groups' screens (Settings → Members → Groups with a group being changed and
+// its delete asked, the share dialog with a group's row and its one picker's list open, a
+// workbook's access with a group), in both themes and both languages, against the server stack
+// (groups.ts's scene, made in English, then loaded again in each language and theme). The picker's
+// list is drawn over the page, outside the dialog's box, and is checked with it.
+test.describe('accessibility of Phase 11’s groups', () => {
+  const cloud = signers();
+  test.afterEach(() => cloud.close());
+  test('Axe finds nothing on Settings’ groups, the share dialog’s picker and a workbook’s access (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop, 'Members invited by mail; the screens are the web build’s');
+    test.setTimeout(480000);
+    const scene = await groupsScene(page, 'Axe groups', cloud.signer);
+    const pageUrl = page.url();
+    const problems: string[] = [];
+    try {
+      for (const theme of ['light', 'dark'] as const) {
+        for (const language of ['en', 'ar'] as const) {
+          await page.goto(pageUrl);
+          await setTheme(page, theme);
+          await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+          await page.reload();
+          await expect(editor(page)).toBeVisible({ timeout: 30000 });
+          await groupsScreens(page, scene, language, async (screen) => {
+            problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+          });
+        }
+      }
+      expect(problems, problems.join('\n')).toEqual([]);
+    } finally {
+      await scene.dispose();
     }
   });
 });
