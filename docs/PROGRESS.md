@@ -20,7 +20,9 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 8: Hardening and moving in | Done, 2026-11-16 (0.8.0; Chrome's own IndexedDB loss answered by a journal; the Chromium report, drafted, is yours to file; one notice keeps its own component) | `phase-8`, `v0.8.0` |
 | Phase 9: Publishing and views | Done, 2026-11-18 (0.9.0; the site's origin, DNS and certificate, and its install on the host are yours; Sheet's real desktop app proven on the reference machine) | `phase-9`, `v0.9.0` |
 | Phase 10: Editable Customers and Items, search by meaning, third-party plugins | Done, 2026-11-18 (0.10.0; proven against the mocks in CI and against the real ERP run locally; the plugins origin's DNS and certificate, pushing Track E8 and E9 and the ERP's tenant script are yours; Voyage proven live) | `phase-10`, `v0.10.0` |
-| Phase 11: Sign-in and permissions | Planned 2026-11-19, with Phases 12 and 13; building | |
+| Phase 11: Sign-in and permissions | Done, 2026-11-19 (0.11.0; proven against the mock OpenID Connect provider and Chrome's and Edge's virtual authenticators; a live check with a real provider and a real authenticator, and installing it with the passkeys' domain, are yours) | `phase-11`, `v0.11.0` |
+| Phase 12: Databases and ERP at scale | Planned 2026-11-19 | |
+| Phase 13: AI and plugins | Planned 2026-11-19 | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `0490cbd` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), committed there and not pushed | |
@@ -1336,6 +1338,85 @@ Benchmarks (`bench/phase10.mjs`; the client part in CI's Windows job, the server
   question. Phase 7's live test against Anthropic is covered by this. Anthropic answers an API key
   sent as `Authorization: Bearer` (what the SDK sends, API version `2026-10-21`) exactly as one
   sent as `x-api-key`: a wrong key is `invalid x-api-key` either way.
+
+## Phase 11: Sign-in and permissions
+
+Done 2026-11-19. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44531569830 (commit `4c10451`, all jobs green, the Windows job on its second attempt); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44531569867 (the same commit). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, WebView2, SQL Server LocalDB 2025, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-19: Phase 11); the design in `DATA_MODEL.md` (Permissions with groups, Accounts: `UserPasskeys`, `SsoDomains`, `SsoProviders`), `ARCHITECTURE.md` (Authentication, Security) and `OPERATIONS.md` (the passkeys' relying party, single sign-on's DNS and providers); what changed for users in `CHANGELOG.md` (0.11.0). Phases 12 and 13 are planned in `IMPLEMENTATION_PLAN.md`.
+
+Milestones
+
+- [x] M11.1 Groups. Commits `9467c4d` (the groups and their routes, one rule in every path that
+      decides access through `Access.Speaks`, the push's SQL fast path, workbooks, keeping access on
+      a move, the older-build rule, `AccessOracleTests`), `0ea85f3` and `a1a1599` (the one picker in
+      the share dialog and a workbook's access, Settings → Members → Groups, words loaded with their
+      screens, the `ui-core` chunk), `7af99be` (v0.10.0 among the old builds)
+- [x] M11.2 Passkeys. Commits `81351bd` (Identity's passkeys, the relying party the API's host,
+      the ceremonies on the API's own pages with their one script, one-use challenges, the device
+      path every sign-in takes, re-authentication), `d4da763` (the `localhost` build the passkey
+      specs run against), `c2878b0` (Settings → Account's passkeys)
+- [x] M11.3 Single sign-on. Commits `7af99be` (the mock OpenID Connect provider and its DNS
+      stand-in), `d64aefd` (domains proven by DNS, a workspace's provider, the code flow and the id
+      token checked in full, accounts made or linked, required sign-on, sessions ended with the
+      provider's hours), `4c10451` (Settings → Single sign-on, "Set a password")
+- Budgets: `bfac4ee` (`Phase11Bench`, `bench/phase11.mjs`, CI's step), `4c10451`
+  (`bench/phase8-server.mjs`'s Phase 11 flags)
+
+Notes
+
+- The work ran as streams in one checkout to a written brief, the server's one at a time (groups,
+  passkeys, single sign-on, the benches) and the client's beside them, after your answers
+  (decisions, 2026-11-19); the parent committed, ran the e2e proof and the benches.
+- **The initial JavaScript.** The groups' picker took it to 349.0 kB of Phase 1's 350: the
+  library's overlay code, shared by the picker's lazy chunk and the first screen, was split into
+  small chunks of their own (+1.6 kB with no new code), and the groups' words were in the
+  catalogue. New screens' words now load with them (`i18n/sections.ts`) and the library's shared
+  code is one chunk again (`ui-core`): 347.6 kB with all three features.
+- **WebAuthn takes no IP address as its relying party**, and development runs on `127.0.0.1` for
+  its cookies (Phase 2): the passkey specs run against the app built for the API on `localhost`
+  (`scripts/web-localhost.mjs`, `localhost:4268`), the API answering on both names. Edge's virtual
+  authenticator answers the sign-in page's autofill ask as the page opens, which signs in by itself;
+  the spec allows for it.
+- **The desktop.** Its sign-in opens the API's pages in the system browser, so passkeys and single
+  sign-on reach it with no Rust change; `PasskeyTests` "The desktop signs in through a passkey in
+  the system browser" and `SsoTests` "The desktop signs in through the provider and its tokens end
+  with that sign-in" run the authorize request, the sign-in, the consent, the token exchange and the
+  API with the token. A desktop spec cannot drive a passkey: the desktop's API is fixed at build time
+  on `127.0.0.1`.
+- The first CI run of the phase (44524083376) failed its server job before any test, in the image's
+  `apt-get` (the runner could not reach Ubuntu's archive).
+- The evidence run's first attempt failed one of Phase 8's budgets: a paste of 1,000 cells reached
+  the server in 5,353 ms against 5 s, in the last of six pastes (p50 3,060 ms, as Phase 8's 3,190 on
+  that runner's processor). An owner's paste takes no path Phase 11 changed (an owner's level is
+  decided before any row is read), and on the reference machine the same bench gave 2,984 ms at
+  worst (p50 2,443) against Phase 8's 3,021 (2,453). The job, run again, passed: 3,618 ms at worst (p50 2,803), with every
+  other budget of Phases 1 to 10.
+- **Not tried against the real world:** single sign-on against a real provider (no test app: the
+  mock implements the protocol and every refusal; one live check with an Entra ID or Google
+  Workspace test app is yours), and a passkey of a real authenticator (Windows Hello, a phone, a
+  key) rather than Chrome's and Edge's virtual one. Production still runs 0.10.0: installing 0.11.0,
+  with `Identity__Passkeys__ServerDomain`, is yours (`OPERATIONS.md`).
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A page restricted to a group is read and edited by exactly that group's people, at the group's level, through every path; a person's own row still decides over their groups'; removing someone from the group takes the page away at once in their open tab and live connection; a 0.10.0 build that edits the page's access keeps the group's row | Pass | `groups.spec.ts` (Chrome, Edge): "a page restricted to a group is its people’s at its level, a person’s own row decides, and leaving the group takes it away at once" (the page turns read-only for the group's people, a member outside it loses it, Cy's own row makes her an editor and her own `none` takes it from her, Ben taken out of the group loses it in his open tab with no reload and gets `AccessRevoked` on the hub). `old-build.spec.ts` "the v0.10.0 build changes a person’s level in a page’s sharing, and the server keeps the group’s row". Server: `AccessOracleTests` (every path: `PageLevelAsync`, `LevelsAsync`, `LevelsOfAsync`, `ReadersAsync`, `EditorsAsync`, `AllLevelsAsync` (the feed, the tree, search, search by meaning, exports), the page gate, the push and its round trips, workbooks, keeping access on a move, over 16 random workspaces; broken three ways by hand, each caught), `GroupTests`, `AuthorizationTests`, `SharingTests` (a 0.10.0-shaped save keeps group rows; guests), `WorkbookAccessTests`, `TreeAccessTests`, `RealtimeTests` (leaving a group revokes the page on the hub) |
+| A person signs in with a passkey added in Settings, in Chrome and Edge and through the desktop's system browser; a passkey of another account, or made for another site, is refused; one removed stops at once | Pass | `passkeys.spec.ts` (Chrome, Edge, virtual authenticators): "a passkey added from Settings signs in on its own, and once removed is refused". Server: `PasskeyTests` (35: another account's credential, another relying party, another origin, a challenge used twice, a counter going back, no user verification, removal, the limit of 20, lockout, the pages' CSP, "The desktop signs in through a passkey in the system browser") |
+| A person of a verified domain signs in through the workspace's provider with no password, the first time making their account; an unverified domain, an id token with a wrong signature, issuer, audience, nonce or expiry, and an email outside the domains are each refused; with sign-on required, that domain's password and passkey sign-ins are refused and sessions go back to the provider after the limit | Pass | `sso.spec.ts` (Chrome, Edge; the mock provider): "a person of a verified domain signs in through the workspace’s provider with no password, joins as a member, and required sign-on refuses their domain’s passwords but the owner’s" (the provider and the domain set up in Settings). Server: `SsoTests` against the mock (every refusal: an unverified domain, a wrong signature, issuer, audience, nonce, expiry, `alg: none`, an unpublished key, a `state` and a code used twice, an address outside the domains, `email_verified: false`, no address, the provider's error, discovery down; a first sign-in, a link, a join, required with the owner kept and the other sessions ended, the session's hours, the desktop's tokens ending with it, the secret in no answer, log or audit, DNS through the fake, owners only) |
+
+Also: `a11y.spec.ts` "accessibility of Phase 11’s groups" and the single sign-on section's case, and `passkeys.spec.ts`'s "the passkey pages pass Axe in English and Arabic, the script their only one" and "Settings’ passkeys pass Axe in both themes and languages, and the Arabic has no English of its own"; `arabic.spec.ts` "the Arabic groups in Settings, the share dialog and a workbook’s access have no English of their own" and the single sign-on section's case. Unit: 3,610 tests in `pnpm test` (3,604 passed, 6 skipped), among them `cloud/groups.test.ts`, `passkeys.test.ts`, `sso.test.ts`, `i18n/sections.test.ts` and the mock provider's 32; 405 server tests (393 passed; the 11 benches and the real provider calls skipped); every standing check passes.
+
+Benchmarks (`bench/phase11.mjs` in CI's Linux server job; the CPU per push locally, as Phase 8's)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| Search at 10,000 pages, a member in 20 groups with 500 group rows, p95 | 300 ms | 211.4 ms (full text; a member in no group 214.4) | 264.8 ms (`LIKE`; a member in no group 275.6) |
+| The feed of 1,000 changes for that member, p95 | 500 ms | 108 ms | 194.5 ms |
+| The tree at 10,000 pages for that member, p95 | tracked | 139.4 ms (a member in no group 134.9) | 251.5 ms (a member in no group 220.9) |
+| A sign-in by passkey, the API's own time, p95 | 200 ms | 19.9 ms | 19.1 ms |
+| A sign-in through single sign-on, the API's own time, p95 | 200 ms | 17.5 ms (the provider's 1.6 taken off; a first sign-in 29.6) | 20.9 ms (the provider's 18.2 taken off) |
+| The server's CPU per push, a member in 20 groups, against 0.10.0 (median of 3 pairs) | within 10 % | — | the API 2.01 ms against 2.14 (0.94), the worker 5.32 against 5.75 (0.93); the typing windows alone 1.06 and 0.99 |
+| The initial JavaScript | 350 kB (Phase 1) | 347.6 kB | 347.6 kB |
 
 ## Track U: `CashGear.React.UI`
 

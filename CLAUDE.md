@@ -3,7 +3,7 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 10 are done (0.10.0: the local-first editor; accounts, sync, sharing, server
+Status: Phases 0 to 11 are done (0.11.0: the local-first editor; accounts, sync, sharing, server
 search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
 views; Sheet workbooks embedded in pages and read-only ERP blocks; real-time editing, presence,
 comments, mentions and the inbox; editable ERP blocks for Vendors, chart and kanban plugin
@@ -15,9 +15,11 @@ site from a process of its own (`pages.cashgearerp.com`), databases' rows on sit
 links, the timeline view and date windows, and workbooks in the export with their history and
 Sheet's desktop app by deep link; then editable Customers and Items on hand, with fields an
 item's rows share, search by meaning over Voyage AI's embeddings on the workspace's own key, and
-third-party plugins in sandboxed frames from an origin of their own, `plugins.cashgearerp.com`).
-No phase is planned after it yet: what could come next is under "Later" in
-`docs/IMPLEMENTATION_PLAN.md`.
+third-party plugins in sandboxed frames from an origin of their own, `plugins.cashgearerp.com`;
+then sign-in and permissions: a workspace's groups in every access list, passkeys beside the
+password, and single sign-on through a workspace's own OpenID Connect provider for the email
+domains it proved by DNS). Phase 12 (databases and ERP at scale) and Phase 13 (AI and plugins) are
+planned in `docs/IMPLEMENTATION_PLAN.md`; what could come after them is under "Later" there.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.
 
