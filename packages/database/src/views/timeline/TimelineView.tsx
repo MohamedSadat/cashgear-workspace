@@ -10,7 +10,10 @@
 // `LOCAL_ROW_LIMIT`; and the rows with no start (a filter `isEmpty`, paged as the list scrolls).
 //
 // A bar moves by dragging its body and resizes by its edges, or by the keys (`CgTimelineProps`):
-// one `row.update` a move, its dates in their own forms (`movedValues`). A row with no date is
+// one `row.update` a move, its dates in their own forms (`movedValues`). With lanes (Phase 12,
+// Track U19), a bar dragged onto another lane's lines, or moved by Alt+ArrowUp and Alt+ArrowDown,
+// writes the lane's property (null for "No value") with its dates in that one `row.update`, its
+// dates left out when only its lane changed. A row with no date is
 // dragged from the list onto a day, or put on today by its button. A double click on a line's
 // empty days, or the toolbar's New (today), makes a row there, its title typed first. A reader
 // (`canEdit` false) moves nothing.
@@ -309,7 +312,20 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
         info.end
           ? t('timeline.span', { title: info.title, start: info.start, end: info.end })
           : t('timeline.day', { title: info.title, start: info.start }),
-      moveHint: t('timeline.moveHint'),
+      moveHint: laneDef ? t('timeline.moveHintLanes') : t('timeline.moveHint'),
+      movedLane: (item, info) =>
+        info.end
+          ? t('timeline.movedLane', {
+              title: item.title || t('untitled'),
+              lane: info.lane,
+              start: info.start,
+              end: info.end,
+            })
+          : t('timeline.movedLaneDay', {
+              title: item.title || t('untitled'),
+              lane: info.lane,
+              start: info.start,
+            }),
       moved: (item, info) =>
         info.end
           ? t('timeline.moved', {
@@ -330,7 +346,7 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
       lane: (title, count) => t('timeline.lane', { name: title, number: formatCount(count) }),
       untitled: t('untitled'),
     }),
-    [t, name, laneDef?.name, formatCount],
+    [t, name, laneDef, formatCount],
   );
 
   if (!usable || !startDef) return <TimelineSetup database={database} view={view} env={env} />;
@@ -386,13 +402,19 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
           onItemOpen={(item) => host.openRow(item.data!.row.id)}
           onItemMove={
             writable
-              ? (item, details) =>
-                  void write(
-                    item.data!.row,
-                    movedValues(item.data!, startDef, endDef, details.edge, details.days),
-                  )
+              ? (item, details) => {
+                  const data = item.data!;
+                  // Only its lane changed: its dates are not written again.
+                  const values: Record<string, unknown> =
+                    details.edge === 'move' && details.days === 0
+                      ? {}
+                      : movedValues(data, startDef, endDef, details.edge, details.days);
+                  if (laneDef && details.lane !== undefined) values[laneDef.id] = details.lane;
+                  if (Object.keys(values).length) void write(data.row, values);
+                }
               : undefined
           }
+          moveBetweenLanes={writable && !!laneDef}
           onCreate={
             writable
               ? (date, lane, details) => setPopup({ date, lane, anchor: details.anchor })

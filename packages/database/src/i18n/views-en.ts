@@ -103,6 +103,10 @@ export const viewsEn = {
       'Alt and the arrow keys move it by a day; add Shift to change its end, or Ctrl and Shift its start.',
     moved: 'Moved {{title}}: {{start}} to {{end}}.',
     movedDay: 'Moved {{title}} to {{start}}.',
+    moveHintLanes:
+      'Alt and ArrowLeft or ArrowRight move it by a day; add Shift to change its end, or Ctrl and Shift its start. Alt and ArrowUp or ArrowDown move it to the lane above or below.',
+    movedLane: 'Moved {{title}} to {{lane}}: {{start}} to {{end}}.',
+    movedLaneDay: 'Moved {{title}} to {{lane}}, {{start}}.',
     resized: '{{title}} now runs from {{start}} to {{end}}.',
     resizedDay: '{{title}} is now on {{start}} only.',
     noLane: 'No {{name}}',

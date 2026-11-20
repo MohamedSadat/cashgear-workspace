@@ -75,7 +75,12 @@ async function startOf(title: string): Promise<DateValue | undefined> {
 }
 
 /** The timeline on the database's own page, signed in; the language and theme first. */
-async function openTimeline(page: Page, language: 'en' | 'ar' = 'en', theme?: 'light' | 'dark') {
+async function openTimeline(
+  page: Page,
+  language: 'en' | 'ar' = 'en',
+  theme?: 'light' | 'dark',
+  databaseId = seeded.databaseId,
+) {
   await page.goto('/');
   await page.evaluate(
     ({ language, theme }) => {
@@ -84,7 +89,7 @@ async function openTimeline(page: Page, language: 'en' | 'ar' = 'en', theme?: 'l
     },
     { language, theme },
   );
-  await signIn(page, account, `/#/p/${seeded.databaseId}`);
+  await signIn(page, account, `/#/p/${databaseId}`);
   const db = fullPage(page);
   const timeline = db.locator('.cgw-db-tl');
   await expect(timeline.locator('[data-cg-timeline-item]').first()).toBeVisible({
@@ -316,6 +321,155 @@ test('runs from right to left in Arabic: later is to the left, and the keys and 
   await expect
     .poll(async () => (await startOf(title))?.start, { timeout: 30_000 })
     .toBe(plus(before.start, 3));
+  expect(errors).toEqual([]);
+});
+
+// Phase 12 (M12.2, Track U19): a bar moved to another lane, by pointer with its days and by the
+// keys, both ways, each one `row.update` holding the lane (and the dates when they changed); in
+// Arabic the days are mirrored and the lane keys are not. Over a database of its own, 500 rows over
+// eight years, so a lane holds a few lines and the next lane's header is in view.
+test('moves a bar to another lane by pointer with its days and by the keys, both ways, in one edit each; right to left too', async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  const errors = watchErrors(page);
+  const small = await seedTimelineDatabase(api, { rows: 500, name: 'Lanes' });
+  const laneIds = STAGES.map((_, i) => `Stg0000${i}`);
+  const valuesOf = async (title: string) => {
+    const answer = await api.post(`/api/v1/databases/${small.databaseId}/query`, {
+      filter: null,
+      sorts: [],
+      group: null,
+      search: title,
+      context: { today: '2026-11-17', offsetMinutes: 0, me: null },
+      limit: 5,
+    });
+    const row = (answer.rows as { title: string; values: Record<string, unknown> }[]).find(
+      (r) => r.title === title,
+    )!;
+    return {
+      start: (row.values[TIMELINE_P.start] as DateValue).start,
+      lane: (row.values[TIMELINE_P.stage] as string | undefined) ?? null,
+    };
+  };
+  // Every row.update the app sends, as the server receives it.
+  const updates: { entityId: string; values: Record<string, unknown> }[] = [];
+  page.on('request', (request) => {
+    if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+    const body = request.postDataJSON() as {
+      ops: { type: string; entityId: string; payload: { values?: Record<string, unknown> } }[];
+    };
+    for (const op of body.ops)
+      if (op.type === 'row.update')
+        updates.push({ entityId: op.entityId, values: op.payload.values ?? {} });
+  });
+
+  for (const language of ['en', 'ar'] as const) {
+    const { db, timeline } = await openTimeline(page, language, undefined, small.databaseId);
+    if (language === 'en') {
+      await db.getByRole('button', { name: 'Layout', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Layout' }).getByLabel('Lanes by').selectOption({
+        label: 'Stage',
+      });
+      await page.keyboard.press('Escape');
+    }
+    const header = (k: number) => timeline.locator(`[data-cg-timeline-lane="${laneIds[k]}"]`);
+    await expect(header(0)).toBeVisible();
+    const scroller = (await timeline.locator('[data-cg-timeline-scroller]').boundingBox())!;
+    // A bar wholly in view in lane k, with lane k + 1's header in view below it.
+    let found: { k: number; title: string; id: string } | null = null;
+    for (const k of [1, 2, 3, 0]) {
+      const top = await header(k).boundingBox();
+      const next = await header(k + 1).boundingBox();
+      if (!top || !next || next.y + next.height > scroller.y + scroller.height - 60) continue;
+      const bars = timeline.locator('[data-cg-timeline-item]');
+      for (let i = 0; i < (await bars.count()); i++) {
+        const box = await bars.nth(i).boundingBox();
+        if (!box || box.y < top.y + top.height || box.y > next.y) continue;
+        if (box.x < scroller.x + 4 || box.x + box.width > scroller.x + scroller.width - 4) continue;
+        found = {
+          k,
+          title: (await bars.nth(i).textContent())!.trim(),
+          id: (await bars.nth(i).getAttribute('data-cg-timeline-item'))!,
+        };
+        break;
+      }
+      if (found) break;
+    }
+    if (!found) throw new Error('No bar in view with the next lane below it');
+    const { k, title, id } = found;
+    const bar = () => timeline.locator(`[data-cg-timeline-item="${id}"]`);
+    const before = await valuesOf(title);
+    expect(before.lane).toBe(laneIds[k]);
+    const later = language === 'ar' ? -1 : 1;
+    /** Its body dragged `days` later onto a line of lane `to`, in steps, as a hand drags. */
+    const dragTo = async (to: number, days: number) => {
+      // Where it rests: after a drop the timeline scrolls the bar's line and start into view.
+      let from = (await bar().boundingBox())!;
+      for (let i = 0; i < 20; i++) {
+        await page.waitForTimeout(150);
+        const now = (await bar().boundingBox())!;
+        if (now.x === from.x && now.y === from.y) break;
+        from = now;
+      }
+      const line = (await header(to).boundingBox())!;
+      // Inside a day near its middle, away from its edges (which resize it): a move is counted by
+      // the day under the pointer, and its own middle is a day's boundary when it spans an even
+      // number of days.
+      const spans = Math.round(from.width / DAY);
+      const start = {
+        x: from.x + from.width / 2 + (spans % 2 === 1 ? 0 : 5),
+        y: from.y + from.height / 2,
+      };
+      const end = {
+        x: start.x + later * (days * DAY + (days > 0 ? 2 : -2)),
+        y: line.y + line.height / 2,
+      };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 12; i++)
+        await page.mouse.move(
+          start.x + ((end.x - start.x) * i) / 12,
+          start.y + ((end.y - start.y) * i) / 12,
+        );
+      await page.mouse.up();
+    };
+    const seen = updates.length;
+    const settled = async (lane: string, start: string) =>
+      expect
+        .poll(async () => JSON.stringify(await valuesOf(title)), { timeout: 30_000 })
+        .toBe(JSON.stringify({ start, lane }));
+
+    // Down by pointer onto the next lane's header line, two days later: lane and dates in one edit.
+    await dragTo(k + 1, 2);
+    await settled(laneIds[k + 1], plus(before.start, 2));
+    // Up by pointer onto its own lane's header line again, a day earlier.
+    await expect(bar()).toBeVisible();
+    await dragTo(k, -1);
+    await settled(laneIds[k], plus(before.start, 1));
+    // The keys, never mirrored: Alt+ArrowDown to the lane below, Alt+ArrowUp back; days kept.
+    await bar().focus();
+    await page.keyboard.press('Alt+ArrowDown');
+    await settled(laneIds[k + 1], plus(before.start, 1));
+    await expect(bar()).toBeFocused();
+    await page.keyboard.press('Alt+ArrowUp');
+    await settled(laneIds[k], plus(before.start, 1));
+
+    const mine = updates.slice(seen).filter((u) => u.entityId === id);
+    expect(mine.map((u) => Object.keys(u.values).sort())).toEqual([
+      [TIMELINE_P.stage, TIMELINE_P.start].sort(),
+      [TIMELINE_P.stage, TIMELINE_P.start].sort(),
+      [TIMELINE_P.stage],
+      [TIMELINE_P.stage],
+    ]);
+    expect(mine.map((u) => u.values[TIMELINE_P.stage])).toEqual([
+      laneIds[k + 1],
+      laneIds[k],
+      laneIds[k + 1],
+      laneIds[k],
+    ]);
+  }
+  await expect(syncStatus(page)).toHaveAttribute('data-state', 'synced', { timeout: 30_000 });
   expect(errors).toEqual([]);
 });
 

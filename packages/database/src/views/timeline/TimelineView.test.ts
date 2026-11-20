@@ -425,6 +425,63 @@ describe('the timeline', () => {
     expect(lineHolds(4)).toBe('row');
   });
 
+  it('moves a bar to the lane below or above with Alt and ArrowDown or ArrowUp: its lane alone in one row.update, never mirrored, "No value" as none', async () => {
+    for (const language of ['en', 'ar'] as const) {
+      const s = await timelineOf(120, { lane: P.status });
+      const { view, host } = s;
+      // The rows that were done have no status now: the last lane holds them, and Done none.
+      const done = [...host.rowRecords.values()].filter((r) => r.values[P.status] === 'stDone01');
+      await host.apply(
+        done.map((r) =>
+          newOp('row.update', s.host.database(s.tasksId)!.workspaceId, r.id, {
+            values: { [P.status]: null },
+          }),
+        ),
+      );
+      host.applied.length = 0;
+      await mount(view, language);
+      const bar = bars()[0];
+      const id = bar.dataset.cgTimelineItem!;
+      expect(host.rowRecords.get(id)!.values[P.status]).toBe('stTodo01');
+      const lanes: unknown[] = [];
+      const focused = () =>
+        container.querySelector<HTMLElement>(`[data-cg-timeline-item="${id}"]`)!;
+      bar.focus();
+      for (const [code, lane] of [
+        ['ArrowDown', 'stDoing1'],
+        ['ArrowDown', 'stDone01'],
+        ['ArrowDown', null],
+        ['ArrowUp', 'stDone01'],
+      ] as const) {
+        await key(focused(), code, { altKey: true });
+        await nextFrame();
+        lanes.push(lane);
+        // The focus follows the bar to its new line.
+        expect(document.activeElement?.getAttribute('data-cg-timeline-item')).toBe(id);
+      }
+      const updates = ops(host, 'row.update') as unknown as {
+        entityId: string;
+        payload: { values: Record<string, unknown> };
+      }[];
+      expect(updates.map((u) => u.entityId)).toEqual([id, id, id, id]);
+      // Its lane alone: the dates did not change, so they are not written again.
+      expect(updates.map((u) => u.payload.values)).toEqual(lanes.map((l) => ({ [P.status]: l })));
+      expect(host.rowRecords.get(id)!.values[P.status]).toBe('stDone01');
+      await act(async () => root?.unmount());
+      root = null;
+      container.innerHTML = '';
+    }
+  });
+
+  it('moves no bar between lanes for a reader', async () => {
+    const { view, host } = await timelineOf(60, { lane: P.status }, { canEdit: false });
+    await mount(view);
+    const bar = bars()[0];
+    bar.focus();
+    await key(bar, 'ArrowDown', { altKey: true });
+    expect(ops(host, 'row.update')).toHaveLength(0);
+  });
+
   it('places a row with no date on today, and drops one on the day under the pointer', async () => {
     const { view, host } = await timelineOf(80);
     await mount(view);

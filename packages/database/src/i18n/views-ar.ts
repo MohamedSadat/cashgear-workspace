@@ -105,6 +105,10 @@ export const viewsAr: Strings<typeof viewsEn> = {
       'Alt مع مفتاحي السهم ينقله يومًا؛ وبإضافة Shift تتغير نهايته، ومع Ctrl وShift بدايته.',
     moved: 'نُقل {{title}}: من {{start}} إلى {{end}}.',
     movedDay: 'نُقل {{title}} إلى {{start}}.',
+    moveHintLanes:
+      'Alt مع السهم الأيسر أو الأيمن ينقله يومًا؛ وبإضافة Shift تتغير نهايته، ومع Ctrl وShift بدايته. وAlt مع السهم الأعلى أو الأسفل ينقله إلى المسار الذي فوقه أو تحته.',
+    movedLane: 'نُقل {{title}} إلى {{lane}}: من {{start}} إلى {{end}}.',
+    movedLaneDay: 'نُقل {{title}} إلى {{lane}}، {{start}}.',
     resized: 'صار {{title}} من {{start}} إلى {{end}}.',
     resizedDay: 'صار {{title}} في {{start}} وحده.',
     noLane: 'بلا {{name}}',
