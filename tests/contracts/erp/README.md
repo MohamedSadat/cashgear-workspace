@@ -173,7 +173,17 @@ mock-only cases check its exact answers:
 - Trial balance: each account of the statement with lines in the period; `share` is 100 × its
   `balance` over the rows' total, at 2 places, null when the total is 0.
 
-`ERP_TEST_*` users need the roles above. The suite cannot call the ERP's own services: comparing
+`ERP_TEST_*` users need the roles above. The ERP decides a report's access by its page's roles
+alone, and every role that opens Vendors also opens AP aging or the trial balance, so against
+UnifiedAPI the users `reports.test.ts` needs cannot be the other files' `LIMITED`, `ADVEDIT` and
+`NONE`: run it on its own, with `ERP_TEST_KEY_*` set to report users of their own (the ERP seeds
+`ws-test-kit-report-full`, `-limited`, `-edit`, `-advedit` and `-none` for it; its
+`ContractEnv.ps1 -WorkspaceSuite -Reports`), and the other files without it
+(`--exclude tests/contracts/erp/reports.test.ts`). The mock's users hold both. Where the contract
+leaves a value's reading open the ERP may read it another way than the mock (stock balance's
+`unitCost` at 2 places and `0` at a quantity of 0, for one: `docs/INTEGRATIONS.md`, "As built in
+the ERP"), which is why exact values are checked on the mock only. The suite cannot call the ERP's
+own services: comparing
 each report with what `ApAgingQueryService`, `WarehouseBalanceService` and `GenFinStatmentAsync`
 answer for the same parameters is Track E11's own test in the ERP.
 

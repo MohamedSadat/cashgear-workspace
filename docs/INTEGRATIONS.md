@@ -1146,7 +1146,7 @@ report is partial or stops at `maxRecords`, and refreshes only on Refresh or a p
 Nothing of a report's answer is written anywhere: not the document, the store, search, history or
 the server.
 
-As built on Workspace's side (Phase 12, M12.6; Track E11 itself is the ERP's, still to come).
+As built on Workspace's side (Phase 12, M12.6; Track E11 itself is the ERP's, below).
 `@cgw/erp`'s contract has every attribute above with its guards (each parameter's shape and default,
 unique names; a report with no editable field and `maxCommitRecords` 0; `total` only on a decimal or
 integer field; totals only of summed fields, each valid for its field; labels only of the schema's
@@ -1185,6 +1185,27 @@ no AI; its words with the first ERP block (`i18n/reports.ts`). `tests/e2e/erp-re
 checks that the document, the stores, search, history and the server hold nothing of a report after
 each is shown, and the wire for a build before 0.12.0: listing without `kinds` gives no report, and
 a report's query without `parameters` is 400.
+
+As built in the ERP (Track E11, `CashGear` `f5342128` to `af8ca124`, 2026-11-20): `apAging`,
+`stockBalance` and `trialBalance` (`CashGear.UnifiedAPI/Services/Connect/ReportConnector.cs` and one
+file a report) over the pages' own services, `ApAgingQueryService.ReadAsync` with
+`ApAgingRules.Build`, `WarehouseBalanceService.GetLeavesAsync` (its cap of 200,000 places sets
+`partial`) and `LedgerTransQueryService.GenFinStatmentAsync`; rows in each report's own order, then
+0.10.0's search, `equals` and sort, and E10's keyset cursor (bound to the query and the parameters as
+resolved) and `maxRecords`. A first page is always run afresh and kept for 60 s, per session and
+report, only to answer that query's later pages; no tighter limit than the connect routes'. Readings
+the contract leaves open: access is each page's roles alone (the pages check no unit), so the
+suite's entity users cannot also be its report users: `reports.test.ts` runs apart with users of
+its own (the README); `today` is the host's local day (the ERP keeps no company time zone);
+`unitCost` is the page's, cost over quantity at 2 places, half away from zero, `0` at a quantity of
+0 or a negative result (the mock's 4 places and `null` are its own reading); `overdue` is the open
+items past their due date, by either `ageBy`; `lastPaymentAmount` is `null` with no payment;
+`accountType` and `category` are the ERP's enum names (`Liab`, `Cash_C`); the trial balance's period
+runs from `dateFrom` 00:00 to `dateTo` 23:59, as the page reads it; amounts at 2 places and
+quantities at 3, half away from zero, never `-0.00`. Its tests compare each report through the route,
+every page, with its service for the same parameters (`E11ReportLocalDbTests`, LocalDB), and the
+engine over 10,050 synthetic rows (`E11ReportTests`). Workspace's suite against it on LocalDB:
+`reports.test.ts` 34 passed, 7 skipped (the mock's own), none failed.
 
 ### Track E: work in the ERP repo
 
