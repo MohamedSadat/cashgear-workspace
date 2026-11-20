@@ -342,11 +342,10 @@ function openTimed(databaseId) {
 async function cellEdits(page, scope) {
   await page.evaluate(() => window.__edits.splice(0));
   const grid = page.locator(`${scope} [role="grid"]`);
+  // A header is named by its property alone, its type its description (Phase 12).
   const notes = await grid
     .locator('[role="columnheader"]')
-    .evaluateAll((cells) =>
-      cells.findIndex((c) => /^Notes, /.test(c.getAttribute('aria-label') ?? '')),
-    );
+    .evaluateAll((cells) => cells.findIndex((c) => c.getAttribute('aria-label') === 'Notes'));
   if (notes < 0) throw new Error('No Notes column');
   for (let i = 0; i < EDITS; i++) {
     // The first ten rows, over and over: all inside the table's window (it draws only those).
