@@ -148,12 +148,14 @@ export default defineConfig({
         // one chunk (with React, which they need): a screen loaded later that shares them (Phase
         // 11's people-and-groups picker) otherwise split them into small chunks of their own, and
         // the initial JavaScript, summed file by file in gzip (bench/phase1.mjs's budget), grew by
-        // 1.6 kB with no new code in it. This wins back 0.6 kB of it.
+        // 1.6 kB with no new code in it. This wins back 0.6 kB of it. Phase 12's library (R0 to R9,
+        // U19) split its text labels, hooks and field internals the same way, into chunks of a few
+        // hundred bytes each, all in the first screen's graph: grouped here too, 1.9 kB less.
         codeSplitting: {
           groups: [
             {
               name: 'ui-core',
-              test: /@cashgear[\\/]ui[\\/]dist[\\/](internal[\\/](icons|EditorButton|EditorButton\.module|PositionedOverlay)|vendor[\\/]fluent-icons[\\/]icons|components[\\/]Button[\\/]CgButton)\.js$/,
+              test: /@cashgear[\\/]ui[\\/]dist[\\/](internal[\\/](icons|EditorButton|EditorButton\.module|PositionedOverlay|validation|InputShell|listBox|field[\\/]useFieldControl)|vendor[\\/]fluent-icons[\\/]icons|components[\\/]Button[\\/]CgButton|components[\\/]UiText[\\/](CgUiText|uiLabels)|hooks[\\/](useCgId|useDirection|useAsyncOperation|useControllableState|useDebouncedCallback|useFormReset))\.js$/,
             },
           ],
         },
