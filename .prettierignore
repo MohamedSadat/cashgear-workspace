@@ -19,3 +19,5 @@ packages/api/src/schema.ts
 .cgw-dev/
 # The site renderer's expected HTML, byte for byte (SITE_VECTORS_WRITE=1 rewrites them)
 server/tests/Cgw.Tests/fixtures/sites/
+# Phase 13: the local model's stand-in for tests, hashed byte for byte (scripts/local-model/test-model.py)
+tests/fixtures/local-model/

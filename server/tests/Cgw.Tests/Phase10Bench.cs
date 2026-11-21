@@ -117,7 +117,7 @@ public sealed class Phase10Bench(ServerFixture server)
         var settings = await db2.AiSettings.AsNoTracking().SingleAsync();
 
         var first = Stopwatch.GetTimestamp();
-        var (ranked, timings) = await cache.RankAsync(db2, ws.Id, settings.EmbeddingsGeneration, "voyage-4", question, 0.3, CancellationToken.None);
+        var (ranked, timings, _) = await cache.RankAsync(db2, ws.Id, settings.EmbeddingsGeneration, "voyage-4", question, 0.3, CancellationToken.None);
         var firstMs = Stopwatch.GetElapsedTime(first).TotalMilliseconds;
         Assert.True(timings.Loaded);
         Assert.Equal(chunks, timings.Chunks);
@@ -135,7 +135,7 @@ public sealed class Phase10Bench(ServerFixture server)
             route.Add(total - result.Value!.ProviderTime.TotalMilliseconds);
             providerMs.Add(result.Value.ProviderTime.TotalMilliseconds);
             t = Stopwatch.GetTimestamp();
-            var (hits, _) = await cache.RankAsync(db2, ws.Id, settings.EmbeddingsGeneration, "voyage-4", question, 0.3, CancellationToken.None);
+            var (hits, _, _) = await cache.RankAsync(db2, ws.Id, settings.EmbeddingsGeneration, "voyage-4", question, 0.3, CancellationToken.None);
             warm.Add(Stopwatch.GetElapsedTime(t).TotalMilliseconds);
             Assert.NotEmpty(hits);
         }

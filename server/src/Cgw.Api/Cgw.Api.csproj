@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Cgw.Core/Cgw.Core.csproj" />
+    <ProjectReference Include="../Cgw.LocalModel/Cgw.LocalModel.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" PrivateAssets="all" />
     <PackageReference Include="OpenIddict.AspNetCore" />

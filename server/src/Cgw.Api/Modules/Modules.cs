@@ -1,5 +1,6 @@
 using Cgw.Core;
 using Cgw.Core.Ai;
+using Cgw.LocalModel;
 using Cgw.Api.Realtime;
 using Cgw.Core.Assets;
 using Cgw.Core.Comments;
@@ -73,9 +74,8 @@ public static class Modules
         services.AddSingleton<EmbeddingsCache>();
         services.AddScoped<EmbeddingsService>();
         services.AddScoped<MeaningSearch>();
-        services.AddSingleton<IEmbeddingProvider>(sp => new VoyageProvider(
-            sp.GetRequiredService<EmbeddingsOptions>(),
-            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        // Phase 13: voyage-4-nano on this server beside Voyage's API, by the workspace's model.
+        services.AddLocalModel(configuration);
         // Phase 10: third-party plugins (served by the Sites process's second host).
         services.AddSingleton(sp => PluginsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddScoped<PluginService>();

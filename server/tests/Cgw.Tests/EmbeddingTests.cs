@@ -82,7 +82,8 @@ public static class EmbedKit
         for (var round = 0; round < 50; round++)
             if (!await Kit.InWorker(server, workspace, (_, db) => job.PassAsync(db, workspace, CancellationToken.None))) break;
         await using var check = server.NewDb(workspace);
-        return await check.AiSettings.AnyAsync(s => s.EmbeddingsEnabled && s.EmbeddingsKeyCipher != null);
+        // Phase 13: the local model is on with no key.
+        return await check.AiSettings.AnyAsync(s => s.EmbeddingsEnabled && (s.EmbeddingsKeyCipher != null || s.EmbeddingsModel == LocalModelOptions.Model));
     }
 
     public static async Task<List<PageEmbedding>> Vectors(ServerFixture server, Guid workspace, Guid? page = null)
@@ -131,7 +132,8 @@ public sealed class EmbeddingTests(ServerFixture server)
         Assert.False(seen.GetProperty("enabled").GetBoolean());
         Assert.Equal("voyage", seen.GetProperty("provider").GetString());
         Assert.Equal("voyage-4", seen.GetProperty("model").GetString());
-        Assert.Equal(["voyage-4", "voyage-4-large", "voyage-4-lite"], seen.GetProperty("models").EnumerateArray().Select(m => m.GetString()));
+        // Phase 13: voyage-4-nano offered too, as this server has the local model (the tests' stand-in).
+        Assert.Equal(["voyage-4", "voyage-4-large", "voyage-4-lite", "voyage-4-nano"], seen.GetProperty("models").EnumerateArray().Select(m => m.GetString()));
         foreach (var hidden in new[] { "hasKey", "keySetAt", "keySetBy", "usage", "progress" })
             Assert.False(seen.TryGetProperty(hidden, out _), hidden);
         var owners = (await AiKit.Settings(ws.Client, ws.Id)).GetProperty("embeddings");

@@ -37,6 +37,16 @@
       "reason": "Microsoft's native SQL Server networking for Windows, required by Microsoft.Data.SqlClient; not copyleft"
     },
     {
+      "package": "Microsoft.ML.OnnxRuntime",
+      "license": "MIT (licence file)",
+      "reason": "Phase 13: ONNX Runtime, the local embedding model's runtime (API and worker); its nuspec names the MIT licence by file"
+    },
+    {
+      "package": "Microsoft.ML.OnnxRuntime.Managed",
+      "license": "MIT (licence file)",
+      "reason": "Phase 13: ONNX Runtime's managed half, brought by Microsoft.ML.OnnxRuntime; its nuspec names the MIT licence by file"
+    },
+    {
       "package": "Microsoft.Identity.Client.NativeInterop",
       "license": "Microsoft Software License Terms (redistributable)",
       "reason": "Microsoft's MSAL broker interop, brought by Microsoft.Data.SqlClient; not copyleft"

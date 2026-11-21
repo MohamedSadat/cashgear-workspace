@@ -22,7 +22,20 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
     public void Forget(Guid workspaceId) => cache.Drop(workspaceId);
 
     public bool On(AiSettings? row) =>
-        ai.Enabled && row is { EmbeddingsEnabled: true, EmbeddingsKeyCipher: not null } && options.Models.Contains(row.EmbeddingsModel);
+        ai.Enabled && row is { EmbeddingsEnabled: true } && options.Models.Contains(row.EmbeddingsModel) && HasKey(row);
+
+    /// <summary>
+    /// Whether the workspace's model has what it needs to be called: the local model (Phase 13) needs
+    /// no key; Voyage's models the workspace's own.
+    /// </summary>
+    public static bool HasKey(AiSettings row) => LocalModelOptions.IsLocal(row.EmbeddingsModel) || row.EmbeddingsKeyCipher is not null;
+
+    /// <summary>
+    /// The key a call of the workspace's model is made with: none for the local model, else the
+    /// workspace's own opened; null when it does not open (enter it again).
+    /// </summary>
+    public string? KeyFor(Guid workspaceId, AiSettings row) =>
+        LocalModelOptions.IsLocal(row.EmbeddingsModel) ? "" : row.EmbeddingsKeyCipher is { } cipher ? keys.Unprotect(workspaceId, cipher) : null;
 
     public string ModelOf(AiSettings? row) => row?.EmbeddingsModel is { } m && options.Models.Contains(m) ? m : options.DefaultModel;
 
@@ -120,7 +133,7 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
             row.EmbeddingsEnabled = enabled;
             if (enabled) row.EmbeddingsGeneration++;
         }
-        if (row.EmbeddingsEnabled && row.EmbeddingsKeyCipher is null)
+        if (row.EmbeddingsEnabled && !HasKey(row))
         {
             if (change.Enabled == true) return new Failure(Codes.AiKeyMissing, 400, "Set the embeddings provider's key before turning search by meaning on");
             row.EmbeddingsEnabled = false;

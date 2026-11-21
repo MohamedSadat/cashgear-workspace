@@ -1,3 +1,4 @@
+using Cgw.LocalModel;
 using Cgw.Core;
 using Cgw.Core.Ai;
 using Cgw.Core.Data;
@@ -55,9 +56,8 @@ public static class WorkerServices
         // the clean-up of embeddings' changes and removed plugins' files.
         services.AddSingleton(sp => EmbeddingsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddSingleton<EmbeddingKeys>();
-        services.AddSingleton<IEmbeddingProvider>(sp => new VoyageProvider(
-            sp.GetRequiredService<EmbeddingsOptions>(),
-            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        // Phase 13: voyage-4-nano on this server beside Voyage's API, by the workspace's model.
+        services.AddLocalModel(configuration);
         services.AddSingleton<IJob, EmbedJob>();
         services.AddSingleton<IJob, Phase10CleanupJob>();
         services.AddHostedService<JobLoop>();

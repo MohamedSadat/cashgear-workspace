@@ -1,0 +1,16 @@
+{
+  "model": "voyage-4-nano",
+  "source": "a stand-in for tests (scripts/local-model/test-model.py)",
+  "dimensions": 1024,
+  "maxTokens": 2048,
+  "prompts": {
+    "document": "Represent the document for retrieval: ",
+    "query": "Represent the query for retrieving supporting documents: "
+  },
+  "files": {
+    "model.onnx": "cd7fd04b30d2b382a5d305afb687b5c91626a6e1919a20a5960e2cd9010a10a6",
+    "vocab.json": "6bb56468cf56a0829db82fed96a19710c1480fd85945c1355406bacc90ff318b",
+    "merges.txt": "215a6aba00d27bcd42b8ad1dccc4b4d23f40decc150bdbf0d5ce6bb2410708df"
+  },
+  "test": true
+}

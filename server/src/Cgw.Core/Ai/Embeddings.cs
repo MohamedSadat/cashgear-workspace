@@ -27,10 +27,13 @@ public static class EmbeddingActions
 /// <summary>
 /// The server's embeddings settings (<c>Ai__*</c>, Phase 10): <c>Ai__VoyageBaseUrl</c> points the
 /// provider elsewhere outside Production only (the mock in <c>tests/mocks/ai</c>);
-/// <c>Ai__EmbeddingsCacheMb</c> caps the API's in-memory copies of the vectors (1,024);
+/// <c>Ai__EmbeddingsCacheMb</c> caps the API's in-memory copies of the vectors (1,280 from Phase 13: a
+/// million chunks with their sign bits is about 1.1 GB);
 /// <c>Ai__EmbeddingsFloor</c> is the least cosine similarity a page found by meaning must have,
 /// and <c>Ai__EmbeddingsFloors__&lt;model&gt;</c> one model's; <c>Ai__EmbeddingsSettleSeconds</c> how long a
-/// page is left unchanged before the worker embeds it (30).
+/// page is left unchanged before the worker embeds it (30). Phase 13: past
+/// <c>Ai__EmbeddingsApproximateFrom</c> chunks a workspace (200,000) a search scans each chunk's sign
+/// bits first and scores exactly the nearest <c>Ai__EmbeddingsCandidates</c> (4,096) of them.
 /// </summary>
 public sealed record EmbeddingsOptions(
     IReadOnlyList<string> Models,
@@ -41,9 +44,15 @@ public sealed record EmbeddingsOptions(
     TimeSpan Settle,
     TimeSpan RetryDelay)
 {
+    /// <summary>Phase 13: the live chunks a workspace's copy holds past which a search is approximate (decisions, 2026-11-21).</summary>
+    public int ApproximateFrom { get; init; } = 200_000;
+
+    /// <summary>Phase 13: the chunks an approximate search scores exactly, at first (wider when too few pass the permission check).</summary>
+    public int Candidates { get; init; } = 4_096;
+
     public const string Provider = "voyage";
 
-    /// <summary>Voyage's 4 series (decisions, 2026-11-18): the default first.</summary>
+    /// <summary>Voyage's 4 series (decisions, 2026-11-18): the default first. Phase 13: voyage-4-nano beside them when this server has the local model.</summary>
     public static readonly string[] DefaultModels = ["voyage-4", "voyage-4-large", "voyage-4-lite"];
 
     public const int Dimensions = 1024;
@@ -72,18 +81,21 @@ public sealed record EmbeddingsOptions(
         var floors = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var child in section.GetSection("EmbeddingsFloors").GetChildren())
             if (Number(child.Value) is { } floor) floors[child.Key] = floor;
-        var cacheMb = long.TryParse(section["EmbeddingsCacheMb"], NumberStyles.None, CultureInfo.InvariantCulture, out var mb) && mb > 0 ? mb : 1024;
+        var cacheMb = long.TryParse(section["EmbeddingsCacheMb"], NumberStyles.None, CultureInfo.InvariantCulture, out var mb) && mb > 0 ? mb : 1280;
         var settle = int.TryParse(section["EmbeddingsSettleSeconds"], NumberStyles.None, CultureInfo.InvariantCulture, out var s) ? s : 30;
         var retry = int.TryParse(section["EmbeddingsRetryMs"], NumberStyles.None, CultureInfo.InvariantCulture, out var r) ? r : 500;
+        var approximate = int.TryParse(section["EmbeddingsApproximateFrom"], NumberStyles.None, CultureInfo.InvariantCulture, out var a) && a > 0 ? a : 200_000;
+        var candidates = int.TryParse(section["EmbeddingsCandidates"], NumberStyles.None, CultureInfo.InvariantCulture, out var c) && c >= 16 ? c : 4_096;
         return new EmbeddingsOptions(
-            DefaultModels,
+            LocalModelOptions.From(configuration, production).Available ? [.. DefaultModels, LocalModelOptions.Model] : DefaultModels,
             // The key goes only to Voyage's API in Production.
             production ? null : AiOptions.BaseUrl(section["VoyageBaseUrl"]),
             cacheMb * 1024 * 1024,
             Number(section["EmbeddingsFloor"]) ?? FloorDefault,
             floors,
             TimeSpan.FromSeconds(Math.Max(0, settle)),
-            TimeSpan.FromMilliseconds(Math.Clamp(retry, 0, 10_000)));
+            TimeSpan.FromMilliseconds(Math.Clamp(retry, 0, 10_000)))
+        { ApproximateFrom = approximate, Candidates = candidates };
     }
 }
 
@@ -334,9 +346,28 @@ public static class EmbeddingText
     }
 }
 
-/// <summary>Scores of int8 vectors: an integer dot product, and the norm that makes it a cosine.</summary>
+/// <summary>
+/// Scores of int8 vectors: an integer dot product, and the norm that makes it a cosine; Phase 13, a
+/// vector's sign bits and the Hamming distance of two of them (the approximate index's first look).
+/// </summary>
 public static class VectorMath
 {
+    /// <summary>One bit a value, set where it is above 0, in words of 64 (value i at bit i % 64 of word i / 64).</summary>
+    public static void SignBits(ReadOnlySpan<sbyte> vector, Span<ulong> bits)
+    {
+        bits.Clear();
+        for (var i = 0; i < vector.Length && i / 64 < bits.Length; i++)
+            if (vector[i] > 0) bits[i >> 6] |= 1UL << (i & 63);
+    }
+
+    /// <summary>The bits that differ between two vectors' sign bits.</summary>
+    public static int Hamming(ReadOnlySpan<ulong> a, ReadOnlySpan<ulong> b)
+    {
+        var d = 0;
+        for (var i = 0; i < a.Length; i++) d += System.Numerics.BitOperations.PopCount(a[i] ^ b[i]);
+        return d;
+    }
+
     public static float Norm(ReadOnlySpan<sbyte> vector)
     {
         long sum = 0;

@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Cgw.Core/Cgw.Core.csproj" />
+    <ProjectReference Include="../Cgw.LocalModel/Cgw.LocalModel.csproj" />
     <ProjectReference Include="../Cgw.Ydoc/Cgw.Ydoc.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
   </ItemGroup>

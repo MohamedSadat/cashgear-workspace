@@ -34,6 +34,9 @@ public sealed class ServerFixture : IAsyncLifetime
         Environment.GetEnvironmentVariable("CGW_TEST_SQL") is { Length: > 0 } sql
             ? sql
             : "Server=(localdb)\\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true";
+    /// <summary>Phase 13: the local model's stand-in package (a test package, refused in Production).</summary>
+    public string LocalModelPath => Path.Combine(Root, "tests", "fixtures", "local-model");
+
     public string SqlConnection => new SqlConnectionStringBuilder(ServerConnection) { InitialCatalog = Database }.ConnectionString;
     public int BlobPort { get; } = FreePort();
     public string BlobConnection =>
@@ -123,6 +126,10 @@ public sealed class ServerFixture : IAsyncLifetime
         ["Ai:VoyageBaseUrl"] = AiMockUrl,
         ["Ai:EmbeddingsSettleSeconds"] = "0",
         ["Ai:EmbeddingsRetryMs"] = "50",
+        // Phase 13: the local model's stand-in (tests/fixtures/local-model, marked a test package),
+        // so voyage-4-nano is offered and embeds on this machine, in the API and the worker alike.
+        ["Ai:LocalModel:Path"] = Path.Combine(FindRoot(), "tests", "fixtures", "local-model"),
+        ["Ai:LocalModel:Threads"] = "1",
         // Phase 10: the plugins' host (the Sites process's second one).
         ["Plugins:PublicUrl"] = PluginsUrl,
         // Phase 11: a domain's TXT record is read from the mock provider's DNS stand-in, never from DNS.

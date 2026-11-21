@@ -61,8 +61,9 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
     public async Task<bool> PassAsync(CgwDb db, Guid? only, CancellationToken ct)
     {
         var models = options.Models;
+        var local = LocalModelOptions.Model;
         var due = await db.AiSettings.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .Where(s => s.EmbeddingsEnabled && s.EmbeddingsKeyCipher != null && models.Contains(s.EmbeddingsModel))
+            .Where(s => s.EmbeddingsEnabled && (s.EmbeddingsKeyCipher != null || s.EmbeddingsModel == local) && models.Contains(s.EmbeddingsModel))
             .Where(s => only == null || s.WorkspaceId == only)
             .Join(db.Workspaces.Where(w => w.DeletedAt == null), s => s.WorkspaceId, w => w.Id, (s, _) => new { s.WorkspaceId, s.EmbeddingsModel, s.EmbeddingsGeneration, s.EmbeddingsKeyCipher })
             .ToListAsync(ct);
@@ -73,7 +74,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
             if (waiting.TryGetValue(row.WorkspaceId, out var w) && w.Until > now) continue;
             db.ChangeTracker.Clear();
             db.Scope.Switch(row.WorkspaceId);
-            more |= await RunWorkspaceAsync(db, new EmbedSettings(row.WorkspaceId, row.EmbeddingsModel, row.EmbeddingsGeneration, row.EmbeddingsKeyCipher!), ct);
+            more |= await RunWorkspaceAsync(db, new EmbedSettings(row.WorkspaceId, row.EmbeddingsModel, row.EmbeddingsGeneration, row.EmbeddingsKeyCipher), ct);
         }
         return more;
     }
@@ -174,7 +175,8 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         // 3. The provider, for the chunks that have no vector yet: at most 128 texts and 100,000 characters a call.
         if (needed.Count > 0)
         {
-            var key = keys.Unprotect(ws, settings.Cipher);
+            // The local model (Phase 13) needs no key; a Voyage model the workspace's own.
+            var key = LocalModelOptions.IsLocal(model) ? "" : settings.Cipher is { } cipher ? keys.Unprotect(ws, cipher) : null;
             if (key is null)
             {
                 Fail(ws, Codes.AiKeyInvalid);
@@ -274,7 +276,8 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
                 "SELECT [EmbeddingsEnabled], [EmbeddingsGeneration], [EmbeddingsModel], CAST(CASE WHEN [EmbeddingsKeyCipher] IS NULL THEN 0 ELSE 1 END AS bit) AS [HasKey] FROM [AiSettings] WITH (UPDLOCK, HOLDLOCK) WHERE [WorkspaceId] = @ws",
                 wsParameter)
             .ToListAsync(ct);
-        if (current is not [{ EmbeddingsEnabled: true, HasKey: true } on] || on.EmbeddingsGeneration != settings.Generation || on.EmbeddingsModel != settings.Model)
+        if (current is not [{ EmbeddingsEnabled: true } on] || on.EmbeddingsGeneration != settings.Generation || on.EmbeddingsModel != settings.Model
+            || !(on.HasKey || LocalModelOptions.IsLocal(on.EmbeddingsModel)))
             return false;
         var now = clock.GetUtcNow();
         var touched = new List<Guid>();
@@ -334,8 +337,8 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
     }
 }
 
-/// <summary>A workspace's embeddings settings as a pass runs with them: its model, generation and key's cipher.</summary>
-public sealed record EmbedSettings(Guid WorkspaceId, string Model, long Generation, string Cipher);
+/// <summary>A workspace's embeddings settings as a pass runs with them: its model, generation and key's cipher (none for the local model).</summary>
+public sealed record EmbedSettings(Guid WorkspaceId, string Model, long Generation, string? Cipher);
 
 /// <summary>
 /// Phase 10's clean-up, hourly: <c>EmbeddingChanges</c> older than a day (the API's copies older

@@ -21,6 +21,8 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <!-- Phase 7: Anthropic's official C# SDK, for the workspace's own key (Apache-2.0). -->
     <PackageVersion Include="Anthropic" Version="13.8.0" />
+    <!-- Phase 13: the local embedding model (MIT). 1.32.0 was eight days old when chosen. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
     <!-- Phase 11: a domain's TXT record for single sign-on (.NET has no TXT lookup; Apache-2.0). -->
     <PackageVersion Include="DnsClient" Version="1.8.0" />
     <!-- Phase 6: the hub's tests connect as a client does (tests only; MIT, Microsoft). -->
