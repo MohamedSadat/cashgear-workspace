@@ -1693,3 +1693,24 @@ Loading took about 1.3 s and 740 to 760 MB of working set. The host runs the mod
 fast as the reference machine, so the budget, set where the reference machine meets it, holds there
 with room: at the server's 6 threads an Arabic chunk's p95 is 551 ms of 1.5 s and a question's
 31 ms of 100.
+
+## 2026-11-22: After 0.13.0 (the Later list reviewed)
+
+Phase 13 was the last planned phase. The plan's "Later" list, with what Phase 13 left for later
+(billing for Cash Gear's subscription, added to it the same day), was put to you in one batch:
+product themes, then groundwork.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Product themes for the next phases | Publishing (custom domains for published sites, a rate limit in the Sites process, publishing changes in the change feed, an index of row files for the site's file check); AI, further (AI completions on a local model, on the desktop or the server, and billing for Cash Gear's subscription) |
+| Groundwork with them | None for now: the import gaps (Notion's people and outside relations, attachments' bytes before first opened), scale past one node (a backplane), and upgrades (Yjs 14, `@cashgear/app-kit`) stay on "Later" |
+| Not chosen | Platforms and offline (a Linux desktop build, a mobile app, comments offline), larger organisations (SAML and SCIM, the test of access lost without a feed change): they stay on "Later" |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| What comes next | Plan the next phases, in a new session, from the two themes; it sizes them against the code, asks its own questions in one batch, and says whether they are one release or two | As after 0.7.0 and 0.10.0: a planning session sizes before anything is promised |
+| Not offered as a choice | Embedded presentations (no app yet), SQLite on OPFS (it needs COOP/COEP, which blocks embeds), and snapshotting an ERP view (the hard limits forbid ERP data in a Workspace table) stay on "Later" with their reasons | Nothing to choose while their reason stands |

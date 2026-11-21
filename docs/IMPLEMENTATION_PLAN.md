@@ -1949,6 +1949,9 @@ Not planned in any phase; listed so they are not lost. Reviewed on 2026-11-15: w
 went to Phases 8 to 10, and the earlier phases' deferrals that were not chosen are listed here.
 Reviewed again on 2026-11-18, after 0.10.0: sign-in and permissions, ERP at scale, AI and plugins,
 and the database items were chosen, and went to Phases 11 to 13 on 2026-11-19 (`DECISIONS.md`).
+Reviewed again on 2026-11-22, after 0.13.0: publishing (Phase 9's items below) and AI further (AI
+completions on a local model, billing for the subscription) were chosen, for the next phases to
+size and plan; the rest stays (`DECISIONS.md`).
 
 - Embedded presentations, once that app exists.
 - Comments offline (online only from 0.6.0).
@@ -1968,6 +1971,8 @@ and the database items were chosen, and went to Phases 11 to 13 on 2026-11-19 (`
 - Left by Phase 9: custom domains for published sites; a rate limit in the Sites process; publishing
   changes in the change feed (the dialog and Settings read them); an index of row files for the
   site's file check (a `LIKE` over a database's rows in 0.9.0).
+- Left by Phase 13: billing for Cash Gear's subscription (0.13.0's allowances are set by whoever
+  runs the server, a workspace's month counted, nothing charged).
 - Not while the hard limit stands: snapshotting an ERP view into a database, which would store ERP
   data in a Workspace table.
 
