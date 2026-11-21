@@ -95,6 +95,10 @@ API's host and no token is in JavaScript (Q5).
    #   -SitesHostName pages.cashgearerp.com -SitesSiteName CashGearWorkspaceSites -SitesCertificateThumbprint <https>
    # Phase 10's plugins host, a second binding of the sites' site (the certificate is the sites' unless given):
    #   -PluginsHostName plugins.cashgearerp.com -PluginsCertificateThumbprint <https>
+   # Phase 13's local model and Cash Gear's subscription (its keys as the SMTP password, in
+   # $env:CGW_AI_ANTHROPIC_KEY and $env:CGW_AI_VOYAGE_KEY, removed after):
+   #   -LocalModel <cgw-local-model-voyage-4-nano-587d8d6.zip> -LocalModelThreads 8
+   #   -AiMonthlyTokens 2000000 -AiEmbeddingsMonthlyTokens 5000000
    Remove-Item Env:\CGW_SMTP_PASSWORD
    ```
 
@@ -182,7 +186,12 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Ai__Models__N` | The Claude models an admin may choose, the first the default (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`) |
 | `Ai__AnthropicBaseUrl` | Development and tests only: where the provider is (the mock in `tests/mocks/ai`). Ignored in Production, where a workspace's key goes only to Anthropic's API. For AI, the API host must reach `https://api.anthropic.com` on 443 |
 | `Ai__VoyageBaseUrl` | Phase 10, development and tests only: where the embeddings provider is (the mock's `/v1/embeddings`). Ignored in Production, where a workspace's Voyage key goes only to Voyage's API: for search by meaning the API host and the worker's must reach `https://api.voyageai.com` on 443 |
-| `Ai__EmbeddingsCacheMb` | Phase 10, the API: the most memory its copies of workspaces' vectors take together (1,024; about 1 KB a chunk, so a million chunks); the least recently used workspace's copy goes first and loads again on its next search. Each API instance has its own |
+| `Ai__EmbeddingsCacheMb` | Phase 10, the API: the most memory its copies of workspaces' vectors take together (1,024; from Phase 13 1,280: about 1.1 KB a chunk with its sign bits, so a million chunks); the least recently used workspace's copy goes first and loads again on its next search. Each API instance has its own |
+| `Ai__EmbeddingsApproximateFrom`, `Ai__EmbeddingsCandidates` | Phase 13, the API: past this many chunks a workspace (200,000) a search ranks every chunk by its sign bits first and scores exactly only the nearest this many (4,096). Leave unset in production |
+| `Ai__LocalModel__Path` | Phase 13, the API and the worker: the folder of the local model's package (`voyage-4-nano`; `install.ps1 -LocalModel` unpacks it to `<Root>\models\voyage-4-nano` and sets this). Set, and its files the ones pinned in the server's code, the model is offered in Settings as "On this server"; a package that fails the check is not offered and the log says why. The Sites process is never given it |
+| `Ai__LocalModel__Threads`, `Ai__LocalModel__IdleMinutes` | Phase 13: the processor threads one embedding takes (half the processors, at most 8; `install.ps1 -LocalModelThreads`), and how long the model stays loaded unused (30). Loaded, it takes about 1 GB in each of the API and the worker |
+| `Ai__Subscription__AnthropicKey`, `__VoyageKey` | Phase 13, the API and the worker: Cash Gear's own keys for its subscription, from the environment only (`install.ps1` reads `CGW_AI_ANTHROPIC_KEY` and `CGW_AI_VOYAGE_KEY` from its session, as the SMTP password; never a parameter or a file). Without one, that part is not offered on the subscription |
+| `Ai__Subscription__MonthlyTokens`, `__EmbeddingsMonthlyTokens`, `__Workspaces__<id>__MonthlyTokens`, `__Workspaces__<id>__EmbeddingsMonthlyTokens` | Phase 13: a workspace's allowance a calendar month (UTC) in tokens, input and output alike, for AI and for search by meaning; a workspace's own by its id. 0 or unset: not offered (`install.ps1 -AiMonthlyTokens`, `-AiEmbeddingsMonthlyTokens`, `-AiWorkspaceMonthlyTokens @{'<id>' = n}`, `-AiWorkspaceEmbeddingsMonthlyTokens`). Past it, the workspace's calls are refused until the next month (429 `ai.limit`) |
 | `Ai__EmbeddingsFloor`, `Ai__EmbeddingsFloors__<model>` | Phase 10, the API: the least cosine similarity a page found by meaning must have (0.3, for every model unless one has its own); a question with no page above it finds none. Raise it if unrelated pages show under "Related by meaning"; lower it if related ones are missed |
 | `Ai__EmbeddingsSettleSeconds` | Phase 10, the worker: how long a page is left unchanged before it is embedded (30; the e2e stack sets 1, the server's tests 0). Leave unset in production |
 | `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
@@ -327,6 +336,24 @@ https://plugins.cashgearerp.com; …; connect-src 'none'; …; frame-ancestors <
 pages host, is the 404 page. It keeps a ticket and a plugin's row at most 30 s (never past the
 ticket's expiry; a plugin turned off or removed stops within 30 s) and files in memory by their hash
 (at most 64 MB).
+
+Version 0.13.0's migrations (`Phase13Plugins`, `Phase13Embeddings`, `Phase13Ai`) add a plugin's
+approved hosts to `WorkspacePlugins` (none approved for a plugin already there: none named any),
+`PageEmbeddings.SchemaVersion` (every row of a database with embeddings on is embedded again once,
+now with its property values), the key sources of `AiSettings` (`own` for every workspace, as
+before), `AiUsage.Subscription` and `AiReservations`, in a transaction like the others. Nothing is
+offered on Cash Gear's subscription until its key and an allowance are set: in the session that
+runs `install.ps1`, `$env:CGW_AI_ANTHROPIC_KEY` and `$env:CGW_AI_VOYAGE_KEY` (read as the SMTP
+password is, and removed after), with `-AiMonthlyTokens` and `-AiEmbeddingsMonthlyTokens`; like the
+SMTP password, an update run without them leaves the keys out. The local model is offered once its
+package is placed: `node scripts/local-model.mjs` on a machine with Python 3 (it downloads the
+pinned revision of the weights, about 700 MB, exports them and checks the graph against the model
+card's own run) makes `target/deploy/cgw-local-model-voyage-4-nano-587d8d6.zip` (572 MB); copy it to
+the host and pass `-LocalModel <zip>` once (an update without it keeps the folder). The API and the
+worker each load it on first use (about 3 s and 1 GB) and unload it after 30 minutes unused; a
+chunk takes about a second at 8 threads on the reference machine, a question about 50 ms. The
+plugins host's CSP is now a bundle's own (`connect-src` its approved hosts, else `'none'`), and a
+plugin's request leaves the visitor's browser from the plugins origin: the server never proxies it.
 
 The Sites process holds no Data Protection (as in 0.9.0) and must never be able to read the key
 ring: a process that serves the public must not be able to open a workspace's AI key's cipher (both

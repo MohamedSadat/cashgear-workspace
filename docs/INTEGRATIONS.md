@@ -1385,6 +1385,7 @@ interface PluginManifest {
   reads?: { rows?: boolean };   // asks for a database view's rows
   height?: number;              // the frame's first height, 48 to 1,200 CSS px, default 240
   keywords?: string[];          // slash menu words, at most 10 of 1 to 30 characters
+  network?: { hosts: string[] }; // Phase 13: the hosts it may reach once approved (below)
 }
 ```
 
@@ -1399,10 +1400,12 @@ interface PluginManifest {
 | `/api/v1/workspaces/{id}/plugins/{pluginId}/frames` | POST | The plugin live and on: 200 `{url, expiresAt}`; else 404. Rate `frames`, 120 a minute |
 
 `WorkspacePlugin` is `{id, type, version, name, description, reads, height, keywords, enabled,
-sizeBytes, addedBy: {id, name}, addedAt, updatedAt}`. Audit `plugin.add`, `plugin.update`,
-`plugin.enable`, `plugin.disable`, `plugin.remove` (type, version, bundle hash). Plugins are not in
-the change feed: the client reads the list on start, after Settings' changes and when a frame's
-ticket answers 404.
+sizeBytes, addedBy: {id, name}, addedAt, updatedAt}`, and from Phase 13 `network?: {hosts,
+approved}`. Audit `plugin.add`, `plugin.update`, `plugin.enable`, `plugin.disable`,
+`plugin.remove` (type, version, bundle hash), and from Phase 13 `plugin.network` (the hosts
+approved). Until 0.13.0 plugins were not in the change feed: the client read the list on start,
+after Settings' changes and when a frame's ticket answered 404; it still does, and from Phase 13
+also on a `plugin` change (below).
 
 **The plugins origin.** `https://plugins.cashgearerp.com` (`Plugins__PublicUrl`; `http://localhost:5291`
 in development and e2e), a second host name of the Sites process. A frame's `url` is
@@ -1417,6 +1420,7 @@ Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src {
   style-src {origin} 'unsafe-inline'; img-src {origin} data: blob:; font-src {origin};
   media-src {origin}; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none';
   base-uri 'none'; frame-ancestors {Workspace's origins}
+  (Phase 13: connect-src the plugin's approved hosts, below)
 X-Content-Type-Options: nosniff
 Referrer-Policy: no-referrer
 Cache-Control: private, max-age=600
@@ -1475,8 +1479,43 @@ third-party plugins (0.9.0 and earlier) draws its own "needs a newer version" pl
 the block exactly.
 
 **Trust.** A plugin shown rows could copy what it is shown into its own props, which every reader
-of the page receives; the add dialog says so. It has no network, so nothing it is shown can leave
-the page any other way. A contract version is never changed once shipped; a new one is added.
+of the page receives; the add dialog says so. Without a network (every plugin until 0.13.0, and any
+whose manifest names none), nothing it is shown can leave the page any other way. A contract
+version is never changed once shipped; a new one is added.
+
+### A plugin's network (Phase 13)
+
+Agreed on 2026-11-21 (decisions, Phase 13). A manifest may name the hosts its plugin reaches:
+`network: {hosts: string[]}`, 1 to 10 distinct exact host names (`api.example.com`,
+`api.example.com:8443`): lower-case letters, digits and hyphens in two labels or more, an optional
+port, no wildcard, no IP address, never `cashgearerp.com` or a name under it nor the server's own
+origins (`host.reserved`), anything else `manifest.invalid`. Outside Production also
+`localhost:<port>` and `127.0.0.1:<port>`, the e2e stack's test host (`tests/mocks/net`), reached
+over plain http; Production never reaches one. The rules are `PluginHosts.cs` and `manifest.ts`,
+held to each other by the contract's vectors.
+
+**Approval.** A host is reached only once an owner or admin approved it. Adding a plugin approves
+every host it names (`POST …/plugins?approve=<hosts, comma-separated>`, what the review dialog
+showed); an update approves none: a host an update adds waits, marked new in its review and in its
+row ("Allow hosts"), while the hosts approved before stay. `PATCH {approvedHosts: string[]}` sets the
+approved list (any of the manifest's hosts; `[]` is "Stop network", at once). The review of a plugin
+that reads rows and names hosts says both are allowed together: it can send what it is shown. Audit
+`plugin.network` (the hosts approved, by whom).
+
+**The origin.** The plugins origin's CSP is the bundle's own: `connect-src` the reached hosts
+(`https://host`, `http://` for a loopback one), the manifest's hosts that are approved, else
+`'none'`; every other directive as before. A frame ticket made after its plugin's row changed is
+served only by the row read again (`ticket.MadeAt`), so a host stopped is unreachable by the next
+frame at once. Workspace's own CSPs are unchanged: the plugin's requests leave from the plugins
+origin, never Workspace's.
+
+### Plugins in the change feed (Phase 13)
+
+Every add, update, switch, host approval and removal writes a change of entity type `plugin`
+(`upsert` or `delete`, its id, no entity) under the change feed's lock. A tab's engine turns it into
+a `plugins` event; the shell reads the workspace's list again if it had read it, and a block whose
+plugin changed draws a new frame (its key holds the plugin's `revision`, its `updatedAt`). A build
+that does not know the type (0.12.0 and earlier) skips it, as the feed's unknown types.
 
 ## Import formats (Phase 8)
 
@@ -1545,8 +1584,9 @@ public interface IEmbeddingProvider   // Phase 10: a provider of its own (Voyage
 | Mode | Key lives | Notes |
 | --- | --- | --- |
 | Bring your own key | Server, encrypted per workspace; never returned to any client | The workspace admin chooses the provider and model |
-| Cash Gear AI subscription | Server | Metered per workspace |
-| Local model | The desktop app calls a local endpoint directly | Nothing leaves the device; desktop only |
+| Cash Gear AI subscription (Phase 13) | The host's environment only | A monthly allowance per workspace, reserved before each call (below) |
+| Local model for embeddings (Phase 13) | No key: the model runs on the server | No text leaves the host for search by meaning (below) |
+| Local model for AI | The desktop app calls a local endpoint directly | Nothing leaves the device; desktop only; "Later" |
 
 Rules:
 
@@ -1724,7 +1764,7 @@ then the derived text, in chunks of about 2,000 characters cut at paragraph ends
 then spaces, overlapping about 200, each starting with the title's line; at most 200 chunks a page.
 A chunk whose text and model already have a vector keeps it, with no call. Trashed and deleted
 pages' vectors are removed; a restored page is embedded again within 5 minutes. Never comments,
-workbooks, database property values or ERP data (none is in a page). `PageEmbeddings` holds the
+workbooks or ERP data (none is in a page); from Phase 13 a row's property values (below). `PageEmbeddings` holds the
 vectors; `EmbeddingChanges` names each page whose vectors changed, for a day (DATA_MODEL.md).
 
 **Search by meaning.** `GET /api/v1/workspaces/{id}/search/meaning?q=&limit=`. Checks in order: a
@@ -1735,7 +1775,8 @@ Answer `{hits: SearchHit[]}`, ordinary search's hit (`pageId, title, snippet, sc
 databaseId`), `score` the cosine similarity, `snippet` the start of the page's own best chunk. The
 API keeps each searched workspace's vectors of its current model in memory (capped by
 `Ai__EmbeddingsCacheMb`, the least recently used first), brought up to date from `EmbeddingChanges`
-on each search, and scores every chunk exactly; pages under the similarity floor
+on each search, and scores every chunk exactly (from Phase 13, past 200,000 chunks, the nearest
+by sign bits first: below); pages under the similarity floor
 (`Ai__EmbeddingsFloor`, 0.3) are left out; then ordinary search's permission check runs at query
 time, by the current pages, so a page restricted or trashed stops counting at once. No route
 returns a vector and no log holds one.
@@ -1753,3 +1794,73 @@ English and Arabic (`embeddings.mjs`), so a question that shares no word with a 
 concepts scores high, in either language and across the two; `/__mock/embeddings` records each call's
 input count and type, the key only as a hash. One live test with a real key:
 `A_real_embedding` (`VOYAGE_API_KEY`), which prints voyage-4's scores against the floor.
+
+### Property values by meaning (Phase 13)
+
+Agreed on 2026-11-21. A row's chunks carry its property values before its own text: after the
+title's line, one "Name: value" line each (`EmbeddingValues.cs`), in the database's order, each
+value as the CSV export writes it, cut at 1,000 characters on a word: text, number, select, status,
+date, checkbox, URL and email, and formulas and rollups by their computed results. Never a person, created-by or edited-by value, nor a
+formula or rollup that reads one (through a formula's inputs or a rollup's relation and target, a
+cycle or a missing property counting as one), nor a rollup of a relation or files (ids);
+multi-select, phone, a relation's titles and files are left out. The vectors are kept by the row's
+`PageVersion` and its database's `SchemaVersion` (`PageEmbeddings.SchemaVersion`): a value changed,
+a formula's input changed, or a property renamed, added or removed embeds the rows again on the
+job's next pass. A hit's snippet is drawn from the same text.
+
+### The approximate index (Phase 13)
+
+Agreed on 2026-11-21: in the API process, past `Ai__EmbeddingsApproximateFrom` chunks a workspace
+(200,000), exact below. Each chunk's copy also holds its sign bits (1,024 bits, 16 words); a question
+is ranked by Hamming distance over every chunk first (a histogram cut, no sort), then the nearest
+`Ai__EmbeddingsCandidates` (4,096) are scored exactly. The copy is fed by `EmbeddingChanges` as
+before and capped by `Ai__EmbeddingsCacheMb` (1,280 from 0.13.0). When the permission check drops
+pages and fewer than the limit remain, the search widens eight times, and then to every chunk, until
+the limit is met or nothing is left. Measured at 1,000,000 chunks in one workspace
+(`Phase13Bench`): the route p95 under 20 ms warm and after a change, against about 100 ms for the
+exact ranking, and the exact search's first ten pages all found (recall 1.0 against a floor of
+0.95).
+
+### The local model (Phase 13)
+
+Agreed on 2026-11-21 after the spike (decisions, Phase 13): `voyage-4-nano` (Apache 2.0; MongoDB's
+open weights, the revision pinned) on ONNX Runtime (MIT) on the processor, in the API (questions)
+and the worker (chunks), never the Sites process, offered in Settings as "On this server
+(voyage-4-nano)" beside Voyage's models when the server has its package (`Ai__LocalModel__Path`). Its
+own model's vectors, 1,024 dimensions, int8 (each vector scaled by its largest magnitude to 127): a
+change to or from it embeds every page again, as any model change. No key; no text leaves the host
+for search by meaning, and a workspace on it never calls Voyage.
+
+The package (`scripts/local-model.mjs`, not in the deploy package: 572 MB zipped) is `model.onnx`
+(the card's graph: Qwen3 with bidirectional attention, mean pooling, the 2,048 head cut to 1,024,
+normalised; the token table in fp16, the rest fp32), `vocab.json`, `merges.txt`, the licence, a
+notice and `cgw-model.json` describing them. The server loads it only when each file's SHA-256 is
+one pinned in its code, and never a test package (`test: true`, `tests/fixtures/local-model`, a
+byte-level stand-in with the real graph's inputs and output) in Production. `Cgw.LocalModel`'s own
+tokenizer (byte-level BPE with Qwen2's split over code points) gives Hugging Face's tokens exactly.
+The model loads on first use (about 3 s, about 1 GB) and unloads after `Ai__LocalModel__IdleMinutes`
+(30) unused; one run takes `Ai__LocalModel__Threads` (half the processors, at most 8). The spike
+set the budget (`Phase13LocalModelBench`): a 2,000-character chunk p95 1.5 s in either language
+(Arabic is about twice English's tokens), a question p95 100 ms.
+
+### Cash Gear's subscription (Phase 13)
+
+Agreed on 2026-11-21. A workspace's owner or admin chooses, for AI and for search by meaning each,
+its own key or Cash Gear's subscription (`keySource`: `own`, `subscription`; `PUT
+/ai-settings {keySource?, embeddings?: {keySource?}}`). Cash Gear's keys and allowances come from
+the host's environment only (`Ai__Subscription__AnthropicKey`, `__VoyageKey`, `__MonthlyTokens`,
+`__EmbeddingsMonthlyTokens`, and `__Workspaces__<id>__MonthlyTokens` and
+`__EmbeddingsMonthlyTokens` for one workspace; `install.ps1` sets them from the session, as the SMTP
+password); a server without the key, or a workspace with no allowance, is not offered it (choosing
+it then is 400 `request.invalid`). No billing in 0.13.0.
+
+The allowance is a calendar month's tokens in UTC, input and output alike. Every call on the
+subscription reserves its most (the input's characters halved, plus the output limit; a batch of
+chunks its characters halved) before it is sent, in `AiReservations` under the workspace's AI
+settings row's lock (`UPDLOCK, HOLDLOCK`), so calls at once never pass it together; the call
+settles by its `AiUsage` row (`Subscription` set, the provider's counted tokens) taking the
+reservation's place, and a reservation not settled lapses after 15 minutes. Past it: 429 `ai.limit`
+with `reason: "allowance"`, which the AI panel and search by meaning say as such; the embedding job
+waits for the next month. Owners and admins see `subscription: {month, allowance, used, reserved}`
+beside each part's settings. The audit's `ai.request` and `ai.settings` name the subscription; no
+key is ever returned or logged.

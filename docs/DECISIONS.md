@@ -1632,3 +1632,49 @@ ONNX build (one community int8 conversion exists).
 | --- | --- | --- |
 | A plugin's hosts outside Production | Also `http://localhost:<port>` and `http://127.0.0.1:<port>`, so the e2e stack's test host can be named; Production takes https only | The tests need a host they run; a plugin in production never talks plain http |
 | An allowance's month | The calendar month in UTC, as the usage totals since 0.7.0 | One month for what is shown and what is enforced |
+| A value's line | At most 1,000 characters, cut on a word; a value as the CSV export writes it | A long text property must not crowd the row's own text out of its first chunk; the CSV's text is already the agreed reading of every type |
+| The approximate index's numbers | 4,096 candidates scored exactly; eight times as many when the permission filter leaves fewer than asked, then every chunk; the copies' cap 1,280 MB (from 1,024), a copy sized to its rows before it loads | At 1,000,000 clustered chunks 4,096 found every one of the exact search's first ten (recall 1.0) at under 20 ms; a million chunks with their bits are about 1.1 GB |
+| The local model's threads and memory | Half the processors, at most 8 (`Ai__LocalModel__Threads`); loaded on first use, unloaded after 30 minutes unused | At 8 threads a chunk takes what all 24 take on the reference machine, and the API keeps the rest; the model is about 1 GB in each process |
+| A reservation's estimate | The input's characters halved, plus the output limit (a batch of chunks: their characters halved) | Tokens are never fewer than a character in two for English or Arabic text; an estimate too high only holds room for a moment |
+| Settings while pages are embedded | Read again when Settings opens and every 5 s while pages wait | The month's use and the progress move without a reload, and nothing is asked when nothing waits |
+| "Stop network" | Approves no host (`approvedHosts: []`), at once; the manifest's hosts then wait as an update's new ones do | One switch an owner can reach for, kept apart from turning the plugin off |
+
+### The spike (M13.4): results, and what they decided
+
+Run on 2026-11-21 on the reference machine (Xeon E5-2680 v3, 12 cores, 24 threads, AVX2, no AVX-512
+or VNNI), the model's own code read first. `voyage-4-nano` at the revision
+`587d8d6dcaec029a9779c2098d6af020e4a07c01` (692,919,112 bytes of safetensors), exported to ONNX by
+`scripts/local-model/export.py` as the card runs it (cosine 1.000000 with the card's own run): input
+ids and mask to the mean-pooled vector cut to its first 1,024 and normalised. .NET with ONNX Runtime
+1.31.1, one text a run:
+
+| Input | Tokens | All threads, median / p95 | 8 threads, median / p95 | 4 threads, median / p95 |
+| --- | --- | --- | --- | --- |
+| 2,000 characters, English | 402 | 458 / 462 ms | 402 / 586 ms | 851 / 945 ms |
+| 2,000 characters, Arabic | 804 | 1,048 / 1,052 ms | 1,006 / 1,079 ms | 1,672 / 1,775 ms |
+| A question, English | 18 | 39 / 41 ms | 36 / 41 ms | 53 / 68 ms |
+| A question, Arabic | 24 | 47 / 51 ms | 42 / 52 ms | 68 / 86 ms |
+
+Loading takes about 3 s and 1,060 MB of working set. What it decided:
+
+- **Kept, not quantised.** Dynamic int8 broke the model (cosine 0.10 with fp32; MatMul alone 0.89 to
+  0.94); weight-only 8-bit kept it (0.9993 to 0.9999) but ran slower (822 ms a chunk), and 4-bit lost
+  it (0.95 to 0.98). The package is fp32 with the token table in fp16 (cosine 1.0, the same speed,
+  311 MB less): `model.onnx` 1,075 MB, 572 MB zipped.
+- **The budget** (`Phase13LocalModelBench`, `bench/phase13.mjs --local-model`): a 2,000-character
+  chunk in either language p95 at most 1.5 s, a question p95 at most 100 ms, at the threads the
+  server gives the model. Arabic, about twice English's tokens, is the case that binds. A page of 20
+  chunks then embeds in under half a minute on the worker, and a question adds under a tenth of a
+  second to search by meaning.
+- **The tokenizer is the server's own** (`QwenTokenizer`, about 200 lines, no package) rather than
+  `Microsoft.ML.Tokenizers`: byte-level BPE over `vocab.json` and `merges.txt`, NFC first, Qwen2's
+  split written over code points (.NET's `Regex` reads `\p{L}` per UTF-16 unit and split 17 of 3,000
+  cases with letters outside the BMP differently). 20,000 of 20,000 cases gave Hugging Face's
+  `tokenizers` tokens exactly (English, Arabic, both digit sets, emoji and joiners, CJK Extension B,
+  mathematical letters, every kind of space, CRLF, contractions in any case); added tokens are never
+  matched in text. It loads in about 0.5 s and tokenises an Arabic chunk in under 1.5 ms.
+- **Threads** (above, Defaults picked).
+
+The host's own run (a graph of random weights, which times as the real one does, in a 6.7 MB
+package run from a folder deleted after) waits for a Remote Desktop session: the budget stands on the
+reference machine's figures until it is taken.
