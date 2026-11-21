@@ -240,7 +240,7 @@ export function PluginsSection({
     }
   };
 
-  /** Its hosts set at once: every one it names (Allow), or none (Stop its network). */
+  /** Its hosts set at once: every one it names (Allow), or none (Stop network). */
   const setHosts = async (plugin: WorkspacePlugin, hosts: readonly string[]) => {
     setBusy(true);
     setProblem(null);
