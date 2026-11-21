@@ -62,15 +62,31 @@ async function review(page: Page, path: string, updateOf?: string) {
   return dialog;
 }
 
-/** What the frame recorded of each target, once it has tried them all. */
-async function attempts(page: Page) {
-  const frame = frameOf(page);
-  await expect(frame.locator('#summary')).toHaveAttribute('data-done', 'true', { timeout: 30000 });
-  const out: Record<string, string> = {};
-  for (const li of await frame.locator('#attempts li').all())
-    out[(await li.getAttribute('data-attempt'))!] = (await li.getAttribute('data-outcome'))!;
-  return out;
+/**
+ * What the frame recorded of each target once it has tried them all, read in one go inside it; null
+ * before, or while the block draws a new frame (the tab reads the plugin list again on the feed's
+ * `plugin` change, and a block whose plugin changed draws a new frame). Poll it.
+ */
+async function attempts(page: Page): Promise<Record<string, string> | null> {
+  return frameOf(page)
+    .locator('body')
+    .evaluate(
+      (body) => {
+        if (body.querySelector('#summary')?.getAttribute('data-done') !== 'true') return null;
+        const out: Record<string, string> = {};
+        for (const li of body.querySelectorAll('#attempts li'))
+          out[li.getAttribute('data-attempt') ?? ''] = li.getAttribute('data-outcome') ?? '';
+        return out;
+      },
+      undefined,
+      { timeout: 5000 },
+    )
+    .catch(() => null);
 }
+
+/** Waits until the frame's attempts are these. */
+const attemptsAre = (page: Page, expected: Record<string, string>) =>
+  expect.poll(() => attempts(page), { timeout: 30000 }).toEqual(expected);
 
 async function signedInWorkspace(page: Page, name: string, space: string) {
   const account = await newAccount(name);
@@ -116,19 +132,18 @@ test('a plugin reaches the hosts an admin approved and no other; a new host in a
   const pick = page.getByRole('dialog', { name: 'Choose a database' });
   await pick.getByRole('option', { name: /Tasks/ }).first().click();
   await expect(pick).toHaveCount(0);
-  await expect
-    .poll(async () => (await attempts(page)).approved, { timeout: 30000 })
-    .toBe('reached');
-  expect(await attempts(page)).toEqual({
-    approved: 'reached',
-    other: 'blocked',
-    unnamed: 'blocked',
-  });
+  // This plugin sends only what its `init` holds, and the frame drawn before the view was chosen was
+  // given its rows by a later message: the page opened again draws it with them in its `init`.
   await waitSaved(page);
+  await page.reload();
+  await attemptsAre(page, { approved: 'reached', other: 'blocked', unnamed: 'blocked' });
+  await expect
+    .poll(async () => (await seen()).some((r) => r.body.includes('Quarterly close')), {
+      timeout: 30000,
+    })
+    .toBe(true);
   const sent = await seen();
-  expect(sent.length).toBeGreaterThan(0);
   expect(new Set(sent.map((r) => r.host))).toEqual(new Set(['localhost:4288']));
-  expect(sent.some((r) => r.body.includes('Quarterly close'))).toBe(true);
 
   // An update naming a new host: the dialog marks it new and says it waits; the row lists it
   // waiting; the open page draws the new version, which still cannot reach it.
@@ -146,14 +161,7 @@ test('a plugin reaches the hosts an admin approved and no other; a new host in a
   );
   await expect(row.locator('[data-hosts="approved"]')).toHaveText('Connects to: localhost:4288');
   await page.goto(pageUrl);
-  await expect(frameOf(page).locator('#summary')).toHaveAttribute('data-done', 'true', {
-    timeout: 30000,
-  });
-  expect(await attempts(page)).toEqual({
-    approved: 'reached',
-    other: 'blocked',
-    unnamed: 'blocked',
-  });
+  await attemptsAre(page, { approved: 'reached', other: 'blocked', unnamed: 'blocked' });
   expect((await seen()).every((r) => r.host === 'localhost:4288')).toBe(true);
 
   // Allowed in its row (rows and network named together): now it reaches both, never example.com.
@@ -169,12 +177,7 @@ test('a plugin reaches the hosts an admin approved and no other; a new host in a
     { timeout: 30000 },
   );
   await page.goto(pageUrl);
-  await expect.poll(async () => (await attempts(page)).other, { timeout: 30000 }).toBe('reached');
-  expect(await attempts(page)).toEqual({
-    approved: 'reached',
-    other: 'reached',
-    unnamed: 'blocked',
-  });
+  await attemptsAre(page, { approved: 'reached', other: 'reached', unnamed: 'blocked' });
   expect((await seen()).some((r) => r.host === '127.0.0.1:4288')).toBe(true);
 
   // Its network stopped: neither host is reached any more.
@@ -186,14 +189,7 @@ test('a plugin reaches the hosts an admin approved and no other; a new host in a
   );
   const before = (await seen()).length;
   await page.goto(pageUrl);
-  await expect
-    .poll(async () => (await attempts(page)).approved, { timeout: 30000 })
-    .toBe('blocked');
-  expect(await attempts(page)).toEqual({
-    approved: 'blocked',
-    other: 'blocked',
-    unnamed: 'blocked',
-  });
+  await attemptsAre(page, { approved: 'blocked', other: 'blocked', unnamed: 'blocked' });
   expect((await seen()).length).toBe(before);
   expect(errors).toEqual([]);
 });
