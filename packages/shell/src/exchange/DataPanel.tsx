@@ -6,6 +6,9 @@
 // (exchange/workbooks.ts). An export imported while signed in goes to the account as a new synced
 // workspace, and its workbooks are made again there; imported signed out, it stays on this device
 // and its workbooks are skipped, which the message says.
+//
+// With no workspace shown (signed out on a device whose workspaces are all synced: another
+// account's are never shown), the panel is still in Settings and offers the import alone.
 import { CgFilePicker } from '@cashgear/ui';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -171,39 +174,42 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
           : t('exchange.desktopKept')}
       </p>
       <div className="cgw-data-buttons">
-        <button
-          type="button"
-          className="cgw-button"
-          disabled={busy !== null || !session.workspaceId}
-          onClick={() => {
-            setBusy('export');
-            setMessage(null);
-            // A synced workspace's workbooks are in the account: read from there, when it can be.
-            const workbooks =
-              cloud && workspace && !workspace.localOnly && reachable(cloud)
-                ? workbookReaderFor(cloud, workspace.id)
-                : undefined;
-            exportAndSave(
-              session,
-              (n, b, ty) => platform.saveFile(n, b, ty),
-              t('page.untitled'),
-              undefined,
-              databases?.people(),
-              workspace && collaborates(collab, session, workspace.id)
-                ? collab!.people(workspace.id).name
-                : undefined,
-              workbooks,
-            )
-              .then((report) => setMessage(exported(report)))
-              .catch((error: unknown) => {
-                console.error(error);
-                setMessage(t('exchange.exportFailed'));
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          {t('exchange.exportWorkspace')}
-        </button>
+        {/* With no workspace shown here there is nothing to export: only the import is offered. */}
+        {workspace && (
+          <button
+            type="button"
+            className="cgw-button"
+            disabled={busy !== null}
+            onClick={() => {
+              setBusy('export');
+              setMessage(null);
+              // A synced workspace's workbooks are in the account: read from there, when it can be.
+              const workbooks =
+                cloud && workspace && !workspace.localOnly && reachable(cloud)
+                  ? workbookReaderFor(cloud, workspace.id)
+                  : undefined;
+              exportAndSave(
+                session,
+                (n, b, ty) => platform.saveFile(n, b, ty),
+                t('page.untitled'),
+                undefined,
+                databases?.people(),
+                workspace && collaborates(collab, session, workspace.id)
+                  ? collab!.people(workspace.id).name
+                  : undefined,
+                workbooks,
+              )
+                .then((report) => setMessage(exported(report)))
+                .catch((error: unknown) => {
+                  console.error(error);
+                  setMessage(t('exchange.exportFailed'));
+                })
+                .finally(() => setBusy(null));
+            }}
+          >
+            {t('exchange.exportWorkspace')}
+          </button>
+        )}
         {serverExport && (
           <button
             type="button"
@@ -243,15 +249,18 @@ export function DataPanel({ session }: { session: WorkspaceSession }) {
         >
           {t('exchange.import')}
         </CgFilePicker>
-        <button
-          type="button"
-          className="cgw-button"
-          // A guest makes no pages of their own (the server refuses them): it is not offered.
-          disabled={busy !== null || !session.workspaceId || workspace?.role === 'guest'}
-          onClick={() => setImporting(true)}
-        >
-          {t('exchange.importOther')}
-        </button>
+        {/* Markdown, Notion and Word come into the workspace shown. */}
+        {workspace && (
+          <button
+            type="button"
+            className="cgw-button"
+            // A guest makes no pages of their own (the server refuses them): it is not offered.
+            disabled={busy !== null || workspace.role === 'guest'}
+            onClick={() => setImporting(true)}
+          >
+            {t('exchange.importOther')}
+          </button>
+        )}
       </div>
       {importing && (
         <Suspense fallback={null}>

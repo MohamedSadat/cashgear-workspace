@@ -88,7 +88,9 @@ export function Settings({
         </Suspense>
       )}
       {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
-      {session.workspaceId && <DataPanel session={session} />}
+      {/* With no workspace shown (signed out, every one here synced), an export can still be
+          brought back: the panel then offers its import alone. */}
+      <DataPanel session={session} />
       {cloud && session.workspaceId && <ErpSettingsSection session={session} />}
       {cloud && session.workspaceId && <AiSettingsSection session={session} />}
       {cloud && session.workspaceId && (
