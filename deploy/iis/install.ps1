@@ -12,7 +12,9 @@
   Storage uses an Azure AD identity (DefaultAzureCredential); the OpenID Connect certificates are
   in LocalMachine\My, named by thumbprint. The one secret, the SMTP password, is read from the
   environment of the session that runs this script and stored as an app-pool and service
-  environment variable, which only administrators can read.
+  environment variable, which only administrators can read. Phase 13: Cash Gear's own AI keys for
+  its subscription are read the same way (CGW_AI_ANTHROPIC_KEY, CGW_AI_VOYAGE_KEY), and given to the
+  API and the worker only.
 
   On a host outside a domain (no gMSA), leave out -ServiceAccount: the app pool runs as its own
   ApplicationPoolIdentity and the worker as its virtual account (NT SERVICE\<service name>), and
@@ -89,7 +91,22 @@ param(
   # Phase 11: the passkeys' relying party, the API's own host (never a wider domain: the ERP, the
   # sites and the plugins could then ask for assertions). The API refuses to start in Production
   # without it, or with any other name than -HostName.
-  [string] $PasskeyDomain = 'workspace-api.cashgearerp.com'
+  [string] $PasskeyDomain = 'workspace-api.cashgearerp.com',
+  # Phase 13: the local embedding model's package (the zip scripts/local-model.mjs makes), unpacked
+  # to <Root>\models\voyage-4-nano for the API and the worker, never the sites. Left out on an
+  # update, a package unpacked before is kept. The server loads it only if its files are the ones
+  # pinned in its code.
+  [string] $LocalModel = '',
+  # Phase 13: the processor threads one embedding by the local model takes (0: half the
+  # processors, at most 8).
+  [int] $LocalModelThreads = 0,
+  # Phase 13: Cash Gear's subscription, a workspace's allowance a month in tokens, for AI and for
+  # search by meaning (0: not offered), and a workspace's own, by its id. The keys come from this
+  # session's environment only: CGW_AI_ANTHROPIC_KEY and CGW_AI_VOYAGE_KEY.
+  [long] $AiMonthlyTokens = 0,
+  [long] $AiEmbeddingsMonthlyTokens = 0,
+  [hashtable] $AiWorkspaceMonthlyTokens = @{},
+  [hashtable] $AiWorkspaceEmbeddingsMonthlyTokens = @{}
 )
 
 $ErrorActionPreference = 'Stop'
@@ -151,6 +168,26 @@ if ($AzureClientId) {
 }
 # The SMTP password comes from this session's environment, never from a parameter or a file.
 if ($env:CGW_SMTP_PASSWORD) { $environment['Smtp__Password'] = $env:CGW_SMTP_PASSWORD }
+# Phase 13: Cash Gear's AI keys for its subscription, the same way; the allowances are not secrets.
+if ($env:CGW_AI_ANTHROPIC_KEY) { $environment['Ai__Subscription__AnthropicKey'] = $env:CGW_AI_ANTHROPIC_KEY }
+if ($env:CGW_AI_VOYAGE_KEY) { $environment['Ai__Subscription__VoyageKey'] = $env:CGW_AI_VOYAGE_KEY }
+if ($AiMonthlyTokens -gt 0) { $environment['Ai__Subscription__MonthlyTokens'] = "$AiMonthlyTokens" }
+if ($AiEmbeddingsMonthlyTokens -gt 0) { $environment['Ai__Subscription__EmbeddingsMonthlyTokens'] = "$AiEmbeddingsMonthlyTokens" }
+foreach ($id in $AiWorkspaceMonthlyTokens.Keys) {
+  $environment["Ai__Subscription__Workspaces__$([guid]$id)__MonthlyTokens"] = "$([long]$AiWorkspaceMonthlyTokens[$id])"
+}
+foreach ($id in $AiWorkspaceEmbeddingsMonthlyTokens.Keys) {
+  $environment["Ai__Subscription__Workspaces__$([guid]$id)__EmbeddingsMonthlyTokens"] = "$([long]$AiWorkspaceEmbeddingsMonthlyTokens[$id])"
+}
+# Phase 13: the local model, where step 2 unpacks it (or kept from an earlier install).
+$modelFolder = Join-Path $Root 'models\voyage-4-nano'
+if ($LocalModel) {
+  if (-not (Test-Path $LocalModel -PathType Leaf)) { throw "-LocalModel: no file at $LocalModel" }
+}
+if ($LocalModel -or (Test-Path (Join-Path $modelFolder 'cgw-model.json'))) {
+  $environment['Ai__LocalModel__Path'] = $modelFolder
+  if ($LocalModelThreads -gt 0) { $environment['Ai__LocalModel__Threads'] = "$LocalModelThreads" }
+}
 
 # Phase 9: the Sites process reads the database and Blob Storage with the same names, and is given
 # nothing else: no SMTP password, no OpenID Connect certificates, no Data Protection. Phase 10: the
@@ -230,6 +267,19 @@ foreach ($part in 'api', 'worker', 'sites') {
   # A few short retries, not robocopy's default of a million 30-second waits.
   robocopy (Join-Path $package $part) $target /MIR /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
   if ($LASTEXITCODE -ge 8) { throw "Copying $part failed ($LASTEXITCODE)" }
+}
+# Phase 13: the local model's package, unpacked beside the parts while the API and the worker are
+# stopped (they hold the model in memory, not the file). Unpacked whole, then put in place.
+if ($LocalModel) {
+  Write-Host "Unpacking the local model from $LocalModel..."
+  $staging = Join-Path $Root "models\unpacking-$([guid]::NewGuid().ToString('N'))"
+  Expand-Archive -Path $LocalModel -DestinationPath $staging
+  if (-not (Test-Path (Join-Path $staging 'cgw-model.json'))) {
+    Remove-Item -Recurse -Force $staging
+    throw "-LocalModel: $LocalModel holds no cgw-model.json (make it with node scripts/local-model.mjs)"
+  }
+  if (Test-Path $modelFolder) { Remove-Item -Recurse -Force $modelFolder }
+  Move-Item $staging $modelFolder
 }
 
 # 3. The app pool and the site: no managed code (ASP.NET Core Module), its own identity.
