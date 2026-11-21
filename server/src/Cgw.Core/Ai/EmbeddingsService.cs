@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Cgw.Core.Ai;
 
 /// <summary>A checked change to the embeddings' settings: each part null when the body left it out.</summary>
-public sealed record EmbeddingsChange(bool? Enabled, string? Model, string? NewKey, bool RemoveKey);
+public sealed record EmbeddingsChange(bool? Enabled, string? Model, string? NewKey, bool RemoveKey, string? KeySource = null);
 
 /// <summary>
 /// A workspace's embeddings settings (Phase 10, decisions 2026-11-18): a switch, a model and a
@@ -16,7 +16,7 @@ public sealed record EmbeddingsChange(bool? Enabled, string? Model, string? NewK
 /// in the same transaction and drops the API's copy; turned on again, or with a new model, the
 /// generation rises and the worker embeds every page again.
 /// </summary>
-public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOptions options, AiOptions ai, Cgw.Core.Search.EmbeddingsCache cache, TimeProvider clock)
+public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOptions options, AiOptions ai, AiSubscriptionOptions subscription, AiAllowance allowance, Cgw.Core.Search.EmbeddingsCache cache, TimeProvider clock)
 {
     /// <summary>Lets this API instance's copy of the workspace's vectors go (others see the change on their next search).</summary>
     public void Forget(Guid workspaceId) => cache.Drop(workspaceId);
@@ -25,17 +25,25 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
         ai.Enabled && row is { EmbeddingsEnabled: true } && options.Models.Contains(row.EmbeddingsModel) && HasKey(row);
 
     /// <summary>
-    /// Whether the workspace's model has what it needs to be called: the local model (Phase 13) needs
-    /// no key; Voyage's models the workspace's own.
+    /// Whether the workspace's model has what it needs to be called (Phase 13): the local model needs
+    /// no key; a Voyage model the workspace's own, or Cash Gear's when the subscription is offered to it.
     /// </summary>
-    public static bool HasKey(AiSettings row) => LocalModelOptions.IsLocal(row.EmbeddingsModel) || row.EmbeddingsKeyCipher is not null;
+    public bool HasKey(AiSettings row) =>
+        LocalModelOptions.IsLocal(row.EmbeddingsModel)
+        || (row.EmbeddingsKeySource == KeySources.Subscription ? subscription.OffersEmbeddings(row.WorkspaceId) : row.EmbeddingsKeyCipher is not null);
+
+    /// <summary>Whether the workspace's calls are on Cash Gear's subscription (a Voyage model with its key).</summary>
+    public static bool OnSubscription(AiSettings row) =>
+        !LocalModelOptions.IsLocal(row.EmbeddingsModel) && row.EmbeddingsKeySource == KeySources.Subscription;
 
     /// <summary>
-    /// The key a call of the workspace's model is made with: none for the local model, else the
-    /// workspace's own opened; null when it does not open (enter it again).
+    /// The key a call of the workspace's model is made with: none for the local model, Cash Gear's on
+    /// the subscription, else the workspace's own opened; null when it does not open (enter it again).
     /// </summary>
     public string? KeyFor(Guid workspaceId, AiSettings row) =>
-        LocalModelOptions.IsLocal(row.EmbeddingsModel) ? "" : row.EmbeddingsKeyCipher is { } cipher ? keys.Unprotect(workspaceId, cipher) : null;
+        LocalModelOptions.IsLocal(row.EmbeddingsModel) ? ""
+        : row.EmbeddingsKeySource == KeySources.Subscription ? (subscription.OffersEmbeddings(workspaceId) ? subscription.VoyageKey : null)
+        : row.EmbeddingsKeyCipher is { } cipher ? keys.Unprotect(workspaceId, cipher) : null;
 
     public string ModelOf(AiSettings? row) => row?.EmbeddingsModel is { } m && options.Models.Contains(m) ? m : options.DefaultModel;
 
@@ -44,7 +52,14 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
     {
         var model = ModelOf(row);
         var on = On(row);
-        var dto = new EmbeddingsSettingsDto { Enabled = on, Provider = EmbeddingsOptions.Provider, Model = model, Models = options.Models };
+        var dto = new EmbeddingsSettingsDto
+        {
+            Enabled = on,
+            Provider = LocalModelOptions.IsLocal(model) ? "local" : EmbeddingsOptions.Provider,
+            Model = model,
+            Models = options.Models,
+            KeySource = row?.EmbeddingsKeySource ?? KeySources.Own,
+        };
         if (!member.IsAdmin) return dto;
         AiPersonDto? setBy = null;
         if (row?.EmbeddingsKeyCipher is not null && row.EmbeddingsKeySetBy is { } by)
@@ -73,15 +88,19 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
             KeySetBy = setBy,
             Usage = new EmbeddingsUsageDto(month.ToString("yyyy-MM", CultureInfo.InvariantCulture), used?.Requests ?? 0, used?.Tokens ?? 0),
             Progress = progress,
+            Subscription = subscription.OffersEmbeddings(member.WorkspaceId) ? await allowance.UsageAsync(member.WorkspaceId, AiAllowance.Embeddings, ct) : null,
         };
     }
 
     /// <summary>The body's embeddings part, checked before anything changes: a model offered, a plausible key or null.</summary>
-    public Result<EmbeddingsChange?> Read(EmbeddingsUpdate? body)
+    public Result<EmbeddingsChange?> Read(EmbeddingsUpdate? body, Guid workspaceId)
     {
         if (body is null) return Result<EmbeddingsChange?>.Success(null);
         if (body.Model is { } model && !options.Models.Contains(model))
             return Failure.Invalid("embeddings.model is one of " + string.Join(", ", options.Models));
+        if (body.KeySource is { } source && !KeySources.All.Contains(source)) return Failure.Invalid("embeddings.keySource is own or subscription");
+        if (body.KeySource == KeySources.Subscription && !subscription.OffersEmbeddings(workspaceId))
+            return Failure.Invalid("Cash Gear's subscription for search by meaning is not offered to this workspace");
         string? newKey = null;
         var remove = false;
         switch (body.ApiKey.ValueKind)
@@ -97,7 +116,7 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
             default:
                 return Failure.Invalid("embeddings.apiKey is the provider's key (20 to 500 characters, no spaces) or null to remove it");
         }
-        return Result<EmbeddingsChange?>.Success(new EmbeddingsChange(body.Enabled, body.Model, newKey, remove));
+        return Result<EmbeddingsChange?>.Success(new EmbeddingsChange(body.Enabled, body.Model, newKey, remove, body.KeySource));
     }
 
     /// <summary>What a change did, for the audit (never the key) and for what follows it.</summary>
@@ -110,7 +129,8 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
     public Result<Applied> Apply(AiSettings row, Member member, EmbeddingsChange change)
     {
         var now = clock.GetUtcNow();
-        var before = new { enabled = row.EmbeddingsEnabled, model = row.EmbeddingsModel, hasKey = row.EmbeddingsKeyCipher is not null };
+        var before = new { enabled = row.EmbeddingsEnabled, model = row.EmbeddingsModel, hasKey = row.EmbeddingsKeyCipher is not null, keySource = row.EmbeddingsKeySource };
+        if (change.KeySource is { } source) row.EmbeddingsKeySource = source;
         if (change.Model is { } model && model != row.EmbeddingsModel)
         {
             row.EmbeddingsModel = model;
@@ -143,10 +163,12 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
         {
             enabled = row.EmbeddingsEnabled,
             model = row.EmbeddingsModel,
+            keySource = row.EmbeddingsKeySource,
             key = change.NewKey is not null ? "set" : change.RemoveKey ? (before.hasKey ? "removed" : "none") : "kept",
             was = before,
         };
-        var changed = turnedOff || before.model != row.EmbeddingsModel || before.enabled != row.EmbeddingsEnabled || change.NewKey is not null || change.RemoveKey;
+        var changed = turnedOff || before.model != row.EmbeddingsModel || before.enabled != row.EmbeddingsEnabled || change.NewKey is not null || change.RemoveKey
+            || before.keySource != row.EmbeddingsKeySource;
         return new Applied(detail, turnedOff, changed);
     }
 

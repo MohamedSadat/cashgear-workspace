@@ -447,7 +447,7 @@ public sealed class EmbeddingsCache(EmbeddingsOptions options, TimeProvider cloc
 /// pages left out by the current <c>Pages</c> rows, never the vectors, walking down the ranked pages
 /// until <c>limit</c> pass. A page restricted or trashed stops counting at once. No vector is answered.
 /// </summary>
-public sealed class MeaningSearch(CgwDb db, Access access, EmbeddingsService embeddings, EmbeddingsCache cache, IEmbeddingProvider provider, EmbeddingsOptions options, TimeProvider clock)
+public sealed class MeaningSearch(CgwDb db, Access access, EmbeddingsService embeddings, EmbeddingsCache cache, IEmbeddingProvider provider, EmbeddingsOptions options, AiAllowance allowance, TimeProvider clock)
 {
     public const int DefaultLimit = 10;
     public const int MaxLimit = 20;
@@ -510,16 +510,24 @@ public sealed class MeaningSearch(CgwDb db, Access access, EmbeddingsService emb
         if (embeddings.KeyFor(member.WorkspaceId, row) is not { } key)
             return new Failure(Codes.AiKeyInvalid, 502, "The workspace's embeddings key could not be read: enter it again");
         var model = embeddings.ModelOf(row);
+        // Phase 13: on Cash Gear's subscription, the question's tokens are reserved of the allowance first.
+        Guid? reservation = null;
+        if (EmbeddingsService.OnSubscription(row))
+        {
+            var reserved = await allowance.ReserveAsync(member.WorkspaceId, AiAllowance.Embeddings, AiAllowance.Estimate(question.Length), ct);
+            if (!reserved.Ok) return reserved.Failure!;
+            reservation = reserved.Value;
+        }
         var watch = Stopwatch.StartNew();
         try
         {
             var result = await provider.EmbedAsync(new EmbeddingCall([question], EmbeddingCall.Query, model, key), ct);
-            await MeterAsync(member, model, "ok", result.Tokens, watch.Elapsed);
+            await MeterAsync(member, model, "ok", result.Tokens, watch.Elapsed, reservation);
             return (result.Vectors[0], result.Took);
         }
         catch (AiProviderException error)
         {
-            await MeterAsync(member, model, error.Code, 0, watch.Elapsed);
+            await MeterAsync(member, model, error.Code, 0, watch.Elapsed, reservation);
             return new Failure(error.Code, error.Code == Codes.AiLimit ? 503 : 502, error.Code switch
             {
                 Codes.AiKeyInvalid => "The embeddings provider refused the workspace's key",
@@ -529,13 +537,14 @@ public sealed class MeaningSearch(CgwDb db, Access access, EmbeddingsService emb
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            await MeterAsync(member, model, "cancelled", 0, watch.Elapsed);
+            await MeterAsync(member, model, "cancelled", 0, watch.Elapsed, reservation);
             throw;
         }
     }
 
-    private async Task MeterAsync(Member member, string model, string outcome, long tokens, TimeSpan took)
+    private async Task MeterAsync(Member member, string model, string outcome, long tokens, TimeSpan took, Guid? reservation)
     {
+        allowance.Settle(reservation);
         db.AiUsage.Add(new AiUsage
         {
             Id = Guid.CreateVersion7(),
@@ -547,6 +556,7 @@ public sealed class MeaningSearch(CgwDb db, Access access, EmbeddingsService emb
             Outcome = outcome,
             DurationMs = (int)Math.Min(int.MaxValue, took.TotalMilliseconds),
             CreatedAt = clock.GetUtcNow(),
+            Subscription = reservation is not null,
         });
         await db.SaveChangesAsync(CancellationToken.None);
     }

@@ -166,6 +166,16 @@
               }
             }
           },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "502": {
             "description": "Bad Gateway",
             "content": {
@@ -5197,6 +5207,19 @@
           },
           "embeddings": {
             "$ref": "#/components/schemas/EmbeddingsSettingsDto"
+          },
+          "keySource": {
+            "type": "string"
+          },
+          "subscription": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AllowanceDto"
+              }
+            ]
           }
         }
       },
@@ -5226,6 +5249,12 @@
               {
                 "$ref": "#/components/schemas/EmbeddingsUpdate"
               }
+            ]
+          },
+          "keySource": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }
@@ -5300,6 +5329,44 @@
             "format": "int64"
           },
           "outputTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "AllowanceDto": {
+        "required": [
+          "month",
+          "allowance",
+          "used",
+          "reserved"
+        ],
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string"
+          },
+          "allowance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "used": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "reserved": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -5956,6 +6023,19 @@
                 "$ref": "#/components/schemas/EmbeddingsProgressDto"
               }
             ]
+          },
+          "keySource": {
+            "type": "string"
+          },
+          "subscription": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AllowanceDto"
+              }
+            ]
           }
         }
       },
@@ -5976,6 +6056,12 @@
           },
           "apiKey": {
             "$ref": "#/components/schemas/JsonElement"
+          },
+          "keySource": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

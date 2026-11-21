@@ -192,7 +192,7 @@ public sealed class EmbeddingTests(ServerFixture server)
             var audits = await db.AuditLog.Where(a => a.Action == "ai.settings").ToListAsync();
             Assert.Single(audits);
             Assert.All(audits, a => Assert.DoesNotContain(key[8..], a.Detail ?? ""));
-            Assert.Contains("\"embeddings\":{\"enabled\":true,\"model\":\"voyage-4-lite\",\"key\":\"set\"", audits[0].Detail);
+            Assert.Contains("\"embeddings\":{\"enabled\":true,\"model\":\"voyage-4-lite\",\"keySource\":\"own\",\"key\":\"set\"", audits[0].Detail);
         }
 
         // Removing the key turns them off.

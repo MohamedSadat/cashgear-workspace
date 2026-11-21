@@ -41,7 +41,12 @@ public sealed class AiKeys(IDataProtectionProvider protection)
 /// A completion ready to run: who asked, where, which call, and for <c>ask</c> the pages it sends.
 /// <c>Call</c> is null for an <c>ask</c> no readable page answers: nothing is sent then.
 /// </summary>
-public sealed record AiPrepared(Member Member, Guid RequestId, string Action, Guid? PageId, string Model, AiCall? Call, IReadOnlyList<AiSourceDto>? Sources);
+public sealed record AiPrepared(Member Member, Guid RequestId, string Action, Guid? PageId, string Model, AiCall? Call, IReadOnlyList<AiSourceDto>? Sources)
+{
+    /// <summary>Phase 13: made with Cash Gear's key, and the reservation of the allowance it holds.</summary>
+    public bool Subscription { get; init; }
+    public Guid? Reservation { get; init; }
+}
 
 /// <summary>
 /// AI for a workspace (INTEGRATIONS.md, AI, As agreed for 0.7.0): its settings, and each completion
@@ -49,14 +54,17 @@ public sealed record AiPrepared(Member Member, Guid RequestId, string Action, Gu
 /// for this server and the workspace and a key is set. The module calls no other system than its
 /// provider, and has no route to the ERP.
 /// </summary>
-public sealed class AiService(CgwDb db, Access access, TenantScope scope, SearchService search, MeaningSearch meaning, EmbeddingsService embeddings, AiKeys keys, AiOptions options, Audit audit, TimeProvider clock)
+public sealed class AiService(CgwDb db, Access access, TenantScope scope, SearchService search, MeaningSearch meaning, EmbeddingsService embeddings, AiKeys keys, AiOptions options, AiSubscriptionOptions subscription, AiAllowance allowance, Audit audit, TimeProvider clock)
 {
     public const string Provider = AnthropicProvider.ProviderId;
 
     private async Task<AiSettings?> RowAsync(CancellationToken ct) => await db.AiSettings.FirstOrDefaultAsync(ct);
 
-    /// <summary>Whether a completion may run: on here, on for the workspace, and a key set.</summary>
-    private bool On(AiSettings? row) => options.Enabled && row is { Enabled: true, KeyCipher: not null };
+    /// <summary>Whether a completion may run: on here, on for the workspace, and a key: its own set, or (Phase 13) Cash Gear's offered to it.</summary>
+    private bool On(AiSettings? row) => options.Enabled && row is { Enabled: true } && HasKey(row);
+
+    private bool HasKey(AiSettings row) =>
+        row.KeySource == KeySources.Subscription ? subscription.OffersCompletions(row.WorkspaceId) : row.KeyCipher is not null;
 
     public async Task<AiSettingsDto> SettingsAsync(Member member, CancellationToken ct = default)
     {
@@ -69,6 +77,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             Model = model,
             Models = options.Models,
             Embeddings = await embeddings.SettingsAsync(member, row, ct),
+            KeySource = row?.KeySource ?? KeySources.Own,
         };
         if (!member.IsAdmin) return dto;
         AiPersonDto? setBy = null;
@@ -87,6 +96,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             KeySetAt = row?.KeyCipher is not null ? row.KeySetAt : null,
             KeySetBy = setBy,
             Usage = new AiUsageDto(month.ToString("yyyy-MM", CultureInfo.InvariantCulture), used?.Requests ?? 0, used?.Input ?? 0, used?.Output ?? 0),
+            Subscription = subscription.OffersCompletions(member.WorkspaceId) ? await allowance.UsageAsync(member.WorkspaceId, AiAllowance.Completions, ct) : null,
         };
     }
 
@@ -94,6 +104,9 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
     {
         if (!member.IsAdmin) return Failure.Denied("Only an owner or admin changes the workspace's AI");
         if (body.Model is { } model && !options.Models.Contains(model)) return Failure.Invalid("model is one of " + string.Join(", ", options.Models));
+        if (body.KeySource is { } source && !KeySources.All.Contains(source)) return Failure.Invalid("keySource is own or subscription");
+        if (body.KeySource == KeySources.Subscription && !subscription.OffersCompletions(member.WorkspaceId))
+            return Failure.Invalid("Cash Gear's subscription is not offered to this workspace");
         string? newKey = null;
         var removeKey = false;
         switch (body.ApiKey.ValueKind)
@@ -109,7 +122,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             default:
                 return Failure.Invalid("apiKey is the provider's key (20 to 500 characters, no spaces) or null to remove it");
         }
-        var embeddingsChange = embeddings.Read(body.Embeddings);
+        var embeddingsChange = embeddings.Read(body.Embeddings, member.WorkspaceId);
         if (!embeddingsChange.Ok) return embeddingsChange.Failure!;
 
         // Under the settings row's lock, which the worker's writes of vectors take too: vectors are
@@ -124,8 +137,9 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             row = new AiSettings { WorkspaceId = member.WorkspaceId, Provider = Provider, Model = options.DefaultModel, UpdatedAt = now };
             db.AiSettings.Add(row);
         }
-        var before = new { row.Enabled, row.Model, HasKey = row.KeyCipher is not null };
+        var before = new { row.Enabled, row.Model, HasKey = row.KeyCipher is not null, row.KeySource };
         if (body.Model is { } chosen) row.Model = chosen;
+        if (body.KeySource is { } keySource) row.KeySource = keySource;
         if (newKey is not null)
         {
             row.KeyCipher = keys.Protect(member.WorkspaceId, newKey);
@@ -139,8 +153,9 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             row.KeySetBy = null;
         }
         if (body.Enabled is { } enabled) row.Enabled = enabled;
-        // A workspace with no key is never on; removing the key turns it off.
-        if (row.Enabled && row.KeyCipher is null)
+        // A workspace with no key is never on; removing the key turns it off (Phase 13: on the
+        // subscription it needs none of its own).
+        if (row.Enabled && !HasKey(row))
         {
             if (body.Enabled == true) return new Failure(Codes.AiKeyMissing, 400, "Set the provider's key before turning AI on");
             row.Enabled = false;
@@ -158,6 +173,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
         {
             enabled = row.Enabled,
             model = row.Model,
+            keySource = row.KeySource,
             key = newKey is not null ? "set" : removeKey ? (before.HasKey ? "removed" : "none") : "kept",
             was = before,
             embeddings = applied?.Detail,
@@ -202,11 +218,26 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
                 return new AiPrepared(member, Guid.CreateVersion7(), action, body.PageId, row!.Model, null, []);
         }
         var model = options.Models.Contains(row!.Model) ? row.Model : options.DefaultModel;
-        if (keys.Unprotect(member.WorkspaceId, row.KeyCipher!) is not { } key)
+        var onSubscription = row.KeySource == KeySources.Subscription;
+        if ((onSubscription ? subscription.AnthropicKey : keys.Unprotect(member.WorkspaceId, row.KeyCipher!)) is not { } key)
             return new Failure(Codes.AiKeyInvalid, 502, "The workspace's key could not be read: enter it again");
         var request = AiRequestBuilder.Build(input, body.Language, sources);
+        // Phase 13: on Cash Gear's subscription, the call's most (its text's tokens, estimated never
+        // short, and its output limit) is reserved of the month's allowance before it is sent.
+        Guid? reservation = null;
+        if (onSubscription)
+        {
+            var reserved = await allowance.ReserveAsync(member.WorkspaceId, AiAllowance.Completions,
+                AiAllowance.Estimate(request.System.Length + request.User.Length) + request.MaxTokens, ct);
+            if (!reserved.Ok) return reserved.Failure!;
+            reservation = reserved.Value;
+        }
         return new AiPrepared(member, Guid.CreateVersion7(), action, body.PageId, model, new AiCall(request, model, key),
-            sources?.Select(s => new AiSourceDto(s.PageId, s.Title)).ToList());
+            sources?.Select(s => new AiSourceDto(s.PageId, s.Title)).ToList())
+        {
+            Subscription = onSubscription,
+            Reservation = reservation,
+        };
     }
 
     /// <summary>Reciprocal rank fusion's constant (decisions, 2026-11-18).</summary>
@@ -290,7 +321,10 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             Outcome = outcome,
             DurationMs = (int)Math.Min(int.MaxValue, took.TotalMilliseconds),
             CreatedAt = now,
+            Subscription = prepared.Subscription,
         });
+        // Phase 13: the call's own row takes its reservation's place, in the same save.
+        allowance.Settle(prepared.Reservation);
         audit.Add(actor, "ai.complete", prepared.Member.WorkspaceId, prepared.PageId is null ? "workspace" : "page", prepared.PageId ?? prepared.Member.WorkspaceId, new
         {
             requestId = prepared.RequestId,
@@ -300,6 +334,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             inputTokens,
             outputTokens,
             sources = prepared.Sources?.Count,
+            subscription = prepared.Subscription,
         });
         await db.SaveChangesAsync(CancellationToken.None);
     }

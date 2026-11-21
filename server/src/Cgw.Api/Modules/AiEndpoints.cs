@@ -37,7 +37,7 @@ public static class AiEndpoints
             .WithTags("AI").RequireAuthorization().RequireRateLimiting(RateLimits.Ai)
             .WithName("completeAi")
             .Produces<AiEventDto>(200, NdJson)
-            .ProducesProblem(400).ProducesProblem(403).ProducesProblem(404).ProducesProblem(413).ProducesProblem(502).ProducesProblem(503)
+            .ProducesProblem(400).ProducesProblem(403).ProducesProblem(404).ProducesProblem(413).ProducesProblem(429).ProducesProblem(502).ProducesProblem(503)
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(1024 * 1024));
     }
 

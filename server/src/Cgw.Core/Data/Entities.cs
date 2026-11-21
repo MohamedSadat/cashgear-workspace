@@ -859,6 +859,29 @@ public sealed class AiSettings : ITenantOwned
     public Guid? EmbeddingsKeySetBy { get; set; }
     /// <summary>Rises when embeddings are turned on again or the model changes: a copy of the vectors of another generation is loaded whole.</summary>
     public long EmbeddingsGeneration { get; set; }
+
+    // Phase 13: where each part's calls get their key: the workspace's own, or Cash Gear's subscription.
+
+    /// <summary><c>own</c> (the default) or <c>subscription</c>, for completions.</summary>
+    public string KeySource { get; set; } = Ai.KeySources.Own;
+    /// <summary><c>own</c> (the default) or <c>subscription</c>, for a Voyage model's embeddings (the local model needs none).</summary>
+    public string EmbeddingsKeySource { get; set; } = Ai.KeySources.Own;
+}
+
+/// <summary>
+/// Phase 13: a call on Cash Gear's subscription reserving its most of the month's allowance before it
+/// is sent (<see cref="Ai.AiAllowance"/>); its <see cref="AiUsage"/> row takes its place when it ends,
+/// and one a crash left lapses at <see cref="ExpiresAt"/>.
+/// </summary>
+public sealed class AiReservation : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary><c>completions</c> or <c>embeddings</c>.</summary>
+    public string Kind { get; set; } = "";
+    public long Tokens { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 }
 
 /// <summary>One AI provider call, for metering (Phase 7): who, what, which model, the tokens, how it ended. Never its content.</summary>
@@ -877,6 +900,8 @@ public sealed class AiUsage : ITenantOwned
     public string Outcome { get; set; } = "";
     public int DurationMs { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    /// <summary>Phase 13: made with Cash Gear's key, its tokens counted against the workspace's allowance.</summary>
+    public bool Subscription { get; set; }
 }
 
 /// <summary>

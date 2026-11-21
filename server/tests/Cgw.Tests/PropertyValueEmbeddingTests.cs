@@ -154,7 +154,7 @@ public sealed class PropertyValueEmbeddingTests(ServerFixture server)
         {
             var provider = scope.ServiceProvider;
             var fresh = new EmbedJob(provider.GetRequiredService<IEmbeddingProvider>(), provider.GetRequiredService<EmbeddingKeys>(),
-                provider.GetRequiredService<EmbeddingsOptions>(), TimeProvider.System, NullLogger<EmbedJob>.Instance);
+                provider.GetRequiredService<EmbeddingsOptions>(), provider.GetRequiredService<AiSubscriptionOptions>(), TimeProvider.System, NullLogger<EmbedJob>.Instance);
             for (var round = 0; round < 20; round++)
                 if (!await Kit.InWorker(server, ws.Id, (_, db) => fresh.PassAsync(db, ws.Id, CancellationToken.None))) break;
         }

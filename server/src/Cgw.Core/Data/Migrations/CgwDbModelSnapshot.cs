@@ -22,6 +22,38 @@ namespace Cgw.Core.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Cgw.Core.Data.AiReservation", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<long>("Tokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "Kind", "ExpiresAt");
+
+                    b.ToTable("AiReservations");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.AiSettings", b =>
                 {
                     b.Property<byte[]>("WorkspaceId")
@@ -44,6 +76,14 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<byte[]>("EmbeddingsKeySetBy")
                         .HasColumnType("binary(16)");
+
+                    b.Property<string>("EmbeddingsKeySource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("own");
 
                     b.Property<string>("EmbeddingsModel")
                         .IsRequired()
@@ -70,6 +110,14 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<byte[]>("KeySetBy")
                         .HasColumnType("binary(16)");
+
+                    b.Property<string>("KeySource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("own");
 
                     b.Property<string>("Model")
                         .IsRequired()
@@ -136,6 +184,9 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<byte[]>("PageId")
                         .HasColumnType("binary(16)");
+
+                    b.Property<bool>("Subscription")
+                        .HasColumnType("bit");
 
                     b.Property<byte[]>("UserId")
                         .HasColumnType("binary(16)");

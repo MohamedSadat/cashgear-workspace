@@ -28,7 +28,7 @@ namespace Cgw.Worker.Jobs;
 /// whose text did not change keeps its vector, with no call), and a formula's or rollup's result that
 /// changes raises the row's version as any value does.
 /// </summary>
-public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, EmbeddingsOptions options, TimeProvider clock, ILogger<EmbedJob> logger) : IJob
+public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, EmbeddingsOptions options, AiSubscriptionOptions subscription, TimeProvider clock, ILogger<EmbedJob> logger) : IJob
 {
     public string Name => "embed";
     public TimeSpan Interval => TimeSpan.FromSeconds(2);
@@ -62,10 +62,11 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
     {
         var models = options.Models;
         var local = LocalModelOptions.Model;
+        var onSubscription = KeySources.Subscription;
         var due = await db.AiSettings.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .Where(s => s.EmbeddingsEnabled && (s.EmbeddingsKeyCipher != null || s.EmbeddingsModel == local) && models.Contains(s.EmbeddingsModel))
+            .Where(s => s.EmbeddingsEnabled && (s.EmbeddingsKeyCipher != null || s.EmbeddingsModel == local || s.EmbeddingsKeySource == onSubscription) && models.Contains(s.EmbeddingsModel))
             .Where(s => only == null || s.WorkspaceId == only)
-            .Join(db.Workspaces.Where(w => w.DeletedAt == null), s => s.WorkspaceId, w => w.Id, (s, _) => new { s.WorkspaceId, s.EmbeddingsModel, s.EmbeddingsGeneration, s.EmbeddingsKeyCipher })
+            .Join(db.Workspaces.Where(w => w.DeletedAt == null), s => s.WorkspaceId, w => w.Id, (s, _) => new { s.WorkspaceId, s.EmbeddingsModel, s.EmbeddingsGeneration, s.EmbeddingsKeyCipher, s.EmbeddingsKeySource })
             .ToListAsync(ct);
         var more = false;
         var now = clock.GetUtcNow();
@@ -74,7 +75,10 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
             if (waiting.TryGetValue(row.WorkspaceId, out var w) && w.Until > now) continue;
             db.ChangeTracker.Clear();
             db.Scope.Switch(row.WorkspaceId);
-            more |= await RunWorkspaceAsync(db, new EmbedSettings(row.WorkspaceId, row.EmbeddingsModel, row.EmbeddingsGeneration, row.EmbeddingsKeyCipher), ct);
+            var source = LocalModelOptions.IsLocal(row.EmbeddingsModel) ? KeySources.Own : row.EmbeddingsKeySource;
+            // On the subscription only while this server offers it to the workspace.
+            if (source == KeySources.Subscription && !subscription.OffersEmbeddings(row.WorkspaceId)) continue;
+            more |= await RunWorkspaceAsync(db, new EmbedSettings(row.WorkspaceId, row.EmbeddingsModel, row.EmbeddingsGeneration, row.EmbeddingsKeyCipher) { KeySource = source }, ct);
         }
         return more;
     }
@@ -175,8 +179,10 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         // 3. The provider, for the chunks that have no vector yet: at most 128 texts and 100,000 characters a call.
         if (needed.Count > 0)
         {
-            // The local model (Phase 13) needs no key; a Voyage model the workspace's own.
-            var key = LocalModelOptions.IsLocal(model) ? "" : settings.Cipher is { } cipher ? keys.Unprotect(ws, cipher) : null;
+            // The local model (Phase 13) needs no key; a Voyage model the workspace's own, or Cash Gear's on the subscription.
+            var onPlan = settings.KeySource == KeySources.Subscription;
+            var key = LocalModelOptions.IsLocal(model) ? "" : onPlan ? subscription.VoyageKey : settings.Cipher is { } cipher ? keys.Unprotect(ws, cipher) : null;
+            var allowance = new AiAllowance(db, subscription, clock);
             if (key is null)
             {
                 Fail(ws, Codes.AiKeyInvalid);
@@ -187,11 +193,24 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
             async Task<bool> SendAsync()
             {
                 if (batch.Count == 0) return true;
+                // On the subscription (Phase 13): the batch's tokens reserved first; past the allowance the
+                // workspace waits for the next month.
+                Guid? reservation = null;
+                if (onPlan)
+                {
+                    var reserved = await allowance.ReserveAsync(ws, AiAllowance.Embeddings, AiAllowance.Estimate(batch.Sum(b => (long)b.Text.Length)), ct);
+                    if (!reserved.Ok)
+                    {
+                        WaitForNextMonth(ws);
+                        return false;
+                    }
+                    reservation = reserved.Value;
+                }
                 var watch = Stopwatch.StartNew();
                 try
                 {
                     var result = await provider.EmbedAsync(new EmbeddingCall(batch.Select(b => b.Text).ToList(), EmbeddingCall.Document, model, key), ct);
-                    await MeterAsync(db, ws, model, "ok", result.Tokens, watch.Elapsed, ct);
+                    await MeterAsync(db, ws, model, "ok", result.Tokens, watch.Elapsed, ct, reservation, allowance);
                     for (var i = 0; i < batch.Count; i++)
                     {
                         var (plan, chunk, _) = batch[i];
@@ -200,7 +219,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
                 }
                 catch (AiProviderException error)
                 {
-                    await MeterAsync(db, ws, model, error.Code, 0, watch.Elapsed, ct);
+                    await MeterAsync(db, ws, model, error.Code, 0, watch.Elapsed, ct, reservation, allowance);
                     Fail(ws, error.Code);
                     return false;
                 }
@@ -227,6 +246,14 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         return !complete;
     }
 
+    /// <summary>Phase 13: a workspace past its subscription's allowance waits until the first of the next month (UTC).</summary>
+    private void WaitForNextMonth(Guid workspaceId)
+    {
+        var (_, next) = AiAllowance.MonthOf(clock.GetUtcNow());
+        waiting[workspaceId] = (next, 0);
+        logger.LogWarning("A workspace's allowance of search by meaning on the subscription is used; embedding waits until {Next:yyyy-MM-dd}", next);
+    }
+
     private void Fail(Guid workspaceId, string code)
     {
         var failures = waiting.TryGetValue(workspaceId, out var w) ? w.Failures + 1 : 1;
@@ -235,8 +262,9 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         logger.LogWarning("Embedding a workspace's pages failed ({Code}); trying again in {Minutes} minutes", code, wait.TotalMinutes);
     }
 
-    private async Task MeterAsync(CgwDb db, Guid workspaceId, string model, string outcome, long tokens, TimeSpan took, CancellationToken ct)
+    private async Task MeterAsync(CgwDb db, Guid workspaceId, string model, string outcome, long tokens, TimeSpan took, CancellationToken ct, Guid? reservation = null, AiAllowance? allowance = null)
     {
+        allowance?.Settle(reservation);
         db.AiUsage.Add(new AiUsage
         {
             Id = Guid.CreateVersion7(),
@@ -248,6 +276,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
             Outcome = outcome,
             DurationMs = (int)Math.Min(int.MaxValue, took.TotalMilliseconds),
             CreatedAt = clock.GetUtcNow(),
+            Subscription = reservation is not null,
         });
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
@@ -273,11 +302,11 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         var wsParameter = new SqlParameter("@ws", SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(ws) };
         var current = await db.Database.SqlQueryRaw<LockedSettings>(
-                "SELECT [EmbeddingsEnabled], [EmbeddingsGeneration], [EmbeddingsModel], CAST(CASE WHEN [EmbeddingsKeyCipher] IS NULL THEN 0 ELSE 1 END AS bit) AS [HasKey] FROM [AiSettings] WITH (UPDLOCK, HOLDLOCK) WHERE [WorkspaceId] = @ws",
+                "SELECT [EmbeddingsEnabled], [EmbeddingsGeneration], [EmbeddingsModel], [EmbeddingsKeySource], CAST(CASE WHEN [EmbeddingsKeyCipher] IS NULL THEN 0 ELSE 1 END AS bit) AS [HasKey] FROM [AiSettings] WITH (UPDLOCK, HOLDLOCK) WHERE [WorkspaceId] = @ws",
                 wsParameter)
             .ToListAsync(ct);
         if (current is not [{ EmbeddingsEnabled: true } on] || on.EmbeddingsGeneration != settings.Generation || on.EmbeddingsModel != settings.Model
-            || !(on.HasKey || LocalModelOptions.IsLocal(on.EmbeddingsModel)))
+            || !(on.HasKey || LocalModelOptions.IsLocal(on.EmbeddingsModel) || on.EmbeddingsKeySource == KeySources.Subscription))
             return false;
         var now = clock.GetUtcNow();
         var touched = new List<Guid>();
@@ -333,12 +362,16 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         public bool EmbeddingsEnabled { get; set; }
         public long EmbeddingsGeneration { get; set; }
         public string EmbeddingsModel { get; set; } = "";
+        public string EmbeddingsKeySource { get; set; } = KeySources.Own;
         public bool HasKey { get; set; }
     }
 }
 
-/// <summary>A workspace's embeddings settings as a pass runs with them: its model, generation and key's cipher (none for the local model).</summary>
-public sealed record EmbedSettings(Guid WorkspaceId, string Model, long Generation, string? Cipher);
+/// <summary>A workspace's embeddings settings as a pass runs with them: its model, generation and key's cipher (none for the local model), and (Phase 13) the key's source.</summary>
+public sealed record EmbedSettings(Guid WorkspaceId, string Model, long Generation, string? Cipher)
+{
+    public string KeySource { get; init; } = KeySources.Own;
+}
 
 /// <summary>
 /// Phase 10's clean-up, hourly: <c>EmbeddingChanges</c> older than a day (the API's copies older

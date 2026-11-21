@@ -56,6 +56,8 @@ public static class WorkerServices
         // the clean-up of embeddings' changes and removed plugins' files.
         services.AddSingleton(sp => EmbeddingsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddSingleton<EmbeddingKeys>();
+        // Phase 13: Cash Gear's subscription (its keys from the host's environment only).
+        services.AddSingleton(_ => AiSubscriptionOptions.From(configuration));
         // Phase 13: voyage-4-nano on this server beside Voyage's API, by the workspace's model.
         services.AddLocalModel(configuration);
         services.AddSingleton<IJob, EmbedJob>();

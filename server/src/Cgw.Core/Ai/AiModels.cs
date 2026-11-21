@@ -36,6 +36,13 @@ public sealed record AiSettingsDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiUsageDto? Usage { get; init; }
     /// <summary>Phase 10: embeddings (search by meaning), a switch and a key of their own.</summary>
     public required EmbeddingsSettingsDto Embeddings { get; init; }
+    /// <summary>Phase 13: <c>own</c> or <c>subscription</c> (Cash Gear's key).</summary>
+    public string KeySource { get; init; } = KeySources.Own;
+    /// <summary>
+    /// Phase 13, owners and admins only: Cash Gear's subscription for completions, when this server
+    /// offers it to the workspace: the month's allowance, used and reserved. Absent when not offered.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AllowanceDto? Subscription { get; init; }
 }
 
 /// <summary>Who set the key: a workspace member's id and name.</summary>
@@ -60,6 +67,10 @@ public sealed record EmbeddingsSettingsDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiPersonDto? KeySetBy { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public EmbeddingsUsageDto? Usage { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public EmbeddingsProgressDto? Progress { get; init; }
+    /// <summary>Phase 13: <c>own</c> or <c>subscription</c>, for a Voyage model (the local model needs no key).</summary>
+    public string KeySource { get; init; } = KeySources.Own;
+    /// <summary>Phase 13, owners and admins only: Cash Gear's subscription for search by meaning, when offered.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AllowanceDto? Subscription { get; init; }
 }
 
 /// <summary>This calendar month's embeddings calls (the worker's and the questions') and their tokens.</summary>
@@ -80,6 +91,8 @@ public sealed record AiSettingsUpdate
     public JsonElement ApiKey { get; init; }
     /// <summary>Phase 10: absent keeps the embeddings' settings as they are.</summary>
     public EmbeddingsUpdate? Embeddings { get; init; }
+    /// <summary>Phase 13: <c>own</c> or <c>subscription</c>; absent keeps it.</summary>
+    public string? KeySource { get; init; }
 }
 
 /// <summary>
@@ -91,6 +104,8 @@ public sealed record EmbeddingsUpdate
     public bool? Enabled { get; init; }
     public string? Model { get; init; }
     public JsonElement ApiKey { get; init; }
+    /// <summary>Phase 13: <c>own</c> or <c>subscription</c>; absent keeps it.</summary>
+    public string? KeySource { get; init; }
 }
 
 /// <summary><c>POST /ai/complete</c>'s body. <c>input</c> is read field by field, per action, by <see cref="AiRequestBuilder"/>.</summary>

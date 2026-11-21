@@ -526,9 +526,9 @@ public sealed class AiTests(ServerFixture server)
             .SelectMany(t => t.IsGenericType ? t.GetGenericArguments().Append(t) : [t])
             .ToList();
         Assert.DoesNotContain(named, t => t.Namespace == "Cgw.Core.Workbooks");
-        // The service's only collaborators: the database, access, search (by words and, Phase 10, by meaning), its key store and settings, the embeddings settings, audit and a clock.
+        // The service's only collaborators: the database, access, search (by words and, Phase 10, by meaning), its key store and settings, the embeddings settings, (Phase 13) Cash Gear's subscription and its allowance, audit and a clock.
         Assert.Equal(
-            ["Access", "AiKeys", "AiOptions", "Audit", "CgwDb", "EmbeddingsService", "MeaningSearch", "SearchService", "TenantScope", "TimeProvider"],
+            ["Access", "AiAllowance", "AiKeys", "AiOptions", "AiSubscriptionOptions", "Audit", "CgwDb", "EmbeddingsService", "MeaningSearch", "SearchService", "TenantScope", "TimeProvider"],
             typeof(AiService).GetConstructors().Single().GetParameters().Select(p => p.ParameterType.Name).Order(StringComparer.Ordinal));
         // And no source of the module or its routes names the ERP's address, links or sessions.
         foreach (var file in Directory.EnumerateFiles(Path.Combine(server.Root, "server", "src", "Cgw.Core", "Ai"), "*.cs")

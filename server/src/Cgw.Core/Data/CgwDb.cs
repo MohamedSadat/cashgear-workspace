@@ -70,6 +70,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<PageEmbedding> PageEmbeddings => Set<PageEmbedding>();
     public DbSet<EmbeddingChange> EmbeddingChanges => Set<EmbeddingChange>();
     public DbSet<WorkspacePlugin> WorkspacePlugins => Set<WorkspacePlugin>();
+    /// <summary>Phase 13: reservations of a workspace's allowance on Cash Gear's AI subscription.</summary>
+    public DbSet<AiReservation> AiReservations => Set<AiReservation>();
     public DbSet<PluginFrameTicket> PluginFrameTickets => Set<PluginFrameTicket>();
     public DbSet<WorkspaceGroup> WorkspaceGroups => Set<WorkspaceGroup>();
     public DbSet<WorkspaceGroupMember> WorkspaceGroupMembers => Set<WorkspaceGroupMember>();
@@ -470,6 +472,9 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.EmbeddingsProvider).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.EmbeddingsModel).HasMaxLength(64).IsUnicode(false);
             e.Property(x => x.EmbeddingsKeyCipher).HasMaxLength(4000).IsUnicode(false);
+            // Phase 13: the keys' sources.
+            e.Property(x => x.KeySource).HasMaxLength(16).IsUnicode(false).HasDefaultValue(Ai.KeySources.Own);
+            e.Property(x => x.EmbeddingsKeySource).HasMaxLength(16).IsUnicode(false).HasDefaultValue(Ai.KeySources.Own);
             // The worker's queue: workspaces with embeddings on.
             e.HasIndex(x => x.EmbeddingsEnabled).HasFilter("[EmbeddingsEnabled] = 1").HasDatabaseName("IX_AiSettings_Embeddings");
         });
@@ -481,6 +486,13 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Action).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.Model).HasMaxLength(64).IsUnicode(false);
             e.Property(x => x.Outcome).HasMaxLength(20).IsUnicode(false);
+        });
+        // Phase 13: a subscription call's reservation of the month's allowance.
+        b.Entity<AiReservation>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.WorkspaceId, x.Kind, x.ExpiresAt });
+            e.Property(x => x.Kind).HasMaxLength(16).IsUnicode(false);
         });
 
         // Phase 8: mail choices per account and the mail queue (not tenant-owned: a person's, across workspaces).
@@ -638,6 +650,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<Notification>(b);
         Filter<AiSettings>(b);
         Filter<AiUsage>(b);
+        Filter<AiReservation>(b);
         Filter<PublishedSite>(b);
         Filter<PageEmbedding>(b);
         Filter<EmbeddingChange>(b);

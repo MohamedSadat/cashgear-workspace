@@ -64,6 +64,9 @@ public static class Modules
         services.AddSingleton(sp => AiOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddSingleton<AiKeys>();
         services.AddScoped<AiService>();
+        // Phase 13: Cash Gear's subscription (its keys from the host's environment only) and the allowances.
+        services.AddSingleton(_ => AiSubscriptionOptions.From(configuration));
+        services.AddScoped<AiAllowance>();
         services.AddSingleton<IAiProvider>(sp => new AnthropicProvider(
             sp.GetRequiredService<AiOptions>(),
             new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));

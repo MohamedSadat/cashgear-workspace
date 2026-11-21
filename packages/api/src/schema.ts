@@ -1620,15 +1620,18 @@ export interface components {
       /** Format: date-time */
       keySetAt?: null | string;
       keySetBy?: null | components['schemas']['AiPersonDto'];
+      keySource?: string;
       model: string;
       models: string[];
       provider: string;
+      subscription?: null | components['schemas']['AllowanceDto'];
       usage?: null | components['schemas']['AiUsageDto'];
     };
     AiSettingsUpdate: {
       apiKey?: components['schemas']['JsonElement'];
       embeddings?: null | components['schemas']['EmbeddingsUpdate'];
       enabled?: null | boolean;
+      keySource?: null | string;
       model?: null | string;
     };
     AiSourceDto: {
@@ -1650,6 +1653,15 @@ export interface components {
       outputTokens: number | string;
       /** Format: int32 */
       requests: number | string;
+    };
+    AllowanceDto: {
+      /** Format: int64 */
+      allowance: number | string;
+      month: string;
+      /** Format: int64 */
+      reserved: number | string;
+      /** Format: int64 */
+      used: number | string;
     };
     AssetDto: {
       contentType: string;
@@ -1816,15 +1828,18 @@ export interface components {
       /** Format: date-time */
       keySetAt?: null | string;
       keySetBy?: null | components['schemas']['AiPersonDto'];
+      keySource?: string;
       model: string;
       models: string[];
       progress?: null | components['schemas']['EmbeddingsProgressDto'];
       provider: string;
+      subscription?: null | components['schemas']['AllowanceDto'];
       usage?: null | components['schemas']['EmbeddingsUsageDto'];
     };
     EmbeddingsUpdate: {
       apiKey?: components['schemas']['JsonElement'];
       enabled?: null | boolean;
+      keySource?: null | string;
       model?: null | string;
     };
     EmbeddingsUsageDto: {
@@ -3334,6 +3349,15 @@ export interface operations {
       };
       /** @description Payload Too Large */
       413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['ProblemDetails'];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown;
         };
