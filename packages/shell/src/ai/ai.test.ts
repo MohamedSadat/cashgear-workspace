@@ -409,6 +409,31 @@ describe('when AI is offered', () => {
     expect(store.state(WS)).toBe(store.state(WS));
   });
 
+  it('does not read again at once after a failed read', async () => {
+    let calls = 0;
+    let now = 1_000;
+    const { api } = fakeApi(() => []);
+    const failing: AiApi = {
+      ...api,
+      settings: () => {
+        calls += 1;
+        return Promise.reject(new AiError('not.found'));
+      },
+    };
+    const store = new AiSettingsStore(failing, () => now);
+    store.load(WS);
+    await until(() => store.state(WS).status === 'failed', 'the failure');
+    // The hook asks again on every change of availability: a failure must not answer with a read.
+    for (let i = 0; i < 5; i++) store.load(WS);
+    expect(calls).toBe(1);
+    now += 15_001;
+    store.load(WS);
+    expect(calls).toBe(2);
+    await until(() => store.state(WS).status === 'failed', 'the second failure');
+    store.load(WS, true);
+    expect(calls).toBe(3);
+  });
+
   it('keeps what the server answers, and hears a refusal as off', async () => {
     const { api } = fakeApi(() => []);
     const store = new AiSettingsStore(api);

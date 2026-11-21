@@ -38,6 +38,14 @@ export function availability(state: AiSettingsState, context: AiContext): AiAvai
 /** Settings are read again after this long when someone asks (another admin may change them). */
 const FRESH_MS = 60_000;
 
+/**
+ * A failed read is not tried again for this long unless forced. The hook that asks
+ * (`context.ts`) asks again whenever availability changes, and a failure is such a change: without
+ * a pause, a workspace whose read fails (404 for an account that is not its member, a server
+ * error) was asked for about fifteen times a second for as long as the tab stayed open.
+ */
+const RETRY_MS = 15_000;
+
 const IDLE: AiSettingsState = Object.freeze({ status: 'idle' as const });
 
 export class AiSettingsStore {
@@ -74,7 +82,12 @@ export class AiSettingsStore {
     const state = this.state(workspaceId);
     if (state.status === 'loading') return;
     const at = this.readAt.get(workspaceId);
-    if (!force && state.status === 'ready' && at !== undefined && this.now() - at < FRESH_MS)
+    const age = at === undefined ? Infinity : this.now() - at;
+    if (
+      !force &&
+      ((state.status === 'ready' && age < FRESH_MS) ||
+        (state.status === 'failed' && age < RETRY_MS))
+    )
       return;
     const kept = state.status === 'idle' ? null : state.settings;
     this.set(workspaceId, { status: 'loading', settings: kept });
@@ -83,12 +96,14 @@ export class AiSettingsStore {
         this.readAt.set(workspaceId, this.now());
         this.set(workspaceId, { status: 'ready', settings });
       },
-      (error: unknown) =>
+      (error: unknown) => {
+        this.readAt.set(workspaceId, this.now());
         this.set(workspaceId, {
           status: 'failed',
           settings: kept,
           code: error instanceof AiError ? error.code : 'server.error',
-        }),
+        });
+      },
     );
   }
 
