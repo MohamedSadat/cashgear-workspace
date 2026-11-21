@@ -96,18 +96,22 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
     state && state.status !== 'idle' ? (state.settings ?? null) : null;
   // Phase 13: read again when Settings opens (the month's use on the subscription, the pages
   // embedded), and every 5 s while pages wait to be embedded, so the progress moves.
+  // Only as the AI context reads them: signed in, of a workspace on the account (an import not yet
+  // uploaded is not, and the server answers 404).
   const store = ai?.store;
   const workspaceId = ai?.workspaceId;
+  const readable =
+    !!account && !!ai && ai.availability !== 'localWorkspace' && ai.availability !== 'signedOut';
   useEffect(() => {
-    if (store && workspaceId) store.load(workspaceId, true);
-  }, [store, workspaceId]);
+    if (store && workspaceId && readable) store.load(workspaceId, true);
+  }, [store, workspaceId, readable]);
   const progress = settings?.embeddings?.enabled ? settings.embeddings.progress : undefined;
   const embedding = !!progress && progress.embedded < progress.pages;
   useEffect(() => {
-    if (!store || !workspaceId || !embedding) return;
+    if (!store || !workspaceId || !embedding || !readable) return;
     const timer = setInterval(() => store.load(workspaceId, true), 5000);
     return () => clearInterval(timer);
-  }, [store, workspaceId, embedding]);
+  }, [store, workspaceId, embedding, readable]);
   if (!cloud || !account || !workspace) return null;
 
   const save: Save = (change, after, missing = 'ai.keyMissing') => {
