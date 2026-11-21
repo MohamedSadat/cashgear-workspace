@@ -1539,6 +1539,93 @@ Benchmarks (`bench/phase12.mjs` in CI's Windows job; the ERP's in its repository
 | The ERP's memory a request at 100,000 records | not growing with the table | — | 1.8 / 2.5 / 2.0 MB, the same at 10,000; Items on hand's own order about 2 MB (0.10.0: 239 / 775 / 563 MB) |
 | The initial JavaScript | 350 kB (Phase 1) | 348.7 kB | 348.6 kB |
 
+## Phase 13: AI and plugins
+
+Done 2026-11-22. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44950360291 (commit `fa1283e`, all jobs green on the first attempt: 381 browser e2e cases passed, 3 of them on a retry, and 14 skipped, the desktop app's 64 passed, every kill test 25 of 25 and the migration's 10 of 10, every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44950360239 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, SQL Server LocalDB 2025, Azurite) and the e2e server stack; the local model's from the real package on it, and the spike's graph on the production host. Answers, defaults and the spike's results are in `DECISIONS.md` (2026-11-21: Phase 13); the design in `INTEGRATIONS.md` (a plugin's network, plugins in the change feed, property values by meaning, the approximate index, the local model, Cash Gear's subscription), `DATA_MODEL.md` (`WorkspacePlugins`' approved hosts, `PageEmbeddings.SchemaVersion`, the key sources, `AiReservations`), `ARCHITECTURE.md` (`Cgw.LocalModel`, the index, the subscription) and `OPERATIONS.md` (0.13.0's migrations, `install.ps1 -LocalModel`, the subscription's keys and allowances); what changed for users in `CHANGELOG.md` (0.13.0).
+
+Milestones
+
+- [x] M13.1 A plugin's network. Commits `de6f0b4` (the manifest's hosts and their rules on both
+      sides with the contract's vectors, approval when added and in a plugin's row, the CSP per
+      bundle, the Sites process reading a plugin's row again for a ticket made after it changed, the
+      mock host and the networked fixture, `plugins-network.spec.ts`), `e72e97a` (the buttons named
+      with their visible text), `d1aa54c` (the spec reads a frame whole)
+- [x] M13.2 Plugins in the change feed. Commit `de6f0b4` (a `plugin` change for each add, update,
+      switch, approval and removal; the engine's `plugins` event, the list read again, a frame drawn
+      anew by the plugin's `revision`)
+- [x] M13.3 Property values by meaning. Commit `f0833d8` (`EmbeddingValues`, the vectors kept by the
+      row's and its database's versions, the snippet from the same text)
+- [x] M13.4 The approximate index and a local model. The spike (decisions, 2026-11-21, on the
+      reference machine and the production host); commits `35d0eae` (the index, `Cgw.LocalModel`,
+      the package script, the stand-in, `Phase13Bench`), `6c6660a` (Settings' "On this server")
+- [x] M13.5 AI by subscription. Commits `9102028` (the key sources, `AiAllowance` and
+      `AiReservations`, the refusal, the worker waiting), `6c6660a` (Settings' choice and the month's
+      use, the panel's refusal, `ai-plan.spec.ts`, Phase 13's Axe and Arabic walks), `62de12a`
+- Budgets, deploy and docs: `fc46178` (`bench/phase13.mjs`, CI's steps), `2d032c4` (`install.ps1`),
+  `fb79919`, `c4da791`, `fa1283e` (a kill test that stops, CI's limits); and `b81fdd6`, a session
+  of its own (below)
+
+Notes
+
+- **The spike decided the package, not the model.** `voyage-4-nano` held at fp32 with its token
+  table in fp16; every 8-bit and 4-bit form was broken or slower (decisions). The budget was set
+  where the reference machine meets it (a 2,000-character Arabic chunk p95 1.5 s, a question 100 ms);
+  the production host, an AMD EPYC 9575F with 12 logical processors, runs it about twice as fast. Its
+  run was a graph of random weights from a scratch folder, deleted after; nothing was installed.
+- **No text leaves the host** with the local model: `LocalModelTests` route a workspace on it to the
+  local provider and count Voyage's calls (none); `ai-plan.spec.ts` turns it on with no key, finds a
+  page by a question and finds the mock Voyage sent nothing; the router sends only `voyage-4-nano`
+  here and every other model to Voyage.
+- **The local model in CI** is the stand-in package (`tests/fixtures/local-model`): the real graph's
+  inputs and output over a byte-level vocabulary, through the same ONNX Runtime and tokenizer code.
+  The real package (572 MB, made from the weights by `scripts/local-model.mjs`) is measured here
+  (`bench/phase13.mjs --local-model`) and checked against the model card's own run when it is made;
+  it is not in the deploy package.
+- **The initial JavaScript** is 349.5 kB of 350 (0.12.0: 348.6 here): Phase 13's words are in
+  sections, and what the first screen gained is the AI settings' key source and a plugin's network
+  and revision in their small mappings. The next phase starts at the budget's edge.
+- **Found by the e2e run, fixed before the evidence:** Settings' fresh read of the AI settings asked
+  for those of an import not yet uploaded (a 404 the browser logged; `62de12a`); the networked
+  plugin's frame was drawn before its view and given its rows by message, which it does not read
+  (the spec draws it again, `d1aa54c`). `export-workbooks.spec.ts` had failed on every run since
+  `1e14359` (2026-11-21, a signed-out browser shows only its own device's workspaces, and Settings
+  then had no "Your data" section): fixed in a session of its own (`b81fdd6`, Settings offers the
+  import with no workspace shown).
+- **CI's Windows job had reached its limit.** On `b81fdd6` every test passed, then the desktop
+  kill test printed nothing for 48 minutes until the job's 150-minute limit; the same build passed
+  it here in 2 minutes. `fa1283e` ends a kill test that makes no progress for 5 minutes, saying
+  where it stopped, and gives each kill test step 20 minutes and the job 180 (decisions). The
+  evidence run's Windows job took 109 minutes; no kill test stopped.
+- **Not tried against the real world:** Cash Gear's own provider keys (the subscription runs on the
+  mock providers; no key of Cash Gear's exists yet), and a real third-party host from a plugin (the
+  e2e stack's host on `localhost:4288`; Production refuses loopback hosts). Production runs 0.12.0.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A plugin reaches the hosts an admin approved and no other; a new host in an update waits for approval | Pass | `plugins-network.spec.ts` (Chrome, Edge): "a plugin reaches the hosts an admin approved and no other; a new host in an update waits for approval" (its rows' titles reach the approved host only, `127.0.0.1:4288` and `example.com` blocked; an update naming a second host shows it new and waiting and the frame still cannot reach it; allowed, both reached; Stop network, neither). Server: `PluginNetworkTests` (the CSP per bundle, approval on add, an update's host waiting, `PATCH` approvals, a ticket after a change, reserved and malformed hosts, the contract's host vectors); `manifest.ts`'s vectors (286) |
+| An added, updated, switched or removed plugin reaches an open tab without a reload | Pass | `plugins-network.spec.ts` (Chrome, Edge): "an added, updated, switched or removed plugin reaches a member’s open tab without a reload" (a mark on the member's window kept throughout). Server: `PluginNetworkTests.Every_add_update_switch_approval_and_removal_is_a_plugin_change_in_the_feed_for_every_member`. Unit: the engine's `plugins` event (`realtime.test.ts`), the shell's list read again (`plugins.test.ts`) |
+| A question finds a row by a property value its text does not hold, never by a person's | Pass | Server: `PropertyValueEmbeddingTests` (through the worker's job and the route: a row found by its category, a select's value its title and text lack, and by its new meaning once the value changes, no longer by the old; every embedded type's value in the row's text in the database's order, never a person's, a formula over one or a rollup of one; a question matching only a person's or a multi-select's value finds no row; a property renamed or a rollup's result changed embeds the rows again; which properties a row embeds) |
+| At 1,000,000 chunks, search by meaning answers within budget, and finds at least 0.95 of the exact search's first ten | Pass | `Phase13Bench` in CI's server job and here: below. `ApproximateIndexTests` (past its threshold the search is approximate and finds the exact search's first ten; too few readable pages among the candidates widens it until it finds them) |
+| With the local model, no text leaves the host for embeddings | Pass | `ai-plan.spec.ts` (Chrome, Edge): "search by meaning on this server: no key, and no text leaves the host for embeddings"; `LocalModelTests` (the router, a workspace on it searching with no key, the package's checks) |
+| A workspace on the subscription uses AI with no key of its own, and is refused past its allowance | Pass | `ai-plan.spec.ts` (Chrome, Edge): "a workspace on Cash Gear’s subscription uses AI with no key of its own, its use shown against the allowance". Server: `SubscriptionTests` (used with no key and refused past the allowance with 429 `ai.limit` and `reason: "allowance"`; calls at once never pass it together; offered only with an allowance; search by meaning on it reserves each call and the worker waits past it) |
+
+Also: `a11y.spec.ts` "Axe finds nothing on the subscription, this server’s model and a plugin’s hosts" (light and dark, English and Arabic); `arabic.spec.ts` "the Arabic subscription, this server’s model and a plugin’s hosts have no English of their own". Unit: 3,821 tests in `pnpm test`; 452 server tests (16 skipped: the benches and the real provider calls); every standing check passes.
+
+Benchmarks (`bench/phase13.mjs`: the server's part in CI's server job, the plugins' in its Windows job, the local model here and on the host)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| Retrieval by meaning over 1,000,000 chunks, warm, p95 less the provider's time | 300 ms | 18.8 ms | 12.9 ms |
+| The same after a change of five pages | 300 ms | 25.3 ms | 17.9 ms |
+| The approximate index's recall of the exact search's first ten | at least 0.95 | 1.0 | 1.0 (50 questions) |
+| Its first load of 1,000,000 chunks; the copy's memory | tracked | 8.3 s; 1,116 MB | 20.9 s; 1,116 MB |
+| The local model: a 2,000-character chunk, p95, at the server's threads | 1.5 s | — | 1,052 ms Arabic, 575 English (8 threads); the host 551 / 312 (6 threads) |
+| The local model: a question, p95 | 100 ms | — | 48.3 ms (8 threads); the host 31 (6 threads) |
+| Typing between ten networked plugin frames, work per key p95 / key to the next frame p95 | 8 ms (16 on CI) / 33 ms | 2.3 ms / 16.4 ms | 5.3 ms / 17.1 ms |
+| The initial JavaScript | 350 kB (Phase 1) | 349.5 kB | 349.5 kB |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
