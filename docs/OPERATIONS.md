@@ -128,7 +128,18 @@ API's host and no token is in JavaScript (Q5).
 ## Production as installed
 
 Installed 2026-11-14 (0.5.0); updated to 0.10.0 on 2026-11-19 with `install.ps1`, which also
-installed the Sites process. Names only; no setting here is a secret.
+installed the Sites process, and to 0.12.0 on 2026-11-21 (Phase 11's migrations, the passkeys'
+relying party `workspace-api.cashgearerp.com`). The web app deploys itself on every push, the server
+does not: check `GET /api/v1/version` against the release when something new fails in production
+(from 2026-11-20 to 2026-11-21 the 0.11 and 0.12 web apps ran against the 0.10.0 API). Names only;
+no setting here is a secret.
+
+An update, as done for 0.12.0: the package copied onto the host over Remote Desktop's clipboard
+(no drive is redirected) and its hash compared, a copy-only backup verified with `RESTORE
+VERIFYONLY`, then `install.ps1` from an administrator's PowerShell with its parameters read back
+from the API app pool's environment and `CGW_SMTP_PASSWORD` set from it in that session, so no
+setting is typed again; the app pools' and the worker's variables compared with a copy taken
+before.
 
 | Part | Where |
 | --- | --- |

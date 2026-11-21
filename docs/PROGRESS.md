@@ -1339,6 +1339,21 @@ Benchmarks (`bench/phase10.mjs`; the client part in CI's Windows job, the server
   sent as `Authorization: Bearer` (what the SDK sends, API version `2026-10-21`) exactly as one
   sent as `x-api-key`: a wrong key is `invalid x-api-key` either way.
 
+- 2026-11-21: 0.12.0 installed in production (package from `cca3381`, hash compared on the host;
+  backup `CashGearWorkspace-pre-0.12.0-20261121.bak`, verified). `Phase11Groups`, `Phase11Passkeys`
+  and `Phase11Sso` migrated; `GET /api/v1/version` answers 0.12.0, health 200 on the API and the
+  sites, the plugins host's 404 page; `PUT` and `DELETE` reach the API (401 without a session); the
+  API's and the worker's variables as before plus `Identity__Passkeys__ServerDomain`, the sites'
+  unchanged. Until then the 0.11 and 0.12 web apps had run against the 0.10.0 API: groups, passkeys
+  and single sign-on answered 404. The first run stopped after the migrations: the API's app pool
+  took longer than `install.ps1`'s one-minute wait to stop (IIS waits up to its 90 s
+  `shutdownTimeLimit` for open WebSockets); run again, it finished. `install.ps1` now waits the
+  pool's own limit and 30 s more.
+- The same day: a browser signed in as a second account kept showing the first account's workspace
+  (a sign-out leaves a device's data), and every route of it answered 404 to that account: the
+  share dialog, the members and an invitation. The AI settings' read, failing, was asked for again
+  at once for ever (about 15 a second; `cca3381` waits 15 s after a failure).
+
 ## Phase 11: Sign-in and permissions
 
 Done 2026-11-19. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44531569830 (commit `4c10451`, all jobs green, the Windows job on its second attempt); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44531569867 (the same commit). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, WebView2, SQL Server LocalDB 2025, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-19: Phase 11); the design in `DATA_MODEL.md` (Permissions with groups, Accounts: `UserPasskeys`, `SsoDomains`, `SsoProviders`), `ARCHITECTURE.md` (Authentication, Security) and `OPERATIONS.md` (the passkeys' relying party, single sign-on's DNS and providers); what changed for users in `CHANGELOG.md` (0.11.0). Phases 12 and 13 are planned in `IMPLEMENTATION_PLAN.md`.
@@ -1394,7 +1409,7 @@ Notes
   mock implements the protocol and every refusal; one live check with an Entra ID or Google
   Workspace test app is yours), and a passkey of a real authenticator (Windows Hello, a phone, a
   key) rather than Chrome's and Edge's virtual one. Production still runs 0.10.0: installing 0.11.0,
-  with `Identity__Passkeys__ServerDomain`, is yours (`OPERATIONS.md`).
+  with `Identity__Passkeys__ServerDomain`, is yours (`OPERATIONS.md`). (0.12.0 installed 2026-11-21: "After 0.10.0: production".)
 
 Exit criteria
 
@@ -1499,7 +1514,7 @@ Notes
   too, read the spec's relay p95 at 87 and 152 ms and Phase 6's at 160: every job green.
 - **Not tried against the real world:** the three readers by hand (yours), and the ERP's report and
   scale cases against production data (LocalDB only, as every ERP phase; the ERP's settings point at
-  a live shared database). Production still runs 0.10.0.
+  a live shared database). Production still runs 0.10.0 (0.12.0 installed 2026-11-21).
 
 Exit criteria
 

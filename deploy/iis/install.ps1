@@ -212,9 +212,14 @@ foreach ($site in $SiteName, $SitesSiteName) {
   # too, and wait for it, or the copy meets locked files.
   if (Test-Path "IIS:\AppPools\$site") {
     if ((Get-WebAppPoolState $site).Value -ne 'Stopped') { Stop-WebAppPool $site }
-    $deadline = (Get-Date).AddSeconds(60)
+    # IIS lets open requests run for the pool's shutdownTimeLimit (90 s by default) before it ends
+    # them, and the real-time hub's WebSockets stay open until then: wait that long and a little
+    # more. Waiting a fixed minute failed the 0.12.0 install with people connected.
+    $limit = (Get-ItemProperty "IIS:\AppPools\$site" -Name processModel.shutdownTimeLimit).Value.TotalSeconds
+    $wait = [Math]::Max(60, [int]$limit + 30)
+    $deadline = (Get-Date).AddSeconds($wait)
     while ((Get-WebAppPoolState $site).Value -ne 'Stopped') {
-      if ((Get-Date) -gt $deadline) { throw "The app pool $site did not stop within a minute" }
+      if ((Get-Date) -gt $deadline) { throw "The app pool $site did not stop within $wait seconds" }
       Start-Sleep -Seconds 1
     }
   }
