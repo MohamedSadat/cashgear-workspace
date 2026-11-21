@@ -118,7 +118,9 @@ export type SyncEvent =
   /** Phase 6: the feed said a page's comments changed; an open comments list reads them again. */
   | { kind: 'comments'; workspaceId: Id; pageId: Id }
   /** Phase 6: the person's inbox changed (a notification made or read). */
-  | { kind: 'notifications'; workspaceId: Id };
+  | { kind: 'notifications'; workspaceId: Id }
+  /** Phase 13: the workspace's plugins changed: a list read before is read again. */
+  | { kind: 'plugins'; workspaceId: Id };
 
 /** How much of a database this device keeps (`holdProgress`). */
 export interface HoldProgress {
@@ -3187,6 +3189,7 @@ export function batchOf(
   // Phase 6: told of once each per page of the feed, never stored.
   const comments = new Set<Id>();
   let notifications = false;
+  let plugins = false;
   for (const change of changes) {
     switch (change.entityType) {
       case 'comments':
@@ -3194,6 +3197,9 @@ export function batchOf(
         break;
       case 'notification':
         notifications = true;
+        break;
+      case 'plugin':
+        plugins = true;
         break;
       case 'workspace':
         if (change.kind === 'delete') batch.deleteWorkspace = true;
@@ -3240,5 +3246,6 @@ export function batchOf(
   }
   for (const pageId of comments) emit({ kind: 'comments', workspaceId, pageId });
   if (notifications) emit({ kind: 'notifications', workspaceId });
+  if (plugins) emit({ kind: 'plugins', workspaceId });
   return batch;
 }

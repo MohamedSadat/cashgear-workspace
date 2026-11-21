@@ -29,6 +29,11 @@ export function pluginsStoreOf(cloud: Cloud): PluginsStore {
       account = now;
       made.clear();
     });
+    // Phase 13: a plugin added, updated, switched or removed elsewhere (the feed's `plugin` change):
+    // a list this tab has read is read again.
+    cloud.onPlugins((workspaceId) => {
+      if (made.state(workspaceId).status !== 'idle') void made.load(workspaceId, true);
+    });
     stores.set(cloud, made);
     store = made;
   }
@@ -59,6 +64,7 @@ const installed = (plugin: WorkspacePlugin): InstalledPlugin => ({
   reads: plugin.reads,
   height: plugin.height,
   enabled: plugin.enabled,
+  revision: plugin.updatedAt,
 });
 
 export class PluginServices {

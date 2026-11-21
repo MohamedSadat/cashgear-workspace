@@ -10,6 +10,7 @@ import type { passkeysEn } from '../cloud/passkeysWords';
 import type { ssoEn } from '../cloud/ssoWords';
 import type { offlineRowsEn } from '../cloud/offlineWords';
 import type { signOutEn } from '../cloud/signOutWords';
+import type { pluginNetworkEn } from '../plugins/networkWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -24,6 +25,7 @@ interface Sections {
   sso: typeof ssoEn;
   offlineRows: typeof offlineRowsEn;
   signOut: typeof signOutEn;
+  pluginNetwork: typeof pluginNetworkEn;
 }
 
 declare module 'i18next' {

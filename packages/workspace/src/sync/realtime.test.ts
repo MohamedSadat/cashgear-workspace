@@ -517,6 +517,21 @@ describe('real-time sync through the hub', () => {
     expect(t.two.events.some((e) => e.kind === 'members')).toBe(false);
   });
 
+  it('tells of a plugin change once a page of the feed, and never stores it (Phase 13)', async () => {
+    const t = await team();
+    const before = await t.two.store.readMirror(t.ws.id);
+    t.server.pluginChanged(t.ws.id, uuidv7());
+    t.server.pluginChanged(t.ws.id, uuidv7(), 'delete');
+    await t.two.engine.syncOnce();
+    expect(t.two.events.filter((e) => e.kind === 'plugins')).toEqual([
+      { kind: 'plugins', workspaceId: t.ws.id },
+    ]);
+    expect(await t.two.store.readMirror(t.ws.id)).toEqual(before);
+    // Nothing more until the next change.
+    await t.two.engine.syncOnce();
+    expect(t.two.events.filter((e) => e.kind === 'plugins')).toHaveLength(1);
+  });
+
   it('is the Phase 3 engine while the transport is disconnected: saves go over HTTP', async () => {
     const server = new FakeServer({ codec: fakeCodec });
     const hub = new FakeHub(server);

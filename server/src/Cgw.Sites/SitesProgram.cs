@@ -151,7 +151,6 @@ public static class SitesHost
     public static IApplicationBuilder UsePluginsHost(this IApplicationBuilder app, PluginsOptions options, bool hsts)
     {
         var host = options.Host;
-        var csp = PluginFiles.ContentSecurityPolicy(options);
         return app.Use(async (context, next) =>
         {
             var onPlugins = host is not null && string.Equals(context.Request.Host.Value, host, StringComparison.OrdinalIgnoreCase);
@@ -161,15 +160,16 @@ public static class SitesHost
                 else await next();
                 return;
             }
-            if (!Readable(context) || !await PluginFileAsync(context, csp, hsts)) await NotFound(context).ExecuteAsync(context);
+            if (!Readable(context) || !await PluginFileAsync(context, hsts)) await NotFound(context).ExecuteAsync(context);
         });
     }
 
     /// <summary>
     /// <c>/f/{ticket}/{*path}</c>: the ticket opened, the plugin live, on and of the ticket's bundle,
-    /// the path one of the bundle's files; false (the 404 page) for anything else.
+    /// the path one of the bundle's files; false (the 404 page) for anything else. Phase 13: with the
+    /// plugin's own Content Security Policy (its approved hosts), read as it was when the ticket was made.
     /// </summary>
-    private static async Task<bool> PluginFileAsync(HttpContext context, string csp, bool hsts)
+    private static async Task<bool> PluginFileAsync(HttpContext context, bool hsts)
     {
         var path = context.Request.Path.Value ?? "";
         if (!path.StartsWith("/f/", StringComparison.Ordinal)) return false;
@@ -182,7 +182,7 @@ public static class SitesHost
         var db = services.GetRequiredService<CgwDb>();
         var ticket = await files.TicketAsync(db, rest[..slash], ct);
         if (ticket is null) return false;
-        var plugin = await files.PluginAsync(db, ticket.PluginId, ct);
+        var plugin = await files.PluginAsync(db, ticket.PluginId, ct, ticket.MadeAt);
         if (plugin is not { Live: true, Enabled: true } || plugin.WorkspaceId != ticket.WorkspaceId || plugin.BundleHash != ticket.BundleHash) return false;
         if (!plugin.Files.TryGetValue(rest[(slash + 1)..], out var file)) return false;
         var bytes = await files.BytesAsync(plugin, file, ct);
@@ -193,7 +193,7 @@ public static class SitesHost
         response.StatusCode = 200;
         response.ContentType = file.ContentType;
         response.ContentLength = bytes.LongLength;
-        headers.ContentSecurityPolicy = csp;
+        headers.ContentSecurityPolicy = plugin.Csp;
         headers.XContentTypeOptions = "nosniff";
         headers["Referrer-Policy"] = "no-referrer";
         headers.CacheControl = "private, max-age=600";

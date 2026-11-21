@@ -4806,6 +4806,13 @@
         "operationId": "addPlugin",
         "parameters": [
           {
+            "name": "approve",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "workspaceId",
             "in": "path",
             "required": true,
@@ -7607,10 +7614,28 @@
           }
         }
       },
-      "PluginPatch": {
+      "PluginNetworkDto": {
         "required": [
-          "enabled"
+          "hosts",
+          "approved"
         ],
+        "type": "object",
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "approved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PluginPatch": {
         "type": "object",
         "properties": {
           "enabled": {
@@ -7618,6 +7643,15 @@
               "null",
               "boolean"
             ]
+          },
+          "approvedHosts": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -10200,6 +10234,16 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "network": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PluginNetworkDto"
+              }
+            ]
           }
         }
       },

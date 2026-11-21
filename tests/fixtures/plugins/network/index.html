@@ -1,0 +1,20 @@
+<!doctype html>
+<!--
+  A plugin with a network for the Phase 13 tests (tests/fixtures/plugins): once it is given its block
+  (and, when the block names a view, its rows), it sends the rows' titles to three places and records
+  what each did: `localhost:4288` (the test host its manifest names), `127.0.0.1:4288` (the same test
+  host under another name, which only a later version names) and `example.com` (named by no
+  version). The plugins origin's CSP lets it reach only the hosts an owner or admin approved. The
+  results are in #attempts, and are sent back as this plugin's own props.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ping</title>
+  </head>
+  <body>
+    <p id="summary" role="status">Waiting…</p>
+    <ul id="attempts"></ul>
+    <script src="main.js"></script>
+  </body>
+</html>

@@ -4,4 +4,6 @@ export function writePluginBundles(folder?: string): {
   reference: string;
   referenceV2: string;
   hostile: string;
+  network: string;
+  networkV2: string;
 };

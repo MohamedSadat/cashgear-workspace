@@ -6,16 +6,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core.Plugins;
 
-/// <summary>A plugin as the plugins origin checks it: live, on, its bundle and its files by path.</summary>
-public sealed record PluginServed(Guid Id, Guid WorkspaceId, bool Live, bool Enabled, string BundleHash, string BlobPrefix, IReadOnlyDictionary<string, PluginFile> Files);
+/// <summary>
+/// A plugin as the plugins origin checks it: live, on, its bundle and its files by path; Phase 13, its
+/// own Content Security Policy (its <c>connect-src</c> the hosts it was approved to reach).
+/// </summary>
+public sealed record PluginServed(Guid Id, Guid WorkspaceId, bool Live, bool Enabled, string BundleHash, string BlobPrefix, IReadOnlyDictionary<string, PluginFile> Files, string Csp);
 
 /// <summary>
 /// What the Sites process's plugins host reads (Phase 10): a frame ticket by its hash and a plugin's
-/// row, each kept at most 30 s, and
+/// row, each kept at most 30 s (Phase 13: a plugin's row read again for a ticket made after it was
+/// read, so an update or an approval is served at once), and
 /// its files' bytes from Blob Storage, kept in memory by their SHA-256 (at most 64 MB, the least
 /// recently used going first), each checked against its hash when read.
 /// </summary>
-public sealed class PluginFiles(BlobStore blob, TimeProvider clock)
+public sealed class PluginFiles(BlobStore blob, PluginsOptions options, TimeProvider clock)
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(30);
     public const long MaxBytes = 64L * 1024 * 1024;
@@ -41,17 +45,21 @@ public sealed class PluginFiles(BlobStore blob, TimeProvider clock)
     private long held;
     private long used;
 
-    /// <summary>The plugin by id across workspaces (the ticket says which), from the cache while it is fresh.</summary>
-    public async Task<PluginServed?> PluginAsync(CgwDb db, Guid pluginId, CancellationToken ct)
+    /// <summary>
+    /// The plugin by id across workspaces (the ticket says which), from the cache while it is fresh and
+    /// was read after <paramref name="madeAfter"/> (the ticket's making: the API saw the row as it was then).
+    /// </summary>
+    public async Task<PluginServed?> PluginAsync(CgwDb db, Guid pluginId, CancellationToken ct, DateTimeOffset? madeAfter = null)
     {
         var now = clock.GetUtcNow();
-        if (plugins.TryGetValue(pluginId, out var kept) && now - kept.At < Lifetime) return kept.Plugin;
+        if (plugins.TryGetValue(pluginId, out var kept) && now - kept.At < Lifetime && (madeAfter is not { } made || kept.At >= made)) return kept.Plugin;
         var row = await db.WorkspacePlugins.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().FirstOrDefaultAsync(p => p.Id == pluginId, ct);
         var live = row is not null && await db.Workspaces.AsNoTracking().AnyAsync(w => w.Id == row.WorkspaceId && w.DeletedAt == null, ct);
         PluginServed? served = row is null
             ? null
             : new PluginServed(row.Id, row.WorkspaceId, row.RemovedAt is null && live, row.Enabled, row.BundleHash, row.BlobPrefix,
-                PluginService.FilesOf(row).ToDictionary(f => f.Path, StringComparer.Ordinal));
+                PluginService.FilesOf(row).ToDictionary(f => f.Path, StringComparer.Ordinal),
+                ContentSecurityPolicy(options, PluginHosts.ConnectSources(PluginService.ReachedOf(row, options.Production))));
         if (plugins.Count > 10_000) plugins.Clear();
         plugins[pluginId] = (now, served);
         return served;
@@ -85,14 +93,15 @@ public sealed class PluginFiles(BlobStore blob, TimeProvider clock)
     /// A plugin file's Content Security Policy (decisions, 2026-11-18): a sandbox with scripts and
     /// nothing else, everything from the plugins origin only (named, not <c>'self'</c>, which a
     /// sandboxed document's opaque origin may not match), no network, no frames, no workers, no
-    /// forms, framed only by Workspace's own origins.
+    /// forms, framed only by Workspace's own origins. Phase 13: <c>connect-src</c> the hosts the
+    /// plugin was approved to reach (<paramref name="connect"/>), <c>'none'</c> when there are none.
     /// </summary>
-    public static string ContentSecurityPolicy(PluginsOptions options)
+    public static string ContentSecurityPolicy(PluginsOptions options, string connect = "'none'")
     {
         var origin = options.PublicUrl;
         var ancestors = options.FrameAncestors.Count == 0 ? "'none'" : string.Join(' ', options.FrameAncestors);
         return $"sandbox allow-scripts; default-src 'none'; script-src {origin}; style-src {origin} 'unsafe-inline'; img-src {origin} data: blob:; "
-            + $"font-src {origin}; media-src {origin}; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'; "
+            + $"font-src {origin}; media-src {origin}; connect-src {connect}; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'; "
             + $"frame-ancestors {ancestors}";
     }
 }

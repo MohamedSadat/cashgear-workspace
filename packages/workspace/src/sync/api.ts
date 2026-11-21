@@ -118,7 +118,9 @@ export type ServerChange =
       entityId: Id;
       kind: 'upsert' | 'delete';
       entity: null;
-    };
+    }
+  /** Phase 13: a plugin added, updated, switched (`upsert`) or removed (`delete`); never stored. */
+  | { seq: number; entityType: 'plugin'; entityId: Id; kind: 'upsert' | 'delete'; entity: null };
 
 export interface ChangesPage {
   changes: ServerChange[];

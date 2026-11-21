@@ -2213,8 +2213,13 @@ export interface components {
       expiresAt: string;
       url: string;
     };
+    PluginNetworkDto: {
+      approved: string[];
+      hosts: string[];
+    };
     PluginPatch: {
-      enabled: null | boolean;
+      approvedHosts?: null | string[];
+      enabled?: null | boolean;
     };
     PluginReads: {
       rows: boolean;
@@ -2837,6 +2842,7 @@ export interface components {
       id: string;
       keywords: string[];
       name: components['schemas']['PluginText'];
+      network?: null | components['schemas']['PluginNetworkDto'];
       reads: components['schemas']['PluginReads'];
       /** Format: int64 */
       sizeBytes: number | string;
@@ -5644,7 +5650,9 @@ export interface operations {
   };
   addPlugin: {
     parameters: {
-      query?: never;
+      query?: {
+        approve?: string;
+      };
       header?: never;
       path: {
         workspaceId: string;

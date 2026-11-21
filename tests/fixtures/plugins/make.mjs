@@ -2,7 +2,9 @@
 // and a try by hand in Settings → Plugins:
 //   node tests/fixtures/plugins/make.mjs [folder]      (default target/plugin-fixtures)
 // Writes reference.zip (the folder as it is, version 1) and reference-v2.zip (the same files,
-// its manifest's version 2: an update). Nothing here is downloaded.
+// its manifest's version 2: an update); hostile.zip; and (Phase 13) network.zip, a plugin whose
+// manifest names the test host `localhost:4288` (tests/mocks/net), and network-v2.zip, whose manifest
+// names `127.0.0.1:4288` too (an update adding a host). Nothing here is downloaded.
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { createRequire } from 'node:module';
@@ -42,10 +44,17 @@ export function writePluginBundles(folder = resolve('target/plugin-fixtures')) {
     reference: join(folder, 'reference.zip'),
     referenceV2: join(folder, 'reference-v2.zip'),
     hostile: join(folder, 'hostile.zip'),
+    network: join(folder, 'network.zip'),
+    networkV2: join(folder, 'network-v2.zip'),
   };
   writeFileSync(made.reference, bundleOf('reference'));
   writeFileSync(made.referenceV2, bundleOf('reference', { version: 2 }));
   writeFileSync(made.hostile, bundleOf('hostile'));
+  writeFileSync(made.network, bundleOf('network'));
+  writeFileSync(
+    made.networkV2,
+    bundleOf('network', { version: 2, network: { hosts: ['localhost:4288', '127.0.0.1:4288'] } }),
+  );
   return made;
 }
 

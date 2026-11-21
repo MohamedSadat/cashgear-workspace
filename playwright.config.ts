@@ -43,6 +43,13 @@ export const mocks = [
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
+  // Phase 13: a host a plugin may reach once approved (localhost:4288; 127.0.0.1:4288 another host).
+  {
+    command: 'node tests/mocks/net/server.mjs',
+    url: 'http://127.0.0.1:4288/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 ];
 
 // Chrome and Edge are the first-class browsers, as in Sheet. E2E_BASE_URL points the specs at a

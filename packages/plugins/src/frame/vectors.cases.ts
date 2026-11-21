@@ -726,6 +726,106 @@ const manifest: ManifestVector[] = [
     manifestWith('keywords', ['k'.repeat(31)]),
     field('keywords'),
   ),
+  // Phase 13: a plugin's network (an optional field of plugin-frame.1's manifest).
+  valid('a network of one host', manifestWith('network', { hosts: ['api.example.com'] })),
+  valid(
+    'a network of 10 hosts, ports and loopback ones',
+    manifestWith('network', {
+      hosts: [
+        'a.example.com',
+        'b.example.com:8443',
+        'xn--mgbh0fb.example',
+        'a-b.c-d.example.org:443',
+        'localhost:4288',
+        '127.0.0.1:4289',
+        'g.example.com',
+        'h.example.com',
+        'i.example.com',
+        'j.example.com:65535',
+      ],
+    }),
+  ),
+  valid('network null', manifestWith('network', null)),
+  invalid('a network of no hosts', manifestWith('network', { hosts: [] }), field('network.hosts')),
+  invalid(
+    'a network of 11 hosts',
+    manifestWith('network', { hosts: Array.from({ length: 11 }, (_, i) => `h${i}.example.com`) }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'a host named twice',
+    manifestWith('network', { hosts: ['a.example.com', 'a.example.com'] }),
+    field('network.hosts'),
+  ),
+  invalid('network as a list', manifestWith('network', ['a.example.com']), field('network.hosts')),
+  invalid(
+    'hosts as text',
+    manifestWith('network', { hosts: 'a.example.com' }),
+    field('network.hosts'),
+  ),
+  invalid('an IP address', manifestWith('network', { hosts: ['1.2.3.4'] }), field('network.hosts')),
+  invalid('an IPv6 address', manifestWith('network', { hosts: ['[::1]'] }), field('network.hosts')),
+  invalid(
+    'a wildcard',
+    manifestWith('network', { hosts: ['*.example.com'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'capitals',
+    manifestWith('network', { hosts: ['API.example.com'] }),
+    field('network.hosts'),
+  ),
+  invalid('one label', manifestWith('network', { hosts: ['example'] }), field('network.hosts')),
+  invalid(
+    'an address, not a host',
+    manifestWith('network', { hosts: ['https://api.example.com'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'a path',
+    manifestWith('network', { hosts: ['api.example.com/x'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'port 0',
+    manifestWith('network', { hosts: ['api.example.com:0'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'port 65,536',
+    manifestWith('network', { hosts: ['api.example.com:65536'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'localhost without a port',
+    manifestWith('network', { hosts: ['localhost'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    'a label of 64',
+    manifestWith('network', { hosts: [`${'a'.repeat(64)}.example.com`] }),
+    field('network.hosts'),
+  ),
+  valid('a label of 63', manifestWith('network', { hosts: [`${'a'.repeat(63)}.example.com`] })),
+  invalid(
+    'a label starting with a hyphen',
+    manifestWith('network', { hosts: ['-a.example.com'] }),
+    field('network.hosts'),
+  ),
+  invalid(
+    "Cash Gear's own host",
+    manifestWith('network', { hosts: ['workspace-api.cashgearerp.com'] }),
+    [{ code: 'host.reserved', path: 'network.hosts' }],
+  ),
+  invalid(
+    "Cash Gear's domain with a port",
+    manifestWith('network', { hosts: ['cashgearerp.com:8443'] }),
+    [{ code: 'host.reserved', path: 'network.hosts' }],
+  ),
+  valid(
+    'a name that only ends like Cash Gear',
+    manifestWith('network', { hosts: ['notcashgearerp.com'] }),
+  ),
   invalid('not an object', [reference], [{ code: 'manifest.invalid' }]),
   invalid('null', null, [{ code: 'manifest.invalid' }]),
   invalid(

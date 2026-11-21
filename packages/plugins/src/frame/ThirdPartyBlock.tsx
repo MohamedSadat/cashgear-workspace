@@ -47,7 +47,7 @@ export function ThirdPartyBlock({
     case 'installed':
       return (
         <Installed
-          key={`${availability.plugin.id}:${availability.plugin.version}`}
+          key={`${availability.plugin.id}:${availability.plugin.version}:${availability.plugin.revision ?? ''}`}
           plugin={availability.plugin}
           online={availability.online}
           options={options}

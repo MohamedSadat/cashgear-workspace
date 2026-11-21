@@ -94,6 +94,7 @@ export class Cloud {
   private livePage: Id | null = null;
   private readonly commentListeners = new Set<(workspaceId: Id, pageId: Id) => void>();
   private readonly notificationListeners = new Set<(workspaceId: Id) => void>();
+  private readonly pluginListeners = new Set<(workspaceId: Id) => void>();
   private checked = false;
   /** The server said who is signed in, this session (else the account is the cached one). */
   private verified = false;
@@ -216,6 +217,12 @@ export class Cloud {
     return () => void this.notificationListeners.delete(listener);
   }
 
+  /** Phase 13: the feed said a workspace's plugins changed (added, updated, switched, removed). */
+  onPlugins(listener: (workspaceId: Id) => void): () => void {
+    this.pluginListeners.add(listener);
+    return () => void this.pluginListeners.delete(listener);
+  }
+
   /**
    * A page joined on the hub (presence may be sent for it from then on), or no longer; returns
    * its off.
@@ -305,6 +312,9 @@ export class Cloud {
         break;
       case 'notifications':
         for (const listener of this.notificationListeners) listener(event.workspaceId);
+        break;
+      case 'plugins':
+        for (const listener of this.pluginListeners) listener(event.workspaceId);
         break;
     }
   }

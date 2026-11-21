@@ -22,6 +22,11 @@ export interface PluginManifest {
   height: number;
   /** Slash-menu words, at most 10 of 1 to 30 characters. */
   keywords: string[];
+  /**
+   * Phase 13: the hosts it asks to reach (at most 10 exact host names, a port or not), reached only
+   * once an owner or admin approved them; null when it asks for none.
+   */
+  network: { hosts: string[] } | null;
 }
 
 /** The server's codes for a bundle it refuses (`plugin.invalid`'s `errors`). */
@@ -29,6 +34,7 @@ export type BundleErrorCode =
   | 'manifest.missing'
   | 'manifest.invalid'
   | 'type.reserved'
+  | 'host.reserved'
   | 'entry.missing'
   | 'file.type'
   | 'file.name'
@@ -76,6 +82,41 @@ export function isBundlePath(path: unknown): path is string {
   }
   return path.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
 }
+
+/** At most this many hosts in a manifest's `network`. */
+export const MAX_PLUGIN_HOSTS = 10;
+
+const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+const HOST = new RegExp(`^(?:${LABEL}\\.)+${LABEL}(?::([1-9][0-9]{0,4}))?$`);
+const LOOPBACK = /^(?:localhost|127\.0\.0\.1):([1-9][0-9]{0,4})$/;
+
+/** A loopback host with its port: the server takes it outside Production only (the tests' host). */
+export const isLoopbackHost = (host: string) => {
+  const match = LOOPBACK.exec(host);
+  return !!match && Number(match[1]) <= 65535;
+};
+
+/**
+ * A host a manifest may name (the server's `PluginHosts.Valid`): lower-case labels of letters, digits
+ * and hyphens, two or more, a port from 1 to 65535 or none, the last label not only digits (no IP
+ * address); or a loopback host with a port.
+ */
+export function isPluginHost(host: unknown): host is string {
+  if (typeof host !== 'string' || host.length === 0 || host.length > 259) return false;
+  if (isLoopbackHost(host)) return true;
+  const match = HOST.exec(host);
+  if (!match || (match[1] !== undefined && Number(match[1]) > 65535)) return false;
+  const name = match[1] === undefined ? host : host.slice(0, host.lastIndexOf(':'));
+  if (name.length > 253) return false;
+  return !/^[0-9]+$/.test(name.slice(name.lastIndexOf('.') + 1));
+}
+
+/** Cash Gear's own (`cashgearerp.com` and under it): a manifest never names one. */
+export const isCashGearHost = (host: string) => {
+  const colon = host.lastIndexOf(':');
+  const name = colon > 0 ? host.slice(0, colon) : host;
+  return name === 'cashgearerp.com' || name.endsWith('.cashgearerp.com');
+};
 
 /** Extensions a bundle may hold, and the type each is served as (the server types by extension). */
 export const BUNDLE_TYPES: Readonly<Record<string, string>> = Object.freeze({
@@ -170,6 +211,23 @@ export function parseManifest(value: unknown): ManifestRead {
   )
     invalid('keywords');
 
+  let network: { hosts: string[] } | null = null;
+  const asked = value.network;
+  if (asked !== undefined && asked !== null) {
+    const hosts = isObject(asked) ? asked.hosts : undefined;
+    if (
+      !Array.isArray(hosts) ||
+      hosts.length === 0 ||
+      hosts.length > MAX_PLUGIN_HOSTS ||
+      !hosts.every(isPluginHost) ||
+      new Set(hosts).size !== hosts.length
+    )
+      invalid('network.hosts');
+    else if (hosts.some(isCashGearHost))
+      errors.push({ code: 'host.reserved', path: 'network.hosts' });
+    else network = { hosts: [...hosts] };
+  }
+
   if (errors.length) return { ok: false, errors };
   const names = name as Record<string, string>;
   const descriptions = isObject(description) ? (description as Record<string, string>) : null;
@@ -185,6 +243,7 @@ export function parseManifest(value: unknown): ManifestRead {
       reads: { rows: isObject(reads) && reads.rows === true },
       height: height as number,
       keywords: [...(keywords as string[])],
+      network,
     },
   };
 }

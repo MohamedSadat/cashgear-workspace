@@ -2481,6 +2481,14 @@ namespace Cgw.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("binary(16)");
 
+                    b.Property<string>("ApprovedHosts")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4000)")
+                        .HasDefaultValue("[]");
+
                     b.Property<string>("BlobPrefix")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -2502,6 +2510,12 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<string>("Files")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("HostsApprovedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("HostsApprovedBy")
+                        .HasColumnType("binary(16)");
 
                     b.Property<string>("Manifest")
                         .IsRequired()

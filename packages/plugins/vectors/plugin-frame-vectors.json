@@ -6409,6 +6409,763 @@
       ]
     },
     {
+      "name": "a network of one host",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["api.example.com"]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "a network of 10 hosts, ports and loopback ones",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": [
+            "a.example.com",
+            "b.example.com:8443",
+            "xn--mgbh0fb.example",
+            "a-b.c-d.example.org:443",
+            "localhost:4288",
+            "127.0.0.1:4289",
+            "g.example.com",
+            "h.example.com",
+            "i.example.com",
+            "j.example.com:65535"
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "network null",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": null
+      },
+      "valid": true
+    },
+    {
+      "name": "a network of no hosts",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": []
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a network of 11 hosts",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": [
+            "h0.example.com",
+            "h1.example.com",
+            "h2.example.com",
+            "h3.example.com",
+            "h4.example.com",
+            "h5.example.com",
+            "h6.example.com",
+            "h7.example.com",
+            "h8.example.com",
+            "h9.example.com",
+            "h10.example.com"
+          ]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a host named twice",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["a.example.com", "a.example.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "network as a list",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": ["a.example.com"]
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "hosts as text",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": "a.example.com"
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "an IP address",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["1.2.3.4"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "an IPv6 address",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["[::1]"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a wildcard",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["*.example.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "capitals",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["API.example.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "one label",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["example"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "an address, not a host",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["https://api.example.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a path",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["api.example.com/x"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "port 0",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["api.example.com:0"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "port 65,536",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["api.example.com:65536"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "localhost without a port",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["localhost"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a label of 64",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a label of 63",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com"]
+        }
+      },
+      "valid": true
+    },
+    {
+      "name": "a label starting with a hyphen",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["-a.example.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "manifest.invalid",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "Cash Gear's own host",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["workspace-api.cashgearerp.com"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "host.reserved",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "Cash Gear's domain with a port",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["cashgearerp.com:8443"]
+        }
+      },
+      "valid": false,
+      "errors": [
+        {
+          "code": "host.reserved",
+          "path": "network.hosts"
+        }
+      ]
+    },
+    {
+      "name": "a name that only ends like Cash Gear",
+      "manifest": {
+        "contract": "plugin-frame.1",
+        "type": "vendor.notes",
+        "version": 1,
+        "name": {
+          "en": "Notes",
+          "ar": "ملاحظات"
+        },
+        "description": {
+          "en": "A note and a counter.",
+          "ar": "ملاحظة وعدّاد."
+        },
+        "entry": "index.html",
+        "reads": {
+          "rows": true
+        },
+        "height": 240,
+        "keywords": ["notes", "ملاحظات"],
+        "network": {
+          "hosts": ["notcashgearerp.com"]
+        }
+      },
+      "valid": true
+    },
+    {
       "name": "not an object",
       "manifest": [
         {

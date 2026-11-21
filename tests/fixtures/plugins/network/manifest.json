@@ -1,0 +1,15 @@
+{
+  "contract": "plugin-frame.1",
+  "type": "vendor.ping",
+  "version": 1,
+  "name": { "en": "Ping", "ar": "تنبيه" },
+  "description": {
+    "en": "Sends the titles of the rows it is shown to the hosts it was allowed to reach, and records which hosts it could reach.",
+    "ar": "يرسل عناوين الصفوف المعروضة عليه إلى المضيفات المسموح له بها، ويسجّل المضيفات التي وصل إليها."
+  },
+  "entry": "index.html",
+  "reads": { "rows": true },
+  "height": 140,
+  "keywords": ["ping", "network"],
+  "network": { "hosts": ["localhost:4288"] }
+}

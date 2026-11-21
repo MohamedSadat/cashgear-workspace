@@ -34,13 +34,15 @@ public static class PluginEndpoints
             .WithName("listPlugins").RequireRateLimiting(RateLimits.User);
 
         // The zip as the body (application/zip, at most 5 MB): 201 for a new type, 200 for a new bundle of one already there.
-        plugins.MapPost("", async Task<Results<Created<WorkspacePluginDto>, Ok<WorkspacePluginDto>, ProblemHttpResult>> (PluginService service, HttpContext http) =>
+        // Phase 13: `approve`, the hosts of its manifest the person adding it was shown and allowed, by commas.
+        plugins.MapPost("", async Task<Results<Created<WorkspacePluginDto>, Ok<WorkspacePluginDto>, ProblemHttpResult>> (string? approve, PluginService service, HttpContext http) =>
             {
                 var member = http.Member();
                 if (!member.IsAdmin) return Problems.From(Failure.Denied("Only an owner or admin adds a plugin"));
                 var bytes = await WorkbookEndpoints.ReadBodyAsync(http.Request, PluginBundle.MaxZip, http.RequestAborted);
                 if (bytes is null) return Problems.From(WorkbookEndpoints.TooLarge(PluginBundle.MaxZip, "A plugin's bundle is at most 5 MB"));
-                var result = await service.AddAsync(member, http.Actor(), bytes, http.RequestAborted);
+                var approved = (approve ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Take(PluginHosts.MaxHosts).ToList();
+                var result = await service.AddAsync(member, http.Actor(), bytes, approved, http.RequestAborted);
                 if (!result.Ok) return Problems.From(result.Failure!);
                 var (plugin, created) = result.Value;
                 return created

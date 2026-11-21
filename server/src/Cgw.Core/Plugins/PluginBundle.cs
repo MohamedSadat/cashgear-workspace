@@ -15,6 +15,8 @@ public sealed record PluginReads(bool Rows);
 /// <summary>
 /// <c>manifest.json</c> as validated (decisions, 2026-11-18; <c>plugin-frame.1</c>), defaults filled
 /// in: <c>entry</c> <c>index.html</c>, <c>reads</c> none, <c>height</c> 240, <c>keywords</c> none.
+/// Phase 13: <c>network</c>, the hosts it asks to reach (an optional field of <c>plugin-frame.1</c>'s
+/// manifest; every reader since 0.10.0 drops fields it does not know, so 0.12.0 gives it none).
 /// </summary>
 public sealed record PluginManifest(
     string Contract,
@@ -25,7 +27,8 @@ public sealed record PluginManifest(
     string Entry,
     PluginReads Reads,
     int Height,
-    IReadOnlyList<string> Keywords);
+    IReadOnlyList<string> Keywords,
+    PluginNetwork? Network = null);
 
 /// <summary>One file of a bundle as stored: its path in the zip, its type (by extension), size and SHA-256 (hex).</summary>
 public sealed record PluginFile(string Path, string ContentType, long Size, string Sha256);
@@ -64,6 +67,8 @@ public static partial class PluginBundle
     public const string ManifestMissing = "manifest.missing";
     public const string ManifestInvalid = "manifest.invalid";
     public const string TypeReserved = "type.reserved";
+    /// <summary>Phase 13: a host the manifest names is Cash Gear's own.</summary>
+    public const string HostReserved = "host.reserved";
     public const string EntryMissing = "entry.missing";
     public const string FileType = "file.type";
     public const string FileName = "file.name";
@@ -297,7 +302,13 @@ public static partial class PluginBundle
                 keywords.Add(w);
             }
         }
+        var network = PluginHosts.Read(root["network"], out var networkOk, out var hostReserved);
+        if (!networkOk)
+        {
+            if (hostReserved) code = HostReserved;
+            return null;
+        }
         code = null;
-        return new PluginManifest(Contract, type, version, name, description, entry, reads, height, keywords);
+        return new PluginManifest(Contract, type, version, name, description, entry, reads, height, keywords, network);
     }
 }

@@ -67,3 +67,27 @@
   border-radius: 6px;
   background: var(--cg-surface-subtle);
 }
+
+/* Phase 13: a plugin's network. */
+.cgw-plugins-network {
+  display: block;
+  font-size: var(--cg-font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.cgw-plugins-network[data-hosts='waiting'] code {
+  font-weight: 600;
+}
+
+.cgw-plugins-hosts {
+  margin: 0;
+  padding-inline-start: 18px;
+}
+
+.cgw-plugins-hosts code {
+  overflow-wrap: anywhere;
+}
+
+.cgw-plugins-new {
+  font-weight: 600;
+}

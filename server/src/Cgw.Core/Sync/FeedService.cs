@@ -159,6 +159,11 @@ public sealed class FeedService(CgwDb db, Access access)
                     // The caller's own inbox changed (a per-person row, so only theirs come here).
                     changes.Add(new ChangeDto(row.Seq, "notification", row.EntityId, "upsert", null));
                     break;
+                case Plugins.PluginService.ChangeType:
+                    // A plugin added, updated, switched or removed (Phase 13): every member, guests
+                    // too, reads the list, so every member is told; the tab reads the list again.
+                    changes.Add(new ChangeDto(row.Seq, Plugins.PluginService.ChangeType, row.EntityId, row.Kind, null));
+                    break;
             }
         }
         return new ChangesDto(changes, cursor, more);

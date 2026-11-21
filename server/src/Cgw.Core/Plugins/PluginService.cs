@@ -26,12 +26,26 @@ public sealed record WorkspacePluginDto(
     long SizeBytes,
     UserRefDto AddedBy,
     DateTimeOffset AddedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] PluginNetworkDto? Network = null);
+
+/// <summary>
+/// Phase 13: the hosts a plugin's manifest names, and those an owner or admin approved (the ones it
+/// reaches); a host named and not approved waits. Null when the manifest names none.
+/// </summary>
+public sealed record PluginNetworkDto(IReadOnlyList<string> Hosts, IReadOnlyList<string> Approved);
 
 public sealed record WorkspacePluginsDto(IReadOnlyList<WorkspacePluginDto> Plugins);
 
-/// <summary><c>PATCH /workspaces/{id}/plugins/{pluginId}</c>: turn it on or off.</summary>
-public sealed record PluginPatch(bool? Enabled);
+/// <summary>
+/// <c>PATCH /workspaces/{id}/plugins/{pluginId}</c>: turn it on or off; Phase 13, set the hosts of
+/// its manifest it may reach (<c>approvedHosts</c>, each one its manifest names).
+/// </summary>
+public sealed record PluginPatch
+{
+    public bool? Enabled { get; init; }
+    public IReadOnlyList<string>? ApprovedHosts { get; init; }
+}
 
 /// <summary>A frame's address on the plugins origin, and when its ticket ends.</summary>
 public sealed record PluginFrameDto(string Url, DateTimeOffset ExpiresAt);
@@ -42,7 +56,7 @@ public sealed record PluginFrameDto(string Url, DateTimeOffset ExpiresAt);
 /// developer's machine and in e2e). The API builds a frame's address from it, never from a request.
 /// <see cref="FrameAncestors"/> are the Workspace origins that may frame a plugin (<c>Web__Origins</c>).
 /// </summary>
-public sealed record PluginsOptions(string PublicUrl, IReadOnlyList<string> FrameAncestors)
+public sealed record PluginsOptions(string PublicUrl, IReadOnlyList<string> FrameAncestors, bool Production = false, IReadOnlyList<string>? OwnHosts = null)
 {
     public const string PublicUrlKey = "Plugins:PublicUrl";
     public const string DevPublicUrl = "http://localhost:5291";
@@ -61,7 +75,12 @@ public sealed record PluginsOptions(string PublicUrl, IReadOnlyList<string> Fram
             .Where(o => Uri.TryCreate(o, UriKind.Absolute, out var u) && u.Authority.Length > 0 && o.All(c => c is > ' ' and < '\u007f' and not ';' and not ','))
             .Select(o => o.TrimEnd('/'))
             .Distinct(StringComparer.Ordinal).ToArray();
-        return new PluginsOptions(origin ?? (production ? "" : DevPublicUrl), origins);
+        var publicUrl = origin ?? (production ? "" : DevPublicUrl);
+        // Phase 13: this server's own hosts, which no plugin may name as its network.
+        var own = origins.Append(publicUrl).Append(configuration["Api:PublicUrl"] ?? "").Append(configuration["Sites:PublicUrl"] ?? "")
+            .Select(o => Uri.TryCreate(o, UriKind.Absolute, out var u) ? u.Authority : null).OfType<string>()
+            .Where(h => h.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return new PluginsOptions(publicUrl, origins, production, own);
     }
 
     /// <summary>The plugins host as a request names it (<c>Host</c>), or null when there is none.</summary>
@@ -75,6 +94,9 @@ public sealed record PluginsOptions(string PublicUrl, IReadOnlyList<string> Fram
 public sealed record PluginTicket(Guid WorkspaceId, Guid PluginId, string BundleHash)
 {
     public DateTimeOffset ExpiresAt { get; init; }
+
+    /// <summary>When the API made it (its expiry less its lifetime).</summary>
+    public DateTimeOffset MadeAt => ExpiresAt - PluginTickets.Lifetime;
 }
 
 /// <summary>
@@ -139,8 +161,10 @@ public static class PluginTickets
 /// (<c>plugin.add</c>, <c>plugin.update</c>, <c>plugin.enable</c>, <c>plugin.disable</c>,
 /// <c>plugin.remove</c>, with type, version and bundle hash); any member, guests too, reads the list
 /// and asks for a frame of a plugin that is live and on. A bundle's files are private blobs under
-/// its own prefix, written before the row names them. Every write takes the workspace's lock. The
-/// list is read by clients on start and after Settings' changes: no change goes to the feed.
+/// its own prefix, written before the row names them. Every write takes the workspace's lock and,
+/// from Phase 13, writes a <c>plugin</c> change in the feed in the same transaction (<c>upsert</c>
+/// for an add, an update or a switch, <c>delete</c> for a removal), so an open tab reads the list
+/// again without a reload; builds before 0.13.0 ignore the type.
 /// </summary>
 public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, Audit audit, PluginsOptions options, TimeProvider clock)
 {
@@ -151,9 +175,22 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>The feed's type for a plugin's change (Phase 13): an event, no entity; the tab reads the list again.</summary>
+    public const string ChangeType = "plugin";
+
     public static PluginManifest ManifestOf(WorkspacePlugin row) => JsonSerializer.Deserialize<PluginManifest>(row.Manifest, Json)!;
 
     public static IReadOnlyList<PluginFile> FilesOf(WorkspacePlugin row) => JsonSerializer.Deserialize<List<PluginFile>>(row.Files, Json) ?? [];
+
+    /// <summary>The hosts approved for the plugin (Phase 13), as stored.</summary>
+    public static IReadOnlyList<string> ApprovedOf(WorkspacePlugin row) => JsonSerializer.Deserialize<List<string>>(row.ApprovedHosts, Json) ?? [];
+
+    /// <summary>The hosts the plugin reaches: approved ones its manifest names (never loopback in Production).</summary>
+    public static IReadOnlyList<string> ReachedOf(WorkspacePlugin row, bool production) =>
+        PluginHosts.Reached(ManifestOf(row).Network, ApprovedOf(row).ToHashSet(StringComparer.Ordinal), production);
+
+    private static PluginNetworkDto? NetworkOf(PluginManifest manifest, WorkspacePlugin row) =>
+        manifest.Network is { } network ? new PluginNetworkDto(network.Hosts, network.Hosts.Where(ApprovedOf(row).Contains).ToList()) : null;
 
     private async Task<List<WorkspacePluginDto>> DtosAsync(IReadOnlyList<WorkspacePlugin> rows, CancellationToken ct)
     {
@@ -163,7 +200,7 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
             var manifest = ManifestOf(r);
             var by = People.Of(people, r.AddedBy);
             return new WorkspacePluginDto(r.Id, r.Type, r.Version, manifest.Name, manifest.Description, manifest.Reads, manifest.Height, manifest.Keywords,
-                r.Enabled, r.SizeBytes, new UserRefDto(by.Id, by.Name), r.AddedAt, r.UpdatedAt);
+                r.Enabled, r.SizeBytes, new UserRefDto(by.Id, by.Name), r.AddedAt, r.UpdatedAt, NetworkOf(manifest, r));
         }).ToList();
     }
 
@@ -186,13 +223,22 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
     /// A bundle added: a new type is made (<c>created</c>), a type already there gets the new bundle
     /// at the same or a higher version (<c>plugin.older</c> below it). Its files are written first;
     /// the bundle it replaced is unreachable at once (a frame ticket names its bundle) and its files go.
+    /// Phase 13: the hosts its manifest names are approved by <paramref name="approve"/> (those the
+    /// person adding it was shown and allowed); an update keeps the hosts already approved, so a host it
+    /// adds waits until approved (here or by <see cref="PatchAsync"/>). A host of this server's own is
+    /// <c>host.reserved</c>; a loopback host in Production is <c>manifest.invalid</c>.
     /// </summary>
-    public async Task<Result<(WorkspacePluginDto Plugin, bool Created)>> AddAsync(Member member, Actor actor, byte[] zip, CancellationToken ct = default)
+    public async Task<Result<(WorkspacePluginDto Plugin, bool Created)>> AddAsync(Member member, Actor actor, byte[] zip, IReadOnlyCollection<string>? approve = null, CancellationToken ct = default)
     {
         if (!member.IsAdmin) return Failure.Denied("Only an owner or admin adds a plugin");
         var (bundle, problems) = PluginBundle.Read(zip);
         if (bundle is null) return Invalid(problems);
         var manifest = bundle.Manifest;
+        if (manifest.Network is { } asked)
+        {
+            if (asked.Hosts.Any(h => PluginHosts.Reserved(h, options.OwnHosts))) return Invalid([new(PluginBundle.HostReserved, PluginBundle.ManifestPath)]);
+            if (options.Production && asked.Hosts.Any(PluginHosts.Loopback)) return Invalid([new(PluginBundle.ManifestInvalid, PluginBundle.ManifestPath)]);
+        }
         var existing = await db.WorkspacePlugins.AsNoTracking().FirstOrDefaultAsync(p => p.Type == manifest.Type && p.RemovedAt == null, ct);
         if (existing is not null && existing.Version > manifest.Version) return Older(existing);
         var id = existing?.Id ?? Guid.CreateVersion7();
@@ -221,6 +267,11 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
             }
             var manifestJson = JsonSerializer.Serialize(manifest, Json);
             var filesJson = JsonSerializer.Serialize(bundle.Files.Select(f => f.File).ToList(), Json);
+            // The hosts approved: those already approved (an update) and those approved now, of the ones it names.
+            var named = manifest.Network?.Hosts ?? [];
+            var before = current is null ? [] : ApprovedOf(current);
+            var approved = named.Where(h => before.Contains(h) || (approve?.Contains(h) ?? false)).ToList();
+            var network = manifest.Network is null ? null : new { hosts = named, approved };
             if (current is null)
             {
                 row = new WorkspacePlugin
@@ -239,9 +290,12 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
                     AddedAt = now,
                     UpdatedBy = member.UserId,
                     UpdatedAt = now,
+                    ApprovedHosts = JsonSerializer.Serialize(approved, Json),
+                    HostsApprovedAt = approved.Count > 0 ? now : null,
+                    HostsApprovedBy = approved.Count > 0 ? member.UserId : null,
                 };
                 db.WorkspacePlugins.Add(row);
-                audit.Add(actor, "plugin.add", member.WorkspaceId, "plugin", id, new { type = manifest.Type, version = manifest.Version, bundleHash = bundle.Hash });
+                audit.Add(actor, "plugin.add", member.WorkspaceId, "plugin", id, new { type = manifest.Type, version = manifest.Version, bundleHash = bundle.Hash, network });
             }
             else
             {
@@ -253,7 +307,17 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
                     version = manifest.Version,
                     bundleHash = bundle.Hash,
                     from = new { version = row.Version, bundleHash = row.BundleHash },
+                    network,
                 });
+                if (!approved.SequenceEqual(before))
+                {
+                    row.ApprovedHosts = JsonSerializer.Serialize(approved, Json);
+                    if (approved.Except(before).Any())
+                    {
+                        row.HostsApprovedAt = now;
+                        row.HostsApprovedBy = member.UserId;
+                    }
+                }
                 row.Version = manifest.Version;
                 row.Manifest = manifestJson;
                 row.Files = filesJson;
@@ -263,7 +327,9 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
                 row.UpdatedBy = member.UserId;
                 row.UpdatedAt = now;
             }
+            changes.Add(ChangeType, id, "upsert", 1, member.UserId);
             await db.SaveChangesAsync(ct);
+            await changes.FlushAsync(ct);
             await tx.CommitAsync(ct);
         }
         catch (DbUpdateException e) when (e.InnerException is SqlException { Number: 2601 or 2627 })
@@ -283,23 +349,55 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
         await foreach (var (name, _) in blob.ListAsync(prefix, ct)) await blob.DeleteAsync(name, ct);
     }
 
-    /// <summary>Turns a live plugin on or off (<c>plugin.enable</c>, <c>plugin.disable</c>).</summary>
+    /// <summary>
+    /// Turns a live plugin on or off (<c>plugin.enable</c>, <c>plugin.disable</c>); Phase 13, sets the
+    /// hosts it may reach, each one its manifest names (<c>plugin.network</c>).
+    /// </summary>
     public async Task<Result<WorkspacePluginDto>> PatchAsync(Member member, Actor actor, Guid pluginId, PluginPatch? patch, CancellationToken ct = default)
     {
         if (!member.IsAdmin) return Failure.Denied("Only an owner or admin turns a plugin on or off");
-        if (patch?.Enabled is not { } enabled) return Failure.Invalid("Send enabled");
+        if (patch is null || (patch.Enabled is null && patch.ApprovedHosts is null)) return Failure.Invalid("Send enabled or approvedHosts");
+        if (patch.ApprovedHosts is { } hosts && (hosts.Count > PluginHosts.MaxHosts || hosts.Any(h => h is null) || hosts.Distinct(StringComparer.Ordinal).Count() != hosts.Count))
+            return Failure.Invalid("approvedHosts is at most 10 distinct hosts its manifest names");
         db.ChangeTracker.Clear();
         await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, ct);
         await changes.LockAsync(member.WorkspaceId, ct);
         var row = await db.WorkspacePlugins.FirstOrDefaultAsync(p => p.Id == pluginId && p.RemovedAt == null, ct);
         if (row is null) return Failure.NotFound("No such plugin");
-        if (row.Enabled != enabled)
+        var changed = false;
+        var now = clock.GetUtcNow();
+        if (patch.ApprovedHosts is { } approve)
+        {
+            var named = ManifestOf(row).Network?.Hosts ?? [];
+            if (approve.Any(h => !named.Contains(h))) return Failure.Invalid("approvedHosts names only hosts its manifest names");
+            // In the manifest's order, so the same approval reads the same.
+            var approved = named.Where(approve.Contains).ToList();
+            var was = ApprovedOf(row);
+            if (!approved.SequenceEqual(was))
+            {
+                row.ApprovedHosts = JsonSerializer.Serialize(approved, Json);
+                if (approved.Except(was).Any())
+                {
+                    row.HostsApprovedAt = now;
+                    row.HostsApprovedBy = member.UserId;
+                }
+                audit.Add(actor, "plugin.network", member.WorkspaceId, "plugin", row.Id, new { type = row.Type, version = row.Version, bundleHash = row.BundleHash, approved, was });
+                changed = true;
+            }
+        }
+        if (patch.Enabled is { } enabled && row.Enabled != enabled)
         {
             row.Enabled = enabled;
-            row.UpdatedBy = member.UserId;
-            row.UpdatedAt = clock.GetUtcNow();
             audit.Add(actor, enabled ? "plugin.enable" : "plugin.disable", member.WorkspaceId, "plugin", row.Id, new { type = row.Type, version = row.Version, bundleHash = row.BundleHash });
+            changed = true;
+        }
+        if (changed)
+        {
+            row.UpdatedBy = member.UserId;
+            row.UpdatedAt = now;
+            changes.Add(ChangeType, row.Id, "upsert", 1, member.UserId);
             await db.SaveChangesAsync(ct);
+            await changes.FlushAsync(ct);
         }
         await tx.CommitAsync(ct);
         return (await DtosAsync([row], ct))[0];
@@ -317,7 +415,9 @@ public sealed class PluginService(CgwDb db, BlobStore blob, ChangeLog changes, A
         row.RemovedAt = clock.GetUtcNow();
         row.RemovedBy = member.UserId;
         audit.Add(actor, "plugin.remove", member.WorkspaceId, "plugin", row.Id, new { type = row.Type, version = row.Version, bundleHash = row.BundleHash });
+        changes.Add(ChangeType, row.Id, "delete", 1, member.UserId);
         await db.SaveChangesAsync(ct);
+        await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);
         return true;
     }

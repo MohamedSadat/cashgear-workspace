@@ -273,6 +273,11 @@ export class FakeServer {
     this.change(this.spaces.get(workspaceId)!, 'notification', notificationId, 'upsert', userId);
   }
 
+  /** Phase 13: a plugin added, updated or switched (`upsert`) or removed (`delete`): every member sees it. */
+  pluginChanged(workspaceId: Id, pluginId: Id, kind: 'upsert' | 'delete' = 'upsert') {
+    this.change(this.spaces.get(workspaceId)!, 'plugin', pluginId, kind);
+  }
+
   /** Whether the account may see a page; a row is seen as its database is. */
   private visible(account: Account, pageId: Id): boolean {
     const id = this.spaceOfPage(pageId)?.mirror.rowRecords.get(pageId)?.databaseId ?? pageId;
@@ -1193,6 +1198,14 @@ export class FakeServer {
                 entityType: 'notification',
                 entityId: row.entityId,
                 kind: 'upsert',
+                entity: null,
+              };
+            case 'plugin':
+              return {
+                seq: row.seq,
+                entityType: 'plugin',
+                entityId: row.entityId,
+                kind: row.kind === 'delete' ? 'delete' : 'upsert',
                 entity: null,
               };
             default:

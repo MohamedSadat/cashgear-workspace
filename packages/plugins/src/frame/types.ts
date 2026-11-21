@@ -14,6 +14,11 @@ export interface InstalledPlugin {
   /** The frame's first height, CSS px. */
   height: number;
   enabled: boolean;
+  /**
+   * Phase 13: when the plugin last changed (a new bundle, its hosts approved): a frame is drawn anew
+   * when it changes, so an open page shows the plugin as it now is without a reload.
+   */
+  revision?: string;
 }
 
 /**

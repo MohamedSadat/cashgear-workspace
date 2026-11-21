@@ -4,6 +4,7 @@ import { groupsWords } from '../cloud/groupsWords';
 import { passkeysWords } from '../cloud/passkeysWords';
 import { offlineRowsWords } from '../cloud/offlineWords';
 import { signOutWords } from '../cloud/signOutWords';
+import { pluginNetworkWords } from '../plugins/networkWords';
 import { ssoWords } from '../cloud/ssoWords';
 import { ar } from './ar';
 import { flatten } from './catalogue';
@@ -11,7 +12,14 @@ import { en } from './en';
 import { addSection, type Section } from './sections';
 
 /** Every section a screen brings with it (sections.ts). */
-const SECTIONS: Section[] = [groupsWords, passkeysWords, ssoWords, offlineRowsWords, signOutWords];
+const SECTIONS: Section[] = [
+  groupsWords,
+  passkeysWords,
+  ssoWords,
+  offlineRowsWords,
+  signOutWords,
+  pluginNetworkWords,
+];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();
 

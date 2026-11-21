@@ -3,16 +3,20 @@
 // and what it reads are shown, with what trusting it means, before anything is sent), update it
 // (the same, for a type already there), turn it on or off, and remove it (asked first); everyone
 // else sees the list read-only. The server decides who may and checks the bundle again; each
-// change is audited there. Loaded with Settings' first look, not with the app.
+// change is audited there. Loaded with Settings' first look, not with the app. Phase 13: the hosts a
+// plugin asks to reach, allowed by adding it (with its rows, both in one step), a host an update adds
+// waiting in its row until allowed, and its network stopped there.
 import type { BundleError } from '@cgw/plugins/frame';
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '../Dialog';
 import type { Cloud } from '../cloud/cloud';
 import { useAccount } from '../cloud/CloudUi';
+import { useSection } from '../i18n/sections';
 import type { WorkspaceSession } from '../session';
 import { PluginRequestError, type WorkspacePlugin } from './api';
 import { BUNDLE_LIMITS, readBundle, type BundleSummary } from './bundle';
+import { pluginNetworkWords } from './networkWords';
 import { pluginsStoreOf } from './services';
 import type { PluginsStore } from './store';
 import './plugins.css';
@@ -55,6 +59,8 @@ function bundleText(t: Translate, error: BundleError): string {
         : t('plugins.settings.errors.manifestInvalid');
     case 'type.reserved':
       return t('plugins.settings.errors.typeReserved');
+    case 'host.reserved':
+      return t('pluginNetwork.hostReserved');
     case 'entry.missing':
       return t('plugins.settings.errors.entryMissing', { path });
     case 'file.type':
@@ -78,6 +84,7 @@ export function PluginsSection({
   /** An owner or an admin: they may add, update, turn on or off and remove. */
   manages: boolean;
 }) {
+  useSection(pluginNetworkWords);
   const { t: typed, i18n } = useTranslation();
   const t = typed as unknown as Translate;
   const language = i18n.language === 'ar' ? 'ar' : 'en';
@@ -95,6 +102,7 @@ export function PluginsSection({
   const [reading, setReading] = useState(false);
   const [review, setReview] = useState<Review | null>(null);
   const [removing, setRemoving] = useState<WorkspacePlugin | null>(null);
+  const [allowing, setAllowing] = useState<WorkspacePlugin | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -114,6 +122,10 @@ export function PluginsSection({
   );
   const nameOf = (plugin: { name: { en: string; ar: string }; type: string }) =>
     plugin.name[language] || plugin.name.en || plugin.type;
+  const list = useMemo(
+    () => new Intl.ListFormat(i18n.language, { style: 'long', type: 'conjunction' }),
+    [i18n.language],
+  );
 
   const failed = (error: unknown) => {
     if (error instanceof PluginRequestError) {
@@ -190,7 +202,10 @@ export function PluginsSection({
     if (!review) return;
     setBusy(true);
     try {
-      const { plugin, created } = await store.api.add(workspaceId, review.bytes);
+      // Adding a plugin allows the hosts it names (the dialog said so); an update allows none: a host
+      // it adds waits in its row.
+      const approve = review.existing ? [] : (review.summary.manifest.network?.hosts ?? []);
+      const { plugin, created } = await store.api.add(workspaceId, review.bytes, approve);
       store.put(workspaceId, plugin);
       setReview(null);
       setMessage(
@@ -219,6 +234,28 @@ export function PluginsSection({
         }),
       );
     } catch (error) {
+      failed(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Its hosts set at once: every one it names (Allow), or none (Stop its network). */
+  const setHosts = async (plugin: WorkspacePlugin, hosts: readonly string[]) => {
+    setBusy(true);
+    setProblem(null);
+    setMessage(null);
+    try {
+      const changed = await store.api.setApprovedHosts(workspaceId, plugin.id, hosts);
+      store.put(workspaceId, changed);
+      setAllowing(null);
+      setMessage(
+        hosts.length
+          ? t('pluginNetwork.allowed', { name: nameOf(changed), hosts: list.format(hosts) })
+          : t('pluginNetwork.stopped', { name: nameOf(changed) }),
+      );
+    } catch (error) {
+      setAllowing(null);
       failed(error);
     } finally {
       setBusy(false);
@@ -293,6 +330,8 @@ export function PluginsSection({
               const name = nameOf(plugin);
               const when = plugin.updatedAt || plugin.addedAt;
               const date = when ? dates.format(new Date(when)) : '';
+              const approved = plugin.network?.approved ?? [];
+              const waiting = (plugin.network?.hosts ?? []).filter((h) => !approved.includes(h));
               return (
                 <tr key={plugin.id} data-plugin={plugin.type}>
                   <td>
@@ -302,6 +341,12 @@ export function PluginsSection({
                     <code dir="ltr" className="cgw-plugins-type">
                       {plugin.type}
                     </code>
+                    {approved.length ? (
+                      <Hosts label={t('pluginNetwork.connects')} hosts={approved} kind="approved" />
+                    ) : null}
+                    {waiting.length ? (
+                      <Hosts label={t('pluginNetwork.waiting')} hosts={waiting} kind="waiting" />
+                    ) : null}
                   </td>
                   <td>{plugin.version}</td>
                   <td>{sizes.format(plugin.sizeBytes / 1024)}</td>
@@ -332,6 +377,30 @@ export function PluginsSection({
                             plugin.enabled ? 'plugins.settings.turnOff' : 'plugins.settings.turnOn',
                           )}
                         </button>
+                        {waiting.length ? (
+                          <button
+                            type="button"
+                            className="cgw-button"
+                            disabled={busy}
+                            aria-label={t('pluginNetwork.allowNamed', { name })}
+                            data-testid="plugin-allow"
+                            onClick={() => setAllowing(plugin)}
+                          >
+                            {t('pluginNetwork.allow')}
+                          </button>
+                        ) : null}
+                        {approved.length ? (
+                          <button
+                            type="button"
+                            className="cgw-button"
+                            disabled={busy}
+                            aria-label={t('pluginNetwork.stopNamed', { name })}
+                            data-testid="plugin-stop-network"
+                            onClick={() => void setHosts(plugin, [])}
+                          >
+                            {t('pluginNetwork.stop')}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="cgw-button"
@@ -419,6 +488,34 @@ export function PluginsSection({
           onClose={() => setReview(null)}
         />
       ) : null}
+      {allowing ? (
+        <Dialog
+          role="alertdialog"
+          title={t('pluginNetwork.allowTitle', { name: nameOf(allowing) })}
+          onClose={() => setAllowing(null)}
+        >
+          <p>
+            {t(allowing.reads.rows ? 'pluginNetwork.rowsAllowNote' : 'pluginNetwork.allowNote', {
+              name: nameOf(allowing),
+            })}
+          </p>
+          <HostList hosts={allowing.network?.hosts ?? []} />
+          <div className="cgw-dialog-buttons">
+            <button
+              type="button"
+              className="cgw-button is-primary"
+              disabled={busy}
+              data-testid="plugin-allow-confirm"
+              onClick={() => void setHosts(allowing, allowing.network?.hosts ?? [])}
+            >
+              {t('pluginNetwork.allowConfirm')}
+            </button>
+            <button type="button" className="cgw-button" onClick={() => setAllowing(null)}>
+              {t('plugins.settings.cancel')}
+            </button>
+          </div>
+        </Dialog>
+      ) : null}
       {removing ? (
         <Dialog
           role="alertdialog"
@@ -445,6 +542,47 @@ export function PluginsSection({
   );
 }
 
+/** Hosts as written, left to right, each in its own element. */
+function HostList({ hosts, fresh = [] }: { hosts: readonly string[]; fresh?: readonly string[] }) {
+  const { t: typed } = useTranslation();
+  const t = typed as unknown as Translate;
+  return (
+    <ul className="cgw-plugins-hosts" data-testid="plugin-hosts">
+      {hosts.map((host) => (
+        <li key={host}>
+          <code dir="ltr">{host}</code>
+          {fresh.includes(host) ? (
+            <span className="cgw-plugins-new"> ({t('pluginNetwork.newHost')})</span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A row's hosts: those it connects to, or those waiting for approval. */
+function Hosts({
+  label,
+  hosts,
+  kind,
+}: {
+  label: string;
+  hosts: readonly string[];
+  kind: 'approved' | 'waiting';
+}) {
+  return (
+    <span className="cgw-plugins-network" data-hosts={kind}>
+      <span className="cgw-muted">{label}: </span>
+      {hosts.map((host, i) => (
+        <span key={host}>
+          {i ? ', ' : null}
+          <code dir="ltr">{host}</code>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** What the bundle is, shown before it is sent: its names, type, version, what it reads. */
 function ReviewDialog({
   review,
@@ -464,6 +602,9 @@ function ReviewDialog({
   const { manifest } = review.summary;
   const name = manifest.name[language] || manifest.name.en;
   const update = !!review.existing;
+  const hosts = manifest.network?.hosts ?? [];
+  const before = review.existing?.network?.approved ?? [];
+  const fresh = update ? hosts.filter((h) => !before.includes(h)) : [];
   return (
     <Dialog
       title={t(update ? 'plugins.settings.reviewUpdate' : 'plugins.settings.reviewAdd', { name })}
@@ -500,9 +641,24 @@ function ReviewDialog({
               manifest.reads.rows ? 'plugins.settings.readsRows' : 'plugins.settings.readsNothing',
             )}
           </dd>
+          {hosts.length ? (
+            <>
+              <dt>{t('pluginNetwork.field')}</dt>
+              <dd>
+                <HostList hosts={hosts} fresh={fresh} />
+              </dd>
+            </>
+          ) : null}
         </dl>
-        {manifest.reads.rows ? (
+        {hosts.length && !update ? (
+          <p className="cgw-plugins-warning">
+            {t(manifest.reads.rows ? 'pluginNetwork.rowsAddNote' : 'pluginNetwork.addNote')}
+          </p>
+        ) : manifest.reads.rows ? (
           <p className="cgw-plugins-warning">{t('plugins.settings.rowsNote')}</p>
+        ) : null}
+        {fresh.length ? (
+          <p className="cgw-plugins-warning">{t('pluginNetwork.updateWaits')}</p>
         ) : null}
         <p className="cgw-muted">{t('plugins.settings.sandboxNote')}</p>
       </div>

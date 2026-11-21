@@ -17,7 +17,7 @@ const { zipSync, strToU8 } = await import('fflate');
 const { createApi } = await import('@cgw/api');
 const { createI18n } = await import('../i18n');
 const { CommandRegistry } = await import('../commands');
-const { pluginApi, PluginRequestError } = await import('./api');
+const { pluginApi, pluginOf, PluginRequestError } = await import('./api');
 const { PluginsStore } = await import('./store');
 const { readBundle } = await import('./bundle');
 const { PluginServices, SHARED_SOURCE } = await import('./services');
@@ -48,6 +48,7 @@ const plugin = (extra: Partial<WorkspacePlugin> = {}): WorkspacePlugin => ({
   addedBy: { id: 'u1', name: 'Mona Adel' },
   addedAt: '2026-11-18T09:00:00Z',
   updatedAt: '2026-11-18T09:00:00Z',
+  network: null,
   ...extra,
 });
 
@@ -94,6 +95,7 @@ const bundle = (extra: Record<string, string | Uint8Array> = {}, m: object = man
 function fakeServer() {
   const requests: { method: string; url: URL; headers: Headers; body: Uint8Array | null }[] = [];
   let offline = false;
+  let listed: unknown[] | null = null;
   const json = (value: unknown, status = 200) =>
     new Response(JSON.stringify(value), {
       status,
@@ -108,7 +110,7 @@ function fakeServer() {
     if (url.pathname === '/api/v1/account/antiforgery') return json({ token: 'csrf' });
     const base = `/api/v1/workspaces/${WS}/plugins`;
     if (url.pathname === base && input.method === 'GET')
-      return json({ plugins: [{ ...plugin(), version: '1', sizeBytes: '12800' }] });
+      return json({ plugins: listed ?? [{ ...plugin(), version: '1', sizeBytes: '12800' }] });
     if (url.pathname === base && input.method === 'POST') {
       const text = new TextDecoder().decode(body!);
       if (text.includes('bad'))
@@ -138,6 +140,8 @@ function fakeServer() {
     fetch,
     requests,
     goOffline: () => (offline = true),
+    /** The list the server answers from now on (Phase 13). */
+    answerList: (plugins: unknown[]) => (listed = plugins),
     api: () =>
       pluginApi(
         createApi({ baseUrl: 'http://api.test', auth: { kind: 'cookie' }, fetch: fetch as never }),
@@ -202,8 +206,8 @@ function fakeApi(initial: WorkspacePlugin[] = [plugin()]) {
       if (failWith) throw new PluginRequestError(failWith === 'offline' ? 0 : 500, failWith);
       return list;
     },
-    add: async (_ws, bytes) => {
-      calls.push(`add ${bytes.length}`);
+    add: async (_ws, bytes, approve) => {
+      calls.push(`add ${bytes.length}${approve?.length ? ` approve ${approve.join(',')}` : ''}`);
       if (failWith)
         throw new PluginRequestError(400, failWith, [{ code: 'file.name', path: 'a b' }]);
       const added = plugin({ version: 2, reads: { rows: true } });
@@ -213,6 +217,16 @@ function fakeApi(initial: WorkspacePlugin[] = [plugin()]) {
     setEnabled: async (_ws, id, enabled) => {
       calls.push(`enabled ${id} ${enabled}`);
       const changed = { ...list.find((p) => p.id === id)!, enabled };
+      list = list.map((p) => (p.id === id ? changed : p));
+      return changed;
+    },
+    setApprovedHosts: async (_ws, id, hosts) => {
+      calls.push(`approve ${id} ${hosts.join(',')}`);
+      const found = list.find((p) => p.id === id)!;
+      const changed = {
+        ...found,
+        network: found.network && { hosts: found.network.hosts, approved: [...hosts] },
+      };
       list = list.map((p) => (p.id === id ? changed : p));
       return changed;
     },
@@ -386,6 +400,7 @@ function fakeSession(current: { id: string; localOnly: boolean; role?: string } 
 
 function fakeCloud(server = fakeServer()) {
   const listeners = new Set<() => void>();
+  const pluginListeners = new Set<(workspaceId: string) => void>();
   const cloud = {
     api: createApi({
       baseUrl: 'http://api.test',
@@ -395,10 +410,18 @@ function fakeCloud(server = fakeServer()) {
     account: { id: 'u1' } as { id: string } | null | undefined,
     status: { state: 'synced' as string },
     subscribe: (l: () => void) => (listeners.add(l), () => void listeners.delete(l)),
+    onPlugins: (l: (workspaceId: string) => void) => (
+      pluginListeners.add(l),
+      () => void pluginListeners.delete(l)
+    ),
   };
   return {
     cloud: cloud as unknown as Cloud,
     server,
+    /** The feed's `plugin` change for a workspace (Phase 13). */
+    pluginsChanged(workspaceId: string) {
+      for (const l of [...pluginListeners]) l(workspaceId);
+    },
     set(change: { account?: { id: string } | null | undefined; state?: string }) {
       if ('account' in change) cloud.account = change.account;
       if (change.state) cloud.status.state = change.state;
@@ -408,6 +431,78 @@ function fakeCloud(server = fakeServer()) {
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+describe('a plugin’s change in the feed (Phase 13)', () => {
+  it('reads again a list this tab has read, and no other, so an open page follows it', async () => {
+    const { session } = fakeSession({ id: WS, localOnly: false });
+    const services = new PluginServices(session);
+    const c = fakeCloud();
+    services.setCloud(c.cloud);
+    const lists = () =>
+      c.server.requests.filter((r) => r.method === 'GET' && r.url.pathname.endsWith('/plugins'))
+        .length;
+    // Never read: a change elsewhere reads nothing.
+    c.pluginsChanged(WS);
+    await settle();
+    expect(lists()).toBe(0);
+    const source = services.sourceFor(WS);
+    source.ensure();
+    await settle();
+    expect(lists()).toBe(1);
+    const first = source.availability('vendor.notes');
+    expect(first).toMatchObject({
+      kind: 'installed',
+      plugin: { revision: '2026-11-18T09:00:00Z' },
+    });
+    // Read: the change reads it again; another workspace's change does not.
+    c.pluginsChanged(OTHER_WS);
+    await settle();
+    expect(lists()).toBe(1);
+    c.server.answerList([{ ...plugin(), updatedAt: '2026-11-21T10:00:00Z' }]);
+    c.pluginsChanged(WS);
+    await settle();
+    expect(lists()).toBe(2);
+    // A new revision (an update, a host approved): a new availability, so the frame is drawn anew.
+    const second = source.availability('vendor.notes');
+    expect(second).not.toBe(first);
+    expect(second).toMatchObject({
+      kind: 'installed',
+      plugin: { revision: '2026-11-21T10:00:00Z' },
+    });
+    // Removed elsewhere: the block says it is missing.
+    c.server.answerList([]);
+    c.pluginsChanged(WS);
+    await settle();
+    expect(source.availability('vendor.notes')).toEqual({ kind: 'missing' });
+  });
+
+  it('sends the hosts an add allows and the hosts approved later, and reads a plugin’s network', async () => {
+    const c = fakeCloud();
+    const api = pluginApi(c.cloud.api);
+    await api.add(WS, new TextEncoder().encode('new zip'), ['a.example.com', 'localhost:4288']);
+    await api.add(WS, new TextEncoder().encode('zip'));
+    await api.setApprovedHosts(WS, PLUGIN, ['a.example.com']);
+    const posts = c.server.requests.filter(
+      (r) => r.method === 'POST' && r.url.pathname.endsWith('/plugins'),
+    );
+    expect(posts.map((r) => r.url.searchParams.get('approve'))).toEqual([
+      'a.example.com,localhost:4288',
+      null,
+    ]);
+    const patch = c.server.requests.find((r) => r.method === 'PATCH')!;
+    expect(JSON.parse(new TextDecoder().decode(patch.body!))).toEqual({
+      approvedHosts: ['a.example.com'],
+    });
+    expect(
+      pluginOf({
+        id: PLUGIN,
+        network: { hosts: ['a.example.com', 'b.example.com'], approved: ['b.example.com', 'x'] },
+      }).network,
+    ).toEqual({ hosts: ['a.example.com', 'b.example.com'], approved: ['b.example.com'] });
+    expect(pluginOf({ id: PLUGIN }).network).toBeNull();
+    expect(pluginOf({ id: PLUGIN, network: { hosts: [] } }).network).toBeNull();
+  });
+});
 
 describe('a block’s availability', () => {
   it('reads the list when a block needs it, and says installed, off or missing', async () => {

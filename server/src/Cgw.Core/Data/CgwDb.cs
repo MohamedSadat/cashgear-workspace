@@ -551,6 +551,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Type).HasMaxLength(64).IsUnicode(false);
             e.Property(x => x.BundleHash).HasMaxLength(64).IsUnicode(false);
             e.Property(x => x.BlobPrefix).HasMaxLength(300).IsUnicode(false);
+            e.Property(x => x.ApprovedHosts).HasMaxLength(4000).IsUnicode(false).HasDefaultValue("[]");
         });
         b.Entity<PluginFrameTicket>(e =>
         {

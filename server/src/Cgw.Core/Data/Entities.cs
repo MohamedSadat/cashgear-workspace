@@ -952,6 +952,13 @@ public sealed class WorkspacePlugin : ITenantOwned
     public Guid? RemovedBy { get; set; }
     /// <summary>When the worker deleted a removed plugin's blobs.</summary>
     public DateTimeOffset? BlobsDeletedAt { get; set; }
+    /// <summary>
+    /// Phase 13: JSON, the hosts of its manifest's <c>network</c> an owner or admin approved (a host an
+    /// update adds waits until approved); the plugins origin's CSP names those the manifest still names.
+    /// </summary>
+    public string ApprovedHosts { get; set; } = "[]";
+    public DateTimeOffset? HostsApprovedAt { get; set; }
+    public Guid? HostsApprovedBy { get; set; }
 }
 
 /// <summary>
