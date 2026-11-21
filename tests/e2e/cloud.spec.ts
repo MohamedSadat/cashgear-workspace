@@ -193,7 +193,7 @@ test('a workspace made before signing in uploads intact: tree, documents and ids
   await other.close();
 });
 
-test('an invited member sees the workspace; signing out keeps the pages on the device', async ({
+test('an invited member sees the workspace; signing out hides it, signing in again shows it', async ({
   page,
   browser,
 }) => {
@@ -225,17 +225,96 @@ test('an invited member sees the workspace; signing out keeps the pages on the d
     timeout: 30000,
   });
 
-  // Signing out: this device keeps what it has; the status says so.
+  // Signing out (2026-11-21): the account's workspace stays on this device but is not shown to
+  // whoever uses it next; the first run's screen is, with its Sign in.
   await second.goto('/#/settings');
   await second.getByRole('button', { name: 'Sign out' }).click();
-  await expect(
-    second
-      .getByRole('navigation', { name: 'Sidebar' })
-      .getByRole('button', { name: 'Sign in to sync' }),
-  ).toBeVisible();
   await second.goto('/');
+  await expect(second.getByLabel('Workspace name')).toBeVisible({ timeout: 20000 });
+  await expect(second.getByRole('treeitem', { name: /Getting started/ })).toHaveCount(0);
+  // Signed in again: there at once, from this device.
+  await signIn(second, member);
+  await signedIn(second, member);
   await expect(second.getByRole('treeitem', { name: /Getting started/ })).toBeVisible();
   await other.close();
+});
+
+test("another account signed in on the same browser sees none of the first's workspaces; a sign-out can remove them", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  const first = await newAccount('First');
+  await page.goto('/');
+  await signIn(page, first);
+  await signedIn(page, first);
+  await workspaceHere(page, 'First space');
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
+  await newPage(page, 'Private plans');
+  await page.keyboard.type('Only for the first account');
+  await waitSaved(page);
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 20000 });
+  const planned = page.url();
+
+  // Signed out without removing, then another account signs in on the same browser.
+  await page.goto('/#/settings');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();
+  const second = await newAccount('Second');
+  await signIn(page, second);
+  await signedIn(page, second);
+  await workspaceHere(page, 'Second space');
+  await expect(page.getByRole('treeitem', { name: /Private plans/ })).toHaveCount(0);
+  // Not in the workspace switcher, and not by the page's own link either.
+  await page.locator('.cgw-workspace-switcher').click();
+  await expect(page.getByRole('menuitem', { name: /Second space/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /First space/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.goto(planned);
+  await expect(
+    page.getByRole('heading', { name: 'This page does not exist on this device.' }),
+  ).toBeVisible();
+  await expect(page.getByText('Only for the first account')).toHaveCount(0);
+
+  // The second signs out; the first signs in again: the page is there, from this device.
+  await page.goto('/#/settings');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  // Signed out before the sign-in page is asked for (its form's token follows the sign-out).
+  await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();
+  await signIn(page, first);
+  await signedIn(page, first);
+  await page.getByRole('treeitem', { name: /Private plans/ }).click({ timeout: 30000 });
+  await expect(editor(page)).toContainText('Only for the first account');
+
+  // Signing out with "remove": the first account's workspace leaves the device; the server keeps it.
+  await page.goto('/#/settings');
+  await page.getByTestId('sign-out-remove').check();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible({
+    timeout: 30000,
+  });
+  const held = await page.evaluate(async () => {
+    const open = indexedDB.open('cgw-workspace');
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+    });
+    const names = await new Promise<string[]>((resolve, reject) => {
+      const read = db.transaction('workspaces').objectStore('workspaces').getAll();
+      read.onsuccess = () => resolve((read.result as { name: string }[]).map((w) => w.name));
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    return names;
+  });
+  expect(held).toContain('Second space');
+  expect(held).not.toContain('First space');
+  await signIn(page, first);
+  await signedIn(page, first);
+  await page.getByRole('treeitem', { name: /Private plans/ }).click({ timeout: 30000 });
+  await expect(editor(page)).toContainText('Only for the first account', { timeout: 20000 });
+  // A read already on its way when a sign-out ends the session answers 401, which the browser
+  // logs itself (Settings' members, now and then): that line alone is allowed.
+  expect(errors.filter((e) => !e.includes('status of 401 (Unauthorized)'))).toEqual([]);
 });
 
 test('a guest sees only the page shared with them; a view link opens it read-only until withdrawn', async ({

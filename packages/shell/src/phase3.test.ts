@@ -110,6 +110,8 @@ async function setAside({ privateSection = true } = {}) {
   ]);
   const entry = (await store.setAsideDoc(pageId, 'doc.epochMismatch'))!;
   expect(entry).not.toBeNull();
+  // Signed in here as the account the workspace was synced for: its workspaces are shown.
+  await store.setPref(ACCOUNT_PREF, { id: 'account', email: 'a@x.test' });
   const session = await WorkspaceSession.start(store);
   return { store, session, workspaceId, personal, pageId, existing, entry };
 }
@@ -387,6 +389,8 @@ describe('what is kept offline', () => {
       ],
     });
     await store.pin({ workspaceId, pageId: parent, subtree: true, pinnedAt: now() });
+    // Signed in here as the account the workspace was synced for: its workspaces are shown.
+    await store.setPref(ACCOUNT_PREF, { id: 'account', email: 'a@x.test' });
     const session = await WorkspaceSession.start(store);
     let notify = () => {};
     const status = { state: 'synced' as string };
@@ -573,6 +577,8 @@ describe('a page the account may only view', () => {
     await store.appendDocUpdates(pageId, [
       { updateId: uuidv7(), data: newDocumentUpdate(pageId, paragraph('Shared text')) },
     ]);
+    // Signed in here as the account the workspace was synced for: its workspaces are shown.
+    await store.setPref(ACCOUNT_PREF, { id: 'account', email: 'a@x.test' });
     const session = await WorkspaceSession.start(store);
     const reset: Id[] = [];
     session.onDocReset((id) => reset.push(id));

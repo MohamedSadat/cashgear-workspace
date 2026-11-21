@@ -126,7 +126,8 @@ export class Collab {
     if (accountChanged) {
       // Another person (or nobody): what the last one could see goes.
       this.workspacePresence.clear();
-      for (const directory of this.directories.values()) void directory.refresh();
+      // Read again for the one signed in; signed out, a read is a 401 (the next sign-in reads).
+      if (self) for (const directory of this.directories.values()) void directory.refresh();
     }
     for (const store of this.comments) store.setOnline(online);
     if (accountChanged || back) void this.inbox.load();

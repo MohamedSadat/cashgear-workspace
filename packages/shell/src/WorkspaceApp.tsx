@@ -306,9 +306,12 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
   );
 
   const routed = route.kind === 'page' ? route.pageId : null;
-  const page = routed ? session.mirror.pages.get(routed) : undefined;
+  const found = routed ? session.mirror.pages.get(routed) : undefined;
+  // Another account's page, left on this device by a sign-out, opens as one not found.
+  const page = found && session.shows(found.workspaceId) ? found : undefined;
   // A row opens as a page with its properties above its body (contract section 7).
-  const row = useRowRoute(session, page ? null : routed);
+  const foundRow = useRowRoute(session, found ? null : routed);
+  const row = foundRow && !session.shows(foundRow.workspaceId) ? null : foundRow;
   const shown: AnyPage | undefined = page ?? row ?? undefined;
   const holder = isRowRecord(shown) ? session.mirror.pages.get(shown.databaseId) : undefined;
   const trashed = !!shown?.trashedAt || !!holder?.trashedAt;

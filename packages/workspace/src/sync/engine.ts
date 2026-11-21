@@ -212,6 +212,11 @@ const CHECKS_PER_PASS = 4;
 const CHECK_TRIES = 20;
 /** Waiting updates counted for the status (a long outbox shows at least this many). */
 const WAITING_CAP = 5000;
+/**
+ * Read whole when an account's data is to be removed: the waiting count's cap could hide what
+ * still waits. Not larger: IndexedDB's `getAll` takes a 32-bit count.
+ */
+const REMOVE_CAP = 1_000_000;
 
 /** Rows a request of a database's rows asks for, and such requests a pass makes. */
 const ROWS_PAGE = 1000;
@@ -460,6 +465,15 @@ export class SyncEngine {
   }
 
   /**
+   * The account this device is signed in as, also while a 401 pauses it (the session ended
+   * elsewhere: its changes still wait for it); null only once it signs out, or the server says no
+   * one is signed in. Its synced workspaces are the ones shown here.
+   */
+  get remembered(): Account | null {
+    return this.account ?? this.known;
+  }
+
+  /**
    * Signs the engine in (after `me()` answered, or with `cachedAccount()` when there is no
    * network: then `offline` says so at once) or out. Signing in keeps the account (never a
    * credential) for the next start; signing out forgets it, and keeps everything local.
@@ -484,6 +498,9 @@ export class SyncEngine {
     if (account && this.connected) this.track(this.rejoin(this.connection));
     if (account) {
       this.failures = 0;
+      // The account's workspaces are listed at its first pass (one removed from this device at a
+      // sign-out comes back at once), not up to ten passes later.
+      this.passes = 0;
       if (options.offline) void this.report('offline');
       else {
         // Signed in: "Syncing" at once, not the start's "Signed out" until the first pass ends
@@ -508,6 +525,67 @@ export class SyncEngine {
       displayName: value.displayName ?? '',
       deviceId: value.deviceId ?? null,
     };
+  }
+
+  /**
+   * What of an account's synced workspaces still waits to be sent from this device: operations,
+   * document updates (rows' too), refused updates being repaired, and pages set aside and not
+   * recovered yet. A sign-out that removes the account's data asks this first.
+   */
+  async accountWaiting(accountId: Id): Promise<number> {
+    const { ids, pages } = await this.accountHoldings(accountId);
+    if (!ids.size) return 0;
+    let waiting = 0;
+    for (const id of ids) {
+      waiting += (await this.store.nextOutboxBatch(REMOVE_CAP, id)).length;
+      for (const refusal of Object.values(await this.refusalsOf(id)))
+        waiting += refusal.updates.length;
+    }
+    for (const doc of await this.store.unsentDocUpdates(REMOVE_CAP))
+      if (pages.has(doc.pageId)) waiting += doc.updates.length;
+    for (const entry of await this.store.quarantine(null))
+      if (ids.has(entry.workspaceId) && entry.status === 'pending') waiting += 1;
+    return waiting;
+  }
+
+  /**
+   * Removes an account's synced workspaces from this device (a sign-out that asks for it): their
+   * records, documents, files and search entries go as a lost workspace's do, and what was set
+   * aside from them is dismissed. Only once the account is signed out here (a pass could pull them
+   * back) and nothing of theirs waits to be sent: otherwise nothing is removed and the answer
+   * counts what waits. "On this device only" workspaces are never touched.
+   */
+  async removeAccountData(accountId: Id): Promise<{ removed: Id[]; waiting: number }> {
+    if (this.account?.id === accountId) throw new Error('Sign the account out before removing it');
+    // A pass still running finishes first, so nothing it writes lands after the removal.
+    await (this.current ?? Promise.resolve());
+    const waiting = await this.accountWaiting(accountId);
+    if (waiting) return { removed: [], waiting };
+    const { ids } = await this.accountHoldings(accountId);
+    for (const id of ids) {
+      await this.store.applyRemote({ workspaceId: id, deleteWorkspace: true });
+      this.refusals.delete(id);
+    }
+    for (const entry of await this.store.quarantine(null))
+      if (ids.has(entry.workspaceId) && entry.status !== 'dismissed')
+        await this.store.settleQuarantine(entry.id, 'dismissed');
+    this.mine = new Set();
+    this.mineRead = false;
+    for (const id of ids) this.emit({ kind: 'mirror', workspaceId: id });
+    return { removed: [...ids], waiting: 0 };
+  }
+
+  /** An account's synced workspaces on this device, and every page and row of them. */
+  private async accountHoldings(accountId: Id): Promise<{ ids: Set<Id>; pages: Set<Id> }> {
+    const snapshot = await this.store.readMirror(null);
+    const ids = new Set(
+      snapshot.workspaces.filter((w) => !w.localOnly && w.accountId === accountId).map((w) => w.id),
+    );
+    const pages = new Set(snapshot.pages.filter((p) => ids.has(p.workspaceId)).map((p) => p.id));
+    for (const database of snapshot.databases)
+      if (ids.has(database.workspaceId))
+        for (const row of await this.store.readRows(database.id)) pages.add(row.id);
+    return { ids, pages };
   }
 
   start() {

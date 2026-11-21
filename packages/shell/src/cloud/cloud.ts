@@ -224,10 +224,16 @@ export class Cloud {
     return this.engine.onJoined(listener);
   }
 
-  /** The hub's connection runs while someone is signed in, and stops when no one is. */
+  /**
+   * The hub's connection runs while someone is signed in, and stops when no one is. The session
+   * shows that account's synced workspaces only: another account's, left on this device by a
+   * sign-out, stay hidden. A 401 (the session ended elsewhere) keeps them shown, with "Sign in to
+   * sync": the device is still that account's until it signs out.
+   */
   private followAccount() {
     if (this.account_) this.realtime.start();
     else this.realtime.stop();
+    this.session.setViewer(this.account_?.id ?? this.engine.remembered?.id ?? null);
   }
 
   /** The page on screen changed: it is joined on the hub (when connected), the last one left. */
@@ -494,6 +500,26 @@ export class Cloud {
       this.api.resetCsrf();
       this.emit();
     }
+  }
+
+  /**
+   * Signs out and removes this account's synced workspaces from this device: their pages,
+   * files and search entries, as for a workspace the account lost ("on this device only" ones
+   * stay). What waits is sent first; if anything still waits (offline, say), nothing is done and
+   * the answer counts it, so no edit is lost. The data stays on the server, and comes back with
+   * the next sign-in.
+   */
+  async signOutAndRemove(): Promise<{ waiting: number }> {
+    const account = this.account_;
+    if (!account) return { waiting: 0 };
+    await this.session.flushAll();
+    await this.engine.syncOnce().catch(() => undefined);
+    const waiting = await this.engine.accountWaiting(account.id);
+    if (waiting) return { waiting };
+    await this.signOut();
+    const removed = await this.engine.removeAccountData(account.id);
+    await this.session.reloadMirror();
+    return { waiting: removed.waiting };
   }
 
   /**

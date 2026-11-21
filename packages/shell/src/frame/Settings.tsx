@@ -11,6 +11,7 @@ import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
 import { GroupsSection } from '../cloud/GroupsSettings';
 import { PasskeysSection } from '../cloud/PasskeysSettings';
 import { PasswordSection } from '../cloud/PasswordSettings';
+import { SignOutSection } from '../cloud/SignOutSection';
 import { SsoSection } from '../cloud/SsoSettings';
 import { OfflineSettings } from '../cloud/OfflineSettings';
 import { MailSettings } from '../cloud/MailSettings';
@@ -69,6 +70,7 @@ export function Settings({
           cloud={cloud}
           passwordSection={<PasswordSection cloud={cloud} />}
           passkeys={<PasskeysSection cloud={cloud} />}
+          signOut={<SignOutSection cloud={cloud} />}
         />
       )}
       {cloud && <MailSettings cloud={cloud} />}

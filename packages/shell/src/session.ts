@@ -8,6 +8,7 @@
 // documents, titles, search and the trash; its access is its database's.
 import type { DocEvent, DocJSON, DocumentOptions, PageDocument } from '@cgw/doc';
 import {
+  ACCOUNT_PREF,
   Mirror,
   OpError,
   keyBetween,
@@ -68,6 +69,16 @@ export interface CloudHooks {
 }
 
 /** A page whose document this device does not hold, opened while it cannot be fetched. */
+/**
+ * Whether a workspace is shown to the account signed in (null: no one): one kept "on this device
+ * only" always, a synced one only to the account it was synced for. A deleted one never.
+ */
+export function shownTo(workspace: WorkspaceRecord, viewer: Id | null): boolean {
+  if (workspace.deletedAt) return false;
+  if (workspace.localOnly) return true;
+  return viewer !== null && workspace.accountId === viewer;
+}
+
 export class NotOnDeviceError extends Error {
   constructor(
     readonly pageId: Id,
@@ -175,14 +186,23 @@ export class WorkspaceSession {
       } | null>)
     | null = null;
 
+  /**
+   * The account signed in here, whose synced workspaces are shown; null when no one is. Another
+   * account's workspaces stay on the device, hidden, until it signs in again here (or its data is
+   * removed at a sign-out); "on this device only" workspaces are shown to anyone.
+   */
+  private viewer: Id | null;
+
   private constructor(
     readonly store: LocalStore,
     mirror: Mirror,
     workspaceId: Id | null,
+    viewer: Id | null,
     private readonly docOptions: DocumentOptions = {},
   ) {
     this.mirror = mirror;
     this.workspace = workspaceId;
+    this.viewer = viewer;
   }
 
   static async start(
@@ -190,16 +210,20 @@ export class WorkspaceSession {
     docOptions: DocumentOptions = {},
   ): Promise<WorkspaceSession> {
     const mirror = new Mirror(await store.readMirror(null));
+    // Who was signed in last (the sync engine keeps it, no credential): their workspaces show from
+    // the first paint, before the account check answers (the cloud then says who it is).
+    const account = await store.getPref<{ id?: unknown } | null>(ACCOUNT_PREF).catch(() => null);
+    const viewer = typeof account?.id === 'string' ? account.id : null;
     let last: string | null = null;
     try {
       last = localStorage.getItem(LAST_WORKSPACE);
     } catch {
       // No memory of the last workspace; take the first.
     }
-    const live = [...mirror.workspaces.values()].filter((w) => !w.deletedAt);
+    const live = [...mirror.workspaces.values()].filter((w) => shownTo(w, viewer));
     const chosen =
       live.find((w) => w.id === last) ?? live.sort((a, b) => (a.id < b.id ? -1 : 1))[0];
-    return new WorkspaceSession(store, mirror, chosen?.id ?? null, docOptions);
+    return new WorkspaceSession(store, mirror, chosen?.id ?? null, viewer, docOptions);
   }
 
   connect(hooks: CloudHooks) {
@@ -253,13 +277,41 @@ export class WorkspaceSession {
       if (page && this.docs.has(pageId) && this.canEdit(pageId) !== editable) this.resetDoc(pageId);
     }
     // A workspace this device lost goes from view; the first one the account brings opens.
-    if (!this.workspace || !this.mirror.workspaces.has(this.workspace)) {
-      const next = this.workspaces()[0]?.id ?? null;
-      if (next !== this.workspace) {
-        this.workspace = next;
-        for (const listener of this.listeners) listener();
-      }
+    this.pickShown();
+  }
+
+  /** The open workspace, when it is not one to show, gives way to the first that is (or none). */
+  private pickShown() {
+    if (this.workspace && this.shows(this.workspace)) return;
+    const next = this.workspaces()[0]?.id ?? null;
+    if (next !== this.workspace) {
+      this.workspace = next;
+      for (const listener of this.listeners) listener();
     }
+  }
+
+  /**
+   * The account signed in here changed (the cloud says so at each sign-in, sign-out and account
+   * check): only its synced workspaces are shown from now on, and the open one changes if it was
+   * another account's.
+   */
+  setViewer(accountId: Id | null) {
+    if (accountId === this.viewer) return;
+    this.viewer = accountId;
+    // Documents of workspaces no longer shown close (what they hold is written as they do).
+    for (const pageId of [...this.docs.keys()]) {
+      const workspaceId = this.record(pageId)?.workspaceId;
+      if (workspaceId && !this.shows(workspaceId)) this.forget(pageId);
+    }
+    this.pickShown();
+    // The sidebar's workspace list reads `workspaces()` again.
+    for (const listener of this.listeners) listener();
+  }
+
+  /** Whether a workspace is shown here: "on this device only", or the signed-in account's. */
+  shows(workspaceId: Id): boolean {
+    const workspace = this.mirror.workspaces.get(workspaceId);
+    return !!workspace && shownTo(workspace, this.viewer);
   }
 
   /** Updates another device made, already stored: the open document shows them. */
@@ -300,16 +352,20 @@ export class WorkspaceSession {
   }
 
   get current(): WorkspaceRecord | null {
-    return this.workspace ? (this.mirror.workspaces.get(this.workspace) ?? null) : null;
+    return this.workspace && this.shows(this.workspace)
+      ? (this.mirror.workspaces.get(this.workspace) ?? null)
+      : null;
   }
 
   workspaces(): WorkspaceRecord[] {
     return [...this.mirror.workspaces.values()]
-      .filter((w) => !w.deletedAt)
+      .filter((w) => shownTo(w, this.viewer))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** Opens a workspace; one not shown here (another account's) is refused. */
   switchTo(workspaceId: Id) {
+    if (!this.shows(workspaceId)) return;
     this.workspace = workspaceId;
     try {
       localStorage.setItem(LAST_WORKSPACE, workspaceId);

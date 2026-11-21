@@ -268,10 +268,13 @@ export function AccountSettings({
   cloud,
   passkeys,
   passwordSection,
+  signOut,
 }: {
   cloud: Cloud;
   passkeys?: ReactNode;
   passwordSection?: ReactNode;
+  /** Sign out with the choice to remove the account's workspaces from this device; a plain button if absent. */
+  signOut?: ReactNode;
 }) {
   const { t, i18n } = useTranslation();
   const account = useAccount(cloud);
@@ -333,9 +336,11 @@ export function AccountSettings({
               </li>
             ))}
           </ul>
-          <button type="button" className="cgw-button" onClick={() => void cloud.signOut()}>
-            {t('cloud.signOut')}
-          </button>
+          {signOut ?? (
+            <button type="button" className="cgw-button" onClick={() => void cloud.signOut()}>
+              {t('cloud.signOut')}
+            </button>
+          )}
           {passwordSection}
           {passkeys}
           <h3>{t('cloud.deleteAccount')}</h3>
@@ -389,7 +394,9 @@ export function MembersSettings({
   const admin = workspace?.role === 'owner' || workspace?.role === 'admin';
   const workspaceId: Id | null = synced ? workspace.id : null;
   const load = () => {
-    if (!workspaceId) return;
+    // Called by the cloud's own change too: a sign-out's comes before this section draws again,
+    // and asking then is a 401 the browser logs.
+    if (!workspaceId || !cloud.account) return;
     void cloud.members(workspaceId).then(setMembers, () => setMembers([]));
     if (admin) void cloud.invites(workspaceId).then(setInvites, () => setInvites([]));
   };

@@ -1562,3 +1562,27 @@ the contract left open, each in `INTEGRATIONS.md`'s as-built paragraphs):
 | A report's access | Each report page's roles alone, so the suite's report users are its own (`reports.test.ts` apart, its README) | The ERP's pages check no unit |
 | A report's `today` | The host's local day | The ERP keeps no company time zone |
 | `unitCost` | The page's: cost over quantity at 2 places, half away from zero, `0` at a quantity of 0 or a negative result | What the ERP's own page shows; the mock keeps 4 places and `null`, mock-only cases |
+
+## 2026-11-21: Another account's workspaces on a shared device
+
+Found in production: after a sign-out, the next account to sign in on the same browser saw the first
+account's synced workspaces, which a sign-out had left on the device ("a sign-out forgets the
+account, not the data", Phase 3), and every route of them answered 404 to it.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| What happens to an account's synced workspaces on the device at a sign-out, or when another account signs in | Hidden, plus a choice to remove them: the app shows the signed-in account's synced workspaces and the ones kept on this device only, signed out only the latter; Sign out in Settings → Account has "Also remove this account's workspaces from this device", which removes them once everything waiting is on the server. Hidden data is kept, so signing in again brings it back with unsent edits |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Whose workspaces are shown | A synced workspace to the account it was synced for (`accountId`) only; "On this device only" ones to anyone; the account is the sync engine's remembered one (`remembered`): kept through a 401, forgotten at a sign-out or when the server says no one is signed in | A session that ended elsewhere still shows its own pages with "Sign in to sync N changes", as Phase 3 designed |
+| At the start | The account kept in the store's prefs (`sync:account`), read by the session before the first paint | A signed-in person never sees their workspaces vanish and come back while the account check runs |
+| A page of a hidden workspace opened by its link | "This page does not exist on this device."; the workspace switcher, notices, the inbox and recovered pages never open one | One rule, `WorkspaceSession.shows` |
+| Removing at a sign-out | What waits is sent first (one pass); if anything of the account still waits (operations, document updates, refused updates being repaired, pages set aside and not recovered), nothing is removed and the person stays signed in, told the count; otherwise the account signs out and its workspaces are removed as a lost workspace's are, what was set aside from them dismissed | No edit is ever lost to a removal; the server keeps everything |
+| What a removal leaves | Set-aside entries of those workspaces, dismissed (never listed) but their bytes still in the store; the stores have no call to delete one yet | A follow-up if it matters: the three stores would each need it |
+| The workspace list after a sign-in | Read at the account's first pass (`passes` reset in `setAccount`), not up to ten passes later | A removed workspace, or another account's, came back only after about 15 s on the desktop |
+| Where the sign-out's words and controls load | With Settings (`cloud/SignOutSection.tsx`, its words a section, `signOutWords.ts`); the rule and the removal in the session and the engine, in the first screen: +0.66 kB of initial JavaScript (348.58 to 349.24 kB of 350) | Only Settings offers it; the rule must hold from the first paint |

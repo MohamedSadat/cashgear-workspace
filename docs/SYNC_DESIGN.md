@@ -480,7 +480,11 @@ this list):
 - **Signed in while offline:** the account (id, email, name, device id; no credential) is kept in
   the store's prefs. With no network at start the app uses it, says "Offline, N changes waiting",
   and syncs when the server answers. A 401 pauses with the count still shown ("Sign in to sync N
-  changes"); a sign-out forgets the account, not the data.
+  changes"); a sign-out forgets the account, not the data. From 2026-11-21 the app shows a synced
+  workspace only to the account it was synced for (the engine's `remembered` account, kept through
+  a 401): another account's, left by a sign-out, stays on the device hidden, and a sign-out can
+  remove the account's workspaces from the device once nothing of theirs waits to be sent
+  (`accountWaiting`, `removeAccountData`; DECISIONS.md, 2026-11-21).
 - **Long outboxes:** document pushes go in batches of at most 200 updates and 4 MB (an update over
   1 MB alone, which the server refuses with 413 and only it is set aside); each batch's answers
   are stored before the next request, so a failure loses nothing answered and nothing restarts

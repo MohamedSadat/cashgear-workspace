@@ -112,8 +112,15 @@ async function setup(options: { signedIn?: boolean; localOnly?: boolean } = {}) 
   const made = await localWorkspace(store);
   const session = await WorkspaceSession.start(store);
   session.switchTo(made.ws.id);
-  if (!options.localOnly)
-    Object.assign(session.mirror.workspaces.get(made.ws.id)!, { localOnly: false, role: 'owner' });
+  if (!options.localOnly) {
+    Object.assign(session.mirror.workspaces.get(made.ws.id)!, {
+      localOnly: false,
+      role: 'owner',
+      accountId: 'account',
+    });
+    // Synced for the account signed in here: shown.
+    session.setViewer('account');
+  }
   const lists: string[] = [];
   const listeners = new Set<() => void>();
   const cloud = {

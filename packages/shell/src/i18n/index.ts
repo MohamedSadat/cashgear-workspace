@@ -9,6 +9,7 @@ import type { groupsEn } from '../cloud/groupsWords';
 import type { passkeysEn } from '../cloud/passkeysWords';
 import type { ssoEn } from '../cloud/ssoWords';
 import type { offlineRowsEn } from '../cloud/offlineWords';
+import type { signOutEn } from '../cloud/signOutWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -22,6 +23,7 @@ interface Sections {
   passkeys: typeof passkeysEn;
   sso: typeof ssoEn;
   offlineRows: typeof offlineRowsEn;
+  signOut: typeof signOutEn;
 }
 
 declare module 'i18next' {
