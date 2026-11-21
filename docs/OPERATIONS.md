@@ -350,7 +350,7 @@ package is placed: `node scripts/local-model.mjs` on a machine with Python 3 (it
 pinned revision of the weights, about 700 MB, exports them and checks the graph against the model
 card's own run) makes `target/deploy/cgw-local-model-voyage-4-nano-587d8d6.zip` (572 MB); copy it to
 the host and pass `-LocalModel <zip>` once (an update without it keeps the folder). The API and the
-worker each load it on first use (about 3 s and 1 GB) and unload it after 30 minutes unused; a
+worker each load it on first use (about 10 s with its files checked, and 1 GB) and unload it after 30 minutes unused; a
 chunk takes about a second at 8 threads on the reference machine, a question about 50 ms. The
 plugins host's CSP is now a bundle's own (`connect-src` its approved hosts, else `'none'`), and a
 plugin's request leaves the visitor's browser from the plugins origin: the server never proxies it.

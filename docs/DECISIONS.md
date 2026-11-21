@@ -1675,6 +1675,20 @@ Loading takes about 3 s and 1,060 MB of working set. What it decided:
   matched in text. It loads in about 0.5 s and tokenises an Arabic chunk in under 1.5 ms.
 - **Threads** (above, Defaults picked).
 
-The host's own run (a graph of random weights, which times as the real one does, in a 6.7 MB
-package run from a folder deleted after) waits for a Remote Desktop session: the budget stands on the
-reference machine's figures until it is taken.
+The host's own run, on 2026-11-21 at 21:20 its time over Remote Desktop (with your word): the same
+graph with random weights, which times as the real one does (445 against 454 ms, 1,011 against
+1,048 on the reference machine), from a 6.7 MB package unpacked in a scratch folder and deleted after
+with its 1.3 GB of weights; nothing installed. The production host is an AMD EPYC 9575F with 12
+logical processors, AVX2, AVX-512 and VNNI, and 32 GB; the server gives the model 6 threads there:
+
+| Input | All 12 threads, median / p95 | 8 threads | 6 threads (the server's) | 4 threads |
+| --- | --- | --- | --- | --- |
+| 2,000 characters, English (402 tokens) | 204.6 / 239.4 ms | 249.6 / 267.3 ms | 243.0 / 311.5 ms | 344.2 / 358.6 ms |
+| 2,000 characters, Arabic (804 tokens) | 435.3 / 527.6 ms | 449.8 / 486.3 ms | 513.0 / 551.4 ms | 738.3 / 889.4 ms |
+| A question, English (18 tokens) | 20.7 / 22.6 ms | 21.3 / 23.5 ms | 23.9 / 27.8 ms | 27.9 / 30.4 ms |
+| A question, Arabic (24 tokens) | 23.5 / 43.4 ms | 26.2 / 28.5 ms | 26.7 / 30.7 ms | 32.2 / 34.4 ms |
+
+Loading took about 1.3 s and 740 to 760 MB of working set. The host runs the model about twice as
+fast as the reference machine, so the budget, set where the reference machine meets it, holds there
+with room: at the server's 6 threads an Arabic chunk's p95 is 551 ms of 1.5 s and a question's
+31 ms of 100.

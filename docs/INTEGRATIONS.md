@@ -1838,7 +1838,7 @@ notice and `cgw-model.json` describing them. The server loads it only when each 
 one pinned in its code, and never a test package (`test: true`, `tests/fixtures/local-model`, a
 byte-level stand-in with the real graph's inputs and output) in Production. `Cgw.LocalModel`'s own
 tokenizer (byte-level BPE with Qwen2's split over code points) gives Hugging Face's tokens exactly.
-The model loads on first use (about 3 s, about 1 GB) and unloads after `Ai__LocalModel__IdleMinutes`
+The model loads on first use (about 10 s with its files checked, about 1 GB) and unloads after `Ai__LocalModel__IdleMinutes`
 (30) unused; one run takes `Ai__LocalModel__Threads` (half the processors, at most 8). The spike
 set the budget (`Phase13LocalModelBench`): a 2,000-character chunk p95 1.5 s in either language
 (Arabic is about twice English's tokens), a question p95 100 ms.
