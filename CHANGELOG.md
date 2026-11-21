@@ -4,6 +4,39 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.12.0] - 2026-11-20
+
+Chart a database's rows, move timeline bars between lanes, read a database's table with a screen
+reader, keep the pages of a pinned database's rows offline, and put Cash Gear ERP's reports on a
+page.
+
+- **Chart views.** A database has a seventh kind of view, a chart: bars, a line or a pie of its
+  rows, grouped by the view's group and measured by a count, or by the sum or average of a number,
+  formula or rollup. A count covers every row however large the database; a sum or an average reads
+  up to 5,000 rows and says so past that. A chart view shows on a share link and on a published site
+  as in the app, and the chart block now draws the same way; a chart grouped or measured by people,
+  or by values a share link doesn't show, says so and shows nothing there.
+- **Lanes on the timeline.** Drag a bar onto another lane, or press Alt+ArrowUp or Alt+ArrowDown on
+  it, to move it there: its lane, and its dates if you dragged it along, change in one edit.
+- **The table with a screen reader.** A database's table says its true number of rows, each row's
+  place and its title as you move, names each column by its property, reads a grouped table as a
+  tree with each group's own count, and says when an edit starts, is saved or is cancelled.
+- **Pinned databases keep their rows' pages.** Pinning a database for offline now also keeps the
+  page of each row that has one, up to 5,000 a database, fetched in batches that leave typing
+  alone; Settings → Offline counts them.
+- **ERP reports.** An ERP block can show AP aging by vendor, stock balance on a date or the trial
+  balance, with their parameters (a date, how to age, a vendor group, a site or warehouse, a period)
+  and a totals row, read as Cash Gear ERP lets you see them. Nothing of a report is kept anywhere: it
+  is read again each time it is shown. Reports need Cash Gear ERP's own update.
+- **Large ERP lists.** With Cash Gear ERP's update, a block of vendors, customers or items reads
+  only the page it shows from the ERP's database, never the whole list: with 100,000 of them its
+  first page comes in under half a second, and the answers and their order are as before.
+- **Older versions.** 0.11.0 and earlier show a chart view as a table and keep it a chart when they
+  change it, and list no reports.
+- **For whoever runs the server.** No new tables. Pinned databases fetch their rows' pages through a
+  new route with a limit of its own (`RateLimits__pull`, 120 a minute). Reports and the paged lists
+  need Cash Gear ERP's `main` at `98deed36` or later.
+
 ## [0.11.0] - 2026-11-19
 
 Share with groups of people at once, sign in with a passkey, and let a company's people sign in
