@@ -143,15 +143,27 @@ public static class Users
 }
 
 /// <summary>
-/// The ASP.NET Core rate limiter (ARCHITECTURE.md, Rate limiting): per IP on anonymous routes,
-/// per user on the rest, tighter on sign-in, ticket redemption, push, search and database import. The desktop's
-/// token requests (<c>/connect/token</c>, and <c>/connect/revoke</c>, which OpenIddict answers
-/// before routing, through the global limiter) have a bucket of their own, so an office behind one
-/// address refreshing its tokens does not use up the sign-in forms'. Limits per minute are in
-/// configuration (<c>RateLimits__*</c>) so a load test can raise them.
+/// The ASP.NET Core rate limiter (ARCHITECTURE.md, Rate limiting): per address on anonymous routes,
+/// the sign-in routes, Sheet's ticket redemption and its file sessions; per person on the rest (the
+/// web's cookie or the desktop's token, one window on every address; a caller not signed in, per
+/// address), tighter on push, search and database import. The desktop's token requests
+/// (<c>/connect/token</c>, and <c>/connect/revoke</c>, which has no endpoint and is limited through
+/// the global limiter) have a bucket of their own, so an office behind one address refreshing its
+/// tokens does not use up the sign-in forms'. It runs in two passes (Program.cs,
+/// <see cref="BeforeAuthentication"/>). Limits per minute are in configuration
+/// (<c>RateLimits__*</c>) so a load test can raise them.
 /// </summary>
 public static class RateLimits
 {
+    /// <summary>
+    /// OpenIddict's routes (<c>/connect/*</c>), whose windows are taken before authentication:
+    /// OpenIddict answers what it refuses on them (a bad grant, a revocation, an authorisation with a
+    /// wrong client) inside the authentication middleware, which a limiter after it would never see.
+    /// Their policies are an address's alone (<c>RateLimitTests</c>); every other route's windows are
+    /// taken after authentication, where <c>Who</c> can see the person.
+    /// </summary>
+    public static bool BeforeAuthentication(HttpContext context) => context.Request.Path.StartsWithSegments("/connect");
+
     public const string Anonymous = "anonymous";
     public const string SignIn = "signin";
     public const string Token = "token";
@@ -187,6 +199,7 @@ public static class RateLimits
         var limits = configuration.GetSection("RateLimits");
         int Limit(string name, int fallback) => int.TryParse(limits[name], CultureInfo.InvariantCulture, out var n) ? n : fallback;
         string Ip(HttpContext c) => c.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // The person signed in (cookie or bearer token), read after authentication; else the address.
         string Who(HttpContext c) => c.User.UserId()?.ToString() ?? "ip:" + Ip(c);
         RateLimitPartition<string> Window(string key, int permits) =>
             RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions

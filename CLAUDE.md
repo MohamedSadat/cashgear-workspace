@@ -807,12 +807,14 @@ Added as they are found, grouped by phase.
 - The API answers an unknown route 404 `not.found`, the same as a workspace the account no longer
   has: a new route the engine calls inside a workspace's pass must not let a 404 reach the pass's
   catch, which removes the workspace from the device (`lose`). An older server has no batch pull.
-- The "per user" rate limits are per address: `Program.cs` runs `UseRateLimiter()` before
-  `UseAuthentication()` (since Phase 2), so a partitioner sees no user and falls back to the
-  address. Swapping the two is not enough: OpenIddict answers `/connect/token` and `/connect/revoke`
-  inside the authentication middleware, before their buckets (`AccountSecurityTests` catches it).
-  In the tests every request is one address, so a policy the fixture does not raise is shared by
-  every test class: test a limit on a `server.Variant`.
+- The rate limiter runs in two passes (`Program.cs`, `RateLimits.BeforeAuthentication`):
+  OpenIddict's routes (`/connect/*`) before `UseAuthentication()`, as OpenIddict answers a refused
+  grant or revocation inside the authentication middleware, before any bucket after it; every other
+  route after it, so a per-person partitioner sees the user (until 2026-11-21 one pass ran before
+  authentication, and every "per person" window was the address's). A policy on a `/connect` route
+  must be an address's. In the tests every request is one address, so a policy the fixture does not
+  raise is shared by every test class: test a limit on a `server.Variant`; `RateLimitTests`'
+  `Addresses` startup filter gives each client an address of its own.
 - A hand-made Yjs v1 update (one string item into a named root:
   `1, 1, client, 0, 0x04, 1, "name", text, 0`) is a real update every reader decodes
   (`DocsPullTests.Padding`): a test may write large valid updates straight into `PageDocUpdates` as

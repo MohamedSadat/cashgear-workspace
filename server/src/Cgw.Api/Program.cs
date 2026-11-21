@@ -67,8 +67,13 @@ app.UseCgwSecurityHeaders();
 app.UseCors(ApiServices.CorsPolicy);
 // The hub's path: WebSockets only, no negotiation, an allowed Origin, before its ticket is read.
 app.UseCgwRealtimeGate();
-app.UseRateLimiter();
+// The rate limiter in two passes (RateLimits): OpenIddict answers a refused grant, authorisation or
+// revocation on its own routes inside the authentication middleware, so their windows, all an
+// address's, are taken before it; every other route's after it, so a person's windows are counted
+// by the person signed in, not by the address they ask from.
+app.UseWhen(RateLimits.BeforeAuthentication, b => b.UseRateLimiter());
 app.UseAuthentication();
+app.UseWhen(c => !RateLimits.BeforeAuthentication(c), b => b.UseRateLimiter());
 app.UseAuthorization();
 app.UseAntiforgery();
 
