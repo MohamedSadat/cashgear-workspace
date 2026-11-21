@@ -13,6 +13,17 @@ export interface AiUsageMonth {
   outputTokens: number;
 }
 
+/** Phase 13: where a part's calls get their key: the workspace's own, or Cash Gear's subscription. */
+export type KeySource = 'own' | 'subscription';
+
+/** Phase 13: a workspace's month on Cash Gear's subscription, in tokens. */
+export interface Allowance {
+  month: string;
+  allowance: number;
+  used: number;
+  reserved: number;
+}
+
 export interface AiSettings {
   /** On, and a key is set. */
   enabled: boolean;
@@ -26,6 +37,10 @@ export interface AiSettings {
   usage?: AiUsageMonth;
   /** Phase 10: search by meaning; absent from a server before it (read as off). */
   embeddings?: EmbeddingsSettings;
+  /** Phase 13: `own` from a server before it. */
+  keySource: KeySource;
+  /** Phase 13, owners and admins: Cash Gear's subscription when this server offers it to the workspace. */
+  subscription?: Allowance;
 }
 
 /**
@@ -35,7 +50,8 @@ export interface AiSettings {
 export interface EmbeddingsSettings {
   /** On, with a key, and AI on for this server. */
   enabled: boolean;
-  provider: 'voyage';
+  /** Phase 13: `local` for the model on this server (voyage-4-nano). */
+  provider: 'voyage' | 'local';
   /** `voyage-4` unless changed. */
   model: string;
   models: string[];
@@ -46,15 +62,29 @@ export interface EmbeddingsSettings {
   usage?: { month: string; requests: number; tokens: number };
   /** While on: the pages to embed with this model, and those embedded. */
   progress?: { pages: number; embedded: number };
+  /** Phase 13: a Voyage model's key's source (the local model needs none). */
+  keySource: KeySource;
+  /** Phase 13, owners and admins: Cash Gear's subscription for search by meaning when offered. */
+  subscription?: Allowance;
 }
+
+/** Phase 13: the model this server runs itself, offered when it has one. */
+export const LOCAL_EMBEDDINGS_MODEL = 'voyage-4-nano';
 
 /** What `PUT …/ai-settings` takes: `apiKey` a string sets the key, null removes it, absent keeps it. */
 export interface AiSettingsChange {
   enabled?: boolean;
   model?: string;
   apiKey?: string | null;
+  /** Phase 13. */
+  keySource?: KeySource;
   /** Phase 10: search by meaning's, with the same rules for its key. */
-  embeddings?: { enabled?: boolean; model?: string; apiKey?: string | null };
+  embeddings?: {
+    enabled?: boolean;
+    model?: string;
+    apiKey?: string | null;
+    keySource?: KeySource;
+  };
 }
 
 export const AI_ACTIONS = [

@@ -14,6 +14,7 @@
 // (scripts/stack-control.mjs): GET /api (its pid), POST /api/restart (killed, started again,
 // answered once its health answers). The development stack has no such port.
 import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import net from 'node:net';
@@ -245,6 +246,16 @@ const env = {
         // Phase 12: the specs and benches pin databases of thousands of rows, one batch pull of up to
         // 100 documents at a time, many a minute from one address.
         RateLimits__pull: '10000',
+        // Phase 13: Cash Gear's subscription against the mock providers, its keys made here at start
+        // and kept in memory only (each a fresh stand-in the mock records as a hash; never a real key),
+        // with an allowance a month for every workspace; and the local model's stand-in package
+        // (tests/fixtures/local-model, a test package the API refuses in Production).
+        Ai__Subscription__AnthropicKey: `sk-mock-subscription-${randomUUID()}`,
+        Ai__Subscription__VoyageKey: `pa-mock-subscription-${randomUUID()}`,
+        Ai__Subscription__MonthlyTokens: '1000000',
+        Ai__Subscription__EmbeddingsMonthlyTokens: '1000000',
+        Ai__LocalModel__Path: join(root, 'tests', 'fixtures', 'local-model'),
+        Ai__LocalModel__Threads: '1',
       }
     : {}),
 };

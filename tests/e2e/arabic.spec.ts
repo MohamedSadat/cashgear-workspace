@@ -13,6 +13,7 @@ import { SSO_REFUSED, ssoScene, ssoScreens } from './sso';
 import { chartScene, chartScreens } from './chart';
 import { gridScene, gridScreens } from './grid';
 import { ERP12_THEIRS, englishIn, erp12Scene, erp12Screens } from './erp12';
+import { planScene, planScreens } from './plan';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -40,8 +41,8 @@ import {
 // the Cash Gear products' names («فتح في Cash Gear Sheet», «بيانات ERP»), which are not translated;
 // from Phase 7 also the AI provider's and its models' names (Anthropic, Claude Opus 5.5), shown in
 // Settings' AI section on every screen walked there; from Phase 10 the embeddings provider's and
-// its models' names (Voyage AI, voyage-4), in the same section. The palette's "Related by meaning"
-// group lists pages, as its others do.
+// its models' names (Voyage AI, voyage-4), in the same section; from Phase 13 the model this server
+// runs itself (voyage-4-nano). The palette's "Related by meaning" group lists pages, as its others do.
 
 /**
  * Groups whose options are what the person wrote, by their names: the palette's page results and
@@ -52,7 +53,7 @@ const OWN_GROUPS = ['الصفحات', 'الأخيرة', 'ذات صلة بالم�
 const BREADCRUMBS = 'موقع هذه الصفحة';
 
 const KEYS =
-  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite)?)\b/g;
+  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite|-nano)?)\b/g;
 
 /**
  * What the person wrote or another system holds, beyond the main screens' own (Phase 5): names
@@ -669,6 +670,48 @@ test('the Arabic ERP report blocks, their parameters, calendar and totals have n
     expect(errors).toEqual([]);
   } finally {
     await scene.api.dispose();
+    await cloud.close();
+  }
+});
+
+// Phase 13's screens in Arabic: Settings with AI on Cash Gear's subscription, search by meaning on
+// this server and a plugin's hosts, a plugin update's review naming a new host, and the dialog that
+// allows its hosts (plan.ts's scene, made in English). The plugin's name and hosts are its author's.
+test('the Arabic subscription, this server’s model and a plugin’s hosts have no English of their own', async ({
+  page,
+}) => {
+  test.skip(desktop, 'A browser against the e2e stack');
+  test.setTimeout(300000);
+  const cloud = signers();
+  const errors = watchAppErrors(page);
+  const scene = await planScene(page, 'Samar', cloud.signer);
+  try {
+    await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    const theirs = {
+      within: [
+        '.cgw-plugins-name',
+        '.cgw-plugins-type',
+        '.cgw-plugins-hosts',
+        '.cgw-plugins-network code',
+      ],
+      names: [
+        ...scene.names,
+        'Workspace',
+        'Private',
+        'Chrome on Windows',
+        'Edge on Windows',
+        'Browser',
+      ].sort((a, b) => b.length - a.length),
+    };
+    const found: string[] = [];
+    await planScreens(page, 'ar', async (screen) => {
+      found.push(...(await english(page, screen, theirs)));
+    });
+    expect(found, found.join('\n')).toEqual([]);
+    expect(errors).toEqual([]);
+  } finally {
     await cloud.close();
   }
 });

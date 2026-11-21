@@ -32,6 +32,7 @@ import { ssoScene, ssoScreens } from './sso';
 import { chartScene, chartScreens } from './chart';
 import { gridScene, gridScreens } from './grid';
 import { erp12Scene, erp12Screens } from './erp12';
+import { planScene, planScreens } from './plan';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -768,5 +769,34 @@ test.describe('accessibility of Phase 12’s ERP reports', () => {
     } finally {
       await scene.api.dispose();
     }
+  });
+});
+
+// Phase 13: Axe on Settings with AI on Cash Gear's subscription, search by meaning on this server and
+// a plugin's hosts (one waiting), a plugin update's review naming a new host, and the dialog that
+// allows a plugin's hosts, in both themes and both languages (plan.ts's scene, made in English).
+test.describe('accessibility of Phase 13’s AI and plugins', () => {
+  const cloud = signers();
+  test.afterAll(async () => cloud.close());
+
+  test('Axe finds nothing on the subscription, this server’s model and a plugin’s hosts (light and dark, English and Arabic)', async ({
+    page,
+  }) => {
+    test.skip(desktop, 'A browser against the e2e stack');
+    test.setTimeout(480000);
+    await planScene(page, 'Axe plan', cloud.signer);
+    const problems: string[] = [];
+    for (const theme of ['light', 'dark'] as const) {
+      for (const language of ['en', 'ar'] as const) {
+        await page.goto('/#/settings');
+        await setTheme(page, theme);
+        await page.evaluate((value) => localStorage.setItem('cgw-language', value), language);
+        await page.reload();
+        await planScreens(page, language, async (screen) => {
+          problems.push(...(await axe(page, `${screen} (${theme}, ${language})`)));
+        });
+      }
+    }
+    expect(problems, problems.join('\n')).toEqual([]);
   });
 });

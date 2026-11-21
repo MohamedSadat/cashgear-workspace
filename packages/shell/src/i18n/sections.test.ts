@@ -5,6 +5,7 @@ import { passkeysWords } from '../cloud/passkeysWords';
 import { offlineRowsWords } from '../cloud/offlineWords';
 import { signOutWords } from '../cloud/signOutWords';
 import { pluginNetworkWords } from '../plugins/networkWords';
+import { aiPlanWords } from '../ai/planWords';
 import { ssoWords } from '../cloud/ssoWords';
 import { ar } from './ar';
 import { flatten } from './catalogue';
@@ -19,6 +20,7 @@ const SECTIONS: Section[] = [
   offlineRowsWords,
   signOutWords,
   pluginNetworkWords,
+  aiPlanWords,
 ];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();

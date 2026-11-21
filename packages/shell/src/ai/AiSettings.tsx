@@ -6,12 +6,29 @@
 // Phase 10: search by meaning's part of it, with a switch of its own (it may be on while AI's
 // completions are off), its Voyage AI key kept as the Anthropic one is, its model, this month's
 // use and how many pages are ready.
-import { useId, useState, useSyncExternalStore } from 'react';
+//
+// Phase 13: where each part's key comes from, the workspace's own or Cash Gear's subscription (when
+// this server offers it to the workspace, with the month's allowance and use), and search by meaning
+// made on this server by its own model (voyage-4-nano), with no key and no text leaving it.
+import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud } from '../cloud/CloudUi';
+import { useSection } from '../i18n/sections';
 import type { WorkspaceSession } from '../session';
 import { useAi } from './context';
-import { AiError, type AiSettings, type AiSettingsChange, type EmbeddingsSettings } from './types';
+import { aiPlanWords } from './planWords';
+import {
+  AiError,
+  LOCAL_EMBEDDINGS_MODEL,
+  type AiSettings,
+  type AiSettingsChange,
+  type Allowance,
+  type EmbeddingsSettings,
+  type KeySource,
+} from './types';
+
+/** Phase 13: where search by meaning is made. */
+type EmbeddingsSource = KeySource | 'local';
 import './ai.css';
 
 const MODEL_LABELS: Record<string, 'ai.modelOpus' | 'ai.modelSonnet' | 'ai.modelHaiku'> = {
@@ -35,7 +52,25 @@ type Save = (
   missing?: 'ai.keyMissing' | 'ai.embeddingsKeyMissing',
 ) => void;
 
+/** Phase 13: a month on Cash Gear's subscription, as Settings says it. */
+function AllowanceText({ allowance, testId }: { allowance: Allowance; testId: string }) {
+  const { t, i18n } = useTranslation();
+  const number = (n: number) => n.toLocaleString(i18n.language);
+  return (
+    <p className="cgw-muted" data-testid={testId}>
+      {t('aiPlan.subscriptionUse', {
+        used: number(allowance.used),
+        allowance: number(allowance.allowance),
+      })}
+      {allowance.reserved > 0
+        ? ' ' + t('aiPlan.subscriptionHeld', { reserved: number(allowance.reserved) })
+        : ''}
+    </p>
+  );
+}
+
 export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
+  useSection(aiPlanWords);
   const { t, i18n } = useTranslation();
   const cloud = useCloud();
   const account = useAccount(cloud);
@@ -43,19 +78,37 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
   const ai = useAi(session, workspace?.id ?? null);
   const titleId = useId();
   const keyId = useId();
+  const sourceName = useId();
   const [key, setKey] = useState('');
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   // The switch shows what the person chose while its save is out, not the old value springing back.
   const [choosing, setChoosing] = useState<boolean | null>(null);
   const [choosingEmbeddings, setChoosingEmbeddings] = useState<boolean | null>(null);
+  // Phase 13: the same for where each part's key comes from, and where search by meaning is made.
+  const [choosingSource, setChoosingSource] = useState<KeySource | null>(null);
+  const [choosingMade, setChoosingMade] = useState<EmbeddingsSource | null>(null);
   const state = useSyncExternalStore(
     (listener) => (ai ? ai.store.subscribe(listener) : () => {}),
     () => (ai ? ai.store.state(ai.workspaceId) : null),
   );
-  if (!cloud || !account || !workspace) return null;
   const settings: AiSettings | null =
     state && state.status !== 'idle' ? (state.settings ?? null) : null;
+  // Phase 13: read again when Settings opens (the month's use on the subscription, the pages
+  // embedded), and every 5 s while pages wait to be embedded, so the progress moves.
+  const store = ai?.store;
+  const workspaceId = ai?.workspaceId;
+  useEffect(() => {
+    if (store && workspaceId) store.load(workspaceId, true);
+  }, [store, workspaceId]);
+  const progress = settings?.embeddings?.enabled ? settings.embeddings.progress : undefined;
+  const embedding = !!progress && progress.embedded < progress.pages;
+  useEffect(() => {
+    if (!store || !workspaceId || !embedding) return;
+    const timer = setInterval(() => store.load(workspaceId, true), 5000);
+    return () => clearInterval(timer);
+  }, [store, workspaceId, embedding]);
+  if (!cloud || !account || !workspace) return null;
 
   const save: Save = (change, after, missing = 'ai.keyMissing') => {
     if (!ai) return;
@@ -66,6 +119,8 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
         setBusy(false);
         setChoosing(null);
         setChoosingEmbeddings(null);
+        setChoosingSource(null);
+        setChoosingMade(null);
         setMessage({ text: t('ai.saved'), error: false });
         after?.();
       },
@@ -73,6 +128,8 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
         setBusy(false);
         setChoosing(null);
         setChoosingEmbeddings(null);
+        setChoosingSource(null);
+        setChoosingMade(null);
         const code = error instanceof AiError ? error.code : 'server.error';
         setMessage({
           text: t(
@@ -120,7 +177,11 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
               checked={choosing ?? settings.enabled}
               disabled={busy}
               onChange={(event) => {
-                if (event.target.checked && !settings.hasKey) {
+                if (
+                  event.target.checked &&
+                  !settings.hasKey &&
+                  settings.keySource !== 'subscription'
+                ) {
                   setMessage({ text: t('ai.keyMissing'), error: true });
                   return;
                 }
@@ -130,57 +191,97 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
             />
             <span>{t('ai.enabled')}</span>
           </label>
-          <div className="cgw-ai-field">
-            <label htmlFor={keyId}>{t('ai.key')}</label>
-            <p className="cgw-muted" data-testid="ai-key-state">
-              {settings.hasKey
-                ? settings.keySetAt
-                  ? settings.keySetBy
-                    ? t('ai.keySet', {
-                        date: dateText(settings.keySetAt),
-                        name: settings.keySetBy.name,
-                      })
-                    : t('ai.keySetNoName', { date: dateText(settings.keySetAt) })
-                  : t('ai.keySetNoName', { date: '' })
-                : t('ai.noKey')}
-            </p>
-            <form
-              className="cgw-ai-key"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const value = key.trim();
-                if (!value) return;
-                save({ apiKey: value }, () => setKey(''));
-              }}
-            >
-              <input
-                id={keyId}
-                className="cgw-input"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                dir="ltr"
-                placeholder={t('ai.keyPlaceholder')}
-                value={key}
-                disabled={busy}
-                onChange={(event) => setKey(event.target.value)}
-              />
-              <button type="submit" className="cgw-button" disabled={busy || !key.trim()}>
-                {t('ai.saveKey')}
-              </button>
-              {settings.hasKey && (
-                <button
-                  type="button"
-                  className="cgw-button"
+          {(settings.subscription || settings.keySource === 'subscription') && (
+            <fieldset className="cgw-ai-field cgw-ai-sources" data-testid="ai-key-source">
+              <legend>{t('aiPlan.keyLegend')}</legend>
+              <label className="cgw-ai-check">
+                <input
+                  type="radio"
+                  name={sourceName}
+                  checked={(choosingSource ?? settings.keySource) === 'own'}
                   disabled={busy}
-                  onClick={() => save({ apiKey: null })}
-                >
-                  {t('ai.removeKey')}
-                </button>
+                  onChange={() => {
+                    setChoosingSource('own');
+                    save({ keySource: 'own' });
+                  }}
+                />
+                <span>{t('aiPlan.keyOwn', { provider: 'Anthropic' })}</span>
+              </label>
+              <label className="cgw-ai-check">
+                <input
+                  type="radio"
+                  name={sourceName}
+                  checked={(choosingSource ?? settings.keySource) === 'subscription'}
+                  disabled={busy || !settings.subscription}
+                  onChange={() => {
+                    setChoosingSource('subscription');
+                    save({ keySource: 'subscription' });
+                  }}
+                />
+                <span>{t('aiPlan.keySubscription')}</span>
+              </label>
+            </fieldset>
+          )}
+          {settings.keySource === 'subscription' ? (
+            <div className="cgw-ai-field" data-testid="ai-subscription">
+              <p className="cgw-muted">{t('aiPlan.subscriptionNote')}</p>
+              {settings.subscription && (
+                <AllowanceText allowance={settings.subscription} testId="ai-allowance" />
               )}
-            </form>
-            <p className="cgw-muted">{t('ai.keyNote')}</p>
-          </div>
+            </div>
+          ) : (
+            <div className="cgw-ai-field">
+              <label htmlFor={keyId}>{t('ai.key')}</label>
+              <p className="cgw-muted" data-testid="ai-key-state">
+                {settings.hasKey
+                  ? settings.keySetAt
+                    ? settings.keySetBy
+                      ? t('ai.keySet', {
+                          date: dateText(settings.keySetAt),
+                          name: settings.keySetBy.name,
+                        })
+                      : t('ai.keySetNoName', { date: dateText(settings.keySetAt) })
+                    : t('ai.keySetNoName', { date: '' })
+                  : t('ai.noKey')}
+              </p>
+              <form
+                className="cgw-ai-key"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const value = key.trim();
+                  if (!value) return;
+                  save({ apiKey: value }, () => setKey(''));
+                }}
+              >
+                <input
+                  id={keyId}
+                  className="cgw-input"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  dir="ltr"
+                  placeholder={t('ai.keyPlaceholder')}
+                  value={key}
+                  disabled={busy}
+                  onChange={(event) => setKey(event.target.value)}
+                />
+                <button type="submit" className="cgw-button" disabled={busy || !key.trim()}>
+                  {t('ai.saveKey')}
+                </button>
+                {settings.hasKey && (
+                  <button
+                    type="button"
+                    className="cgw-button"
+                    disabled={busy}
+                    onClick={() => save({ apiKey: null })}
+                  >
+                    {t('ai.removeKey')}
+                  </button>
+                )}
+              </form>
+              <p className="cgw-muted">{t('ai.keyNote')}</p>
+            </div>
+          )}
           <label className="cgw-ai-field">
             <span>{t('ai.model')}</span>
             <select
@@ -211,6 +312,8 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
               busy={busy}
               choosing={choosingEmbeddings}
               onChoose={setChoosingEmbeddings}
+              picked={choosingMade}
+              onPick={setChoosingMade}
               save={save}
               dateText={dateText}
               onMissingKey={() => setMessage({ text: t('ai.embeddingsKeyMissing'), error: true })}
@@ -236,6 +339,8 @@ function EmbeddingsPart({
   busy,
   choosing,
   onChoose,
+  picked,
+  onPick,
   save,
   dateText,
   onMissingKey,
@@ -244,6 +349,9 @@ function EmbeddingsPart({
   busy: boolean;
   choosing: boolean | null;
   onChoose: (on: boolean) => void;
+  /** Phase 13: where search by meaning is made, as chosen while its save is out. */
+  picked: EmbeddingsSource | null;
+  onPick: (source: EmbeddingsSource) => void;
   save: Save;
   dateText: (iso: string) => string;
   onMissingKey: () => void;
@@ -253,8 +361,27 @@ function EmbeddingsPart({
   const keyId = useId();
   const modelId = useId();
   const modelNoteId = useId();
+  const sourceName = useId();
   const [key, setKey] = useState('');
   const number = (n: number) => n.toLocaleString(i18n.language);
+  // Phase 13: where search by meaning is made: Voyage with the workspace's key or Cash Gear's, or
+  // this server's own model.
+  const local = embeddings.model === LOCAL_EMBEDDINGS_MODEL;
+  const source = local ? 'local' : embeddings.keySource;
+  const offersLocal = embeddings.models.includes(LOCAL_EMBEDDINGS_MODEL);
+  const voyageModels = embeddings.models.filter((m) => m !== LOCAL_EMBEDDINGS_MODEL);
+  const voyageModel = local ? (voyageModels[0] ?? 'voyage-4') : embeddings.model;
+  const choose = (next: EmbeddingsSource) => {
+    if (next === source) return;
+    onPick(next);
+    if (next === 'local') save({ embeddings: { model: LOCAL_EMBEDDINGS_MODEL } });
+    else
+      save(
+        { embeddings: { keySource: next, model: voyageModel } },
+        undefined,
+        'ai.embeddingsKeyMissing',
+      );
+  };
   return (
     <section
       aria-labelledby={titleId}
@@ -270,7 +397,7 @@ function EmbeddingsPart({
           disabled={busy}
           onChange={(event) => {
             const on = event.target.checked;
-            if (on && !embeddings.hasKey) {
+            if (on && !embeddings.hasKey && source === 'own') {
               onMissingKey();
               return;
             }
@@ -280,77 +407,133 @@ function EmbeddingsPart({
         />
         <span>{t('ai.embeddingsEnabled')}</span>
       </label>
-      <div className="cgw-ai-field">
-        <label htmlFor={keyId}>{t('ai.embeddingsKey')}</label>
-        <p className="cgw-muted" data-testid="embeddings-key-state">
-          {embeddings.hasKey
-            ? embeddings.keySetAt
-              ? embeddings.keySetBy
-                ? t('ai.keySet', {
-                    date: dateText(embeddings.keySetAt),
-                    name: embeddings.keySetBy.name,
-                  })
-                : t('ai.keySetNoName', { date: dateText(embeddings.keySetAt) })
-              : t('ai.keySetNoName', { date: '' })
-            : t('ai.noKey')}
-        </p>
-        <form
-          className="cgw-ai-key"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const value = key.trim();
-            if (!value) return;
-            save({ embeddings: { apiKey: value } }, () => setKey(''), 'ai.embeddingsKeyMissing');
-          }}
-        >
-          <input
-            id={keyId}
-            className="cgw-input"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            dir="ltr"
-            placeholder={t('ai.keyPlaceholder')}
-            value={key}
-            disabled={busy}
-            onChange={(event) => setKey(event.target.value)}
-          />
-          <button type="submit" className="cgw-button" disabled={busy || !key.trim()}>
-            {t('ai.embeddingsSaveKey')}
-          </button>
-          {embeddings.hasKey && (
-            <button
-              type="button"
-              className="cgw-button"
+      {(offersLocal || embeddings.subscription || source !== 'own') && (
+        <fieldset className="cgw-ai-field cgw-ai-sources" data-testid="embeddings-source">
+          <legend>{t('aiPlan.embeddingsLegend')}</legend>
+          <label className="cgw-ai-check">
+            <input
+              type="radio"
+              name={sourceName}
+              checked={(picked ?? source) === 'own'}
               disabled={busy}
-              onClick={() => save({ embeddings: { apiKey: null } })}
-            >
-              {t('ai.embeddingsRemoveKey')}
-            </button>
+              onChange={() => choose('own')}
+            />
+            <span>{t('aiPlan.sourceOwn', { provider: 'Voyage AI' })}</span>
+          </label>
+          {(embeddings.subscription || source === 'subscription') && (
+            <label className="cgw-ai-check">
+              <input
+                type="radio"
+                name={sourceName}
+                checked={(picked ?? source) === 'subscription'}
+                disabled={busy || !embeddings.subscription}
+                onChange={() => choose('subscription')}
+              />
+              <span>{t('aiPlan.sourceSubscription', { provider: 'Voyage AI' })}</span>
+            </label>
           )}
-        </form>
-        <p className="cgw-muted">{t('ai.keyNote')}</p>
-      </div>
-      <div className="cgw-ai-field">
-        <label htmlFor={modelId}>{t('ai.embeddingsModel')}</label>
-        <select
-          id={modelId}
-          className="cgw-input"
-          value={embeddings.model}
-          disabled={busy}
-          aria-describedby={modelNoteId}
-          onChange={(event) => save({ embeddings: { model: event.target.value } })}
-        >
-          {embeddings.models.map((model) => (
-            <option key={model} value={model}>
-              {EMBEDDING_MODEL_LABELS[model] ? t(EMBEDDING_MODEL_LABELS[model]) : model}
-            </option>
-          ))}
-        </select>
-        <p id={modelNoteId} className="cgw-muted">
-          {t('ai.embeddingsModelNote')}
+          {(offersLocal || local) && (
+            <label className="cgw-ai-check">
+              <input
+                type="radio"
+                name={sourceName}
+                checked={(picked ?? source) === 'local'}
+                disabled={busy || !offersLocal}
+                onChange={() => choose('local')}
+              />
+              <span>{t('aiPlan.sourceLocal', { model: LOCAL_EMBEDDINGS_MODEL })}</span>
+            </label>
+          )}
+        </fieldset>
+      )}
+      {local && (
+        <p className="cgw-muted" data-testid="embeddings-local">
+          {t('aiPlan.localNote')}
         </p>
-      </div>
+      )}
+      {source === 'subscription' && (
+        <div className="cgw-ai-field" data-testid="embeddings-subscription">
+          <p className="cgw-muted">{t('aiPlan.subscriptionNote')}</p>
+          {embeddings.subscription && (
+            <AllowanceText allowance={embeddings.subscription} testId="embeddings-allowance" />
+          )}
+        </div>
+      )}
+      {source === 'own' && (
+        <div className="cgw-ai-field">
+          <label htmlFor={keyId}>{t('ai.embeddingsKey')}</label>
+          <p className="cgw-muted" data-testid="embeddings-key-state">
+            {embeddings.hasKey
+              ? embeddings.keySetAt
+                ? embeddings.keySetBy
+                  ? t('ai.keySet', {
+                      date: dateText(embeddings.keySetAt),
+                      name: embeddings.keySetBy.name,
+                    })
+                  : t('ai.keySetNoName', { date: dateText(embeddings.keySetAt) })
+                : t('ai.keySetNoName', { date: '' })
+              : t('ai.noKey')}
+          </p>
+          <form
+            className="cgw-ai-key"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const value = key.trim();
+              if (!value) return;
+              save({ embeddings: { apiKey: value } }, () => setKey(''), 'ai.embeddingsKeyMissing');
+            }}
+          >
+            <input
+              id={keyId}
+              className="cgw-input"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              dir="ltr"
+              placeholder={t('ai.keyPlaceholder')}
+              value={key}
+              disabled={busy}
+              onChange={(event) => setKey(event.target.value)}
+            />
+            <button type="submit" className="cgw-button" disabled={busy || !key.trim()}>
+              {t('ai.embeddingsSaveKey')}
+            </button>
+            {embeddings.hasKey && (
+              <button
+                type="button"
+                className="cgw-button"
+                disabled={busy}
+                onClick={() => save({ embeddings: { apiKey: null } })}
+              >
+                {t('ai.embeddingsRemoveKey')}
+              </button>
+            )}
+          </form>
+          <p className="cgw-muted">{t('ai.keyNote')}</p>
+        </div>
+      )}
+      {!local && (
+        <div className="cgw-ai-field">
+          <label htmlFor={modelId}>{t('ai.embeddingsModel')}</label>
+          <select
+            id={modelId}
+            className="cgw-input"
+            value={embeddings.model}
+            disabled={busy}
+            aria-describedby={modelNoteId}
+            onChange={(event) => save({ embeddings: { model: event.target.value } })}
+          >
+            {voyageModels.map((model) => (
+              <option key={model} value={model}>
+                {EMBEDDING_MODEL_LABELS[model] ? t(EMBEDDING_MODEL_LABELS[model]) : model}
+              </option>
+            ))}
+          </select>
+          <p id={modelNoteId} className="cgw-muted">
+            {t('ai.embeddingsModelNote')}
+          </p>
+        </div>
+      )}
       {embeddings.usage && (
         <p className="cgw-muted" data-testid="embeddings-usage">
           {t('ai.embeddingsUsage', {

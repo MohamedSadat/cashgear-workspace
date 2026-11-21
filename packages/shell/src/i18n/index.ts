@@ -11,6 +11,7 @@ import type { ssoEn } from '../cloud/ssoWords';
 import type { offlineRowsEn } from '../cloud/offlineWords';
 import type { signOutEn } from '../cloud/signOutWords';
 import type { pluginNetworkEn } from '../plugins/networkWords';
+import type { aiPlanEn } from '../ai/planWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -26,6 +27,7 @@ interface Sections {
   offlineRows: typeof offlineRowsEn;
   signOut: typeof signOutEn;
   pluginNetwork: typeof pluginNetworkEn;
+  aiPlan: typeof aiPlanEn;
 }
 
 declare module 'i18next' {

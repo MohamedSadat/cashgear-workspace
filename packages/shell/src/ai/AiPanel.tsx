@@ -9,12 +9,14 @@ import { useTranslation } from 'react-i18next';
 import type { ShellDatabaseHost } from '../database/host';
 import { routeHash, navigate } from '../route';
 import { isRowRecord, type AnyPage, type WorkspaceSession } from '../session';
+import { useSection } from '../i18n/sections';
 import { formatShortcut } from '../shortcuts';
 import { acceptProposal, splitTitle, type AcceptOutcome } from './accept';
 import { parseActionItems, parseDatabaseProposal, type DatabaseProposal } from './answers';
 import type { AiHandle } from './context';
 import type { AiPanelRequest } from './open';
 import { buildRequest, type AiSelection, type AiTask, type AiTaskAction } from './requests';
+import { aiPlanWords } from './planWords';
 import { runCompletion, type AiRun } from './run';
 import { AiError, REWRITE_INSTRUCTIONS, type RewriteInstruction } from './types';
 import './ai.css';
@@ -41,6 +43,9 @@ export function errorKey(code: string): string {
       return 'ai.provider';
     case 'ai.limit':
       return 'ai.limit';
+    // Phase 13: past the workspace's allowance on Cash Gear's subscription (a section's words).
+    case 'ai.allowance':
+      return 'aiPlan.allowance';
     case 'limit.rate':
       return 'ai.rate';
     case 'too.long':
@@ -97,6 +102,7 @@ export function AiPanel({
   request,
   onClose,
 }: AiPanelProps) {
+  useSection(aiPlanWords);
   const { t, i18n } = useTranslation();
   const titleId = useId();
   const language: 'en' | 'ar' = i18n.language === 'ar' ? 'ar' : 'en';

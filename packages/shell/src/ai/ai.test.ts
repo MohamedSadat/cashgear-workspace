@@ -76,6 +76,7 @@ function fakeApi(script: (request: AiCompleteRequest) => AiEvent[], gate?: Promi
     model: 'claude-opus-5-5',
     models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
     hasKey: true,
+    keySource: 'own',
   };
   const api: AiApi = {
     settings: async () => settings,
@@ -386,7 +387,13 @@ describe('when AI is offered', () => {
   const ready = { signedIn: true, synced: true, role: 'member', online: true };
   const on = {
     status: 'ready' as const,
-    settings: { enabled: true, provider: 'anthropic' as const, model: 'm', models: [] },
+    settings: {
+      enabled: true,
+      provider: 'anthropic' as const,
+      model: 'm',
+      models: [],
+      keySource: 'own' as const,
+    },
   };
 
   it('needs an account, a synced workspace, no guest, a network and AI on', () => {
@@ -730,5 +737,49 @@ describe('the AI panel', () => {
     );
     expect(container.querySelector('input[type="radio"]')).toBeNull();
     editor.destroy();
+  });
+});
+
+describe('Cash Gear’s subscription and the local model in the settings (Phase 13)', () => {
+  it('reads where each key comes from, the month’s allowance and the local model', async () => {
+    const { settingsOf } = await import('./api');
+    const read = settingsOf({
+      enabled: true,
+      provider: 'anthropic',
+      model: 'claude-opus-5-5',
+      models: ['claude-opus-5-5'],
+      keySource: 'subscription',
+      subscription: { month: '2026-11', allowance: '50000', used: 1200, reserved: '400' },
+      embeddings: {
+        enabled: true,
+        provider: 'local',
+        model: 'voyage-4-nano',
+        models: ['voyage-4', 'voyage-4-nano'],
+        keySource: 'own',
+      },
+    } as never);
+    expect(read.keySource).toBe('subscription');
+    expect(read.subscription).toEqual({
+      month: '2026-11',
+      allowance: 50000,
+      used: 1200,
+      reserved: 400,
+    });
+    expect(read.embeddings?.provider).toBe('local');
+    expect(read.embeddings?.subscription).toBeUndefined();
+    // A server before 0.13.0: the workspace's own key, no subscription.
+    const older = settingsOf({
+      enabled: false,
+      provider: 'anthropic',
+      model: 'm',
+      models: [],
+    } as never);
+    expect(older.keySource).toBe('own');
+    expect(older.subscription).toBeUndefined();
+  });
+
+  it('says a refusal past the allowance in its own words', () => {
+    expect(errorKey('ai.allowance')).toBe('aiPlan.allowance');
+    expect(errorKey('ai.limit')).toBe('ai.limit');
   });
 });

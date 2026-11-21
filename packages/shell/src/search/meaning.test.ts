@@ -51,6 +51,7 @@ const ON = {
   provider: 'voyage' as const,
   model: 'voyage-4',
   models: ['voyage-4', 'voyage-4-large', 'voyage-4-lite'],
+  keySource: 'own' as const,
 };
 const ready = (embeddings: typeof ON | undefined, completions = false): AiSettingsState => ({
   status: 'ready',
@@ -59,6 +60,7 @@ const ready = (embeddings: typeof ON | undefined, completions = false): AiSettin
     provider: 'anthropic',
     model: 'claude-opus-5-5',
     models: [],
+    keySource: 'own',
     ...(embeddings ? { embeddings } : {}),
   },
 });

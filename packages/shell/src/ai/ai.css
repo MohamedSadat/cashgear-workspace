@@ -239,3 +239,18 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--cg-accent) 12%, transparent);
 }
+
+/* Phase 13: where a part's key comes from, and where search by meaning is made. */
+.cgw-ai-sources {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.cgw-ai-sources legend {
+  padding: 0;
+  margin-block-end: 4px;
+  font-weight: 600;
+}

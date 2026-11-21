@@ -6,11 +6,14 @@ import type { Id } from '@cgw/workspace';
 import { readAiEvents } from './events';
 import {
   AiError,
+  LOCAL_EMBEDDINGS_MODEL,
   type AiCompleteRequest,
   type AiEvent,
   type AiSettings,
   type AiSettingsChange,
+  type Allowance,
   type EmbeddingsSettings,
+  type KeySource,
 } from './types';
 
 /** What the AI client needs of the server; tests give their own. */
@@ -28,10 +31,15 @@ export interface AiApi {
 async function failure(error: unknown, response?: Response, body?: unknown): Promise<AiError> {
   if (error instanceof AiError) return error;
   if (response) {
-    const read = body as { code?: unknown } | null | undefined;
+    const read = body as { code?: unknown; reason?: unknown } | null | undefined;
     const problem =
       typeof read?.code === 'string'
-        ? { code: read.code, status: response.status }
+        ? {
+            // Phase 13: a workspace past its allowance on Cash Gear's subscription is its own case.
+            code:
+              read.code === 'ai.limit' && read.reason === 'allowance' ? 'ai.allowance' : read.code,
+            status: response.status,
+          }
         : await problemOf(response);
     const retry = Number(response.headers.get('Retry-After'));
     return new AiError(
@@ -51,16 +59,32 @@ const count = (value: number | string | undefined | null) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const sourceOf = (value: unknown): KeySource => (value === 'subscription' ? 'subscription' : 'own');
+
+/** Phase 13: a month on the subscription, counts as numbers; absent when not offered. */
+function allowanceOf(dto: Schemas['AllowanceDto'] | null | undefined): Allowance | null {
+  if (!dto) return null;
+  return {
+    month: dto.month,
+    allowance: count(dto.allowance),
+    used: count(dto.used),
+    reserved: count(dto.reserved),
+  };
+}
+
 /** Phase 10: search by meaning's settings as the contract's; null from a server before it. */
 export function embeddingsOf(
   dto: Schemas['EmbeddingsSettingsDto'] | null | undefined,
 ): EmbeddingsSettings | null {
   if (!dto) return null;
+  const subscription = allowanceOf(dto.subscription);
   return {
     enabled: dto.enabled,
-    provider: 'voyage',
+    provider: dto.model === LOCAL_EMBEDDINGS_MODEL ? 'local' : 'voyage',
     model: dto.model,
     models: dto.models,
+    keySource: sourceOf(dto.keySource),
+    ...(subscription ? { subscription } : {}),
     ...(dto.hasKey === undefined || dto.hasKey === null ? {} : { hasKey: dto.hasKey }),
     ...(dto.keySetAt === undefined ? {} : { keySetAt: dto.keySetAt }),
     ...(dto.keySetBy === undefined ? {} : { keySetBy: dto.keySetBy }),
@@ -82,11 +106,14 @@ export function embeddingsOf(
 /** The server's settings as the contract's (counts as numbers, absent fields as absent). */
 export function settingsOf(dto: Schemas['AiSettingsDto']): AiSettings {
   const embeddings = embeddingsOf(dto.embeddings);
+  const subscription = allowanceOf(dto.subscription);
   return {
     enabled: dto.enabled,
     provider: 'anthropic',
     model: dto.model,
     models: dto.models,
+    keySource: sourceOf(dto.keySource),
+    ...(subscription ? { subscription } : {}),
     ...(dto.hasKey === undefined || dto.hasKey === null ? {} : { hasKey: dto.hasKey }),
     ...(dto.keySetAt === undefined ? {} : { keySetAt: dto.keySetAt }),
     ...(dto.keySetBy === undefined ? {} : { keySetBy: dto.keySetBy }),
