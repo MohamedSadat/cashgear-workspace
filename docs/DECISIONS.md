@@ -1638,6 +1638,7 @@ ONNX build (one community int8 conversion exists).
 | A reservation's estimate | The input's characters halved, plus the output limit (a batch of chunks: their characters halved) | Tokens are never fewer than a character in two for English or Arabic text; an estimate too high only holds room for a moment |
 | Settings while pages are embedded | Read again when Settings opens and every 5 s while pages wait | The month's use and the progress move without a reload, and nothing is asked when nothing waits |
 | "Stop network" | Approves no host (`approvedHosts: []`), at once; the manifest's hosts then wait as an update's new ones do | One switch an owner can reach for, kept apart from turning the plugin off |
+| CI's Windows job's limit, and a kill test that stops | The job's limit 180 minutes (from 150), each kill test step's 20; `kill-test.mjs` ends the app when a run makes no progress for 5 minutes (`--stuck-minutes`), so the run fails saying where it stopped, and ends the test if it is still stopped after that | The job took 128 minutes before Phase 13, whose specs and budgets add about 12; run 44934797669's desktop kill test printed nothing for 48 minutes until the limit, and the same build passed it here in 2 |
 
 ### The spike (M13.4): results, and what they decided
 

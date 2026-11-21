@@ -164,7 +164,8 @@ function kill(child) {
         '-Command',
         `$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CommandLine; function Kids($id) { foreach ($p in $all) { if ($p.ParentProcessId -eq $id -and $p.ProcessId -ne $id) { $p.ProcessId; Kids $p.ProcessId } } }; @(Kids ${child.pid}) + @($all | Where-Object { $_.CommandLine -like '*${tag}*' -and $_.ProcessId -ne $PID } | ForEach-Object { $_.ProcessId }) | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }`,
       ],
-      { windowsHide: true, stdio: 'ignore' },
+      // Bounded: a call that blocks never lets the watchdog run.
+      { windowsHide: true, stdio: 'ignore', timeout: 120000 },
     );
   else killTree(child.pid);
 }
@@ -190,7 +191,7 @@ function sweep() {
       '-Command',
       `for ($i = 0; $i -lt 100; $i++) { $left = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${tag}*' -and $_.ProcessId -ne $PID }); if ($left.Count -eq 0) { break }; $left | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 200 }`,
     ],
-    { windowsHide: true, stdio: 'ignore' },
+    { windowsHide: true, stdio: 'ignore', timeout: 120000 },
   );
 }
 
@@ -411,6 +412,7 @@ function watchDesktopStore(page, app) {
 /** Starts the app on the profile and returns a page attached over CDP, the probe in place. */
 async function launch({ blocked = false } = {}) {
   // Nothing of the last start left to join (sweep).
+  step('starting the app');
   sweep();
   const port = await freePort();
   let child;
@@ -448,12 +450,14 @@ async function launch({ blocked = false } = {}) {
       stdio: 'ignore',
     });
   }
+  current = { child };
   try {
     await waitFor(`http://127.0.0.1:${port}/json/version`, 45000);
   } catch (error) {
     killTree(child.pid);
     throw error;
   }
+  step('attaching to the app');
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
   const context = browser.contexts()[0];
   let page = context.pages().find((p) => p.url().startsWith('http')) ?? context.pages()[0];
@@ -576,6 +580,8 @@ async function launch({ blocked = false } = {}) {
     await page.waitForFunction(() => location.href.startsWith('http'), null, { timeout: 30000 });
     await page.evaluate(probe);
   }
+  current = app;
+  step('the app started');
   return app;
 }
 
@@ -718,6 +724,7 @@ async function serverHolds(after) {
  * its whole time.
  */
 async function serverCheck(app, run) {
+  step('waiting to be synced');
   const begun = Date.now();
   let now = await read(app.page);
   while (!(now.sync === 'Synced' && now.state === 'saved')) {
@@ -730,6 +737,7 @@ async function serverCheck(app, run) {
   }
   const syncedAfterMs = Date.now() - begun;
   const device = await blockTexts(app.page);
+  step('comparing with the server');
   const compared = Date.now();
   let server;
   for (;;) {
@@ -1027,6 +1035,31 @@ function leveldbDrops() {
 /** The page's id, from the address of the open page. */
 const openPageId = (page) => new URL(page.url()).hash.match(/#\/p\/([0-9a-f-]{36})/)?.[1] ?? null;
 
+// A run that stops moving (a call into the app that never answers) ends the app, so the calls
+// fail and the run is a failure that says where it stopped; still stopped after that, the test
+// ends. CI run 44934797669: the desktop test printed nothing for 48 minutes, until the job's
+// limit, and passed here in 2. `--stuck-minutes` (5).
+const stuckMs = Number(arg('stuck-minutes', 5)) * 60000;
+const stage = { run: null, what: 'setting up', at: Date.now(), ended: false };
+const step = (what) => Object.assign(stage, { what, at: Date.now(), ended: false });
+// The app started last (from its spawn), which the watchdog ends.
+let current = null;
+const watchdog = setInterval(() => {
+  const idle = Date.now() - stage.at;
+  if (!current || idle < stuckMs) return;
+  console.log(`STUCK: run ${stage.run ?? '-'}, ${stage.what}, ${Math.round(idle / 1000)} s`);
+  if (stage.ended) {
+    console.log('Still stuck after the app was ended: the test stops.');
+    console.log(JSON.stringify({ ...results, failures: results.failures.slice(0, 3) }, null, 2));
+    process.exit(1);
+  }
+  current.stuck = stage.what;
+  killTree(current.child.pid);
+  sweep();
+  Object.assign(stage, { at: Date.now(), ended: true });
+}, 15000);
+watchdog.unref();
+
 let offlineLeft = 0;
 let reported = 0;
 let lastKill = null;
@@ -1038,6 +1071,7 @@ try {
   if (target === 'web') await ensurePreview();
   if (sync) await setUpSync();
   for (let run = 0; run < runs; run++) {
+    stage.run = run;
     // The network for this run (sync mode): cut off from the start for one to three runs, or lost
     // while typing, else there.
     let network = 'online';
@@ -1121,6 +1155,7 @@ try {
       }
     };
     try {
+      step('opening the page');
       if (!sync && run === 0) {
         await page.getByRole('button', { name: 'Create workspace' }).click();
         await newKillPage(page);
@@ -1287,6 +1322,7 @@ try {
           await app.block(true);
           network = 'cut off';
         }
+        step('typing');
         const word = words[random(words.length)] + ' ';
         typed += word;
         await page.keyboard.type(word, { delay: random(3) ? 0 : 20 });
@@ -1315,6 +1351,7 @@ try {
     } catch (error) {
       // After a kill the page's calls fail: that is the kill, not a failure.
       if (!killed) {
+        step('reporting a failure');
         // What the window showed, for the report.
         const shot = join(root, `bench/results/kill-error-${target}-${run}.png`);
         await page.screenshot({ path: shot }).catch(() => {});
@@ -1323,7 +1360,7 @@ try {
           .catch(() => '');
         results.failures.push({
           run,
-          error: String(error).slice(0, 400),
+          error: (app.stuck ? `stuck ${app.stuck}: ` : '') + String(error).slice(0, 400),
           screen: screen.slice(0, 600).replace(/\s+/g, ' '),
           before: lastKill,
           // A store Chrome found corrupt and deleted opens on the first-run screen, so the run
@@ -1334,6 +1371,7 @@ try {
         if (results.failures.length > 5) break;
       }
     }
+    step('closing the app');
     await app.browser.close().catch(() => {});
     results.runs = run + 1;
     for (const failure of results.failures.slice(reported)) {
@@ -1361,8 +1399,10 @@ try {
       results.compaction[await compactionOutcome(null, pendingCompaction.covers)]++;
       pendingCompaction = null;
     }
+    stage.run = 'final';
     const app = await launch();
     try {
+      step('the last check');
       await app.page.getByRole('treeitem', { name: /Kill test/ }).click({ timeout: 30000 });
       await app.page.locator('.cgw-editor').waitFor({ timeout: 30000 });
       if (pendingCompaction) {
@@ -1388,12 +1428,14 @@ try {
         await sleep(1500);
       }
     } catch (error) {
-      results.failures.push({ run: 'final', error: String(error).slice(0, 400) });
+      const stuck = app.stuck ? `stuck ${app.stuck}: ` : '';
+      results.failures.push({ run: 'final', error: stuck + String(error).slice(0, 400) });
     } finally {
       await close(app);
     }
   }
 } finally {
+  clearInterval(watchdog);
   for (const child of started.reverse()) killTree(child.pid);
   await signer?.close().catch(() => {});
   await api?.dispose().catch(() => {});

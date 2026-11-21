@@ -155,7 +155,7 @@ jobs:
   windows:
     name: Build and test (Windows)
     runs-on: windows-latest
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -235,17 +235,20 @@ jobs:
       # process at once sometimes loses a whole session's IndexedDB writes in Chrome itself
       # (scripts/kill-test.mjs, --kill); the desktop's kill is the immediate one.
       - name: Kill test (Chrome, IndexedDB)
+        timeout-minutes: 20
         run: node scripts/kill-test.mjs --target web --runs 25 --kill tree
       - run: pnpm --filter @cgw/desktop build
       - run: pnpm desktop:smoke
       # The exit criteria's specs again, on the built desktop app over CDP.
       - run: pnpm test:e2e:desktop
       - name: Kill test (desktop, SQLite)
+        timeout-minutes: 20
         run: node scripts/kill-test.mjs --target desktop --runs 25
       # Phase 3 (M3.5): kills during a store migration (the v1 and v2 fixtures; 10 runs, many
       # locally), then kills during sync on both targets against one server stack started here
       # and kept for the benchmarks below (25 runs each; 1,000 locally for the exit criterion).
       - name: Kill test during a store migration (desktop, the v1 and v2 fixtures)
+        timeout-minutes: 20
         run: node scripts/kill-migration.mjs --runs 10
       - name: Server stack for the Phase 3 runs and the benchmarks
         shell: pwsh
@@ -259,8 +262,10 @@ jobs:
           Get-Content bench/results/server-stack.log -Tail 50
           exit 1
       - name: Kill test during sync (Chrome, IndexedDB, signed in)
+        timeout-minutes: 20
         run: node scripts/kill-test.mjs --target web --sync --runs 25 --check-every 10 --kill tree
       - name: Kill test during sync (desktop, SQLite, signed in)
+        timeout-minutes: 20
         run: node scripts/kill-test.mjs --target desktop --sync --runs 25 --check-every 10
       # Phase 0's harnesses, kept (bench/README.md). pnpm test above already ran the S1 fuzz,
       # the S1 scenarios, the S2 gate and the Yjs pending test; cargo test ran S7's server side.
