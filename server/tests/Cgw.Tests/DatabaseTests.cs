@@ -62,7 +62,7 @@ public sealed class DatabaseTests(ServerFixture server)
         return id;
     }
 
-    private static async Task<JsonElement> NewRow(Ws ws, Guid database, string title, object? values = null, string orderKey = "a0", HttpClient? client = null)
+    public static async Task<JsonElement> NewRow(Ws ws, Guid database, string title, object? values = null, string orderKey = "a0", HttpClient? client = null)
     {
         var id = Guid.CreateVersion7();
         var page = await ws.Tree();
@@ -75,10 +75,10 @@ public sealed class DatabaseTests(ServerFixture server)
         return result.GetProperty("entity").GetProperty("row");
     }
 
-    private static async Task<JsonElement> RowUpdate(Ws ws, Guid row, object values, HttpClient? client = null) =>
+    public static async Task<JsonElement> RowUpdate(Ws ws, Guid row, object values, HttpClient? client = null) =>
         (await ws.Push(client ?? ws.Client, ws.Op("row.update", row, new { values })))[0];
 
-    private static async Task<JsonElement> DbUpdate(Ws ws, Guid database, JsonArray properties, string[]? order = null, HttpClient? client = null)
+    public static async Task<JsonElement> DbUpdate(Ws ws, Guid database, JsonArray properties, string[]? order = null, HttpClient? client = null)
     {
         var payload = new JsonObject { ["properties"] = properties };
         if (order is not null) payload["order"] = new JsonArray(order.Select(o => (JsonNode?)JsonValue.Create(o)).ToArray());

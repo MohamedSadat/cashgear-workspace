@@ -903,6 +903,8 @@ public sealed class PageEmbedding : ITenantOwned
     public long TextVersion { get; set; }
     /// <summary>The page's metadata version embedded (<see cref="Page.Version"/>: its title's changes raise it).</summary>
     public long PageVersion { get; set; }
+    /// <summary>Phase 13: a row's database's version when its values were embedded (0 for a page): a property renamed, added or removed embeds its rows again.</summary>
+    public long SchemaVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 

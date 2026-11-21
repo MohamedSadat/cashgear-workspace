@@ -22,7 +22,11 @@ namespace Cgw.Worker.Jobs;
 /// a page's vectors writes an <c>EmbeddingChanges</c> row in its transaction, under the settings
 /// row's lock, after checking embeddings are still on at that generation. A provider failure backs
 /// the workspace off for 1, 5, then 30 minutes. Metered (<c>embed</c>, no person), never audited.
-/// Comments, workbooks, database property values and ERP data are never read.
+/// Comments, workbooks and ERP data are never read. Phase 13 (M13.3): a row's property values are,
+/// as <see cref="EmbeddingValues"/> chooses them, before its own text; its vectors are kept by its
+/// database's version too, so a property renamed, added or removed embeds its rows again (a chunk
+/// whose text did not change keeps its vector, with no call), and a formula's or rollup's result that
+/// changes raises the row's version as any value does.
 /// </summary>
 public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, EmbeddingsOptions options, TimeProvider clock, ILogger<EmbedJob> logger) : IJob
 {
@@ -84,6 +88,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         // Between full passes: what changed since the last pass began, less the settle time and a minute (clocks).
         DateTimeOffset? since = full ? null : mark.LastPass - options.Settle - TimeSpan.FromMinutes(1);
         var vectors = db.PageEmbeddings;
+        var databases = db.Databases;
 
         // 1. Vectors of pages trashed, deleted or gone.
         const int GoneAPass = 500;
@@ -98,7 +103,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
                 .Where(e => !pages.Any(p => p.Id == e.PageId && p.TrashedAt == null && p.DeletedAt == null))
                 .Select(e => e.PageId).Distinct().OrderBy(id => id).Take(GoneAPass).ToListAsync(ct);
         }
-        if (gone.Count > 0 && !await WriteAsync(db, settings, gone.Select(id => new Planned(id, null, 0, 0)).ToList(), ct)) return false;
+        if (gone.Count > 0 && !await WriteAsync(db, settings, gone.Select(id => new Planned(id, null, 0, 0, 0)).ToList(), ct)) return false;
 
         // 2. Pages whose vectors are missing or not of their current title and text, settled and derived.
         var settled = started - options.Settle;
@@ -110,11 +115,14 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
                 from d in dj.DefaultIfEmpty()
                 // The derive has caught up (or the page has no document) and has been still for the settle time.
                 where (p.DocHeadSeq == 0 && d == null) || (d != null && d.UpToSeq >= p.DocHeadSeq && d.UpdatedAt <= settled)
+                // A row's database changed (its properties, or its results recomputed) since: its rows are looked at.
                 where since == null || p.UpdatedAt >= since || (d != null && d.UpdatedAt >= since)
+                    || (p.Kind == PageKinds.Row && databases.Any(x => x.PageId == p.ParentPageId && x.UpdatedAt >= since))
                 let textVersion = d == null ? 0L : d.UpToSeq
-                where !vectors.Any(e => e.PageId == p.Id && e.Model == model && e.Chunk == 0 && e.PageVersion == p.Version && e.TextVersion == textVersion)
+                let schemaVersion = p.Kind == PageKinds.Row ? databases.Where(x => x.PageId == p.ParentPageId).Select(x => x.Version).FirstOrDefault() : 0L
+                where !vectors.Any(e => e.PageId == p.Id && e.Model == model && e.Chunk == 0 && e.PageVersion == p.Version && e.TextVersion == textVersion && e.SchemaVersion == schemaVersion)
                 orderby p.Id
-                select new { p.Id, p.Title, p.Version, TextVersion = textVersion })
+                select new { p.Id, p.Title, p.Version, p.Kind, TextVersion = textVersion, SchemaVersion = schemaVersion })
             .Take(PagesAPass)
             .ToListAsync(ct);
         // A pass that saw everything due moves the mark on; one cut short goes again from the same mark.
@@ -132,6 +140,8 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         var ids = candidates.Select(c => c.Id).ToList();
         var texts = await db.PageDocDerived.AsNoTracking().Where(d => ids.Contains(d.PageId))
             .Select(d => new { d.PageId, d.PlainText }).ToDictionaryAsync(d => d.PageId, d => d.PlainText, ct);
+        // Rows' values (Phase 13), read with the rows as they are now.
+        var values = await EmbeddingValues.ForRowsAsync(db, candidates.Where(c => c.Kind == PageKinds.Row).Select(c => c.Id).ToList(), ct);
         var held = (await db.PageEmbeddings.AsNoTracking().Where(e => ids.Contains(e.PageId))
                 .Select(e => new { e.PageId, e.Model, e.Chunk, e.TextHash, e.Vector }).ToListAsync(ct))
             .ToLookup(e => e.PageId);
@@ -140,11 +150,13 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         var needed = new List<(Planned Plan, int Chunk, string Text)>();
         foreach (var page in candidates)
         {
-            var chunks = EmbeddingText.Chunks(page.Title, texts.GetValueOrDefault(page.Id));
+            var own = texts.GetValueOrDefault(page.Id);
+            var body = page.Kind == PageKinds.Row && values.TryGetValue(page.Id, out var row) ? EmbeddingValues.Body(row.Text, own) : own;
+            var chunks = EmbeddingText.Chunks(page.Title, body);
             var mine = held[page.Id].ToList();
             var known = mine.Where(e => e.Model == model && e.Vector.Length > 0)
                 .GroupBy(e => Convert.ToHexString(e.TextHash)).ToDictionary(g => g.Key, g => g.First().Vector, StringComparer.Ordinal);
-            var plan = new Planned(page.Id, [], page.Version, page.TextVersion);
+            var plan = new Planned(page.Id, [], page.Version, page.TextVersion, page.SchemaVersion);
             for (var i = 0; i < chunks.Count; i++)
             {
                 var hash = EmbeddingText.Hash(chunks[i].Text);
@@ -242,8 +254,8 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
     /// <summary>A chunk as planned: its index, its text's hash, and its vector once known (empty: nothing to embed).</summary>
     private sealed record PlannedChunk(int Chunk, byte[] Hash, byte[]? Vector);
 
-    /// <summary>A page's vectors as they are to be: null chunks deletes them all.</summary>
-    private sealed record Planned(Guid PageId, List<PlannedChunk>? Chunks, long PageVersion, long TextVersion)
+    /// <summary>A page's vectors as they are to be: null chunks deletes them all. A row's <c>SchemaVersion</c> is its database's version (0 for a page).</summary>
+    private sealed record Planned(Guid PageId, List<PlannedChunk>? Chunks, long PageVersion, long TextVersion, long SchemaVersion)
     {
         public bool Unchanged { get; set; }
     }
@@ -271,10 +283,11 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
             var id = plan.PageId;
             if (plan.Chunks is not null && plan.Unchanged)
             {
-                var (pageVersion, textVersion) = (plan.PageVersion, plan.TextVersion);
+                var (pageVersion, textVersion, schemaVersion) = (plan.PageVersion, plan.TextVersion, plan.SchemaVersion);
                 await db.PageEmbeddings.Where(e => e.PageId == id).ExecuteUpdateAsync(s => s
                     .SetProperty(e => e.PageVersion, pageVersion)
-                    .SetProperty(e => e.TextVersion, textVersion), ct);
+                    .SetProperty(e => e.TextVersion, textVersion)
+                    .SetProperty(e => e.SchemaVersion, schemaVersion), ct);
                 continue;
             }
             var deleted = await db.PageEmbeddings.Where(e => e.PageId == id).ExecuteDeleteAsync(ct);
@@ -300,6 +313,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
                     Vector = chunk.Vector ?? [],
                     TextVersion = plan.TextVersion,
                     PageVersion = plan.PageVersion,
+                    SchemaVersion = plan.SchemaVersion,
                     CreatedAt = now,
                 });
             touched.Add(id);

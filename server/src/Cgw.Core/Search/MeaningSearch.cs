@@ -451,15 +451,19 @@ public sealed class MeaningSearch(CgwDb db, Access access, EmbeddingsService emb
         }
         if (passed.Count == 0) return [];
         // The best chunk's own text: the page's text cut as the worker cuts it (a chunk depends only
-        // on the text before it and 2,000 characters after, so a prefix is enough).
+        // on the text before it and 2,000 characters after, so a prefix is enough); a row's values
+        // first, as the worker embeds them (Phase 13).
         var hitIds = passed.Select(p => p.Page.Id).ToList();
         var length = (passed.Max(p => p.Candidate.Chunk) + 2) * EmbeddingText.Target;
         var texts = await db.PageDocDerived.AsNoTracking().Where(d => hitIds.Contains(d.PageId))
             .Select(d => new { d.PageId, Text = d.PlainText.Substring(0, length) })
             .ToDictionaryAsync(d => d.PageId, d => d.Text, ct);
+        var values = await EmbeddingValues.ForRowsAsync(db, passed.Where(p => p.Page.Kind == PageKinds.Row).Select(p => p.Page.Id).ToList(), ct);
         return passed.Select(p =>
         {
-            var chunks = EmbeddingText.Chunks(p.Page.Title, texts.GetValueOrDefault(p.Page.Id));
+            var text = texts.GetValueOrDefault(p.Page.Id);
+            if (values.TryGetValue(p.Page.Id, out var row)) text = EmbeddingValues.Body(row.Text, text);
+            var chunks = EmbeddingText.Chunks(p.Page.Title, text);
             var own = chunks.Count == 0 ? "" : chunks[Math.Min(p.Candidate.Chunk, chunks.Count - 1)].Own;
             Guid? databaseId = p.Page.Kind == PageKinds.Row ? p.Page.ParentPageId : null;
             return new SearchHitDto(p.Page.Id, p.Page.Title, EmbeddingText.Snippet(own), p.Candidate.Score, p.Page.Kind, databaseId);

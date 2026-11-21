@@ -1338,6 +1338,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<long>("PageVersion")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("SchemaVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<byte[]>("TextHash")
                         .IsRequired()
                         .HasMaxLength(32)
