@@ -21,11 +21,11 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 9: Publishing and views | Done, 2026-11-18 (0.9.0; the site's origin, DNS and certificate, and its install on the host are yours; Sheet's real desktop app proven on the reference machine) | `phase-9`, `v0.9.0` |
 | Phase 10: Editable Customers and Items, search by meaning, third-party plugins | Done, 2026-11-18 (0.10.0; proven against the mocks in CI and against the real ERP run locally; the plugins origin's DNS and certificate, pushing Track E8 and E9 and the ERP's tenant script are yours; Voyage proven live) | `phase-10`, `v0.10.0` |
 | Phase 11: Sign-in and permissions | Done, 2026-11-19 (0.11.0; proven against the mock OpenID Connect provider and Chrome's and Edge's virtual authenticators; a live check with a real provider and a real authenticator, and installing it with the passkeys' domain, are yours) | `phase-11`, `v0.11.0` |
-| Phase 12: Databases and ERP at scale | Planned 2026-11-19 | |
+| Phase 12: Databases and ERP at scale | Done, 2026-11-20 (0.12.0; proven against the mocks in CI and against the real ERP on LocalDB; the three screen readers by hand, from `SCREEN_READERS.md`, are yours) | `phase-12`, `v0.12.0` |
 | Phase 13: AI and plugins | Planned 2026-11-19 | |
-| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `0490cbd` | |
+| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `9f5a208` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
-| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), committed there and not pushed | |
+| Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), E10 and E11 (2026-11-20); its `main` pushed on your word to `98deed36` | |
 
 ## Planning
 
@@ -1418,6 +1418,112 @@ Benchmarks (`bench/phase11.mjs` in CI's Linux server job; the CPU per push local
 | The server's CPU per push, a member in 20 groups, against 0.10.0 (median of 3 pairs) | within 10 % | — | the API 2.01 ms against 2.14 (0.94), the worker 5.32 against 5.75 (0.93); the typing windows alone 1.06 and 0.99 |
 | The initial JavaScript | 350 kB (Phase 1) | 347.6 kB | 347.6 kB |
 
+## Phase 12: Databases and ERP at scale
+
+Done 2026-11-20. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44819327210 (commit `8809e64`, all jobs green, the Windows job on its third attempt: 369 browser e2e cases passed and 14 skipped, the desktop app's 64 passed, every kill test 25 of 25, every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/44819327465 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome 157, Edge, SQL Server LocalDB 2025, Azurite) and the e2e server stack; the ERP's from its own repository on LocalDB (SQL Server 2025 Express). Answers and defaults are in `DECISIONS.md` (2026-11-19: Phase 12); the design in `DATA_MODEL.md` (`DatabaseViews`' `chart` and `viewTypes`, `erpView`'s `parameters`, pins), `ARCHITECTURE.md` (the chart view, the grid with a screen reader, report blocks), `SYNC_DESIGN.md` (the batch pull, a pinned database's rows) and `INTEGRATIONS.md` (`erp-connect.1`'s queries in SQL and its report connectors); the screen readers' script in `SCREEN_READERS.md`; what changed for users in `CHANGELOG.md` (0.12.0). Phase 13 is planned in `IMPLEMENTATION_PLAN.md`.
+
+Milestones
+
+- [x] M12.1 Chart view. Commits `c5676ac` (the server's `chart` type, `viewTypes` read as a count
+      and `ConfigKeysByTypes`, what a chart view shows on a share link and a site, `chart.hidden`,
+      one chart drawing for the block and the view), `a42a2b1` (the seventh view type, the chart's
+      arithmetic, drawing, settings and words moved into `@cgw/database` and the block drawing by
+      them, the Projects template's chart, `old-build.spec.ts`'s v0.10.0 and v0.8.0 cases)
+- [x] M12.2 Lanes. Track U19 (library `d493b4c`); commits `49e72c2` (the library's bump, R0 to R9
+      with it, its small modules in `ui-core`), `1259f87` (a bar moved to another lane by pointer and
+      keys, the lane and its dates in one `row.update`), `f46aad7` (the library's fix for report
+      blocks' two Axe failures)
+- [x] M12.3 The grid with a screen reader. Commit `99a470b` (the true total and every row's index,
+      the title as the row's header, headers named without their type, groups as a tree grid,
+      editing said; `grid-a11y.spec.ts` over Chromium's own tree; `SCREEN_READERS.md`)
+- [x] M12.4 Pins with row documents. Commits `c5676ac` (the batch pull, its `pull` window, a row's
+      level once a database), `b68684e` (a pinned database's rows' documents, the fallback to single
+      pulls, Settings → Offline's count)
+- [x] M12.5 The ERP's queries in SQL. `8d8cebe` (the contract), Track E10 (CashGear `da2fface`,
+      `832cf8da`, `037c62ab`, `596d2009`, `5e5d4726`, then Items on hand's own order `81d56922`, `bcea5743`,
+      `b0562712`, `98deed36`); commit `195b03f` (the mock ERP by 0.10.0's
+      rules with a keyset cursor and the large seed, `scale.test.ts`, "The first N of M")
+- [x] M12.6 Reports. `8d8cebe` (the report connectors written in full), Track E11 (CashGear
+      `f5342128`, `5f535071`, `af8ca124`); commits `195b03f` (the mock's three reports, the block's
+      parameters, totals and labels, `reports.test.ts`, `erp-reports.spec.ts`), `c25ea38`
+- Budgets: `2088fe5` (`bench/phase12.mjs`, CI's step), `8809e64` (Phase 4's bench finds its column
+  by the header's name, which M12.3 changed); docs `97ba521`, `ae363f2`, `b4909c6`
+
+Notes
+
+- The work ran as streams in this checkout to a written brief (the chart view, the grid, the pins,
+  the ERP's Workspace side), with Track U19 in `CashGear.React.UI` and Tracks E10 and E11 in
+  `CashGear` in sessions of their own (decisions, 2026-11-19); the parent committed, bumped the
+  library, built the lanes, ran the e2e proof and the benches. The ERP's `main` was pushed on your
+  word (`5efc473d..af8ca124`, then `af8ca124..98deed36`).
+- **A grouped table's numbers.** The plan's "group lines not counted" cannot hold in a tree grid:
+  Chromium numbers every row of a grid, raises an index not above the previous one and the count to
+  the highest, and a group must be a row. Grouped, the count and indices include the header and each
+  group's header, a row's place in its group is its `aria-posinset` of `aria-setsize`, and the true
+  total is the grid's description ("Rows: 300"); ungrouped, the count and indices are exactly the
+  query's total. The table's "New" line is no row at all (decisions, the accepted reading).
+- **Screen readers by hand are yours.** `SCREEN_READERS.md` is the script (keys and what NVDA,
+  Narrator and VoiceOver must each say). What CI checks on every run is the tree a reader is given:
+  `grid-a11y.spec.ts` reads counts, indices, places, sizes and levels from Chromium's own tree in
+  Chrome and Edge, and the live region's words. Speech cannot be read here, and there is no Mac.
+- **The initial JavaScript.** The library's bump split its new text labels, small hooks and field
+  internals into chunks of a few hundred bytes in the first screen's graph (350.5 kB of the 350
+  budget); they joined `ui-core`: 348.6 kB. The chart's and the grid's words load with them.
+- **Report blocks and Axe.** The bump brought two of the library's defects into report blocks: the
+  date field's calendar and clear buttons 15 to 17 px high (`target-size`) and the calendar's
+  heading named "Choose the month and year" without the month it shows
+  (`label-content-name-mismatch`). Fixed in the library (`9f5a208`: every button a field draws at
+  least 24 px high, no field taller; the heading named by what it shows and described by what it
+  does) and bumped (`f46aad7`).
+- **The pins' bench** held 5,000 row documents in 49 s locally, by 50 batch pulls and 10 single
+  ones (pages the cursor moved under), none limited.
+- **The chart's first open** in a fresh tab loads the drawing's chunk: 2,035 ms cold locally, tracked
+  not budgeted; the budget is the p95 of eight opens after it.
+- **Items on hand at 100,000 records** first missed its budget: 1,076 ms at p95, 0.10.0's grouping
+  of stock by item and place run once for the count and again for the page (a covering index took
+  that grouping only from about 320 to 263 ms). Its own order, with no search, filter or sort, now
+  numbers the places once, groups only for the count and reads the page item by item, the two at
+  once: 425 ms (a page of 1,000 458, after a cursor 491 to 521), with no index or schema change.
+  Where 0.10.0's answer would be the database's choice between keys stored differently on an item's
+  rows it hands back to the general path. Its searches and sorts keep the general path, about 1.3 s
+  and 3.8 s, outside the budget's first page.
+- **CI's runs before the evidence.** `b4909c6` (44780373179) failed the report blocks' Axe case
+  (the library's two defects above); `f46aad7` (44801599071) failed Phase 4's bench, which looked
+  for the column header "Notes, Text" that M12.3 renamed (`8809e64`). On `8809e64` the Windows job's
+  first attempt failed Phase 6's gate on the relay p95 alone, 512 ms of CI's 500, on an AMD EPYC
+  9V74 whose 20 editors typed 2,506 of about 3,000 keys; its second failed `realtime.spec.ts`'s two
+  typists, a key p95 of 1,072 and on the retry 1,883 ms of 1,000, the server's own relay p50 272 ms.
+  No change of Phase 12 touches the push or the hub: on `f46aad7`'s run (an EPYC 9V45) the same spec
+  read a relay p95 of 71 and 81 ms, green runs before Phase 12 read Phase 6's relay at 79.6 to
+  147.7 ms, and locally `8809e64` reads it at 78.5 ms of 150. The third attempt, on an EPYC 9V74
+  too, read the spec's relay p95 at 87 and 152 ms and Phase 6's at 160: every job green.
+- **Not tried against the real world:** the three readers by hand (yours), and the ERP's report and
+  scale cases against production data (LocalDB only, as every ERP phase; the ERP's settings point at
+  a live shared database). Production still runs 0.10.0.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A chart view draws from its database's rows in the app, on a share link and on a site; an older build that edits it keeps it a chart | Pass | `chart-view.spec.ts` (Chrome, Edge): "a chart view made in the app draws the rows as bars, a line and a pie, and follows them", "a share link draws the charts read only, by what they draw, and not one grouped by people", "a site draws the chart as a figure with its numbers, and its placeholder for one grouped by people". `old-build.spec.ts` "the v0.10.0 build edits a chart view as a table, and the server keeps it a chart with its settings" and the v0.8.0 case. Server: `ChartViewTests` (`viewTypes` as a count, the keys each build knows kept, what a link and a site read, `chart.hidden`), `SiteRendererTests` |
+| A bar moved to another lane by pointer and by keys changes its lane and dates in one edit, in both directions | Pass | `timeline.spec.ts` (Chrome, Edge): "moves a bar to another lane by pointer with its days and by the keys, both ways, in one edit each; right to left too" (down a lane two days later and back up a day earlier, then Alt+ArrowDown and Alt+ArrowUp, in English and Arabic; each one `row.update` on the wire). Unit: `TimelineView.test.ts` (the lane keys in both languages down to "No Status" and back, the lane alone written; a reader moves nothing); the library's own (U19) |
+| NVDA, Narrator and VoiceOver read a row's title, its position of the true total and the column as one moves; editing is announced | Tree: Pass. Readers: yours | `grid-a11y.spec.ts` (Chrome, Edge, Chromium's own tree): "a local table: its true total, a row’s place as one moves and jumps, the title as its header, editing said", "a table the server answers: its count is the server’s total, and a row’s index past the rows loaded is its place of it", "a grouped table is a tree grid: groups at level 1 with their state, place and count, rows at level 2 in them". By hand: `SCREEN_READERS.md` |
+| A pinned database of 5,000 rows opens every row's document offline | Pass | `offline.spec.ts` (Chrome, Edge): "a pinned database holds every row's page: they open offline, and Settings counts them"; `bench/phase12-pins.mjs` at 5,000 rows (every document on the device). Unit: `sync/pullDocs.test.ts` (the in-memory server and the HTTP client held to one suite), the engine's pins. Server: `DocsPullTests` (each page as the single route, refusals in their items, 8 MiB and `deferred`, the limit, a row's level once a database) |
+| The ERP answers a query of a 100,000-record table without reading it whole, with 0.10.0's records and order; each report reads with its parameters, as the ERP lets the user see it, and none of it is stored | Pass | Track E10's oracle on LocalDB: 330 random queries at 100,000 records a connector, 2,276 pages, every one identical to 0.10.0's (and 250 over odd text); memory a request 1.8, 2.5 and 2.0 MB at 10,000 and at 100,000 (0.10.0: 239, 775 and 563 MB). Workspace's suite against UnifiedAPI on LocalDB: `scale.test.ts` 18 passed, 2 mock-only skipped; `reports.test.ts` 34 passed, 7 skipped, with its report users; `erp-connect` 39/17, `commit` 19/7, 0 failed. `erp-reports.spec.ts` (Chrome, Edge, the mock): each report with its parameters kept, cost only for whom the ERP shows it, refused without its role, and "nothing stored: after each report is shown, none of its values is in any store, the document, its versions or search" |
+
+Also: `a11y.spec.ts` "Axe finds nothing on the chart view and its settings", "… on the grid and the tree grid, moving and editing" and "… on report blocks, their parameters, calendar and totals" (light and dark, English and Arabic); `arabic.spec.ts`'s three cases of the same. Unit: 3,782 tests in `pnpm test` (3,776 passed, 6 skipped), among them `sync/pullDocs.test.ts`, the chart's `aggregate.test.ts`, the grid's `table/a11y.test.ts`, and `scale.test.ts` and `reports.test.ts` against the mock ERP; 430 server tests (417 passed; the 11 benches and the 2 real provider calls skipped); every standing check passes.
+
+Benchmarks (`bench/phase12.mjs` in CI's Windows job; the ERP's in its repository on LocalDB)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A chart view of 50,000 rows by count, first drawn, p95 of eight opens after a first | 1 s | 42.1 ms (the first, cold, 1,289) | 124.5 ms (median 65.6; the first, cold, 2,035) |
+| Pinning a 5,000-row database until every row's document is on the device | 120 s | 44.4 s | 49.3 s |
+| The keystroke budget on another page meanwhile, work per key p95 / key to the next frame p95 | 8 ms (16 on CI) / 33 ms | 3.6 ms / 17.1 ms | 5.4 ms / 19.2 ms |
+| The ERP's first page of a 100,000-record connector at the ERP, p95 of 40 through the host | 500 ms | — | Vendors 184 ms, Customers 55, Items on hand 425 (1,934 before its follow-up, the same hour) |
+| The ERP's memory a request at 100,000 records | not growing with the table | — | 1.8 / 2.5 / 2.0 MB, the same at 10,000; Items on hand's own order about 2 MB (0.10.0: 239 / 775 / 563 MB) |
+| The initial JavaScript | 350 kB (Phase 1) | 348.7 kB | 348.6 kB |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
@@ -1441,6 +1547,7 @@ Benchmarks (`bench/phase11.mjs` in CI's Linux server job; the CPU per push local
 - [x] The follow-ups the swaps found (asked and built 2026-11-16, `ab467b7`, `f66cb07`, `2baed10`): `CgOptionPicker`'s `normalize`, `CgKanbanBoard`'s column moves, footer, paging, draft and titles, `CgMonthCalendar`'s handle and selected day, `CgTreeView`'s five, `CgFilePicker`'s folder mode, `CgSelect`, the toast's link action, and the two defects and five small gaps above
 - [x] `CgMonthCalendar`'s week cell described, not named, by `weekItems`, and the tree's row buttons out of the accessibility tree until hovered or focused (`92d9f09`, `98e4ff0`; Workspace `c3b00f0`)
 - [x] U18 A timeline (`CgTimeline`: lines and lanes on a date axis, zoom by day, week, month and quarter, pointer and keyboard moves and resizes, right to left, virtualised for 50,000 items; library `0490cbd`, pushed 2026-11-17; Workspace `0e08a62`). Left for Track U: bringing the lines to the first item of the days shown, `scrollToItem` to the top, a `startCreate`, a mark for today's line
+- [x] U19 A bar moved to another lane (`CgTimeline`'s `moveBetweenLanes`: drag onto a lane's lines or header, Alt+ArrowUp and Alt+ArrowDown, the lane in `onItemMove`'s details; library `d493b4c`, 2026-11-20, with R0 to R9; Workspace `49e72c2`, `1259f87`). Then every button a field draws at least 24 px high and the calendar's heading named by what it shows (library `9f5a208`, 2026-11-20; Workspace `f46aad7`)
 
 Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
 `claude/cashgear-react-ui-library-xq8tsz` (decisions, 2026-11-16).
@@ -1465,3 +1572,5 @@ Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
 - [x] E7 Contract suite against UnifiedAPI (`006f8c4d`, `89729d72`, local; Workspace's suite on LocalDB: 49 passed, 21 mock-only skipped, 0 failed)
 - [x] E8 Customers and Items on hand editable, one commit path for all three connectors, the audit row's record id (CashGear `f72bfd10`, `a23615b2`, `02dba6c9`, `9f89743a`, 2026-11-18, local; the tenant script `Add_WorkspaceCommitRecordId.sql`)
 - [x] E9 Workspace's suite with Phase 10's commit cases against UnifiedAPI on LocalDB: 58 passed, 24 skipped (22 mock-only, 2 for the rate-limit host), 0 failed
+- [x] E10 Queries filtered, sorted and paged in SQL with a keyset cursor, 0.10.0's answers kept, `maxRecords` enforced (CashGear `da2fface`, `832cf8da`, `037c62ab`, `596d2009`, `5e5d4726`, `81d56922` to `98deed36`, 2026-11-20, pushed on your word; LocalDB: its oracle at 100,000 records a connector, 2,276 pages identical to 0.10.0's; Workspace's `scale.test.ts` 18 passed, 2 skipped, 0 failed)
+- [x] E11 Report connectors: AP aging by vendor, stock balance on a date, trial balance (CashGear `f5342128`, `5f535071`, `af8ca124`, 2026-11-20, pushed; Workspace's `reports.test.ts` against UnifiedAPI on LocalDB with its report users: 34 passed, 7 mock-only skipped, 0 failed)

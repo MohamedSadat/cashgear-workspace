@@ -1548,3 +1548,17 @@ Built in M12.2 with Track U19 (`CashGear.React.UI` `d493b4c`, pinned 2026-11-20)
 | A bar moved to another lane | One `row.update` holding the lane's property (`null` for "No {property}") and, when its days changed too, its dates in their own forms; a move of its lane alone writes no date | The plan's one edit; a date written unchanged would be an edit of nothing |
 | Its words | "Moved {title} to {lane}: {start} to {end}." and "Moved {title} to {lane}, {start}." («نُقل {title} إلى {lane}: من {start} إلى {end}.», «نُقل {title} إلى {lane}، {start}.»); with lanes, the move hint names Alt and ArrowUp or ArrowDown («Alt مع السهم الأعلى أو الأسفل ينقله إلى المسار الذي فوقه أو تحته») | What happened, in the order the reader needs it |
 | The library's R0 to R9 in the first screen | Their text labels, small hooks and field internals (`CgUiText`, `uiLabels`, `useCgId`, `useDirection`, `useAsyncOperation`, `useControllableState`, `useDebouncedCallback`, `useFormReset`, `InputShell`, `listBox`, `validation`, `useFieldControl`) in the `ui-core` chunk (`apps/web/vite.config.ts`) | Each was a chunk of a few hundred bytes in the first screen's graph: 350.5 kB of initial JavaScript, 348.6 kB grouped |
+
+Built in Tracks E10 and E11 in the ERP (`CashGear` `da2fface` to `98deed36`, 2026-11-20; the readings
+the contract left open, each in `INTEGRATIONS.md`'s as-built paragraphs):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| A host not on SQL Server 2017 or later, or whose probe fails | 0.10.0's path in C# (the ERP's SQLite tests too) | The fold and `TRIM` the SQL path relies on are checked, not assumed |
+| Text stored with an unpaired surrogate (only a raw T-SQL script can) | Searched and matched by `equals` as stored; sorted exactly | 0.10.0 only ever saw U+FFFD for it, through SqlClient |
+| Items on hand's own order | Its own plan (places numbered once, the page item by item, the count and the page on two connections at once); the general path where an item's or a place's keys are stored differently on its rows | The first page within 500 ms with no index; 0.10.0's answer there was the database's choice |
+| Two places its order takes as one (a `NULL` and an empty location) | Broken by place number | 0.10.0 left that order to the database |
+| `maxRecords` | By the cursor's position (the matches at or before it, counted with `total` in one scan), not a count carried in it | No cursor, forged or not, reads past the first 10,000 |
+| A report's access | Each report page's roles alone, so the suite's report users are its own (`reports.test.ts` apart, its README) | The ERP's pages check no unit |
+| A report's `today` | The host's local day | The ERP keeps no company time zone |
+| `unitCost` | The page's: cost over quantity at 2 places, half away from zero, `0` at a quantity of 0 or a negative result | What the ERP's own page shows; the mock keeps 4 places and `null`, mock-only cases |

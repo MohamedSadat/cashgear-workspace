@@ -935,7 +935,7 @@ page at `maxRecords` and a cursor past it, a search's matches all containing it.
 own measure, at the ERP): the first page of a 100,000-record connector within 500 ms, the memory a
 query takes not growing with the table.
 
-As built on Workspace's side (Phase 12, M12.5; Track E10 itself is the ERP's, still to come): the
+As built on Workspace's side (Phase 12, M12.5; Track E10 itself is the ERP's, below): the
 mock ERP (`tests/mocks/erp/rules.mjs`) searches, matches and orders by 0.10.0's rules as
 `ConnectorQuery.cs` has them, read in the ERP's source and nothing run there: .NET's `Trim()` set of
 white space; `OrdinalIgnoreCase` as each UTF-16 unit's simple upper case, then ordinal; decimals by
@@ -960,6 +960,31 @@ mock only, a cursor past `maxRecords` refused and a record written between two p
 of a company holding only the large seed, seeing every field with no record rule) and
 `ERP_TEST_KEY_SCALE_ADMIN` (who links it), else it skips. The block says "the first N of M" whenever
 `total` is above the schema's `maxRecords`, for entities and reports alike.
+
+As built in the ERP (Track E10, `CashGear` `da2fface` to `5e5d4726`, then `81d56922` to `98deed36`,
+2026-11-20): `SqlConnectorQuery` plans each query in SQL on SQL Server 2017 or later (a host that is
+not, or fails the probe, keeps 0.10.0's path). No SQL collation folds case as `OrdinalIgnoreCase`
+does (SQL's `UPPER` disagrees with .NET on about 190 UTF-16 units, Turkish `ı` and long `ſ` among
+them), so a search is planned per query: each of its characters' .NET fold class becomes one value
+in SQL, and the units `UPPER` misses or would take into one are replaced first, under a binary
+collation (no diacritic, tatweel, alef form or width is folded or ignored). A probe of each tenant
+database reads `UPPER` for all 65,536 units once. Sort keys are encoded so a binary comparison is
+the fold's code-point order; Customers' credit limit (a float column) as 0.10.0 rounds it; date-times
+as instants, mapped by .NET within a daylight-saving transition's window. The cursor is
+`{v: 2, f: fingerprint, k: [sort values…, own-order values…]}` in base64url; its position (the matches
+at or before it, counted with `total` in one scan) enforces `maxRecords`. Items on hand in its own
+order, with no search, filter or sort (first pages and their cursor pages), numbers its places once
+and reads the page item by item, the count and the page at once on two connections; where 0.10.0's
+answer would be the database's choice of a value (an item's or a place's keys stored differently on
+its rows) it hands back to the general path; two places the order takes as one (a `NULL` and an
+empty location) are broken by place number. No index, table or migration. Its oracle on LocalDB
+compares every page with 0.10.0's C# path at 100,000 records a connector (330 random queries, 2,276
+pages; Items on hand's own order on 968 pages a user from page sizes 1 to 1,000). First page of 100
+through the host, p95 of 40, company Big: Vendors 184 ms, Customers 55, Items on hand 425 (a page of
+1,000: 225, 121, 458; after a cursor Items on hand 491 to 521); the memory a request about 2 MB at
+10,000 and at 100,000 (0.10.0: 239, 775 and 563 MB). Items on hand's searches and sorts take the
+general path (about 1.3 s and 3.8 s). Workspace's `scale.test.ts` against it: 18 passed, 2 skipped
+(the mock's own), none failed.
 
 ### Reports (Phase 12, Track E11)
 

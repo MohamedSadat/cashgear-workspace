@@ -3,7 +3,7 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 11 are done (0.11.0: the local-first editor; accounts, sync, sharing, server
+Status: Phases 0 to 12 are done (0.12.0: the local-first editor; accounts, sync, sharing, server
 search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
 views; Sheet workbooks embedded in pages and read-only ERP blocks; real-time editing, presence,
 comments, mentions and the inbox; editable ERP blocks for Vendors, chart and kanban plugin
@@ -18,11 +18,10 @@ item's rows share, search by meaning over Voyage AI's embeddings on the workspac
 third-party plugins in sandboxed frames from an origin of their own, `plugins.cashgearerp.com`;
 then sign-in and permissions: a workspace's groups in every access list, passkeys beside the
 password, and single sign-on through a workspace's own OpenID Connect provider for the email
-domains it proved by DNS). Phase 12 (databases and ERP at scale) is in progress: committed so far
-are the chart view, the grid read well by a screen reader, pinned databases holding their rows'
-documents through a batch pull, and report blocks with the ERP's queries at scale on Workspace's
-side (the mock and the suite); still to come are lanes on the timeline (after Track U19), Tracks
-E10 and E11 in the ERP, and the phase's proof. Phase 13 (AI and plugins) is planned in
+domains it proved by DNS; then databases and ERP at scale: the chart view, timeline bars moved
+between lanes, the grid read well by a screen reader, pinned databases holding their rows'
+documents through a batch pull, ERP report blocks, and the ERP's queries filtered, sorted and
+paged in its database by Tracks E10 and E11). Phase 13 (AI and plugins) is planned in
 `docs/IMPLEMENTATION_PLAN.md`; what could come after it is under "Later" there.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.
