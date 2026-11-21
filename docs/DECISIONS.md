@@ -1602,3 +1602,33 @@ addresses had two.
 | Whose window | `user`, `push`, `search`, `preview`, `import`, `realtime`, `ai`, `meaning`, `frames`, `pull`: the person signed in, by cookie or bearer token alike, one window on every address; a caller not signed in, the address's. `anonymous`, `signin`, `token`, `ticket`, `sheet`: the address's, whoever asks | A person's web and desktop are one person; guessing and floods from one address stay bounded by the address |
 | `/connect/authorize` and `/connect/logout` | `signin`'s 20 a minute an address, counted in the first pass, apart from the sign-in forms' 20 in the second (until now one window for both) | The two passes have their own counters; no password is typed on those two routes, and the forms keep their 20 |
 | The work before a person's window | Authentication: a cookie's or token's check (a device's state cached 15 s, a token's entries read) before the window is counted | The window cannot be the person's before the person is known; a caller without credentials costs almost nothing there |
+
+## 2026-11-21: Phase 13
+
+Sized on 2026-11-19 (`IMPLEMENTATION_PLAN.md`, Phase 13) and again before asking, against 0.12.0
+(nothing run): every build ignores a change type it does not know (`entityRecord` and `batchOf`
+drop it), so a `plugin` change needs no rule for older builds; a row's values and its stored formula
+and rollup results are JSON on `DatabaseRows`, and a recompute raises the row's `Version` but not its
+`UpdatedAt`; the plugins origin sends one CSP for every plugin. `voyage-4-nano` (`MongoDB/voyage-4-nano`
+on Hugging Face) is Apache-2.0, about 340 million parameters on Qwen3 with bidirectional attention,
+mean-pooled, 2,048 dimensions by default with Matryoshka cuts to 1,024, 512 and 256, and in
+voyage-4's embedding space; it is published as safetensors with its own model code, with no official
+ONNX build (one community int8 conversion exists).
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| A plugin's network | The https hosts its manifest names (`network: {hosts}`: at most 10 exact host names with an optional port; no wildcard, IP address or Cash Gear host), shown to and approved by the owner or admin who adds it; an update naming a new host keeps only the hosts already approved until one is approved in Settings → Plugins; a plugin that reads rows and has a network approved for both in one step, told that it can send what it is shown; each bundle served with its own CSP, `connect-src` exactly its approved hosts. `network` is an optional field of `plugin-frame.1`'s manifest, not a new contract: every reader since 0.10.0 leaves unknown fields out, so 0.12.0 serves such a plugin with no network |
+| Property values | Text, number, select, status, date, checkbox, URL and email values, as "Name: value" lines after the row's title in its own chunks; never a person, created-by or edited-by, or a formula or rollup that reads one; other formulas and rollups included, embedded again when their results change. Multi-select, phone, a relation's titles and files left out |
+| The approximate index | In the API process past 200,000 chunks a workspace, exact below; at least 0.95 of the exact search's first ten found. Each chunk's sign bits (128 bytes) scanned first, the best few thousand scored exactly from the int8 copy already held, fetching wider until enough pass the permission filter; nothing to train; kept current by `EmbeddingChanges` |
+| The local model | After the spike, `voyage-4-nano` on ONNX Runtime (MIT) in the worker and the API, on the processor, at 1,024 dimensions as int8, a third choice in Settings beside Voyage's API; vectors of its own (choosing it embeds everything again). A model package of its own, exported once from Voyage's official weights by a script here, its hashes pinned in code, copied to the host once and kept across updates (`install.ps1 -LocalModel`); never in the repository or in every deploy package. AI's local mode on the desktop stays on "Later" |
+| The subscription | Cash Gear's Anthropic and Voyage keys in the host's environment only (`Ai__Subscription__AnthropicKey`, `Ai__Subscription__VoyageKey`, set by `install.ps1` from the session as the SMTP password is); a workspace's owners or admins choose its own key or Cash Gear's, for completions and for search by meaning apart; an allowance a month per workspace in tokens (input and output alike; completions and embeddings apart), a default and per-workspace overrides set in the environment by whoever runs the server (no default: not offered); each call reserves its most before it is sent and settles after, a reservation a crash left lapsing after 15 minutes; the use shown against the allowance in Settings; past it, 429 `ai.limit` with `reason: "allowance"`, and the worker's embedding waits for the next month; no billing in 0.13.0 |
+| The spike | On the reference machine first, then once on the production host over Remote Desktop at a quiet hour (nothing installed there, its folder deleted after). Downloads, each into a folder of its own under `target/`: the official weights `MongoDB/voyage-4-nano` from Hugging Face (about 704 MB); for the one export to ONNX, a throwaway Python environment (PyTorch for the processor, Transformers 4.56 or later, ONNX Runtime's quantisation tools); for the server, `Microsoft.ML.OnnxRuntime` and `Microsoft.ML.Tokenizers` from NuGet (both MIT). The model's own code is read before it runs |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| A plugin's hosts outside Production | Also `http://localhost:<port>` and `http://127.0.0.1:<port>`, so the e2e stack's test host can be named; Production takes https only | The tests need a host they run; a plugin in production never talks plain http |
+| An allowance's month | The calendar month in UTC, as the usage totals since 0.7.0 | One month for what is shown and what is enforced |
