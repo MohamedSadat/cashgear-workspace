@@ -4,6 +4,44 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.13.0] - 2026-11-22
+
+Let a plugin reach the services it names, find database rows by what their properties say, search
+by meaning across very large workspaces or entirely on your own server, and use AI on Cash Gear's
+subscription with no key of your own.
+
+- **A plugin's network.** A plugin may name up to ten hosts it connects to. When you add it,
+  Settings → Plugins shows them (and, for a plugin that reads a database view, says it can send
+  what it is shown there), and adding it allows them; it can reach those hosts and nothing else. An
+  update naming a new host keeps it waiting until an owner or admin allows it in the plugin's row,
+  and "Stop network" cuts a plugin off at once.
+- **Plugins arrive without a reload.** A plugin added, updated, turned on or off or removed reaches
+  every open tab of the workspace straight away, and its blocks draw again.
+- **Rows found by their values.** Search by meaning now reads a row's property values as well as
+  its text: text, numbers, selects, statuses, dates, checkboxes, links and emails, and formulas and
+  rollups. A row is found by a value its text doesn't hold, and found again when the value changes.
+  Never by a person: people, created-by and edited-by, and anything worked out from them, are left
+  out.
+- **Search by meaning at scale.** A workspace past 200,000 chunks of text is searched through an
+  approximate index first: at a million chunks it still answers in about 20 ms on the server, and
+  finds what the exact search's first ten are.
+- **Search by meaning on your own server.** Where the server has the model, Settings → AI offers
+  "On this server (voyage-4-nano)": no key, and no text leaves the server for search by meaning.
+  Choosing it embeds every page again.
+- **AI on Cash Gear's subscription.** Where the server offers it, an owner or admin can choose Cash
+  Gear's subscription instead of the workspace's own key, for AI and for search by meaning apart.
+  Settings shows the month's use against the workspace's allowance; past it, AI and search by meaning
+  say so until the next month. No billing yet.
+- **Older versions.** 0.12.0 and earlier serve a plugin that names hosts with no network, and ignore
+  the plugin changes in the feed.
+- **For whoever runs the server.** Three migrations: plugins' approved hosts, a row's database
+  version on its vectors (every row of a database with search by meaning on is embedded once more,
+  now with its values), the key sources and `AiReservations`. The local model is a package of its own
+  (`node scripts/local-model.mjs`, 572 MB), placed once with `install.ps1 -LocalModel`; it takes
+  about 1 GB in each of the API and the worker while loaded. The subscription's keys come from the
+  installing session's `CGW_AI_ANTHROPIC_KEY` and `CGW_AI_VOYAGE_KEY`, its allowances from
+  `-AiMonthlyTokens` and `-AiEmbeddingsMonthlyTokens` (docs/OPERATIONS.md).
+
 ## [0.12.0] - 2026-11-20
 
 Chart a database's rows, move timeline bars between lanes, read a database's table with a screen
