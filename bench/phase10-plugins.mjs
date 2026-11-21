@@ -11,6 +11,14 @@
 // one framed, ten times on one page, a paragraph between each; typing in the paragraph in the
 // middle gives the figures. Writes bench/results/phase10-plugins.json; gated against the budgets
 // and bench/previous/phase10-plugins.json (the last run on main on the same processor).
+//
+//   node bench/phase10-plugins.mjs --network
+//
+// Phase 13's case (IMPLEMENTATION_PLAN.md, Phase 13, Performance benchmarks): the same page with ten
+// networked plugins (tests/fixtures/plugins/network, "Ping", its host allowed as it is added), each
+// frame sending to the mock host on localhost:4288 (tests/mocks/net/server.mjs, which the parent
+// starts) and writing its props back once drawn; Phase 10's budget. Writes
+// bench/results/phase13-plugins.json, figures key10NetworkedPlugins*.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -29,15 +37,31 @@ import { writePluginBundles } from '../tests/fixtures/plugins/make.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const results = join(root, 'bench/results');
-const previousFile = join(root, 'bench/previous/phase10-plugins.json');
+const previousFile = join(
+  root,
+  `bench/previous/${process.argv.includes('--network') ? 'phase13' : 'phase10'}-plugins.json`,
+);
 const log = (line) => console.log(line);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const network = process.argv.includes('--network');
+/** The plugin framed ten times: its bundle, its name in the slash menu, and its frame's sign of ready. */
+const PLUGIN = network
+  ? { bundle: 'network', name: 'Ping', ready: ['#summary', /Done/], file: 'phase13-plugins.json' }
+  : {
+      bundle: 'reference',
+      name: 'Notes',
+      ready: ['#status', /Ready|Choose/],
+      file: 'phase10-plugins.json',
+    };
+const FIGURES = network
+  ? { work: 'key10NetworkedPluginsWorkP95', frame: 'key10NetworkedPluginsFrameP95' }
+  : { work: 'key10PluginsWorkP95', frame: 'key10PluginsFrameP95' };
 
 // The keystroke budget on CI's hosted runner is a frame (bench/phase5.mjs's note, Phase 6).
 const KEY_WORK_MAX = process.env.CI ? 16 : 8;
 const BUDGETS = {
-  key10PluginsWorkP95: { max: KEY_WORK_MAX, unit: 'ms', slack: 2 },
-  key10PluginsFrameP95: { max: 33, unit: 'ms', slack: 5 },
+  [FIGURES.work]: { max: KEY_WORK_MAX, unit: 'ms', slack: 2 },
+  [FIGURES.frame]: { max: 33, unit: 'ms', slack: 5 },
 };
 
 const percentile = (values, p) => {
@@ -119,7 +143,7 @@ async function typeKeys(page, text) {
   };
 }
 
-/** Installs the reference plugin through Settings. */
+/** Installs the plugin through Settings (a networked one's host allowed as it is added). */
 async function installPlugin(page, bundle) {
   await page.goto(`${APP}/#/settings`);
   const section = page.getByTestId('plugins-settings');
@@ -131,7 +155,7 @@ async function installPlugin(page, bundle) {
   await page.getByTestId('plugins-confirm').click();
   await section
     .getByTestId('plugins-list')
-    .filter({ hasText: 'Notes' })
+    .filter({ hasText: PLUGIN.name })
     .waitFor({ timeout: 30000 });
 }
 
@@ -139,8 +163,8 @@ async function installPlugin(page, bundle) {
 async function tenPlugins(page) {
   await newPage(page, 'Ten plugins');
   for (let i = 1; i <= 10; i++) {
-    await page.keyboard.type('/Notes');
-    await page.getByRole('option', { name: 'Notes', exact: true }).waitFor();
+    await page.keyboard.type(`/${PLUGIN.name}`);
+    await page.getByRole('option', { name: PLUGIN.name, exact: true }).waitFor();
     await page.keyboard.press('Enter');
     await page
       .locator('.cgw-page [data-body="pluginBlock"] iframe')
@@ -150,14 +174,17 @@ async function tenPlugins(page) {
     await page.keyboard.press('Enter');
   }
   await saved(page);
-  // Every frame says "Ready" (its handshake done), or the figure means less than it says.
+  // Every frame says it is ready (its handshake done; a networked one, its requests answered), or
+  // the figure means less than it says.
   for (let i = 0; i < 10; i++)
     await page
       .frameLocator('.cgw-page [data-body="pluginBlock"] iframe')
       .nth(i)
-      .locator('#status')
-      .filter({ hasText: /Ready|Choose/ })
+      .locator(PLUGIN.ready[0])
+      .filter({ hasText: PLUGIN.ready[1] })
       .waitFor({ timeout: 30000 });
+  // A networked frame writes its props back once drawn: saved again before typing.
+  if (network) await saved(page);
   // Into the paragraph between the fifth and sixth frames.
   await page.getByText('Between 5 and 6.').click();
   await page.keyboard.press('End');
@@ -167,10 +194,12 @@ async function tenPlugins(page) {
 
 async function run() {
   mkdirSync(results, { recursive: true });
-  const bundle = writePluginBundles(mkdtempSync(join(tmpdir(), 'cgw-phase10-plugins-'))).reference;
+  const bundle = writePluginBundles(mkdtempSync(join(tmpdir(), 'cgw-phase10-plugins-')))[
+    PLUGIN.bundle
+  ];
   await waitFor(`${API}/health/live`, 180000);
   await waitFor(APP, 60000);
-  const account = await newAccount('Phase 10 plugins bench');
+  const account = await newAccount(network ? 'Phase 13 plugins bench' : 'Phase 10 plugins bench');
   const api = await apiSession(account);
   const browser = await chromium.launch({ channel: 'chrome' });
   const errors = [];
@@ -188,9 +217,9 @@ async function run() {
       .getByTestId('sync-status')
       .filter({ hasText: /^Synced$/ })
       .waitFor({ timeout: 120000 });
-    log('Installing the reference plugin');
+    log(`Installing the ${network ? 'networked' : 'reference'} plugin`);
     await installPlugin(page, bundle);
-    log('Typing between ten plugin frames');
+    log(`Typing between ten ${network ? 'networked ' : ''}plugin frames`);
     const keys = await tenPlugins(page);
     log(
       `  ${keys.keys} keys: work p50 ${keys.workP50} ms, p95 ${keys.workP95} ms; next frame p50 ${keys.frameP50} ms, p95 ${keys.frameP95} ms`,
@@ -205,8 +234,8 @@ async function run() {
 
 function gate(measured) {
   const figures = {
-    key10PluginsWorkP95: measured.keys.workP95,
-    key10PluginsFrameP95: measured.keys.frameP95,
+    [FIGURES.work]: measured.keys.workP95,
+    [FIGURES.frame]: measured.keys.frameP95,
   };
   let previous = null;
   try {
@@ -230,7 +259,7 @@ run().then(
   (measured) => {
     const { figures, failures } = gate(measured);
     writeFileSync(
-      join(results, 'phase10-plugins.json'),
+      join(results, PLUGIN.file),
       JSON.stringify(
         { at: new Date().toISOString(), browser: measured.browser, figures, keys: measured.keys },
         null,
@@ -238,10 +267,12 @@ run().then(
       ) + '\n',
     );
     if (failures.length) {
-      console.error('Phase 10 plugin budgets failed:\n  ' + failures.join('\n  '));
+      console.error(
+        `Phase ${network ? 13 : 10} plugin budgets failed:\n  ` + failures.join('\n  '),
+      );
       process.exit(1);
     }
-    log('Phase 10 plugin budgets met.');
+    log(`Phase ${network ? 13 : 10} plugin budgets met.`);
   },
   (error) => {
     console.error(error);

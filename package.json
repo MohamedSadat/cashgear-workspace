@@ -55,6 +55,7 @@
     "bench:phase10": "node bench/phase10.mjs",
     "bench:phase11": "node bench/phase11.mjs",
     "bench:phase12": "node bench/phase12.mjs",
+    "bench:phase13": "node bench/phase13.mjs",
     "bench:webview2-host": "cargo build -p cgw-webview2-host --release",
     "bench:sequence": "dotnet run -c Release --project bench/sequence-dotnet/S8Harness.csproj -- \"Server=(localdb)\\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true\" bench/results/s8-sequence.json",
     "bench:sheet-embed": "node bench/sheet-embed/run.mjs"
