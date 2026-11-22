@@ -55,6 +55,8 @@ public sealed class SitesProgram
         }
         builder.Services.AddCgwSites(builder.Configuration);
         builder.Services.AddHealthChecks();
+        // Phase 14: one address's pages and files a minute, before anything reads the database.
+        builder.Services.AddSiteLimits(builder.Configuration, PluginsOptions.From(builder.Configuration, builder.Environment.IsProduction()));
 
         var app = builder.Build();
         var local = app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing");
@@ -68,6 +70,7 @@ public sealed class SitesProgram
                 await context.Response.WriteAsync("Something went wrong.");
             },
         });
+        app.UseRateLimiter();
         app.UsePluginsHost(app.Services.GetRequiredService<PluginsOptions>(), hsts: !local);
         app.MapSites();
         return app;

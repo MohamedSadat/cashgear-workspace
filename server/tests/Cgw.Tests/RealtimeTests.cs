@@ -919,7 +919,7 @@ public sealed class RealtimeTests(ServerFixture server)
 /// </summary>
 internal sealed class SqlCommands : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
 {
-    private readonly System.Collections.Concurrent.ConcurrentQueue<(string Text, byte[][] Binary)> ran = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(string Text, byte[][] Binary, string[] Strings)> ran = new();
     private readonly List<IDisposable> subscriptions = [];
 
     public static SqlCommands Watch()
@@ -935,6 +935,10 @@ internal sealed class SqlCommands : IObserver<DiagnosticListener>, IObserver<Key
     public List<string> Carrying(byte[] value) =>
         ran.Where(c => c.Binary.Any(b => b.AsSpan().SequenceEqual(value))).Select(c => c.Text).ToList();
 
+    /// <summary>The same for a text parameter (Phase 14: a slug or a host name only one request asks for).</summary>
+    public List<string> Carrying(string value) =>
+        ran.Where(c => c.Strings.Contains(value, StringComparer.Ordinal)).Select(c => c.Text).ToList();
+
     void IObserver<DiagnosticListener>.OnNext(DiagnosticListener listener)
     {
         if (listener.Name != "SqlClientDiagnosticListener") return;
@@ -945,8 +949,8 @@ internal sealed class SqlCommands : IObserver<DiagnosticListener>, IObserver<Key
     {
         if (!e.Key.EndsWith("WriteCommandBefore", StringComparison.Ordinal)) return;
         if (e.Value?.GetType().GetProperty("Command")?.GetValue(e.Value) is not System.Data.Common.DbCommand command) return;
-        var binary = command.Parameters.Cast<System.Data.Common.DbParameter>().Select(p => p.Value).OfType<byte[]>().ToArray();
-        ran.Enqueue((command.CommandText, binary));
+        var values = command.Parameters.Cast<System.Data.Common.DbParameter>().Select(p => p.Value).ToList();
+        ran.Enqueue((command.CommandText, values.OfType<byte[]>().ToArray(), values.OfType<string>().ToArray()));
     }
 
     void IObserver<DiagnosticListener>.OnCompleted()

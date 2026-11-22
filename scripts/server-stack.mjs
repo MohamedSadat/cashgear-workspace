@@ -290,6 +290,8 @@ start('sites', 'dotnet', [bin('Cgw.Sites'), '--urls', `${sitesUrl};${pluginsUrl}
   Blob__ConnectionString: blob,
   Plugins__PublicUrl: pluginsUrl,
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
+  // Phase 14: every spec and bench reads the sites from one address; the limit has a test of its own.
+  ...(e2e ? { RateLimits__sites: '100000', RateLimits__sitesPlugins: '100000' } : {}),
   Logging__LogLevel__Default: 'Warning',
   Logging__LogLevel__Microsoft: 'Warning',
 });

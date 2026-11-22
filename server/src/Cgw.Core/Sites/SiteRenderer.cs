@@ -231,6 +231,22 @@ public static class SiteRenderer
         return h.ToString();
     }
 
+    /// <summary>
+    /// Phase 14: the page a reader past the Sites process's rate limit is given, in both languages:
+    /// it is answered before the site is read, so its language is not known.
+    /// </summary>
+    public static string TooMany()
+    {
+        var h = new SiteHtml();
+        h.Raw("<!doctype html>\n<html lang=\"en\" dir=\"ltr\">\n<head>\n<meta charset=\"utf-8\">\n")
+            .Raw("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"robots\" content=\"noindex\">\n")
+            .Raw("<title>Too many requests · طلبات كثيرة</title>\n<style>").Raw(SiteStyle.Css).Raw("</style>\n</head>\n<body>\n<main class=\"gone\">\n")
+            .Raw("<h1>Too many requests</h1>\n<p>This address has asked for many pages in a short time. Wait a minute, then try again.</p>\n")
+            .Raw("<div lang=\"ar\" dir=\"rtl\">\n<h2>طلبات كثيرة جدًا</h2>\n<p>طلب هذا العنوان صفحات كثيرة في وقت قصير. انتظر دقيقة، ثم حاول مرة أخرى.</p>\n</div>\n")
+            .Raw("</main>\n</body>\n</html>\n");
+        return h.ToString();
+    }
+
     // The document -------------------------------------------------------------------------------------------
 
     private sealed class Writer(SiteHtml h, SitePage page, SiteWords words, JsonElement doc)
