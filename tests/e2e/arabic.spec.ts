@@ -42,7 +42,9 @@ import {
 // from Phase 7 also the AI provider's and its models' names (Anthropic, Claude Opus 5.5), shown in
 // Settings' AI section on every screen walked there; from Phase 10 the embeddings provider's and
 // its models' names (Voyage AI, voyage-4), in the same section; from Phase 13 the model this server
-// runs itself (voyage-4-nano). The palette's "Related by meaning" group lists pages, as its others do.
+// runs itself (voyage-4-nano); from Phase 14 the example host name Settings → Publishing gives
+// (docs.example.com, `EXAMPLE_HOST`), a name in no language, shown on every screen walked there.
+// The palette's "Related by meaning" group lists pages, as its others do.
 
 /**
  * Groups whose options are what the person wrote, by their names: the palette's page results and
@@ -53,7 +55,7 @@ const OWN_GROUPS = ['الصفحات', 'الأخيرة', 'ذات صلة بالم�
 const BREADCRUMBS = 'موقع هذه الصفحة';
 
 const KEYS =
-  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite|-nano)?)\b/g;
+  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite|-nano)?|docs\.example\.com)\b/g;
 
 /**
  * What the person wrote or another system holds, beyond the main screens' own (Phase 5): names
