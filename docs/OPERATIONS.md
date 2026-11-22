@@ -403,6 +403,18 @@ chunk takes about a second at 8 threads on the reference machine, a question abo
 plugins host's CSP is now a bundle's own (`connect-src` its approved hosts, else `'none'`), and a
 plugin's request leaves the visitor's browser from the plugins origin: the server never proxies it.
 
+Version 0.14.0's migrations (`Phase14RowFiles`, `Phase14SiteDomains`, `Phase14PageCovers`) add the
+index of rows' files (`DatabaseRowFiles`), a workspace's host names and the server's ACME account
+(`SiteDomains`, `AcmeAccounts`) and an index of pages by their cover, in a transaction like the
+others. After it starts, the worker fills the index of rows' files once for every row written before
+(`rowFilesFill`, done when `JobStates` holds `rowFilesFill:done`; a few seconds for 100,000 rows),
+and the hourly asset clean-up deletes nothing until then. Install it before 2026-12-14: until 0.14.0
+a file in a row's file cell that no row's document had named was counted unreferenced, and the
+first such files, from 0.5.0's install on 2026-11-14, would be deleted 30 days after. The Sites
+process now also needs `Sites__PublicUrl`, which `install.ps1` gives it; without it every host name
+is served as the sites' own, as before. A site's own host names stay off until `install.ps1
+-CustomDomains` (above).
+
 The Sites process holds no Data Protection (as in 0.9.0) and must never be able to read the key
 ring: a process that serves the public must not be able to open a workspace's AI key's cipher (both
 keys' ciphers are in `AiSettings`, which it can read). `install.ps1` gives a built-in sites identity

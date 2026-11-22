@@ -200,6 +200,11 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasIndex(x => x.WorkspaceId).HasDatabaseName("IX_Pages_Tree")
                 .HasFilter("[Kind] <> N'row' AND [DeletedAt] IS NULL")
                 .IncludeProperties(x => new { x.ParentPageId, x.SectionId, x.Restricted });
+            // Phase 14: a page by its cover (a site's and share link's file check, a member's read
+            // of a file, the clean-up), a seek where a database of 50,000 rows was read whole.
+            e.HasIndex(x => x.CoverAssetId).HasDatabaseName("IX_Pages_Cover")
+                .HasFilter("[CoverAssetId] IS NOT NULL")
+                .IncludeProperties(x => new { x.WorkspaceId, x.Kind, x.ParentPageId, x.DeletedAt, x.TrashedAt, x.IsTemplate });
         });
         b.Entity<WorkspaceDatabase>(e =>
         {

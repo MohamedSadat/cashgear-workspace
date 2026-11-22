@@ -1174,6 +1174,12 @@ namespace Cgw.Core.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CoverAssetId")
+                        .HasDatabaseName("IX_Pages_Cover")
+                        .HasFilter("[CoverAssetId] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("CoverAssetId"), new[] { "WorkspaceId", "Kind", "ParentPageId", "DeletedAt", "TrashedAt", "IsTemplate" });
+
                     b.HasIndex("DeletedAt")
                         .HasFilter("[DeletedAt] IS NOT NULL AND [PurgedAt] IS NULL");
 
