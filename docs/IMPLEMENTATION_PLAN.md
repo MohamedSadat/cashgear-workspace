@@ -1,8 +1,8 @@
 # Cash Gear Workspace: implementation plan
 
 > Approved for planning on 2026-11-11. Phases 8 to 10 added on 2026-11-15, chosen from "Later"
-> after 0.7.0. Phases 11 to 13 added on 2026-11-19, from the themes chosen after 0.10.0. No phase
-> starts until you say so.
+> after 0.7.0. Phases 11 to 13 added on 2026-11-19, from the themes chosen after 0.10.0. Phases 14
+> and 15 added on 2026-11-22, from the themes chosen after 0.13.0. No phase starts until you say so.
 
 ## Context
 
@@ -76,6 +76,8 @@ benchmarks run in CI on every push to `main`.
 | 11 | Sign-in and permissions: groups, passkeys, single sign-on | `v0.11.0` |
 | 12 | Databases and ERP at scale: a chart view, lanes on the timeline, the grid with a screen reader, row documents in pins, ERP reports, the ERP's queries paged in SQL | `v0.12.0` |
 | 13 | AI and plugins: a plugin's own network, plugins in the change feed, property values by meaning, an approximate index, a local embedding model, AI by subscription | `v0.13.0` |
+| 14 | Publishing: a site at its workspace's own domain, publishing changes in the change feed, a rate limit in the Sites process, an index of rows' files | `v0.14.0` |
+| 15 | AI, further: completions on a local model, billing for Cash Gear's subscription | `v0.15.0` |
 
 Changes from the brief's suggested phases, and why:
 
@@ -88,6 +90,9 @@ Changes from the brief's suggested phases, and why:
 - Phases 11 to 13 are the four themes chosen on 2026-11-18, after 0.10.0, sized against the code
   on 2026-11-19 and proposed as three releases: about two of Phase 10 in all, with the riskiest
   change to the server's core (who may read what) first, before more is built on it.
+- Phases 14 and 15 are the two themes chosen on 2026-11-22, after 0.13.0, sized against the code
+  the same day and proposed as two releases: publishing first, as it is smaller and its host work
+  (DNS, a binding, a certificate's terms) is yours early; AI second, behind its spike.
 
 ## Track U: missing components in `CashGear.React.UI`
 
@@ -1943,19 +1948,236 @@ the host today, and the question is embedded in the API, so a local model loads 
 
 ---
 
+## Phase 14: Publishing
+
+**Goals**
+
+A published site at a domain its workspace owns; publishing changes that reach an open tab; a Sites
+process that bounds what one address may ask of it; files on sites, on share links and in members'
+reads found by an index of rows' files rather than by a scan.
+
+**Dependencies**
+
+Phase 9's Sites process and Phase 11's proof of a domain by DNS. A spike on the production host
+before M14.4's certificates: its IIS bindings read, and one catch-all binding tried on a scratch site.
+A test host name of yours, and Let's Encrypt's subscriber agreement, which are yours to give.
+
+Sized on 2026-11-22, against 0.13.0 (nothing run):
+
+- **Custom domains.** The Sites process routes by path only (`/{slug}`, `/{slug}/{pageId}`,
+  `/{slug}/files/{assetId}`); the renderer writes every link under `/{slug}` (`PageUrl`, `FileUrl`
+  and three direct uses), and a page's cache key holds the site. A site at its own host name is a
+  second way to the same `SiteState`, with links from `/`. Proving a name by DNS exists (Phase 11's
+  `cgw-verify=` `TXT` record through DnsClient, `ISsoDns`, and the mock's DNS stand-in). Nothing on
+  the host makes certificates: the `*.cashgearerp.com` certificate is bound by SNI to three names,
+  and IIS takes a binding for another name only from an administrator, unless one catch-all binding
+  over IIS's Centralized Certificate Store serves every name; whether the host's other sites on 443
+  and 80 allow that is what the spike finds. In development a site's host can be any `*.localhost`
+  name, which Chrome sends to the loopback address, so the e2e stack needs no DNS.
+- **The change feed.** Publishing writes no change; the share dialog and Settings read the routes
+  when they open. Phase 13's `plugin` change is the pattern: every build ignores a type it does not
+  know (`entityRecord` and `batchOf` drop it).
+- **The rate limit.** The Sites process has no limiter (an unknown slug is remembered 5 s); the
+  API's (`Http.cs`) is a fixed window per partition in process. IIS runs both in process, so the
+  client's address is the connection's.
+- **Row files.** A site's or share link's file check (`SharedDatabases.ShowsFileAsync`) is
+  `Values LIKE '%<id>%'` over the scope's databases' rows. Found while sizing, by reading (a test
+  confirms it first): a file in a row's file cell is in `AssetRefs` only once the row's own document
+  is derived (`DocJobs.RowFilesAsync`, run only for a page with a document and only when it changes).
+  Until then a member other than its uploader cannot read it (`AssetService.CanReadAsync`), and the
+  hourly clean-up marks it unreferenced and deletes it 30 days after; blob soft delete keeps its
+  bytes 30 days more. Production has held rows' files since 0.5.0 (2026-11-14), so the first could
+  go from 2026-12-14.
+- **The budget.** The initial JavaScript is 349.5 kB of 350. What the first screen gains is the
+  engine's `site` event (a case and an event kind); the domain screens are in Settings and the share
+  dialog's publish view, both loaded later, with their words in sections (`i18n/sections.ts`);
+  measured after every change (`bench/phase1.mjs`'s `initialJs`).
+- **CI.** The Windows job takes about 110 of its 180 minutes; the phase's specs (a site at a
+  `*.localhost` host, the feed, the limit) add a few minutes in Chrome and Edge.
+
+**Questions for you (one batch)**
+
+- How the themes split (default: two releases, this phase and Phase 15, AI further).
+- Certificates for a site's domain (default, after the spike: made by the worker by ACME from Let's
+  Encrypt, the HTTP-01 challenge answered by the Sites process, kept in IIS's Centralized
+  Certificate Store and renewed 30 days before they end, behind one catch-all binding on the sites'
+  site added once by `install.ps1`; if the spike finds the host cannot take that binding, an
+  administrator's step per domain by a script).
+- Who adds a domain (default: owners and admins prove a host name for the workspace by a DNS `TXT`
+  record, as single sign-on's domains; whoever may publish a site chooses one of them for it; one
+  site a host name).
+- The spike and a test domain (default: on the production host over Remote Desktop at a quiet hour,
+  with your sign-in: its bindings read, the catch-all tried on a scratch site and removed; a host
+  name of yours outside `*.cashgearerp.com`; Let's Encrypt's staging environment first).
+
+Proposed defaults, logged with the answers: a domain serves the site's root at `/`, its pages at
+`/<pageId>`, files at `/files/<assetId>` and a `robots.txt` of its own, and the slug's address
+redirects there (302) once the certificate is live; the Sites process allows one address 300
+requests a minute for pages and files on any site (the plugins host 1,200), answering 429 with
+`Retry-After`, `robots.txt`, health and ACME's challenges outside it; a `site` change goes to whoever
+can read the site's root page, a domain's to owners and admins.
+
+**Tasks**
+
+*M14.1 Row files*
+
+- [ ] A test that shows the defect above, then `DatabaseRowFiles` (a row, a property, an asset)
+      written in the same statements as a row's values on every server path (`RowStore`'s writes,
+      `DatabaseOps`, the tree's), and filled for existing rows by a worker job once.
+- [ ] A row's file readable by whoever can read its row; the clean-up counts it as held; the site's
+      and share link's check by the index, still only for a property some view shows.
+
+*M14.2 Publishing in the change feed*
+
+- [ ] A `site` change for each publish, change and unpublish (whatever the reason: a person, the
+      switch, the purge) and for a domain's changes; the engine's `sites` event; the share dialog's
+      publish view and Settings → Publishing read again; older builds ignore the type.
+
+*M14.3 A rate limit in the Sites process*
+
+- [ ] Per address on every host the process answers, before anything reads the database; 429 with
+      `Retry-After` and a page in the site's language.
+
+*M14.4 Custom domains*
+
+- [ ] The spike, on the host.
+- [ ] A workspace's host names, proven by DNS and checked again before each renewal; one attached
+      to a site by whoever may publish it (the share dialog's publish view); Settings → Publishing's
+      domains for owners and admins; audit.
+- [ ] The Sites process by host name: a domain's site from `/`, its links, files, cache keys and
+      `robots.txt`; the slug's redirect; a host it does not know, the 404 page.
+- [ ] Certificates as answered: an ACME client in the worker (account, order, HTTP-01, a CSR by
+      .NET's `CertificateRequest`), the challenge answered by the Sites process, the certificate in
+      the store, renewal and removal; a mock ACME server for the tests; `install.ps1`'s part.
+
+**Acceptance criteria**
+
+- A file in a row's file cell is readable by every member who can read the row and is never cleaned
+  up while a row holds it; a site's and a share link's file check answer by the index.
+- A publish, change or unpublish from any device reaches an open share dialog and Settings without
+  a reload; an older build ignores it.
+- An address past its limit is answered 429 on every host of the Sites process while other
+  addresses read on, and nothing it asks past the limit reaches the database.
+- A site attached to a proven domain reads there with no account and with script off, over https by
+  a certificate made for it, in English and in Arabic; its slug's address leads there; a name not
+  proven, or proven by another workspace, never serves a site; an unpublish holds at the domain
+  within a minute too.
+
+**Performance benchmarks**
+
+- A published page of 2,000 blocks at its domain, first byte p95 ≤ 200 ms from the cache (Phase 9's),
+  the limiter and the host's lookup included.
+- A site's file check in a database of 50,000 rows holding 100,000 files, p95 ≤ 20 ms (0.13.0's scan
+  measured beside it).
+
+**Risks**
+
+- A catch-all binding takes another site's requests on the host: the spike reads every binding
+  first; an administrator's step per domain if it cannot be done safely.
+- A domain taken over: a token per workspace in `TXT`, read again before every renewal; a name
+  removed stops serving at once and its certificate is deleted.
+- Let's Encrypt's limits (certificates per registered domain a week, orders per account): staging in
+  every test, renewals spread, a failed order retried with backoff.
+- The index out of step with the values: written in the same statements; a check compares them.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven; a site at a host name of yours on the deployed host
+  once you have installed it.
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `INTEGRATIONS.md` and `OPERATIONS.md` updated.
+- Tags `phase-14` and `v0.14.0`; a card for Phase 15.
+
+---
+
+## Phase 15: AI, further
+
+**Goals**
+
+AI's completions with no text leaving the host; Cash Gear's subscription paid for.
+
+**Dependencies**
+
+Phase 13. A spike before M15.1: open-weight instruction models on the host's processor, measured for
+speed and for the app's own actions' answers in English and in Arabic. An account of Cash Gear's at
+the payment provider you choose, its sandbox keys for the live test, and its prices, which are yours.
+
+Sized on 2026-11-22, against 0.13.0 (nothing run): every completion goes through `AiService` and an
+`IAiProvider` with what `AiRequestBuilder` built, streamed as `AiChunk`s; three actions answer strict
+JSON by a schema. The largest requests are `ask` (8 sources of 8,000 characters) and `summarise`
+(100,000 characters); a processor reads a prompt at a few hundred tokens a second at best, so a local
+model needs smaller limits of its own per action. `Cgw.LocalModel` runs ONNX Runtime 1.31.1 one run
+at a time a process, loaded on first use; a generative runtime (ONNX Runtime GenAI, MIT) brings its
+own runtime version, which must agree with it. The subscription's allowances are the environment's
+(`Ai__Subscription__*`, per workspace by id); nothing records a plan, a customer or a payment.
+
+**Questions for you (one batch, when the phase starts)**
+
+- Where the model runs (default: on the server, as the embedding model, for the web and the desktop
+  alike, the request still built in one place; a model on the desktop stays on "Later").
+- The model (default, after the spike: Apache-2.0 or MIT, about 4 billion parameters at 4 bits:
+  Qwen3-4B-Instruct-2507 or Phi-4-mini-instruct, by the spike's speed and its Arabic).
+- What it does (default: every action, each with smaller limits the spike sets; JSON answers held to
+  the action's schema while they are made; one answer at a time a process, the rest waiting).
+- The payment provider: yours (for example Paddle as merchant of record, Stripe, or invoices outside
+  the app).
+- What is charged: yours (for example plans of a monthly allowance a workspace, tokens metered with a
+  cap, or a price a member).
+- The spike's downloads, each into a folder of its own under `target/`, as Phase 13's were.
+
+**Tasks**
+
+*M15.1 Completions on a local model*
+
+- [ ] The spike; then the provider `local` behind `IAiProvider`: its package made once by a script
+      with its hashes pinned, `install.ps1`'s part, Settings → AI's "On this server" for completions,
+      the queue, each action's limits, JSON answers held to the schema.
+
+*M15.2 Billing*
+
+- [ ] Plans and their allowances; the provider's own checkout and portal, opened from Settings → AI
+      by owners; its webhooks verified and applied once; the allowance read from the plan (the
+      environment's overrides still win); a daily reconcile; audit; a mock provider for the tests and
+      a live test in its sandbox by your keys.
+
+**Acceptance criteria**
+
+- With the local model, an action's answer streams in English and in Arabic, a JSON action's answer
+  holds to its schema, and no text leaves the host.
+- An owner subscribes in the provider's checkout and the workspace's allowance follows within a
+  minute; a cancelled or failed payment ends it as the plan says; a webhook replayed or forged
+  changes nothing; no card or payment detail ever reaches the app.
+
+**Performance benchmarks**
+
+- Set by the spike: a rewrite of 2,000 characters on the host, first text and the whole answer.
+- A webhook to the allowance shown ≤ 60 s.
+
+**Risks**
+
+- A local model too slow or too weak in Arabic: the spike decides, with the app's own prompts.
+- Two ONNX Runtime versions in one process: the spike builds both models in one host first.
+- The plan and the allowance disagree: webhooks verified and applied once, and reconciled daily.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven; the live test in the provider's sandbox.
+- `INTEGRATIONS.md`, `DATA_MODEL.md`, `ARCHITECTURE.md` and `OPERATIONS.md` updated.
+- Tags `phase-15` and `v0.15.0`; "Later" reviewed with you.
+
+---
+
 ## Later
 
 Not planned in any phase; listed so they are not lost. Reviewed on 2026-11-15: what was chosen
 went to Phases 8 to 10, and the earlier phases' deferrals that were not chosen are listed here.
 Reviewed again on 2026-11-18, after 0.10.0: sign-in and permissions, ERP at scale, AI and plugins,
 and the database items were chosen, and went to Phases 11 to 13 on 2026-11-19 (`DECISIONS.md`).
-Reviewed again on 2026-11-22, after 0.13.0: publishing (Phase 9's items below) and AI further (AI
-completions on a local model, billing for the subscription) were chosen, for the next phases to
-size and plan; the rest stays (`DECISIONS.md`).
+Reviewed again on 2026-11-22, after 0.13.0: publishing (Phase 9's four items) and AI further (AI
+completions on a local model, billing for the subscription) were chosen, and went to Phases 14 and
+15 the same day; the rest stays (`DECISIONS.md`).
 
 - Embedded presentations, once that app exists.
 - Comments offline (online only from 0.6.0).
-- AI's local-model mode on the desktop (completions; Phase 13 runs an embedding model on the host).
 - SAML and SCIM for single sign-on (OpenID Connect only is proposed for 0.11.0).
 - Linux desktop build; a mobile app.
 - A shared `@cashgear/app-kit` for the platform split, theme and shortcuts (D1: once a third app
@@ -1968,11 +2190,6 @@ size and plan; the rest stays (`DECISIONS.md`).
 - Left by Phase 8: a Notion export's people columns as members (text in 0.8.0) and its relations
   to pages outside the export; an attachment's bytes fetched before it is first opened, so a
   second device has them offline.
-- Left by Phase 9: custom domains for published sites; a rate limit in the Sites process; publishing
-  changes in the change feed (the dialog and Settings read them); an index of row files for the
-  site's file check (a `LIKE` over a database's rows in 0.9.0).
-- Left by Phase 13: billing for Cash Gear's subscription (0.13.0's allowances are set by whoever
-  runs the server, a workspace's month counted, nothing charged).
 - Not while the hard limit stands: snapshotting an ERP view into a database, which would store ERP
   data in a Workspace table.
 
@@ -2005,6 +2222,9 @@ size and plan; the rest stays (`DECISIONS.md`).
 | An older build turns a chart view into a table | 12 | `viewTypes` read as the types that build knew; the old-build spec |
 | The ERP's paged queries answer differently from 0.10.0's | 12 | The suite compares both on the same records (Track E10) |
 | A plugin with a network sends away what it is shown | 13 | Hosts approved by an admin, rows and network approved together |
+| A catch-all binding takes another site's requests, or a site's domain is taken over | 14 | The spike reads every binding first; a token per workspace in DNS, read again before each renewal |
+| A row's file is cleaned up while a row holds it | 14 | An index of rows' files, written with the values, counted by the clean-up |
+| The plan paid for and the allowance disagree | 15 | Webhooks verified and applied once, reconciled daily |
 
 ## Verification
 

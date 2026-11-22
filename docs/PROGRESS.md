@@ -22,7 +22,9 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 10: Editable Customers and Items, search by meaning, third-party plugins | Done, 2026-11-18 (0.10.0; proven against the mocks in CI and against the real ERP run locally; the plugins origin's DNS and certificate, pushing Track E8 and E9 and the ERP's tenant script are yours; Voyage proven live) | `phase-10`, `v0.10.0` |
 | Phase 11: Sign-in and permissions | Done, 2026-11-19 (0.11.0; proven against the mock OpenID Connect provider and Chrome's and Edge's virtual authenticators; a live check with a real provider and a real authenticator, and installing it with the passkeys' domain, are yours) | `phase-11`, `v0.11.0` |
 | Phase 12: Databases and ERP at scale | Done, 2026-11-20 (0.12.0; proven against the mocks in CI and against the real ERP on LocalDB; the three screen readers by hand, from `SCREEN_READERS.md`, are yours) | `phase-12`, `v0.12.0` |
-| Phase 13: AI and plugins | Planned 2026-11-19 | |
+| Phase 13: AI and plugins | Done, 2026-11-22 (0.13.0; proven against the mock providers in CI; the local model measured here and on the host; Cash Gear's own provider keys, and installing it, are yours) | `phase-13`, `v0.13.0` |
+| Phase 14: Publishing | Planned 2026-11-22 | |
+| Phase 15: AI, further | Planned 2026-11-22 | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `9f5a208` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), E10 and E11 (2026-11-20); its `main` pushed on your word to `98deed36` | |

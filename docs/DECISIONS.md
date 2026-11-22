@@ -1714,3 +1714,39 @@ product themes, then groundwork.
 | --- | --- | --- |
 | What comes next | Plan the next phases, in a new session, from the two themes; it sizes them against the code, asks its own questions in one batch, and says whether they are one release or two | As after 0.7.0 and 0.10.0: a planning session sizes before anything is promised |
 | Not offered as a choice | Embedded presentations (no app yet), SQLite on OPFS (it needs COOP/COEP, which blocks embeds), and snapshotting an ERP view (the hard limits forbid ERP data in a Workspace table) stay on "Later" with their reasons | Nothing to choose while their reason stands |
+
+## 2026-11-22: Phase 14
+
+The two themes chosen after 0.13.0 were sized against 0.13.0 the same day (`IMPLEMENTATION_PLAN.md`,
+Phases 14 and 15; nothing run): the Sites process routes by path alone and writes every link under
+the slug; Phase 11 already proves a domain by a DNS `TXT` record; nothing on the host makes
+certificates, and IIS takes a binding for a new name only from an administrator, unless one
+catch-all binding over its Centralized Certificate Store serves them all; publishing writes no
+change to the feed; the Sites process has no rate limiter; a site's file check is a `LIKE` over a
+database's rows. Found while sizing, by reading: a file in a row's file cell is in `AssetRefs` only
+once the row's own document is derived, so until then no other member can read it and the clean-up
+deletes it 30 days after its upload (M14.1 shows it by a test first, then fixes it).
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| How the themes split | Two releases: Phase 14 (`v0.14.0`) publishing: custom domains, publishing changes in the change feed, a rate limit in the Sites process, an index of rows' files; Phase 15 (`v0.15.0`) AI further: completions on a local model behind a spike, and billing, whose questions (the payment provider, what is charged) are asked when it starts |
+| Certificates for a site's domain | Automatic, after a spike on the host: the worker gets a Let's Encrypt certificate by ACME for each proven domain, the Sites process answering the HTTP-01 challenge; kept in IIS's Centralized Certificate Store and renewed before it ends; one catch-all binding on the sites' IIS site (443 by the store, 80 for the challenge) added once by `install.ps1`, so no step per domain. If the spike finds the host's other sites would not keep their bindings, an administrator's step per domain by a script instead |
+| Who adds a domain | Owners and admins prove a host name for the workspace by a DNS `TXT` record in Settings → Publishing, as single sign-on's domains; whoever may publish a page chooses one of those for its site; one site a host name |
+| The spike and a test domain | On the production host over Remote Desktop at a quiet hour, after you sign in: IIS's bindings read, the catch-all tried on a scratch site and removed, nothing else changed. You give a test host name outside `*.cashgearerp.com` (one the wildcard does not cover) and accept Let's Encrypt's subscriber agreement yourself in the server's settings; tests use Let's Encrypt's staging environment |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| What a domain serves | The site's root at `/`, its pages at `/<pageId>`, its files at `/files/<assetId>`, a `robots.txt` of its own (its site's indexing); `http://` redirects to `https://` once the certificate is live; the slug's address (`pages.cashgearerp.com/<slug>/…`) redirects there (302) from then on, and serves as before until then | One address a site once it has its own; 302 because a browser keeps a 301 after the domain is removed |
+| A host name | Lower-case ASCII after IDNA (an Arabic name as its `xn--` form), 4 to 253 characters, two labels or more, no wildcard, port or address; never one of the server's own (the API's, the web app's, the sites', the plugins') nor `localhost`; in development and the e2e stack also `*.localhost`. At most 20 a workspace | A name a certificate can be made for; Chrome sends `*.localhost` to the loopback address, so the tests need no DNS |
+| Proving it | A `TXT` record `cgw-verify=<token>` at `_cashgear-workspace.<host>`, 128 random bits shown to owners and admins, read on Verify through Phase 11's `ISsoDns` (the mock's stand-in in development); a name verified by one workspace cannot be by another until it removes it. Pointed by a `CNAME` to the sites' host, or by `A`/`AAAA` records holding its addresses; Settings says which is missing | Phase 11's rule and code; the challenge needs the name to reach the host |
+| Proof kept | Read again before each renewal and once a day while attached; a record missing on two reads a day apart detaches the name, stops it serving and deletes its certificate (audited `site.domain` with reason `proof.lost`) | A name given up at its registrar must not keep serving one workspace's site, nor be served after another proves it |
+| Certificates | RSA 2048, renewed once a third of the lifetime is left (Let's Encrypt's 90 days today, shorter lifetimes later), a failed order retried after 1 h, 6 h, then daily; the ACME account's key as Data Protection's output in the database (the worker holds the key ring), never a file; each certificate as a PFX in the store's folder (`Sites__CertificateStore`), under a password from the environment only (`Sites__CertificatePassword`), the folder readable by administrators, the worker and the store's account alone | IIS's store reads PFX files under one password, so the private key of a site's certificate is a file by necessity, as the Azure client certificate's is (OPERATIONS.md); the ACME key, which could order a certificate for any proven name, is not |
+| Let's Encrypt's terms | No order is made unless `Sites__Acme__AgreeToTerms` is `true`, set by whoever runs the server; `Sites__Acme__Directory` names the directory (production's, or staging's), `Sites__Acme__Email` an optional contact | Accepting the subscriber agreement is the operator's act, never the code's |
+| The rate limit | One address 300 requests a minute for pages and files across every site (a sliding window of six 10 s segments); the plugins host 1,200 (a frame fetches many files); an IPv6 address counted by its /64; `robots.txt`, `/health/live` and ACME's challenges outside it; past it 429 with `Retry-After` and a page in English and Arabic (the limiter runs before the site is read) | The limit is what stops a flood reaching the database, so it cannot know the site's language; an IPv6 client holds a /64 |
+| Publishing in the feed | A `site` change (`entityId` the root page, `upsert` or `delete`) for each publish, change and unpublish, whatever the reason (a person, the switch, the purge), to whoever can read the root page; a `publishing` change (`entityId` the workspace) for the switch and the workspace's domains, to everyone in it; older builds ignore both | A site's page id must not reach someone who cannot see the page; a publisher choosing a domain needs the list |
+| Rows' files | `DatabaseRowFiles` (`WorkspaceId`, `AssetId`, `RowId`, `DatabaseId`, `PropertyId`) written in the same statements as a row's values on every server path, filled for existing rows by a worker job once (`JobStates`); a row's file readable by whoever can read the row and held by it for the clean-up; the site's and share link's check by it, still for a property some view shows | The index and the values cannot drift if one statement writes both; the clean-up's 30 days must not start while a row holds a file |
+| Version | `v0.14.0`, then `v0.15.0` | One version per phase |
