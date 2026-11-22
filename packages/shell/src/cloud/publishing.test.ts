@@ -521,6 +521,14 @@ describe('Settings → Publishing → Your own host names (Phase 14)', () => {
     await until(() => !!container.querySelector('[data-testid="site-domains-none"]'), 'removed');
   });
 
+  it('is not offered by a server before 0.14.0, which has no such route', async () => {
+    const fake = fakeDomains();
+    fake.api.domains.mockRejectedValue(new SyncHttpError(404, 'not.found', 'No'));
+    const container = render(h(SiteDomainsSection, { api: fake.api, workspaceId: WS }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(container.querySelector('[data-testid="site-domains"]')).toBeNull();
+  });
+
   it('reads in Arabic, the host name left to right', async () => {
     const fake = fakeDomains();
     await fake.api.addDomain(WS, 'docs.example.com');

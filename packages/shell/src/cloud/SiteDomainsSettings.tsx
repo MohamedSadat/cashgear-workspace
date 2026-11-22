@@ -57,7 +57,7 @@ export function SiteDomainsSection({
   const { t } = useTranslation();
   const certificate = useCertificateText();
   const [read, setRead] = useState<SiteDomains | null>(null);
-  const [state, setState] = useState<'loading' | 'ready' | 'loadFailed'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'loadFailed' | 'absent'>('loading');
   const [reading, setReading] = useState(0);
   const [host, setHost] = useState('');
   const [busy, setBusy] = useState(false);
@@ -72,7 +72,10 @@ export function SiteDomainsSection({
         setRead(answer);
         setState('ready');
       },
-      () => live && setState('loadFailed'),
+      (error: unknown) => {
+        // A server before 0.14.0 has no such route: the section is not offered.
+        if (live) setState(publishFailure(error) === 'not.found' ? 'absent' : 'loadFailed');
+      },
     );
     return () => {
       live = false;
@@ -130,6 +133,7 @@ export function SiteDomainsSection({
     });
 
   const domains = read?.domains ?? [];
+  if (state === 'absent') return null;
   return (
     <section aria-labelledby="cgw-domains-title" data-testid="site-domains">
       <h4 id="cgw-domains-title">{t('siteDomains.title')}</h4>

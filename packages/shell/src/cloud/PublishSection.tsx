@@ -76,6 +76,7 @@ function SiteAddress({
   useSection(siteDomainsWords);
   const { t } = useTranslation();
   const certificate = useCertificateText();
+  // Null until read, and on a server before 0.14.0 (no such route): nothing is offered.
   const [choices, setChoices] = useState<string[] | null>(null);
   const [chosen, setChosen] = useState(site.domain?.host ?? '');
   const [busy, setBusy] = useState(false);
@@ -93,7 +94,9 @@ function SiteAddress({
             .map((c) => c.host),
         );
       },
-      () => live && setChoices([]),
+      (error: unknown) => {
+        if (live && publishFailure(error) !== 'not.found') setChoices([]);
+      },
     );
     return () => {
       live = false;
