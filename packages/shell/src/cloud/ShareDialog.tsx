@@ -54,7 +54,8 @@ export type ShareCloud = Pick<
   | 'revokeShareLink'
   | 'shareUrl'
   | 'api'
->;
+> &
+  Partial<Pick<Cloud, 'onPublishing'>>;
 
 const codeOf = (error: unknown) => (error instanceof SyncHttpError ? error.code : 'server.error');
 
@@ -80,6 +81,17 @@ export function ShareDialog({
   const format = new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium' });
   const full = mine === 'full';
   const publishing = useMemo(() => publishingApi(cloud.api), [cloud]);
+  // Phase 14: the feed's publishing changes for this page's workspace.
+  const publishingChanges = useMemo(
+    () =>
+      cloud.onPublishing
+        ? (listener: (pageIds: Id[] | null) => void) =>
+            cloud.onPublishing!((workspaceId, pageIds) => {
+              if (workspaceId === page.workspaceId) listener(pageIds);
+            })
+        : undefined,
+    [cloud, page.workspaceId],
+  );
   const canPublish = full && page.kind !== 'row';
   const [view, setView] = useState<'share' | 'publish'>('share');
   const shown = canPublish ? view : 'share';
@@ -162,7 +174,7 @@ export function ShareDialog({
       {shown === 'publish' && (
         <div className="cgw-publish-scroll">
           <Suspense fallback={<p aria-busy="true">{t('app.loading')}</p>}>
-            <PublishSection api={publishing} page={page} />
+            <PublishSection api={publishing} page={page} changes={publishingChanges} />
           </Suspense>
         </div>
       )}

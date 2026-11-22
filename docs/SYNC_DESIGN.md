@@ -885,7 +885,11 @@ by the worker when it is decided, so a revoke cannot be outrun.
 
 **Comments and the inbox** travel on the change feed: a `comments` change (its entity id the
 page's, shown to whoever can read the page) and a per-person `notification` change. Clients from
-before Phase 6 ignore both.
+before Phase 6 ignore both. So do the changes that only tell an open screen to read again, none of
+them stored on a device: `plugin` (Phase 13, to everyone), `site` (Phase 14, a site published,
+changed or unpublished, its entity id the root page's, to whoever can read it) and `publishing`
+(Phase 14, the workspace's switch or domains, to everyone); the engine raises one event a page of
+the feed for each kind (`plugins`, `publishing` with the pages named, or null for the workspace).
 
 ## Tests that guard this design
 

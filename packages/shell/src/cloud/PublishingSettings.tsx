@@ -1,7 +1,8 @@
 // Settings → Publishing (Phase 9, M9.1): the workspace's switch for publishing pages to the web,
 // and its live sites. Owners and admins turn it off, which unpublishes every site of the workspace
 // at once (each audited) and refuses publishing until it is on again; turning it on brings no site
-// back. Everyone else sees whether it is on. The server decides who may change it.
+// back. Everyone else sees whether it is on. The server decides who may change it. Phase 14: read
+// again when the feed says a site or the switch changed, from any tab or device.
 import { CgCheckBox } from '@cashgear/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +22,10 @@ export function PublishingSettings({
 }) {
   const account = useAccount(cloud);
   const api = useMemo(() => publishingApi(cloud.api), [cloud]);
+  const changes = useMemo(
+    () => (listener: (workspaceId: string) => void) => cloud.onPublishing(listener),
+    [cloud],
+  );
   const workspace = session.current;
   if (!account || !workspace || workspace.localOnly) return null;
   return (
@@ -29,6 +34,7 @@ export function PublishingSettings({
       api={api}
       workspaceId={workspace.id}
       manages={workspace.role === 'owner' || workspace.role === 'admin'}
+      changes={changes}
     />
   );
 }
@@ -39,11 +45,14 @@ export function PublishingSection({
   api,
   workspaceId,
   manages,
+  changes,
 }: {
   api: Pick<PublishingApi, 'publishing' | 'setPublishing' | 'unpublish'>;
   workspaceId: string;
   /** An owner or an admin: they may turn it off and on, and see every live site. */
   manages: boolean;
+  /** Phase 14: the feed's publishing changes, of any workspace (filtered here). */
+  changes?: (listener: (workspaceId: string) => void) => () => void;
 }) {
   const { t, i18n } = useTranslation();
   const [publishing, setPublishing] = useState<Publishing | null>(null);
@@ -69,6 +78,14 @@ export function PublishingSection({
       live = false;
     };
   }, [api, workspaceId, reading]);
+
+  useEffect(
+    () =>
+      changes?.((changed) => {
+        if (changed === workspaceId) setReading((n) => n + 1);
+      }),
+    [changes, workspaceId],
+  );
 
   const failed = (error: unknown) => {
     const code = publishFailure(error);

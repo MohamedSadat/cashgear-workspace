@@ -120,7 +120,12 @@ export type SyncEvent =
   /** Phase 6: the person's inbox changed (a notification made or read). */
   | { kind: 'notifications'; workspaceId: Id }
   /** Phase 13: the workspace's plugins changed: a list read before is read again. */
-  | { kind: 'plugins'; workspaceId: Id };
+  | { kind: 'plugins'; workspaceId: Id }
+  /**
+   * Phase 14: sites of these root pages were published, changed or unpublished, or (null) the
+   * workspace's switch or domains changed: a share dialog or Settings shown reads them again.
+   */
+  | { kind: 'publishing'; workspaceId: Id; pageIds: Id[] | null };
 
 /** How much of a database this device keeps (`holdProgress`). */
 export interface HoldProgress {
@@ -3190,8 +3195,16 @@ export function batchOf(
   const comments = new Set<Id>();
   let notifications = false;
   let plugins = false;
+  const sites = new Set<Id>();
+  let publishing = false;
   for (const change of changes) {
     switch (change.entityType) {
+      case 'site':
+        sites.add(change.entityId);
+        break;
+      case 'publishing':
+        publishing = true;
+        break;
       case 'comments':
         comments.add(change.entityId);
         break;
@@ -3247,5 +3260,7 @@ export function batchOf(
   for (const pageId of comments) emit({ kind: 'comments', workspaceId, pageId });
   if (notifications) emit({ kind: 'notifications', workspaceId });
   if (plugins) emit({ kind: 'plugins', workspaceId });
+  if (publishing || sites.size)
+    emit({ kind: 'publishing', workspaceId, pageIds: publishing ? null : [...sites] });
   return batch;
 }

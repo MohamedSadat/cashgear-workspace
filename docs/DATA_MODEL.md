@@ -624,12 +624,17 @@ group and measure, drawn as the chart block is, or its placeholder when a link w
 has no group); its files are checked on every request. Nothing of
 comments, presence, history or the Yjs updates is reachable from it. The Sites process keeps a
 slug's site and scope at most 30 s, and drawn pages by a key of everything they are drawn from.
+From Phase 14 every publish, change and unpublish (by a person or the switch) writes a `site` change to
+the feed (`entityId` the root page, told to whoever can read it), and the switch a `publishing`
+change (`entityId` the workspace, told to everyone in it); neither carries an entity, no build stores
+one, and an open share dialog or Settings reads the routes again on it. The worker's purge of a
+root writes none: nobody can read that page.
 
 ### Sync and audit
 
 | Table | Key fields | Notes |
 | --- | --- | --- |
-| `WorkspaceChanges` | (`WorkspaceId`, `Seq`), `EntityType`, `EntityId`, `Kind`, `Version`, `ActorUserId`, `CreatedAt` | The change feed. `Kind` is `upsert`, `delete`, `grant` or `revoke` |
+| `WorkspaceChanges` | (`WorkspaceId`, `Seq`), `EntityType`, `EntityId`, `Kind`, `Version`, `ActorUserId`, `CreatedAt` | The change feed. `Kind` is `upsert`, `delete`, `grant` or `revoke`. Entity types beside the records': `access`, `member`, `comments`, `notification` (Phase 6), `plugin` (Phase 13), `site` and `publishing` (Phase 14); every build ignores a type it does not know |
 | `AppliedOps` | `OpId`, `WorkspaceId`, `UserId`, `Result` (JSON), `CreatedAt` | Idempotency. Written in the same transaction as the operation |
 | `AuditLog` | `Id`, `WorkspaceId`, `ActorUserId`, `Action`, `TargetType`, `TargetId`, `Detail` (JSON), `Ip`, `CorrelationId`, `CreatedAt` | Append-only: sign-ins (and failures, lockouts), sign-ups, password resets, devices signed out, sharing changes, member changes, exports, permanent deletions, restores, refused forged updates, ERP link changes, workbook changes (made, renamed, trashed, restored, access changed, saved and copied by Sheet); Phase 7: `ai.settings` (on, off, model, key set or removed, never the key), `ai.complete` (each completion, without content), `erp.commit` (each real ERP commit attempt from a page, without values); Phase 9: `site.publish`, `site.update`, `site.unpublish` (with its reason), `workspace.publishing` (on or off, and how many sites it took down), `workbook.restore` with `from` (a version restored; without detail it is still a workbook brought back from the trash); Phase 10: `ai.settings` with `embeddings` (on, off, model, key set or removed; never the key), `plugin.add`, `plugin.update`, `plugin.enable`, `plugin.disable`, `plugin.remove` (type, version, bundle hash); no row a provider call. Account events have no workspace |
 | `WorkspaceExports` | `Id`, `WorkspaceId`, `RequestedBy`, `Status`, `BlobKey`, `SizeBytes`, `Error` | A workspace's export zip, written by the worker |

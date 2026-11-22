@@ -165,9 +165,11 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
             site.Version++;
             site.UpdatedAt = now;
         }
+        changes.Add(SiteRules.SiteChange, page.Id, "upsert", site.Version, member.UserId);
         try
         {
             await db.SaveChangesAsync(ct);
+            await changes.FlushAsync(ct);
             await tx.CommitAsync(ct);
         }
         catch (DbUpdateException e) when (e.InnerException is SqlException { Number: 2601 or 2627 } sql)
@@ -198,7 +200,9 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
         if (site is null) return Failure.NotFound("The page is not published");
         Unpublish(site, member.UserId, SiteRules.ReasonPerson);
         audit.Add(actor, "site.unpublish", member.WorkspaceId, "page", page.Id, new { siteId = site.Id, site.Slug, reason = SiteRules.ReasonPerson });
+        changes.Add(SiteRules.SiteChange, page.Id, "delete", site.Version, member.UserId);
         await db.SaveChangesAsync(ct);
+        await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);
         return true;
     }
@@ -256,10 +260,13 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
                     {
                         Unpublish(site, member.UserId, SiteRules.ReasonPublishingOff);
                         audit.Add(actor, "site.unpublish", member.WorkspaceId, "page", site.RootPageId, new { siteId = site.Id, site.Slug, reason = SiteRules.ReasonPublishingOff });
+                        changes.Add(SiteRules.SiteChange, site.RootPageId, "delete", site.Version, member.UserId);
                         taken++;
                     }
                 audit.Add(actor, "workspace.publishing", member.WorkspaceId, "workspace", member.WorkspaceId, new { enabled = request.Enabled, unpublished = taken });
+                changes.Add(SiteRules.PublishingChange, member.WorkspaceId, "upsert", 1, member.UserId);
                 await db.SaveChangesAsync(ct);
+                await changes.FlushAsync(ct);
             }
             await tx.CommitAsync(ct);
         }

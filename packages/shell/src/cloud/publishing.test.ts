@@ -311,6 +311,35 @@ describe('the share dialog’s “Publish to the web”', () => {
     expect(container.querySelector('[data-testid="publish-section"]')).toBeNull();
   });
 
+  it('reads the site again when the feed says it changed, unless it is being changed here (Phase 14)', async () => {
+    const fake = fakePublishing(ready());
+    const listeners = new Set<(pageIds: string[] | null) => void>();
+    const changes = (listener: (pageIds: string[] | null) => void) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    };
+    const tell = (pageIds: string[] | null) =>
+      act(() => {
+        for (const listener of listeners) listener(pageIds);
+      });
+    const container = render(h(PublishSection, { api: fake.api, page: page('Handbook'), changes }));
+    await until(() => !!container.querySelector('#cgw-publish-slug'), 'the form');
+    expect(fake.api.site).toHaveBeenCalledTimes(1);
+    // Published on another device: shown here without a reload.
+    await fake.api.publish(PAGE, { slug: 'elsewhere', indexing: false, language: 'en' });
+    tell([PAGE]);
+    await until(() => !!container.querySelector('[data-testid="site-url"]'), 'the live site');
+    expect(container.querySelector<HTMLInputElement>('#cgw-publish-slug')!.value).toBe('elsewhere');
+    // Another page's site: nothing read.
+    tell([CHILD]);
+    expect(fake.api.site).toHaveBeenCalledTimes(2);
+    // Being changed here: what the person typed stays, and nothing is read.
+    act(() => type(container.querySelector<HTMLInputElement>('#cgw-publish-slug')!, 'mine'));
+    tell(null);
+    expect(fake.api.site).toHaveBeenCalledTimes(2);
+    expect(container.querySelector<HTMLInputElement>('#cgw-publish-slug')!.value).toBe('mine');
+  });
+
   it('reads in Arabic, an Arabic title proposing the page id', async () => {
     const fake = fakePublishing(ready());
     const container = render(h(PublishSection, { api: fake.api, page: page('دليل الموظف') }), 'ar');
@@ -364,6 +393,29 @@ describe('Settings → Publishing', () => {
     expect(api.setPublishing).toHaveBeenLastCalledWith(WS, true);
     await until(() => checkbox(container).checked, 'on');
     expect(container.querySelector('[data-testid="publishing-none"]')).not.toBeNull();
+  });
+
+  it('reads the sites again when the feed says this workspace’s publishing changed (Phase 14)', async () => {
+    const api = fakeSwitch(live);
+    const listeners = new Set<(workspaceId: string) => void>();
+    const changes = (listener: (workspaceId: string) => void) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    };
+    const container = render(
+      h(PublishingSection, { api, workspaceId: WS, manages: true, changes }),
+    );
+    await until(() => !!container.querySelector('[data-site="handbook"]'), 'the site');
+    await api.unpublish(PAGE);
+    act(() => {
+      for (const listener of listeners) listener('another-workspace');
+    });
+    expect(api.publishing).toHaveBeenCalledTimes(1);
+    act(() => {
+      for (const listener of listeners) listener(WS);
+    });
+    await until(() => !container.querySelector('[data-site="handbook"]'), 'the site gone');
+    expect(api.publishing).toHaveBeenCalledTimes(2);
   });
 
   it('unpublishes one site from the list, and shows a member the switch only', async () => {

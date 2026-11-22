@@ -11,7 +11,8 @@ namespace Cgw.Core.Sync;
 /// moves included): it is sent as a <c>row</c> change with the row, never as a page (Phase 4
 /// contracts, section 4). Databases and views are sent to those who may see their database's page.
 /// Phase 6: a page's <c>comments</c> change goes to those who can read the page, and a person's
-/// <c>notification</c> changes to that person only.
+/// <c>notification</c> changes to that person only. Phase 14: a <c>site</c> change to those who can
+/// read its root page, a <c>publishing</c> change to everyone.
 /// </summary>
 public sealed class FeedService(CgwDb db, Access access)
 {
@@ -42,7 +43,7 @@ public sealed class FeedService(CgwDb db, Access access)
             .Concat(mine.Where(r => r.EntityType == "access"))
             .OrderBy(r => r.Seq).ToList();
 
-        var pageIds = latest.Where(r => r.EntityType is "page" or "row" or "favourite" or "visit" or "comments").Select(r => r.EntityId).Distinct().ToList();
+        var pageIds = latest.Where(r => r.EntityType is "page" or "row" or "favourite" or "visit" or "comments" or Sites.SiteRules.SiteChange).Select(r => r.EntityId).Distinct().ToList();
         var pages = new Dictionary<Guid, Page>();
         foreach (var chunk in Chunked.Of(pageIds))
             foreach (var page in await db.Pages.AsNoTracking().Where(p => chunk.Contains(p.Id)).ToListAsync(ct))
@@ -158,6 +159,19 @@ public sealed class FeedService(CgwDb db, Access access)
                 case "notification":
                     // The caller's own inbox changed (a per-person row, so only theirs come here).
                     changes.Add(new ChangeDto(row.Seq, "notification", row.EntityId, "upsert", null));
+                    break;
+                case Sites.SiteRules.SiteChange:
+                {
+                    // A site published, changed or unpublished (Phase 14): told to those who can read
+                    // its root page, as the page's own changes are; a share dialog or Settings reads again.
+                    var page = pages.GetValueOrDefault(row.EntityId);
+                    if (page is not null && page.DeletedAt is null && PageLevel(page) != Levels.None)
+                        changes.Add(new ChangeDto(row.Seq, Sites.SiteRules.SiteChange, row.EntityId, row.Kind, null));
+                    break;
+                }
+                case Sites.SiteRules.PublishingChange:
+                    // The workspace's switch or its domains (Phase 14): everyone in it reads them.
+                    changes.Add(new ChangeDto(row.Seq, Sites.SiteRules.PublishingChange, row.EntityId, "upsert", null));
                     break;
                 case Plugins.PluginService.ChangeType:
                     // A plugin added, updated, switched or removed (Phase 13): every member, guests

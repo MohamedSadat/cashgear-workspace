@@ -120,7 +120,11 @@ export type ServerChange =
       entity: null;
     }
   /** Phase 13: a plugin added, updated, switched (`upsert`) or removed (`delete`); never stored. */
-  | { seq: number; entityType: 'plugin'; entityId: Id; kind: 'upsert' | 'delete'; entity: null };
+  | { seq: number; entityType: 'plugin'; entityId: Id; kind: 'upsert' | 'delete'; entity: null }
+  /** Phase 14: a site published or changed (`upsert`) or unpublished (`delete`); `entityId` its root page. */
+  | { seq: number; entityType: 'site'; entityId: Id; kind: 'upsert' | 'delete'; entity: null }
+  /** Phase 14: the workspace's switch or domains changed (`entityId` the workspace); never stored. */
+  | { seq: number; entityType: 'publishing'; entityId: Id; kind: 'upsert'; entity: null };
 
 export interface ChangesPage {
   changes: ServerChange[];

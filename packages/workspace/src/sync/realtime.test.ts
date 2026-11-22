@@ -532,6 +532,34 @@ describe('real-time sync through the hub', () => {
     expect(t.two.events.filter((e) => e.kind === 'plugins')).toHaveLength(1);
   });
 
+  it('tells of sites and the switch once a page of the feed, to their readers (Phase 14)', async () => {
+    const t = await team();
+    t.server.revoke(t.ws.id, t.c.id, BOB.id);
+    await t.two.engine.syncOnce();
+    const before = await t.two.store.readMirror(t.ws.id);
+    t.server.siteChanged(t.ws.id, t.a.id);
+    t.server.siteChanged(t.ws.id, t.a.id, 'delete');
+    t.server.siteChanged(t.ws.id, t.b.id);
+    // A page Bob cannot read: never told of its site.
+    t.server.siteChanged(t.ws.id, t.c.id);
+    await t.two.engine.syncOnce();
+    expect(t.two.events.filter((e) => e.kind === 'publishing')).toEqual([
+      { kind: 'publishing', workspaceId: t.ws.id, pageIds: [t.a.id, t.b.id] },
+    ]);
+    expect(await t.two.store.readMirror(t.ws.id)).toEqual(before);
+    // The switch or the domains: everything shown is read again.
+    t.server.siteChanged(t.ws.id, t.a.id);
+    t.server.publishingChanged(t.ws.id);
+    await t.two.engine.syncOnce();
+    expect(t.two.events.filter((e) => e.kind === 'publishing').at(-1)).toEqual({
+      kind: 'publishing',
+      workspaceId: t.ws.id,
+      pageIds: null,
+    });
+    await t.two.engine.syncOnce();
+    expect(t.two.events.filter((e) => e.kind === 'publishing')).toHaveLength(2);
+  });
+
   it('is the Phase 3 engine while the transport is disconnected: saves go over HTTP', async () => {
     const server = new FakeServer({ codec: fakeCodec });
     const hub = new FakeHub(server);

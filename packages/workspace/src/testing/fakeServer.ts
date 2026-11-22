@@ -278,6 +278,16 @@ export class FakeServer {
     this.change(this.spaces.get(workspaceId)!, 'plugin', pluginId, kind);
   }
 
+  /** Phase 14: a page's site published or changed (`upsert`) or unpublished (`delete`): its readers see it. */
+  siteChanged(workspaceId: Id, pageId: Id, kind: 'upsert' | 'delete' = 'upsert') {
+    this.change(this.spaces.get(workspaceId)!, 'site', pageId, kind);
+  }
+
+  /** Phase 14: the workspace's switch or domains changed: everyone sees it. */
+  publishingChanged(workspaceId: Id) {
+    this.change(this.spaces.get(workspaceId)!, 'publishing', workspaceId);
+  }
+
   /** Whether the account may see a page; a row is seen as its database is. */
   private visible(account: Account, pageId: Id): boolean {
     const id = this.spaceOfPage(pageId)?.mirror.rowRecords.get(pageId)?.databaseId ?? pageId;
@@ -1049,9 +1059,11 @@ export class FakeServer {
         const read = space.changes
           .filter((c) => c.seq > after && (!c.userId || c.userId === account.id))
           .slice(0, limit);
-        // A page's comments are told only to whoever can read the page.
+        // A page's comments (and, Phase 14, its site) are told only to whoever can read the page.
         const rows = read.filter(
-          (c) => c.entityType !== 'comments' || this.visible(account, c.entityId),
+          (c) =>
+            (c.entityType !== 'comments' && c.entityType !== 'site') ||
+            this.visible(account, c.entityId),
         );
         const m = space.mirror;
         const changes = rows.map((row): ServerChange => {
@@ -1206,6 +1218,22 @@ export class FakeServer {
                 entityType: 'plugin',
                 entityId: row.entityId,
                 kind: row.kind === 'delete' ? 'delete' : 'upsert',
+                entity: null,
+              };
+            case 'site':
+              return {
+                seq: row.seq,
+                entityType: 'site',
+                entityId: row.entityId,
+                kind: row.kind === 'delete' ? 'delete' : 'upsert',
+                entity: null,
+              };
+            case 'publishing':
+              return {
+                seq: row.seq,
+                entityType: 'publishing',
+                entityId: row.entityId,
+                kind: 'upsert',
                 entity: null,
               };
             default:

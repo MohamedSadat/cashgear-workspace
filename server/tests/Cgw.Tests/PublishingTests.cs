@@ -246,4 +246,49 @@ public sealed class PublishingTests(ServerFixture server)
         var other = (await ws.NewPage("Taking it")).GetProperty("id").GetGuid();
         Assert.Equal(slug, (await PublishOk(ws.Client, other, slug)).GetProperty("slug").GetString());
     }
+
+    [Fact]
+    public async Task Every_publish_change_and_unpublish_is_a_site_change_for_those_who_read_the_page()
+    {
+        var ws = await Ws.Create(server);
+        var member = await Kit.Join(server, ws, "member");
+        var outsider = await Kit.Join(server, ws, "member");
+        var root = (await ws.NewPage("Notes")).GetProperty("id").GetGuid();
+        await Kit.Share(ws, root, true, ("user", member.Id, "view"));
+        async Task<long> Cursor() => (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/changes?after=0&limit=1000")).GetProperty("cursor").GetInt64();
+        async Task<List<(string Type, Guid Id, string Kind)>> Since(HttpClient who, long after, params string[] types)
+        {
+            var page = await who.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/changes?after={after}&limit=1000");
+            return page.GetProperty("changes").EnumerateArray()
+                .Select(c => (c.GetProperty("entityType").GetString()!, c.GetProperty("entityId").GetGuid(), c.GetProperty("kind").GetString()!))
+                .Where(c => types.Contains(c.Item1)).ToList();
+        }
+
+        var start = await Cursor();
+        var slug = Slug("notes");
+        await PublishOk(ws.Client, root, slug);
+        foreach (var who in new[] { ws.Client, member.Client })
+            Assert.Equal([("site", root, "upsert")], await Since(who, start, "site", "publishing"));
+        // Someone who cannot read the page is never told of its site.
+        Assert.Empty(await Since(outsider.Client, start, "site", "publishing"));
+
+        var changed = await Cursor();
+        await PublishOk(ws.Client, root, slug, indexing: true);
+        Assert.Equal([("site", root, "upsert")], await Since(member.Client, changed, "site"));
+        // The same settings again change nothing, and write nothing.
+        var quiet = await Cursor();
+        await PublishOk(ws.Client, root, slug, indexing: true);
+        Assert.Equal(quiet, await Cursor());
+
+        var unpublished = await Cursor();
+        Assert.Equal(HttpStatusCode.NoContent, (await ws.Client.DeleteAsync(Url(root))).StatusCode);
+        Assert.Equal([("site", root, "delete")], await Since(member.Client, unpublished, "site"));
+
+        // The switch: a publishing change for everyone, and each site it took down.
+        await PublishOk(ws.Client, root, Slug("again"));
+        var off = await Cursor();
+        (await ws.Client.PutAsJsonAsync($"/api/v1/workspaces/{ws.Id}/publishing", new { enabled = false })).EnsureSuccessStatusCode();
+        Assert.Equal([("site", root, "delete"), ("publishing", ws.Id, "upsert")], await Since(member.Client, off, "site", "publishing"));
+        Assert.Equal([("publishing", ws.Id, "upsert")], await Since(outsider.Client, off, "site", "publishing"));
+    }
 }

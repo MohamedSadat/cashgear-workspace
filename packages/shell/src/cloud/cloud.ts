@@ -95,6 +95,7 @@ export class Cloud {
   private readonly commentListeners = new Set<(workspaceId: Id, pageId: Id) => void>();
   private readonly notificationListeners = new Set<(workspaceId: Id) => void>();
   private readonly pluginListeners = new Set<(workspaceId: Id) => void>();
+  private readonly publishingListeners = new Set<(workspaceId: Id, pageIds: Id[] | null) => void>();
   private checked = false;
   /** The server said who is signed in, this session (else the account is the cached one). */
   private verified = false;
@@ -223,6 +224,12 @@ export class Cloud {
     return () => void this.pluginListeners.delete(listener);
   }
 
+  /** Phase 14: sites of these root pages changed, or (null) the workspace's switch or domains did. */
+  onPublishing(listener: (workspaceId: Id, pageIds: Id[] | null) => void): () => void {
+    this.publishingListeners.add(listener);
+    return () => void this.publishingListeners.delete(listener);
+  }
+
   /**
    * A page joined on the hub (presence may be sent for it from then on), or no longer; returns
    * its off.
@@ -315,6 +322,9 @@ export class Cloud {
         break;
       case 'plugins':
         for (const listener of this.pluginListeners) listener(event.workspaceId);
+        break;
+      case 'publishing':
+        for (const listener of this.publishingListeners) listener(event.workspaceId, event.pageIds);
         break;
     }
   }

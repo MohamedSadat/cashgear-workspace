@@ -5,9 +5,12 @@
 // title), the site's own language and whether search engines may index it. A live site shows its
 // address, who published it and when, the same settings to change, and Unpublish, which takes it
 // down at once. The server decides who may publish and what a site holds, on every request.
+// Phase 14: a publish, change or unpublish from another tab or device (the feed's `site` change, or
+// the workspace's `publishing` one) is read again at once, unless the person has started changing
+// the fields here (their save then meets the version conflict and is read again).
 import { CgCheckBox } from '@cashgear/ui';
 import type { Id, PageRecord } from '@cgw/workspace';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   defaultSlug,
@@ -49,9 +52,22 @@ function depths(pages: readonly SitePage[]): { page: SitePage; depth: number }[]
   });
 }
 
-export function PublishSection({ api, page }: { api: PublishingApi; page: PageRecord }) {
+/** Phase 14: what the feed says of publishing, for this page's workspace (`null`: anything). */
+export type PublishingChanges = (listener: (pageIds: Id[] | null) => void) => () => void;
+
+export function PublishSection({
+  api,
+  page,
+  changes,
+}: {
+  api: PublishingApi;
+  page: PageRecord;
+  changes?: PublishingChanges;
+}) {
   const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState<Loading>({ kind: 'loading' });
+  // The person changed a field since the last read, or a request is out: a feed change waits.
+  const touched = useRef(false);
   const [reading, setReading] = useState(0);
   const [slug, setSlug] = useState('');
   const [language, setLanguage] = useState<SiteLanguage>(i18n.language === 'ar' ? 'ar' : 'en');
@@ -67,6 +83,7 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
     api.site(page.id).then(
       (state) => {
         if (!live) return;
+        touched.current = false;
         setLoading({ kind: 'ready', state });
         const site = state.site;
         setSlug(site ? site.slug : defaultSlug(page.title, page.id));
@@ -94,6 +111,15 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
     };
     // The title is the proposal's only when the dialog opens.
   }, [api, page.id, reading, t]);
+
+  useEffect(
+    () =>
+      changes?.((pageIds) => {
+        if ((pageIds === null || pageIds.includes(page.id)) && !touched.current)
+          setReading((n) => n + 1);
+      }),
+    [changes, page.id],
+  );
 
   const state = loading.kind === 'ready' ? loading.state : null;
   const site = state?.site ?? null;
@@ -123,6 +149,7 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
 
   const publish = async () => {
     if (problem) return;
+    touched.current = true;
     setBusy(true);
     setMessage(null);
     try {
@@ -133,6 +160,7 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
           : current,
       );
       setCopied(false);
+      touched.current = false;
       setMessage({ text: t(site ? 'publish.updated' : 'publish.published'), alert: false });
     } catch (error) {
       setMessage({ text: refused(error), alert: true });
@@ -144,6 +172,7 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
   };
 
   const unpublish = async () => {
+    touched.current = true;
     setBusy(true);
     setMessage(null);
     try {
@@ -254,7 +283,10 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
               value={slug}
               aria-describedby="cgw-publish-slug-help"
               aria-invalid={problem ? true : undefined}
-              onChange={(event) => setSlug(event.target.value.trim().toLowerCase())}
+              onChange={(event) => {
+                touched.current = true;
+                setSlug(event.target.value.trim().toLowerCase());
+              }}
             />
             <p
               id="cgw-publish-slug-help"
@@ -269,7 +301,10 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
               className="cgw-input"
               value={language}
               aria-describedby="cgw-publish-language-help"
-              onChange={(event) => setLanguage(event.target.value === 'ar' ? 'ar' : 'en')}
+              onChange={(event) => {
+                touched.current = true;
+                setLanguage(event.target.value === 'ar' ? 'ar' : 'en');
+              }}
             >
               <option value="en" lang="en">
                 {t('language.en')}
@@ -286,7 +321,10 @@ export function PublishSection({ api, page }: { api: PublishingApi; page: PageRe
             label={t('publish.indexing')}
             description={t('publish.indexingHelp')}
             checked={indexing}
-            onCheckedChange={(checked) => setIndexing(checked === true)}
+            onCheckedChange={(checked) => {
+              touched.current = true;
+              setIndexing(checked === true);
+            }}
           />
           <div className="cgw-publish-buttons">
             {site ? (

@@ -18,6 +18,14 @@ public static class SiteRules
 
     public static readonly string[] Languages = ["en", "ar"];
 
+    /// <summary>
+    /// Phase 14: a site published, changed or unpublished (<c>entityId</c> its root page), told to
+    /// whoever can read that page; the workspace's switch or domains changed (<c>entityId</c> the
+    /// workspace), told to everyone in it. An open share dialog and Settings read again on either.
+    /// </summary>
+    public const string SiteChange = "site";
+    public const string PublishingChange = "publishing";
+
     public const string ReasonPerson = "person";
     public const string ReasonPublishingOff = "publishing.off";
     /// <summary>The root page was deleted for good (the worker's purge), so no one could unpublish it.</summary>
