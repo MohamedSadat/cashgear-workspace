@@ -34,8 +34,10 @@ namespace Cgw.Sites;
 /// Phase 14: any other host name is a site's own (a workspace's, proven by DNS, its certificate live):
 /// the site's root at <c>/</c>, its pages at <c>/{pageId}</c>, its files at <c>/files/{assetId}</c>, a
 /// <c>robots.txt</c> of its own, ACME's HTTP-01 answers at <c>/.well-known/acme-challenge/{token}</c>
-/// while an order lasts, and <c>http</c> sent on to <c>https</c> in Production; the slug's addresses of
-/// a site with such a name lead there (302). An address past its window is answered 429 first (SiteLimits).
+/// while an order lasts (on the sites' own host too, by the token alone: where the IIS host's port 80
+/// sends ACME's path of a name it does not bind yet), and <c>http</c> sent on to <c>https</c> in
+/// Production; the slug's addresses of a site with such a name lead there (302). An address past its
+/// window is answered 429 first (SiteLimits).
 /// </para>
 /// </summary>
 public sealed class SitesProgram
@@ -231,9 +233,17 @@ public static class SitesHost
             var host = context.Request.Host.Host.ToLowerInvariant();
             // Without its own address (Sites__PublicUrl) the process cannot tell a site's own name
             // from its own: every host is served as the sites' (0.13.0's behaviour).
-            if (own.Length == 0 || host.Length == 0 || host == own)
+            if (own.Length == 0 || host.Length == 0)
             {
                 await next();
+                return;
+            }
+            if (host == own)
+            {
+                // ACME's path of a name the IIS host does not bind yet: its port 80 sends it here
+                // (docs/OPERATIONS.md), answered by the token alone.
+                if (Readable(context) && await ChallengeAsync(context, null) is { } answer) await answer.ExecuteAsync(context);
+                else await next();
                 return;
             }
             var result = Readable(context) ? await DomainAsync(context, host, https) : NotFound(context);
@@ -241,20 +251,27 @@ public static class SitesHost
         });
     }
 
+    private const string ChallengePath = "/.well-known/acme-challenge/";
+
+    /// <summary>ACME's HTTP-01 answer (RFC 8555, 8.3) at its path, the 404 page for another token, or null off that path.</summary>
+    private static async Task<IResult?> ChallengeAsync(HttpContext http, string? host)
+    {
+        var path = http.Request.Path.Value ?? "/";
+        if (!path.StartsWith(ChallengePath, StringComparison.Ordinal)) return null;
+        var token = path[ChallengePath.Length..];
+        if (token.Length is 0 or > 128 || !token.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')) return NotFound(http);
+        var reader = http.RequestServices.GetRequiredService<SiteReader>();
+        if (await reader.ChallengeAsync(host, token, http.RequestAborted) is not { } answer) return NotFound(http);
+        http.Response.Headers.CacheControl = "no-store";
+        return Results.Text(answer, "text/plain; charset=utf-8");
+    }
+
     private static async Task<IResult> DomainAsync(HttpContext http, string host, bool https)
     {
         var reader = http.RequestServices.GetRequiredService<SiteReader>();
         var ct = http.RequestAborted;
         var path = http.Request.Path.Value ?? "/";
-        const string challenge = "/.well-known/acme-challenge/";
-        if (path.StartsWith(challenge, StringComparison.Ordinal))
-        {
-            var token = path[challenge.Length..];
-            if (token.Length is 0 or > 128 || !token.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')) return NotFound(http);
-            if (await reader.ChallengeAsync(host, token, ct) is not { } answer) return NotFound(http);
-            http.Response.Headers.CacheControl = "no-store";
-            return Results.Text(answer, "text/plain; charset=utf-8");
-        }
+        if (await ChallengeAsync(http, host) is { } challenge) return challenge;
         if (await reader.StateByHostAsync(host, ct) is not { } state) return NotFound(http);
         if (https && !http.Request.IsHttps)
             return Results.Redirect($"https://{host}{http.Request.Path}{http.Request.QueryString}", permanent: true, preserveMethod: true);

@@ -208,16 +208,30 @@ public sealed class SiteDomainTests(ServerFixture server)
     {
         var ws = await Ws.Create(server);
         var (_, host) = await Proven(ws, Host("example.test"));
+        var token = "tok-" + Guid.NewGuid().ToString("N");
         await using (var db = server.NewDb(ws.Id))
-            await db.SiteDomains.Where(d => d.Host == host).ExecuteUpdateAsync(u => u.SetProperty(d => d.ChallengeToken, "tok-123_ABC").SetProperty(d => d.ChallengeAnswer, "tok-123_ABC.thumb"));
+            await db.SiteDomains.Where(d => d.Host == host).ExecuteUpdateAsync(u => u.SetProperty(d => d.ChallengeToken, token).SetProperty(d => d.ChallengeAnswer, token + ".thumb"));
         await using var sites = server.NewSites(_ => { });
         var reader = At(sites, host);
-        var answer = await reader.GetAsync("/.well-known/acme-challenge/tok-123_ABC");
+        var answer = await reader.GetAsync("/.well-known/acme-challenge/" + token);
         Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
-        Assert.Equal("tok-123_ABC.thumb", await answer.Content.ReadAsStringAsync());
+        Assert.Equal(token + ".thumb", await answer.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync("/.well-known/acme-challenge/other")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await At(sites, Host("example.test")).GetAsync("/.well-known/acme-challenge/tok-123_ABC")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await ServerFixture.SiteClient(sites).GetAsync("/.well-known/acme-challenge/tok-123_ABC")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await At(sites, Host("example.test")).GetAsync("/.well-known/acme-challenge/" + token)).StatusCode);
+        // The sites' own host, where the IIS host's port 80 sends ACME's path of a name it does not
+        // bind yet: by the token alone.
+        var own = ServerFixture.SiteClient(sites);
+        var redirected = await own.GetAsync("/.well-known/acme-challenge/" + token);
+        Assert.Equal(HttpStatusCode.OK, redirected.StatusCode);
+        Assert.Equal(token + ".thumb", await redirected.Content.ReadAsStringAsync());
+        Assert.Equal("no-store", redirected.Headers.CacheControl?.ToString());
+        Assert.Equal(HttpStatusCode.NotFound, (await own.GetAsync("/.well-known/acme-challenge/tok-" + Guid.NewGuid().ToString("N"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await own.GetAsync("/.well-known/acme-challenge/a.b")).StatusCode);
+        // Once the order is over, nowhere.
+        await using (var db = server.NewDb(ws.Id))
+            await db.SiteDomains.Where(d => d.Host == host).ExecuteUpdateAsync(u => u.SetProperty(d => d.ChallengeToken, (string?)null).SetProperty(d => d.ChallengeAnswer, (string?)null));
+        Assert.Equal(HttpStatusCode.NotFound, (await own.GetAsync("/.well-known/acme-challenge/" + token)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await reader.GetAsync("/.well-known/acme-challenge/" + token)).StatusCode);
     }
 
     [Fact]

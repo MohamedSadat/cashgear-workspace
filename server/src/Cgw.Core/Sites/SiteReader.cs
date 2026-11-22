@@ -150,11 +150,14 @@ public sealed class SiteReader(CgwDb db, SharedReader reader, SharedDatabases da
 
     /// <summary>
     /// Phase 14: ACME's HTTP-01 answer for a token of a proven name's order under way (RFC 8555, 8.3),
-    /// or null. Never cached: the validator asks a few times while the order lasts.
+    /// or null. Never cached: the validator asks a few times while the order lasts. Without a host
+    /// (the sites' own host, where the IIS host's port 80 sends ACME's path of a name it does not bind
+    /// yet), by the token alone: a token is the CA's random value of at least 128 bits, and its answer
+    /// is what the order publishes anyway.
     /// </summary>
-    public Task<string?> ChallengeAsync(string host, string token, CancellationToken ct = default) =>
+    public Task<string?> ChallengeAsync(string? host, string token, CancellationToken ct = default) =>
         db.SiteDomains.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .Where(d => d.Host == host && d.VerifiedAt != null && d.ChallengeToken == token)
+            .Where(d => (host == null || d.Host == host) && d.VerifiedAt != null && d.ChallengeToken == token)
             .Select(d => d.ChallengeAnswer).FirstOrDefaultAsync(ct);
 
     private async Task<SiteState?> ReadStateAsync(PublishedSite site, CancellationToken ct)
