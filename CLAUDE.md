@@ -874,3 +874,11 @@ Added as they are found, grouped by phase.
   API and the worker only; the Sites process references nothing of it.
 - An index that widens when the permission filter drops pages must stop once it has ranked every
   chunk, or a workspace with fewer readable pages than the limit widens for ever.
+
+### After 0.13.0
+
+- CI's browsers refuse to keep storage, so the notice "This browser may clear your pages…" shows
+  once a profile across the window's foot (about 718 to 780 px of 800) until closed; a local
+  profile may never show it. A spec that presses near a view's foot sets `cgw-persist-notice` in
+  `localStorage` first (`timeline.spec.ts`). Which bars a timeline shows moves with today's date,
+  so such a spec can pass for weeks and fail one day (run 44962093078, on 2026-11-22).

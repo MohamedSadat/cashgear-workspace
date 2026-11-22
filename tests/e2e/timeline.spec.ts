@@ -86,6 +86,9 @@ async function openTimeline(
     ({ language, theme }) => {
       localStorage.setItem('cgw-language', language);
       if (theme) localStorage.setItem('cgw-theme', theme);
+      // The storage notice already seen on this device: where a browser refuses to keep its
+      // storage (CI's), it covers the timeline's last lines, and a bar dragged there was missed.
+      localStorage.setItem('cgw-persist-notice', new Date().toISOString());
     },
     { language, theme },
   );
