@@ -204,6 +204,29 @@ public sealed class SiteDomainTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task An_arabic_site_reads_at_its_own_name_right_to_left_in_its_language()
+    {
+        var ws = await Ws.Create(server);
+        var root = (await ws.NewPage("دليل الفريق")).GetProperty("id").GetGuid();
+        var chapter = (await ws.NewPage("الفصل الأول", root)).GetProperty("id").GetGuid();
+        Assert.True((await ws.Client.PutAsJsonAsync($"/api/v1/pages/{root}/site", new { slug = Slug("dalil"), indexing = false, language = "ar" })).IsSuccessStatusCode);
+        var (_, host) = await Proven(ws, Host("example.test"));
+        Assert.True((await Attach(ws.Client, root, host)).IsSuccessStatusCode);
+        await Live(ws.Id, host);
+
+        await using var sites = server.NewSites(_ => { });
+        var reader = At(sites, host);
+        foreach (var path in new[] { "/", $"/{chapter}" })
+        {
+            var html = await reader.GetStringAsync(path);
+            Assert.Contains("<html lang=\"ar\" dir=\"rtl\">", html, StringComparison.Ordinal);
+            Assert.Contains($"href=\"/{chapter}\"", html, StringComparison.Ordinal);
+            var title = path == "/" ? "دليل الفريق" : "الفصل الأول";
+            Assert.True(html.Contains(title, StringComparison.Ordinal) || html.Contains(System.Text.Encodings.Web.HtmlEncoder.Default.Encode(title), StringComparison.Ordinal), path);
+        }
+    }
+
+    [Fact]
     public async Task The_sites_answer_acmes_challenge_for_an_order_under_way_and_nothing_else()
     {
         var ws = await Ws.Create(server);
