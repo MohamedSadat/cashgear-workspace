@@ -427,7 +427,7 @@ public sealed class SsoTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.NotFound, (await ws.Client.PostAsync(SsoKit.Route(ws, $"/domains/{SsoKit.NewDomain()}/verify"), null)).StatusCode);
 
         // DNS that cannot answer reads as a record not found, and says so.
-        await using var failing = server.Variant(b => b.ConfigureTestServices(s => s.AddSingleton<ISsoDns>(new DownDns())));
+        await using var failing = server.Variant(b => b.ConfigureTestServices(s => s.AddSingleton<Cgw.Core.Domains.IDomainDns>(new DownDns())));
         var owner = await SsoKit.NewAccount(server, $"o-{Guid.NewGuid():N}@example.test", failing);
         var fourth = await Ws.Create(server, owner);
         var down = SsoKit.NewDomain();
@@ -443,9 +443,11 @@ public sealed class SsoTests(ServerFixture server)
         Assert.Contains(audit, a => a.Action == "sso.domain.remove");
     }
 
-    private sealed class DownDns : ISsoDns
+    private sealed class DownDns : Cgw.Core.Domains.IDomainDns
     {
-        public Task<IReadOnlyList<string>> TxtAsync(string name, CancellationToken ct) => throw new SsoDnsException("DNS did not answer");
+        public Task<IReadOnlyList<string>> TxtAsync(string name, CancellationToken ct) => throw new Cgw.Core.Domains.DomainDnsException("DNS did not answer");
+
+        public Task<IReadOnlyList<System.Net.IPAddress>> AddressesAsync(string name, CancellationToken ct) => throw new Cgw.Core.Domains.DomainDnsException("DNS did not answer");
     }
 
     [Fact]

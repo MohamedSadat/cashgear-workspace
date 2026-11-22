@@ -224,9 +224,7 @@ public static class ApiServices
         services.AddSingleton(sso);
         services.AddSingleton<SsoSecrets>();
         services.AddSingleton<SsoMetadata>();
-        services.AddSingleton<ISsoDns>(sso.DnsBaseUrl is { } dns
-            ? new HttpSsoDns(new HttpClient { Timeout = TimeSpan.FromSeconds(5) }, dns)
-            : new SystemSsoDns());
+        services.AddSingleton(Cgw.Core.Domains.DomainDns.From(sso.DnsBaseUrl));
         services.AddScoped<SsoPolicy>();
         services.AddScoped<SsoSettings>();
         services.AddScoped<SsoSignIn>();

@@ -26,6 +26,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { createServer } from 'node:http';
+import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -894,20 +895,37 @@ export class MockOidc {
           const entry = realm.record('dns', req, url);
           const asked = url.searchParams.get('name');
           if (!asked) return send(res, entry, 400, { error: 'name: the record name to look up.' });
-          return send(res, entry, 200, { txt: [...(this.dns.get(dnsName(asked)) ?? [])] });
+          const held = this.dns.get(dnsName(asked));
+          return send(res, entry, 200, {
+            txt: [...(held?.txt ?? [])],
+            addresses: [...(held?.addresses ?? [])],
+          });
         }
         case 'POST dns': {
-          const { name: named, txt } = await body();
+          // Phase 14: a name's addresses too (`A` and `AAAA`, its CNAMEs followed), for a site's
+          // host name pointed at the sites. A part not sent is left as it was.
+          const given = await body();
+          const named = given.name;
           if (typeof named !== 'string' || !dnsName(named) || named.length > 253)
             throw new Problem(400, 'name: a DNS name.');
-          const list = txt === null || txt === undefined ? [] : [].concat(txt);
-          if (list.length > 20 || list.some((t) => typeof t !== 'string' || t.length > 4096))
-            throw new Problem(400, 'txt: a string or up to 20 of them, or null to remove.');
-          if (list.length === 0) this.dns.delete(dnsName(named));
+          const held = { ...(this.dns.get(dnsName(named)) ?? { txt: [], addresses: [] }) };
+          if ('txt' in given) {
+            const list = given.txt === null ? [] : [].concat(given.txt);
+            if (list.length > 20 || list.some((t) => typeof t !== 'string' || t.length > 4096))
+              throw new Problem(400, 'txt: a string or up to 20 of them, or null to remove.');
+            held.txt = list;
+          }
+          if ('addresses' in given) {
+            const list = given.addresses === null ? [] : [].concat(given.addresses);
+            if (list.length > 20 || list.some((a) => typeof a !== 'string' || !isIP(a)))
+              throw new Problem(400, 'addresses: an IP address or up to 20 of them, or null.');
+            held.addresses = list;
+          }
+          if (held.txt.length === 0 && held.addresses.length === 0) this.dns.delete(dnsName(named));
           else {
             if (this.dns.size >= MAX_DNS && !this.dns.has(dnsName(named)))
               this.dns.delete(this.dns.keys().next().value);
-            this.dns.set(dnsName(named), list);
+            this.dns.set(dnsName(named), held);
           }
           return reply(204);
         }

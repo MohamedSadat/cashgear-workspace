@@ -40,7 +40,7 @@ public sealed record SsoProviderUpdate
 /// made through it, but its owners'. Removing the provider turns every domain's required off.
 /// Audited, never with the secret.
 /// </summary>
-public sealed class SsoSettings(CgwDb db, SsoMetadata metadata, SsoSecrets secrets, ISsoDns dns, SsoOptions options, Devices devices, Audit audit, TimeProvider clock, ILogger<SsoSettings> log)
+public sealed class SsoSettings(CgwDb db, SsoMetadata metadata, SsoSecrets secrets, Cgw.Core.Domains.IDomainDns dns, SsoOptions options, Devices devices, Audit audit, TimeProvider clock, ILogger<SsoSettings> log)
 {
     public const int MaxSessionHours = 720;
 
@@ -112,7 +112,7 @@ public sealed class SsoSettings(CgwDb db, SsoMetadata metadata, SsoSecrets secre
         {
             records = await dns.TxtAsync(SsoText.RecordName(domain), ct);
         }
-        catch (SsoDnsException e)
+        catch (Cgw.Core.Domains.DomainDnsException e)
         {
             log.LogWarning("Single sign-on: DNS could not be read for {Domain}: {Reason}", domain, e.Message);
             return new Failure(Codes.SsoDnsNotFound, 400, "DNS could not be read just now: try again in a minute");

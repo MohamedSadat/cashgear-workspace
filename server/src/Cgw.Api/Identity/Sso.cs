@@ -7,7 +7,6 @@ using System.Text.Json;
 using Cgw.Core;
 using Cgw.Core.Data;
 using Cgw.Core.Previews;
-using DnsClient;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols;
@@ -47,29 +46,7 @@ public static class SsoText
     /// characters, at least one dot, labels of 1 to 63 letters, digits and hyphens (not at either
     /// end), a top-level label that is not all digits; no wildcard. Null for anything else.
     /// </summary>
-    public static string? Domain(string? input)
-    {
-        if (input is null) return null;
-        var text = input.Trim();
-        if (text.EndsWith('.')) text = text[..^1];
-        if (text.Length is 0 or > 253 || text.Contains('*') || text.Contains('@')) return null;
-        string ascii;
-        try
-        {
-            ascii = new IdnMapping { UseStd3AsciiRules = true }.GetAscii(text).ToLowerInvariant();
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-        if (ascii.Length is < 3 or > 253) return null;
-        var labels = ascii.Split('.');
-        if (labels.Length < 2) return null;
-        foreach (var label in labels)
-            if (label.Length is 0 or > 63 || label[0] == '-' || label[^1] == '-' || !label.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-'))
-                return null;
-        return labels[^1].All(char.IsAsciiDigit) ? null : ascii;
-    }
+    public static string? Domain(string? input) => Cgw.Core.Domains.DomainNames.Ascii(input);
 
     /// <summary>The domain of an email address, as kept (<see cref="Domain"/>); null when it has none.</summary>
     public static string? EmailDomain(string? email)
@@ -127,65 +104,6 @@ public sealed class SsoSecrets(IDataProtectionProvider protection)
 
     /// <summary>A secret as typed: 1 to 500 visible ASCII characters, no spaces.</summary>
     public static bool Plausible(string? secret) => secret is { Length: >= 1 and <= 500 } && secret.All(c => c is > ' ' and < '\u007f');
-}
-
-/// <summary>A name's <c>TXT</c> records, each record's strings joined (RFC 7208, 3.3).</summary>
-public interface ISsoDns
-{
-    /// <summary>The records; empty for a name with none. Throws <see cref="SsoDnsException"/> when DNS could not answer.</summary>
-    Task<IReadOnlyList<string>> TxtAsync(string name, CancellationToken ct);
-}
-
-public sealed class SsoDnsException(string message, Exception? inner = null) : Exception(message, inner);
-
-/// <summary>The host's own resolvers, through DnsClient (Apache-2.0), asked afresh each time (no cache).</summary>
-public sealed class SystemSsoDns : ISsoDns
-{
-    private readonly LookupClient client = new(new LookupClientOptions
-    {
-        UseCache = false,
-        Timeout = TimeSpan.FromSeconds(5),
-        Retries = 2,
-        ThrowDnsErrors = false,
-        UseTcpFallback = true,
-    });
-
-    public async Task<IReadOnlyList<string>> TxtAsync(string name, CancellationToken ct)
-    {
-        try
-        {
-            var answer = await client.QueryAsync(name, QueryType.TXT, QueryClass.IN, ct);
-            return answer.HasError ? [] : answer.Answers.TxtRecords().Select(r => string.Concat(r.Text)).ToList();
-        }
-        catch (DnsResponseException e)
-        {
-            throw new SsoDnsException("DNS did not answer", e);
-        }
-    }
-}
-
-/// <summary>
-/// A developer's machine and the e2e stack (<c>Sso__DnsBaseUrl</c>, refused in Production): the mock
-/// provider's DNS stand-in, <c>GET {base}/__mock/dns?name=</c> → <c>{txt: string[]}</c>.
-/// </summary>
-public sealed class HttpSsoDns(HttpClient http, string baseUrl) : ISsoDns
-{
-    public async Task<IReadOnlyList<string>> TxtAsync(string name, CancellationToken ct)
-    {
-        try
-        {
-            using var response = await http.GetAsync($"{baseUrl}/__mock/dns?name={Uri.EscapeDataString(name)}", ct);
-            if (!response.IsSuccessStatusCode) throw new SsoDnsException($"The DNS stand-in answered {(int)response.StatusCode}");
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            return json.RootElement.TryGetProperty("txt", out var txt) && txt.ValueKind == JsonValueKind.Array
-                ? txt.EnumerateArray().Where(t => t.ValueKind == JsonValueKind.String).Select(t => t.GetString()!).ToList()
-                : [];
-        }
-        catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
-        {
-            throw new SsoDnsException("The DNS stand-in did not answer", e);
-        }
-    }
 }
 
 /// <summary>

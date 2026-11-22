@@ -13,7 +13,6 @@
     <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" PrivateAssets="all" />
     <PackageReference Include="OpenIddict.AspNetCore" />
     <!-- Phase 11: single sign-on's domains, proven by a TXT record (Identity/SsoDns.cs). -->
-    <PackageReference Include="DnsClient" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Cgw.Tests" />

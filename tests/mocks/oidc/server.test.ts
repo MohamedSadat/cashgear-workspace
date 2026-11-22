@@ -678,18 +678,38 @@ describe('the DNS stand-in', () => {
     const name = `_cashgear-workspace.${randomUUID()}.Acme.test.`;
     const lookup = async (n: string) =>
       (await (await fetch(`${mock.url}/__mock/dns?name=${encodeURIComponent(n)}`)).json()) as Json;
-    expect(await lookup(name)).toEqual({ txt: [] });
+    expect(await lookup(name)).toEqual({ txt: [], addresses: [] });
     expect(
       (await control(mock.url, 'dns', { name, txt: ['cgw-verify=abc', 'other'] })).status,
     ).toBe(204);
     expect(await lookup(name.toLowerCase().replace(/\.$/, ''))).toEqual({
       txt: ['cgw-verify=abc', 'other'],
+      addresses: [],
     });
     await control(mock.url, 'dns', { name, txt: null });
-    expect(await lookup(name)).toEqual({ txt: [] });
+    expect(await lookup(name)).toEqual({ txt: [], addresses: [] });
     const asked = (await requests(mock.url, 'dns')).filter((r) => r.query.name === name);
     expect(asked).toHaveLength(2);
     expect((await fetch(`${mock.url}/__mock/dns`)).status).toBe(400);
+  });
+
+  it('keeps a name’s addresses beside its records, each part set alone (Phase 14)', async () => {
+    const name = `docs.${randomUUID()}.example.test`;
+    const lookup = async () =>
+      (await (await fetch(`${mock.url}/__mock/dns?name=${name}`)).json()) as Json;
+    expect(
+      (await control(mock.url, 'dns', { name, addresses: ['203.0.113.5', '2001:db8::5'] })).status,
+    ).toBe(204);
+    await control(mock.url, 'dns', { name, txt: 'cgw-verify=xyz' });
+    expect(await lookup()).toEqual({
+      txt: ['cgw-verify=xyz'],
+      addresses: ['203.0.113.5', '2001:db8::5'],
+    });
+    expect((await control(mock.url, 'dns', { name, addresses: 'not an address' })).status).toBe(
+      400,
+    );
+    await control(mock.url, 'dns', { name, addresses: null });
+    expect(await lookup()).toEqual({ txt: ['cgw-verify=xyz'], addresses: [] });
   });
 });
 
