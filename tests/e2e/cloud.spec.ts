@@ -292,22 +292,25 @@ test("another account signed in on the same browser sees none of the first's wor
   await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible({
     timeout: 30000,
   });
-  const held = await page.evaluate(async () => {
-    const open = indexedDB.open('cgw-workspace');
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      open.onsuccess = () => resolve(open.result);
-      open.onerror = () => reject(open.error);
+  const held = () =>
+    page.evaluate(async () => {
+      const open = indexedDB.open('cgw-workspace');
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => reject(open.error);
+      });
+      const names = await new Promise<string[]>((resolve, reject) => {
+        const read = db.transaction('workspaces').objectStore('workspaces').getAll();
+        read.onsuccess = () => resolve((read.result as { name: string }[]).map((w) => w.name));
+        read.onerror = () => reject(read.error);
+      });
+      db.close();
+      return names;
     });
-    const names = await new Promise<string[]>((resolve, reject) => {
-      const read = db.transaction('workspaces').objectStore('workspaces').getAll();
-      read.onsuccess = () => resolve((read.result as { name: string }[]).map((w) => w.name));
-      read.onerror = () => reject(read.error);
-    });
-    db.close();
-    return names;
-  });
-  expect(held).toContain('Second space');
-  expect(held).not.toContain('First space');
+  // The sign-out shows at once; the removal follows it (after any pass still running, then what
+  // waits counted), so the store is read until it is done.
+  await expect.poll(held, { timeout: 30000 }).not.toContain('First space');
+  expect(await held()).toContain('Second space');
   await signIn(page, first);
   await signedIn(page, first);
   await page.getByRole('treeitem', { name: /Private plans/ }).click({ timeout: 30000 });
