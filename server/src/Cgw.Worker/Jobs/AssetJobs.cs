@@ -87,16 +87,22 @@ public sealed class AssetCleanupJob(BlobStore blob, TimeProvider clock) : IJob
         var refs = db.AssetRefs.IgnoreQueryFilters([CgwDb.Tenant]);
         var pages = db.Pages.IgnoreQueryFilters([CgwDb.Tenant]);
         var previews = db.LinkPreviews.IgnoreQueryFilters([CgwDb.Tenant]);
+        // Phase 14: a file a row's file cell holds (until 0.14.0 only once the row's document was derived).
+        var rowFiles = db.DatabaseRowFiles.IgnoreQueryFilters([CgwDb.Tenant]);
         var referenced = assets.Where(a =>
             refs.Any(r => r.AssetId == a.Id)
+            || rowFiles.Any(f => f.AssetId == a.Id)
             || pages.Any(p => p.CoverAssetId == a.Id && p.DeletedAt == null)
             || previews.Any(l => l.ImageAssetId == a.Id)
             || db.Users.Any(u => u.AvatarAssetId == a.Id));
         await referenced.Where(a => a.UnreferencedSince != null).ExecuteUpdateAsync(s => s.SetProperty(a => a.UnreferencedSince, (DateTimeOffset?)null), ct);
         await assets.Where(a => a.Status == AssetStatus.Ready && a.UnreferencedSince == null).Except(referenced)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.UnreferencedSince, now), ct);
-        var expired = await assets.Where(a => a.Status != AssetStatus.Deleted && a.UnreferencedSince != null && a.UnreferencedSince < now - Keep)
-            .Take(500).ToListAsync(ct);
+        // Nothing is deleted until the index holds every row written before it (RowFilesFillJob):
+        // a row's file that 0.13.0 counted as held by nothing is kept until then.
+        var expired = !await db.JobStates.AnyAsync(j => j.Name == RowFilesFillJob.Done, ct) ? []
+            : await assets.Where(a => a.Status != AssetStatus.Deleted && a.UnreferencedSince != null && a.UnreferencedSince < now - Keep)
+                .Take(500).ToListAsync(ct);
         foreach (var asset in expired)
         {
             await blob.DeleteAsync(asset.BlobKey, ct);

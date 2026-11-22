@@ -90,7 +90,7 @@ public sealed class AssetService(CgwDb db, BlobStore blob, Access access, TimePr
         return Dto(asset);
     }
 
-    /// <summary>Whether the caller may read the asset: its uploader, or a reader of a page that shows it.</summary>
+    /// <summary>Whether the caller may read the asset: its uploader, or a reader of a page that shows it (a row's file cell too).</summary>
     public async Task<bool> CanReadAsync(Member member, Asset asset, CancellationToken ct = default)
     {
         if (asset.CreatedBy == member.UserId) return true;
@@ -99,6 +99,10 @@ public sealed class AssetService(CgwDb db, BlobStore blob, Access access, TimePr
             .Distinct().Take(50).ToListAsync(ct);
         foreach (var page in pages)
             if (Levels.AtLeast(await access.PageLevelAsync(member, page), Levels.View)) return true;
+        // Phase 14: a file a row's file cell holds is read by whoever reads the row (its database's access).
+        var databases = await db.DatabaseRowFiles.Where(f => f.AssetId == asset.Id).Select(f => f.DatabaseId).Distinct().Take(50).ToListAsync(ct);
+        foreach (var database in databases)
+            if (Levels.AtLeast(await access.PageLevelAsync(member, database), Levels.View)) return true;
         return await db.LinkPreviews.AnyAsync(p => p.ImageAssetId == asset.Id, ct);
     }
 

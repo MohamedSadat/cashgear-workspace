@@ -37,6 +37,7 @@ public static class WorkerServices
         services.AddSingleton<IAssetScanner, NoScanner>();
         services.AddSingleton<IJob, AssetCheckJob>();
         services.AddSingleton<IJob, AssetCleanupJob>();
+        services.AddSingleton<IJob, RowFilesFillJob>();
         services.AddSingleton<IJob, SnapshotJob>();
         services.AddSingleton<IJob, HistoryJob>();
         services.AddSingleton<IJob, HardRestoreJob>();

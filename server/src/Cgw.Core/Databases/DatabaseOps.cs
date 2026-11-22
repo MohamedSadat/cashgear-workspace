@@ -403,6 +403,9 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             await RowStore.BumpPagesAsync(db, touched, member.UserId, Now, ct);
             await changes.AddPagesAsync(touched, "upsert", member.UserId, ct);
         }
+        // Phase 14: a files property converted to another type holds no files (only files keep ids of files).
+        if (before.Type == PropertyTypes.Files && def["type"]?.GetValue<string>() != PropertyTypes.Files)
+            await RowFiles.ClearPropertyAsync(db, record.PageId, before.Id, ct);
         return def;
     }
 
@@ -806,9 +809,19 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             }
         }
 
+        // Phase 14: the index of rows' files, for each row whose files cells changed (or that is new).
+        var files = new List<(WorkspaceDatabase Database, RowFiles.Entry Entry, bool Fresh)>();
         foreach (var state in rows.Values.Where(r => r.Dirty))
         {
             var database = await DatabaseAsync(state.Record.DatabaseId, ct);
+            if (database is not null)
+            {
+                var schema = SchemaOf(database);
+                var fresh = db.Entry(state.Record).State == EntityState.Added;
+                var held = RowFiles.Of(schema, state.Values);
+                if (fresh ? held.Count > 0 : !RowFiles.Same(held, RowFiles.Of(schema, ValueJson.ReadMap(state.Record.Values))))
+                    files.Add((database, new RowFiles.Entry(state.Page.Id, held), fresh));
+            }
             state.Record.Values = ValueJson.WriteMap(state.Values);
             state.Record.PropertyVersions = ValueJson.WriteVersions(state.Versions);
             state.Record.Computed = ValueJson.WriteMap(state.Computed);
@@ -825,6 +838,11 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
                 changes.Add("database", id, "upsert", record.Version, actor);
         databaseChanged.Clear();
         await db.SaveChangesAsync(ct);
+        foreach (var group in files.GroupBy(f => (f.Database.PageId, f.Fresh)))
+        {
+            var database = group.First().Database;
+            await RowFiles.ReplaceAsync(db, database.WorkspaceId, database.PageId, group.Select(f => f.Entry).ToList(), ct, fresh: group.Key.Fresh);
+        }
     }
 
     /// <summary>Saves what is tracked so far, so set-based statements see it.</summary>

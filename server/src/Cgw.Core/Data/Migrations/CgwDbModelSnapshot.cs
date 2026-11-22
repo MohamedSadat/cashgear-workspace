@@ -505,6 +505,38 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("DatabaseRows");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.DatabaseRowFile", b =>
+                {
+                    b.Property<byte[]>("RowId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("PropertyId")
+                        .HasMaxLength(16)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(16)");
+
+                    b.Property<byte[]>("AssetId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("RowId", "PropertyId", "AssetId");
+
+                    b.HasIndex("AssetId");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("AssetId"), new[] { "WorkspaceId", "DatabaseId" });
+
+                    b.HasIndex("DatabaseId", "PropertyId");
+
+                    b.ToTable("DatabaseRowFiles");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.DatabaseView", b =>
                 {
                     b.Property<byte[]>("Id")

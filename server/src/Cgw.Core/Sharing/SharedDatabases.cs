@@ -444,11 +444,11 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
         if (await db.Pages.AsNoTracking().AnyAsync(p => p.CoverAssetId == assetId && p.Kind == PageKinds.Row && p.DeletedAt == null && p.TrashedAt == null
                 && !p.IsTemplate && p.ParentPageId != null && databases.Contains(p.ParentPageId.Value), ct))
             return true;
-        var text = assetId.ToString();
-        var holding = await db.DatabaseRows.AsNoTracking()
-            .Where(r => databases.Contains(r.DatabaseId) && r.Values.Contains(text))
-            .Join(db.Pages.Where(p => p.DeletedAt == null && p.TrashedAt == null && !p.IsTemplate), r => r.PageId, p => p.Id, (r, p) => new { r.PageId, r.DatabaseId, r.Values })
-            .OrderBy(r => r.PageId).Take(50).ToListAsync(ct);
+        // Phase 14: by the index of rows' files, not a scan of the rows' values.
+        var holding = await db.DatabaseRowFiles.AsNoTracking()
+            .Where(f => f.AssetId == assetId && databases.Contains(f.DatabaseId))
+            .Join(db.Pages.Where(p => p.DeletedAt == null && p.TrashedAt == null && !p.IsTemplate), f => f.RowId, p => p.Id, (f, p) => new { f.DatabaseId, f.PropertyId })
+            .Distinct().OrderBy(r => r.DatabaseId).ThenBy(r => r.PropertyId).Take(200).ToListAsync(ct);
         foreach (var group in holding.GroupBy(r => r.DatabaseId))
         {
             var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == group.Key, ct);
@@ -462,13 +462,7 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
                     var config = JsonNode.Parse(string.IsNullOrEmpty(v.Config) ? "{}" : v.Config) as JsonObject;
                     return ShownBy(schema, v.Type, config).Select(d => d.Id).Concat(LayoutProperties(v.Type, config));
                 }).ToHashSet(StringComparer.Ordinal);
-            foreach (var row in group)
-            {
-                var values = ValueJson.ReadMap(row.Values);
-                foreach (var (key, value) in values)
-                    if (shown.Contains(key) && schema.Live(key) is { Type: PropertyTypes.Files } && value is string[] files && files.Contains(text, StringComparer.Ordinal))
-                        return true;
-            }
+            if (group.Any(r => shown.Contains(r.PropertyId) && schema.Live(r.PropertyId) is { Type: PropertyTypes.Files })) return true;
         }
         return false;
     }

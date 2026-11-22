@@ -332,6 +332,22 @@ public sealed class AssetRef : ITenantOwned
     public Guid WorkspaceId { get; set; }
 }
 
+/// <summary>
+/// Phase 14 (M14.1): a file a row's file cell holds, written with the row's values in the same
+/// transaction (<see cref="Databases.RowFiles"/>). A row's file is read by whoever can read its
+/// row, held by it for the clean-up, and found by a site's and a share link's check by this index
+/// rather than by a scan of the rows' values. Every files property counts, a deleted one too (its
+/// values stay, and come back with it).
+/// </summary>
+public sealed class DatabaseRowFile : ITenantOwned
+{
+    public Guid RowId { get; set; }
+    public string PropertyId { get; set; } = "";
+    public Guid AssetId { get; set; }
+    public Guid DatabaseId { get; set; }
+    public Guid WorkspaceId { get; set; }
+}
+
 public static class Levels
 {
     public const string Full = "full";

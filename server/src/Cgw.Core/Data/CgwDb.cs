@@ -40,6 +40,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<PageLink> PageLinks => Set<PageLink>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetRef> AssetRefs => Set<AssetRef>();
+    public DbSet<DatabaseRowFile> DatabaseRowFiles => Set<DatabaseRowFile>();
     public DbSet<PagePermission> PagePermissions => Set<PagePermission>();
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<WorkspaceChange> WorkspaceChanges => Set<WorkspaceChange>();
@@ -284,6 +285,14 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         {
             e.HasKey(x => new { x.AssetId, x.PageId });
             e.HasIndex(x => x.PageId);
+        });
+        b.Entity<DatabaseRowFile>(e =>
+        {
+            e.HasKey(x => new { x.RowId, x.PropertyId, x.AssetId });
+            e.Property(x => x.PropertyId).HasMaxLength(16).IsUnicode(false);
+            // A file's rows: a member's read, the clean-up (across workspaces) and a site's check.
+            e.HasIndex(x => x.AssetId).IncludeProperties(x => new { x.WorkspaceId, x.DatabaseId });
+            e.HasIndex(x => new { x.DatabaseId, x.PropertyId });
         });
         b.Entity<PagePermission>(e =>
         {
@@ -629,6 +638,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<PageLink>(b);
         Filter<Asset>(b);
         Filter<AssetRef>(b);
+        Filter<DatabaseRowFile>(b);
         Filter<PagePermission>(b);
         Filter<ShareLink>(b);
         Filter<WorkspaceChange>(b);

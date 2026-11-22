@@ -51,6 +51,7 @@ public sealed class PagePurgeJob(DocStates states, BlobStore blob, TimeProvider 
             await db.PageAncestors.Where(a => a.PageId == pageId || a.AncestorPageId == pageId).ExecuteDeleteAsync(ct);
             // A row's record stays until now (emptied, so the query cache saw it go).
             await db.DatabaseRows.Where(r => r.PageId == pageId).ExecuteDeleteAsync(ct);
+            await db.DatabaseRowFiles.Where(f => f.RowId == pageId || f.DatabaseId == pageId).ExecuteDeleteAsync(ct);
             // Phase 6: its comments, and every inbox entry that points at it.
             await db.Comments.Where(c => c.PageId == pageId).ExecuteDeleteAsync(ct);
             await db.CommentThreads.Where(t => t.PageId == pageId).ExecuteDeleteAsync(ct);
@@ -145,6 +146,7 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.Favourites.ExecuteDeleteAsync(ct);
         await db.PageVisits.ExecuteDeleteAsync(ct);
         await db.PageAncestors.ExecuteDeleteAsync(ct);
+        await db.DatabaseRowFiles.ExecuteDeleteAsync(ct);
         await db.DatabaseRows.ExecuteDeleteAsync(ct);
         await db.DatabaseViews.ExecuteDeleteAsync(ct);
         await db.Databases.ExecuteDeleteAsync(ct);

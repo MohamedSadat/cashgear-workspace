@@ -335,6 +335,7 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
                 var seq = current.RowsVersion;
                 var now = clock.GetUtcNow();
                 var made = new List<RowStore.NewRow>(batch.Count);
+                var madeFiles = new List<RowFiles.Entry>();
                 foreach (var (row, line) in batch)
                 {
                     if (row.Length > columns.Count) Problem(line, $"{row.Length} fields, {columns.Count} columns: the rest are left out");
@@ -374,9 +375,12 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
                     var computed = Compute.Row(schema, data, NoRelatedRows.Instance);
                     made.Add(new RowStore.NewRow(rowId, last, title, ValueJson.WriteMap(values),
                         ValueJson.WriteVersions(values.Keys.ToDictionary(k => k, _ => 1L, StringComparer.Ordinal)), ValueJson.WriteMap(computed)));
+                    // Text reads as no file (DATA_MODEL.md, the conversion table): kept by the one rule all the same.
+                    if (RowFiles.Of(schema, values) is { Count: > 0 } held) madeFiles.Add(new RowFiles.Entry(rowId, held));
                 }
                 // Set-based: the pages, the values and the feed, a statement each.
                 await RowStore.InsertAsync(db, member.WorkspaceId, page.SectionId, current.PageId, made, member.UserId, now, current.Version, seq, ct);
+                await RowFiles.ReplaceAsync(db, member.WorkspaceId, current.PageId, madeFiles, ct, fresh: true);
                 await changes.AddPagesAsync(made.Select(r => r.Id).ToList(), "upsert", member.UserId, ct);
                 current.RowCount += made.Count;
                 current.UpdatedAt = now;

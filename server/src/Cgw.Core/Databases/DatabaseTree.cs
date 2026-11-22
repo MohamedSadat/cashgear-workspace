@@ -115,6 +115,7 @@ public static class DatabaseTree
                 changes.Add("view", view.Id, "delete", view.Version + 1, actor);
             await db.DatabaseViews.Where(v => v.DatabaseId == id).ExecuteDeleteAsync(ct);
             await db.DatabaseRows.Where(r => r.DatabaseId == id).ExecuteDeleteAsync(ct);
+            await db.DatabaseRowFiles.Where(f => f.DatabaseId == id).ExecuteDeleteAsync(ct);
             var record = await db.Databases.FirstOrDefaultAsync(d => d.PageId == id, ct);
             if (record is not null)
             {
@@ -138,6 +139,8 @@ public static class DatabaseTree
         await db.SaveChangesAsync(ct);
         var ids = rowPages.Select(p => p.Id).ToList();
         var records = await db.DatabaseRows.Where(r => ids.Contains(r.PageId)).ToListAsync(ct);
+        // Phase 14: their values go, so do the files the index held for them.
+        await RowFiles.ClearAsync(db, ids, ct);
         foreach (var group in records.GroupBy(r => r.DatabaseId))
         {
             var database = await db.Databases.FirstOrDefaultAsync(d => d.PageId == group.Key, ct);
