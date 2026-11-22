@@ -17,10 +17,12 @@ const { createI18n } = await import('../i18n');
 const { defaultSlug, publishingApi, slugProblem, RESERVED_SLUGS } = await import('./publishing');
 const { PublishSection } = await import('./PublishSection');
 const { PublishingSection } = await import('./PublishingSettings');
+const { SiteDomainsSection } = await import('./SiteDomainsSettings');
 type PublishingApi = import('./publishing').PublishingApi;
 type SiteState = import('./publishing').SiteState;
 type Site = import('./publishing').Site;
 type Publishing = import('./publishing').Publishing;
+type SiteDomain = import('./publishing').SiteDomain;
 type PageRecord = import('@cgw/workspace').PageRecord;
 
 const PAGE = '01936f6e-0000-7000-8000-00000000c001';
@@ -63,6 +65,7 @@ const site = (over: Partial<Site> = {}): Site => ({
   publishedAt: '2026-11-17T10:00:00Z',
   publishedBy: { id: 'u1', name: 'Ada' },
   updatedAt: '2026-11-17T10:00:00Z',
+  domain: null,
   ...over,
 });
 
@@ -98,9 +101,23 @@ function fakePublishing(state: SiteState) {
     }),
     publishing: vi.fn(),
     setPublishing: vi.fn(),
+    // Phase 14: the workspace's proven host names, and a site given one.
+    domains: vi.fn(async () => ({ domains: [], choices, target: 'localhost', certificates: true })),
+    setDomain: vi.fn(async (pageId: string, host: string | null) => {
+      calls.push({ kind: 'setDomain', args: [pageId, host] });
+      if (refuse) throw new SyncHttpError(409, refuse, 'No');
+      const made = {
+        ...held.site!,
+        domain: host ? { host, certificate: 'none' as const, url: `http://${host}:5290` } : null,
+      };
+      held = { ...held, site: made };
+      return made;
+    }),
   } as unknown as PublishingApi;
   return { api, calls, refuse: (code: string | null) => (refuse = code) };
 }
+
+let choices: { host: string; pageId: string | null }[] = [];
 
 const button = (container: HTMLElement, text: string) =>
   [...container.querySelectorAll('button')].find((b) => b.textContent === text) ?? null;
@@ -340,6 +357,57 @@ describe('the share dialog’s “Publish to the web”', () => {
     expect(container.querySelector<HTMLInputElement>('#cgw-publish-slug')!.value).toBe('mine');
   });
 
+  it('gives a live site one of the workspace’s proven host names, or its own address again (Phase 14)', async () => {
+    choices = [
+      { host: 'docs.example.com', pageId: null },
+      { host: 'other.example.com', pageId: CHILD },
+    ];
+    const fake = fakePublishing(ready({ site: site() }));
+    const container = render(h(PublishSection, { api: fake.api, page: page('Handbook') }));
+    await until(() => !!container.querySelector('#cgw-publish-address'), 'the address');
+    const select = container.querySelector<HTMLSelectElement>('#cgw-publish-address')!;
+    // A name another page's site has is not offered.
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'docs.example.com']);
+    expect(button(container, 'Use this address')!.disabled).toBe(true);
+    act(() => {
+      select.value = 'docs.example.com';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => button(container, 'Use this address')!.click());
+    expect(fake.calls.at(-1)).toEqual({ kind: 'setDomain', args: [PAGE, 'docs.example.com'] });
+    await until(() => !!container.querySelector('[data-testid="site-address-state"]'), 'its state');
+    expect(container.querySelector('[data-testid="site-address-state"]')!.textContent).toBe(
+      'At docs.example.com: No certificate yet',
+    );
+    expect(container.querySelector('[data-testid="site-address-message"]')!.textContent).toContain(
+      'once its certificate is made',
+    );
+    // Refused as in use: said.
+    fake.refuse('domain.inUse');
+    act(() => {
+      select.value = '';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => button(container, 'Use this address')!.click());
+    expect(container.querySelector('[data-testid="site-address-message"]')!.textContent).toBe(
+      'That host name serves another page’s site.',
+    );
+    choices = [];
+  });
+
+  it('offers no address before the site is published, and says when no name is proven', async () => {
+    const draft = fakePublishing(ready());
+    const container = render(h(PublishSection, { api: draft.api, page: page('Handbook') }));
+    await until(() => !!container.querySelector('#cgw-publish-slug'), 'the form');
+    expect(container.querySelector('[data-testid="site-address"]')).toBeNull();
+    const live = fakePublishing(ready({ site: site() }));
+    const other = render(h(PublishSection, { api: live.api, page: page('Handbook') }));
+    await until(() => !!other.querySelector('[data-testid="site-address"]'), 'the address');
+    expect(other.querySelector('[data-testid="site-address"]')!.textContent).toContain(
+      'No host name of the workspace is proven yet.',
+    );
+  });
+
   it('reads in Arabic, an Arabic title proposing the page id', async () => {
     const fake = fakePublishing(ready());
     const container = render(h(PublishSection, { api: fake.api, page: page('دليل الموظف') }), 'ar');
@@ -350,6 +418,117 @@ describe('the share dialog’s “Publish to the web”', () => {
     expect(container.querySelector<HTMLSelectElement>('#cgw-publish-language')!.value).toBe('ar');
     expect(container.querySelector('#cgw-publish-title')!.textContent).toBe('النشر على الويب');
     expect(button(container, 'نشر')).not.toBeNull();
+  });
+});
+
+describe('Settings → Publishing → Your own host names (Phase 14)', () => {
+  function fakeDomains() {
+    let domains: SiteDomain[] = [];
+    let proven = false;
+    const api = {
+      domains: vi.fn(async () => ({
+        domains,
+        choices: [],
+        target: 'localhost',
+        certificates: false,
+      })),
+      addDomain: vi.fn(async (_ws: string, host: string) => {
+        if (host === 'bad') throw new SyncHttpError(400, 'request.invalid', 'No');
+        const made: SiteDomain = {
+          id: 'd1',
+          host,
+          record: { name: `_cashgear-workspace.${host}`, value: 'cgw-verify=abc' },
+          target: 'localhost',
+          verifiedAt: null,
+          pageId: null,
+          pageTitle: null,
+          certificate: 'none',
+          certificateExpiresAt: null,
+          certificateError: null,
+          version: 1,
+        };
+        domains = [made];
+        return made;
+      }),
+      verifyDomain: vi.fn(async () => {
+        if (!proven) throw new SyncHttpError(400, 'domain.dnsNotFound', 'No');
+        domains = domains.map((d) => ({
+          ...d,
+          verifiedAt: '2026-11-22T10:00:00Z',
+          pageId: PAGE,
+          pageTitle: 'Handbook',
+          certificate: 'failed' as const,
+          certificateError: 'notPointed',
+        }));
+        return domains[0];
+      }),
+      removeDomain: vi.fn(async () => {
+        domains = [];
+      }),
+    };
+    return { api, prove: () => (proven = true) };
+  }
+
+  it('adds a name, shows the record that proves it, verifies it and removes it after asking', async () => {
+    const fake = fakeDomains();
+    const container = render(h(SiteDomainsSection, { api: fake.api, workspaceId: WS }));
+    await until(() => !!container.querySelector('[data-testid="site-domains-none"]'), 'none yet');
+    expect(container.querySelector('[data-testid="certificates-off"]')).not.toBeNull();
+    const input = container.querySelector<HTMLInputElement>('#cgw-domain-host')!;
+    act(() => type(input, 'bad'));
+    await act(async () => button(container, 'Add')!.click());
+    expect(container.querySelector('[data-testid="site-domains-message"]')!.textContent).toContain(
+      'such as docs.example.com',
+    );
+    act(() => type(input, 'docs.example.com'));
+    await act(async () => button(container, 'Add')!.click());
+    await until(() => !!container.querySelector('[data-host="docs.example.com"]'), 'the name');
+    expect(container.querySelector('[data-testid="domain-record-value"]')!.textContent).toBe(
+      'cgw-verify=abc',
+    );
+    expect(container.textContent).toContain('a CNAME record to localhost');
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Verify docs.example.com"]')!
+        .click(),
+    );
+    expect(container.querySelector('[data-testid="site-domains-message"]')!.textContent).toContain(
+      'not there yet',
+    );
+    fake.prove();
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Verify docs.example.com"]')!
+        .click(),
+    );
+    await until(
+      () =>
+        container.querySelector('[data-testid="domain-state"]')?.textContent ===
+        'Serves “Handbook”',
+      'proven',
+    );
+    expect(container.querySelector('[data-testid="domain-certificate"]')!.textContent).toBe(
+      'No certificate: the name does not point here yet',
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Remove docs.example.com"]')!
+        .click(),
+    );
+    expect(fake.api.removeDomain).not.toHaveBeenCalled();
+    await act(async () => button(container, 'Remove the host name')!.click());
+    expect(fake.api.removeDomain).toHaveBeenCalledWith(WS, 'd1');
+    await until(() => !!container.querySelector('[data-testid="site-domains-none"]'), 'removed');
+  });
+
+  it('reads in Arabic, the host name left to right', async () => {
+    const fake = fakeDomains();
+    await fake.api.addDomain(WS, 'docs.example.com');
+    const container = render(h(SiteDomainsSection, { api: fake.api, workspaceId: WS }), 'ar');
+    await until(() => !!container.querySelector('[data-host]'), 'the name');
+    expect(container.querySelector('#cgw-domains-title')!.textContent).toBe('أسماء نطاقاتك');
+    expect(container.querySelector('[data-host] strong')!.getAttribute('dir')).toBe('ltr');
+    expect(button(container, 'تحقّق')).not.toBeNull();
   });
 });
 
@@ -370,7 +549,7 @@ describe('Settings → Publishing', () => {
   }
   const live: Publishing = {
     enabled: true,
-    sites: [{ ...site(), pageTitle: 'Handbook', pageIcon: '📘' }],
+    sites: [{ ...site(), pageTitle: 'Handbook', pageIcon: '📘', domainHost: null }],
   };
   const checkbox = (container: HTMLElement) =>
     container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;

@@ -12,6 +12,7 @@ import type { offlineRowsEn } from '../cloud/offlineWords';
 import type { signOutEn } from '../cloud/signOutWords';
 import type { pluginNetworkEn } from '../plugins/networkWords';
 import type { aiPlanEn } from '../ai/planWords';
+import type { siteDomainsEn } from '../cloud/domainsWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -28,6 +29,7 @@ interface Sections {
   signOut: typeof signOutEn;
   pluginNetwork: typeof pluginNetworkEn;
   aiPlan: typeof aiPlanEn;
+  siteDomains: typeof siteDomainsEn;
 }
 
 declare module 'i18next' {

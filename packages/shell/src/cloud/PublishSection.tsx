@@ -17,11 +17,15 @@ import {
   publishFailure,
   slugProblem,
   type PublishingApi,
+  type Site,
   type SiteLanguage,
   type SitePage,
   type SiteState,
   type SlugProblem,
 } from './publishing';
+import { siteDomainsWords } from './domainsWords';
+import { useCertificateText } from './SiteDomainsSettings';
+import { useSection } from '../i18n/sections';
 import './publish.css';
 
 const SLUG_TEXT: Record<SlugProblem, string> = {
@@ -50,6 +54,143 @@ function depths(pages: readonly SitePage[]): { page: SitePage; depth: number }[]
     depthOf.set(page.id, depth);
     return { page, depth };
   });
+}
+
+/**
+ * Phase 14: a live site's address: its own (the slug's), or one of the workspace's proven host
+ * names not given to another site. Read again when the feed says publishing changed.
+ */
+function SiteAddress({
+  api,
+  page,
+  site,
+  reading,
+  onSite,
+}: {
+  api: PublishingApi;
+  page: PageRecord;
+  site: Site;
+  reading: number;
+  onSite: (site: Site) => void;
+}) {
+  useSection(siteDomainsWords);
+  const { t } = useTranslation();
+  const certificate = useCertificateText();
+  const [choices, setChoices] = useState<string[] | null>(null);
+  const [chosen, setChosen] = useState(site.domain?.host ?? '');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ text: string; alert: boolean } | null>(null);
+  const current = site.domain?.host ?? '';
+
+  useEffect(() => {
+    let live = true;
+    api.domains(page.workspaceId).then(
+      (answer) => {
+        if (!live) return;
+        setChoices(
+          answer.choices
+            .filter((c) => c.pageId === null || c.pageId === page.id)
+            .map((c) => c.host),
+        );
+      },
+      () => live && setChoices([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, page.workspaceId, page.id, reading]);
+
+  useEffect(() => setChosen(current), [current]);
+
+  const save = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const saved = await api.setDomain(page.id, chosen || null);
+      onSite(saved);
+      setMessage({
+        alert: false,
+        text: chosen
+          ? t('siteDomains.addressSaved', { host: chosen })
+          : t('siteDomains.addressOwnSaved'),
+      });
+    } catch (error) {
+      const code = publishFailure(error);
+      setMessage({
+        alert: true,
+        text:
+          code === 'domain.inUse'
+            ? t('siteDomains.inUse')
+            : code === 'domain.notVerified'
+              ? t('siteDomains.notVerified')
+              : code === 'offline'
+                ? t('publish.offline')
+                : t('siteDomains.failed'),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (choices === null) return null;
+  const hosts = current && !choices.includes(current) ? [current, ...choices] : choices;
+  return (
+    <div className="cgw-publish-fields" data-testid="site-address">
+      <label htmlFor="cgw-publish-address">{t('siteDomains.address')}</label>
+      {hosts.length ? (
+        <>
+          <select
+            id="cgw-publish-address"
+            className="cgw-input"
+            value={chosen}
+            aria-describedby="cgw-publish-address-help"
+            onChange={(event) => setChosen(event.target.value)}
+          >
+            <option value="">{t('siteDomains.addressOwn')}</option>
+            {hosts.map((host) => (
+              <option key={host} value={host} dir="ltr">
+                {host}
+              </option>
+            ))}
+          </select>
+          <p id="cgw-publish-address-help" className="cgw-muted">
+            {t('siteDomains.addressHelp')}
+          </p>
+          <p>
+            <button
+              type="button"
+              className="cgw-button"
+              disabled={busy || chosen === current}
+              onClick={() => void save()}
+            >
+              {t('siteDomains.addressSave')}
+            </button>
+          </p>
+        </>
+      ) : (
+        <p id="cgw-publish-address-help" className="cgw-muted">
+          {t('siteDomains.addressNone')}
+        </p>
+      )}
+      {site.domain ? (
+        <p className="cgw-muted" data-testid="site-address-state">
+          {t('siteDomains.at', {
+            host: site.domain.host,
+            state: certificate(site.domain.certificate, null, null),
+          })}
+        </p>
+      ) : null}
+      {message ? (
+        <p
+          role={message.alert ? 'alert' : 'status'}
+          className={message.alert ? 'cgw-publish-problem' : 'cgw-muted'}
+          data-testid="site-address-message"
+        >
+          {message.text}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 /** Phase 14: what the feed says of publishing, for this page's workspace (`null`: anything). */
@@ -317,6 +458,21 @@ export function PublishSection({
               {t('publish.languageHelp')}
             </p>
           </div>
+          {site ? (
+            <SiteAddress
+              api={api}
+              page={page}
+              site={site}
+              reading={reading}
+              onSite={(saved) =>
+                setLoading((current) =>
+                  current.kind === 'ready'
+                    ? { kind: 'ready', state: { ...current.state, site: saved } }
+                    : current,
+                )
+              }
+            />
+          ) : null}
           <CgCheckBox
             label={t('publish.indexing')}
             description={t('publish.indexingHelp')}

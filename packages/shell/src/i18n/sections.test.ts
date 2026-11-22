@@ -7,6 +7,7 @@ import { signOutWords } from '../cloud/signOutWords';
 import { pluginNetworkWords } from '../plugins/networkWords';
 import { aiPlanWords } from '../ai/planWords';
 import { ssoWords } from '../cloud/ssoWords';
+import { siteDomainsWords } from '../cloud/domainsWords';
 import { ar } from './ar';
 import { flatten } from './catalogue';
 import { en } from './en';
@@ -21,6 +22,7 @@ const SECTIONS: Section[] = [
   signOutWords,
   pluginNetworkWords,
   aiPlanWords,
+  siteDomainsWords,
 ];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();

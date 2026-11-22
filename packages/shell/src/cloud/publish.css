@@ -96,3 +96,48 @@
     grid-column: 1;
   }
 }
+
+/* Phase 14: Settings → Publishing → Your own host names. */
+.cgw-domains {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-domain {
+  padding-block: 8px;
+  border-block-end: 1px solid var(--cg-border);
+}
+
+.cgw-domain p {
+  margin-block: 4px;
+}
+
+.cgw-domain-record dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 4px 0;
+}
+
+.cgw-domain-record dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cgw-domain-buttons,
+.cgw-domain-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.cgw-domain-add {
+  margin-block-start: 12px;
+}
+
+.cgw-domain-add p {
+  flex-basis: 100%;
+  margin: 0;
+}

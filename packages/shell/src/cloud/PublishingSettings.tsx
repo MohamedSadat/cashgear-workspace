@@ -10,6 +10,7 @@ import type { WorkspaceSession } from '../session';
 import type { Cloud } from './cloud';
 import { useAccount } from './CloudUi';
 import { publishFailure, publishingApi, type Publishing, type PublishingApi } from './publishing';
+import { SiteDomainsSection, type DomainsApi } from './SiteDomainsSettings';
 import './publish.css';
 
 /** The section, for a synced workspace while someone is signed in. */
@@ -35,6 +36,7 @@ export function PublishingSettings({
       workspaceId={workspace.id}
       manages={workspace.role === 'owner' || workspace.role === 'admin'}
       changes={changes}
+      domains={api}
     />
   );
 }
@@ -46,6 +48,7 @@ export function PublishingSection({
   workspaceId,
   manages,
   changes,
+  domains,
 }: {
   api: Pick<PublishingApi, 'publishing' | 'setPublishing' | 'unpublish'>;
   workspaceId: string;
@@ -53,6 +56,8 @@ export function PublishingSection({
   manages: boolean;
   /** Phase 14: the feed's publishing changes, of any workspace (filtered here). */
   changes?: (listener: (workspaceId: string) => void) => () => void;
+  /** Phase 14: the workspace's host names, shown to owners and admins. */
+  domains?: DomainsApi;
 }) {
   const { t, i18n } = useTranslation();
   const [publishing, setPublishing] = useState<Publishing | null>(null);
@@ -258,6 +263,9 @@ export function PublishingSection({
                 {t('publish.noSites')}
               </p>
             )
+          ) : null}
+          {manages && domains ? (
+            <SiteDomainsSection api={domains} workspaceId={workspaceId} changes={changes} />
           ) : null}
         </>
       )}
