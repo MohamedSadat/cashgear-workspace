@@ -1750,3 +1750,50 @@ deletes it 30 days after its upload (M14.1 shows it by a test first, then fixes 
 | Publishing in the feed | A `site` change (`entityId` the root page, `upsert` or `delete`) for each publish, change and unpublish, whatever the reason (a person, the switch, the purge), to whoever can read the root page; a `publishing` change (`entityId` the workspace) for the switch and the workspace's domains, to everyone in it; older builds ignore both | A site's page id must not reach someone who cannot see the page; a publisher choosing a domain needs the list |
 | Rows' files | `DatabaseRowFiles` (`RowId`, `PropertyId`, `AssetId`, `DatabaseId`, `WorkspaceId`) written with a row's values in the same transaction on every server path (the ops' flush, a type change, a deletion for good, the purge, a CSV import), every files property counted, a deleted one too; filled for existing rows once by the worker (`RowFilesFillJob`, done when `JobStates` holds `rowFilesFill:done`), and until then the clean-up deletes nothing; a row's file readable by whoever can read its database and held by it for the clean-up; the site's and share link's check by it, still for a property some view shows | The index and the values cannot drift if one transaction writes both; the clean-up's 30 days must not end while a row holds a file, nor before the rows written by 0.13.0 are in the index |
 | Version | `v0.14.0`, then `v0.15.0` | One version per phase |
+
+## 2026-11-22: Phase 14, the host spike
+
+Run on the production host (Windows Server 2022, IIS 10) over Remote Desktop with your sign-in, by
+`deploy/iis/domains-spike.ps1`: its report first (nothing changed), then three tries on a scratch site
+and a name nobody uses (`<random>.cgw-spike.invalid`), each removed after.
+
+What the report found: Default Web Site holds the host's only catch-all binding, `http *:80:` (and
+`https *:443:*.cashgearerp.com` with no certificate of its own); HTTP.sys's `0.0.0.0:443` gives the
+`*.cashgearerp.com` certificate to any name without an SNI entry of its own (`vaultapi.` and
+`www.kitchino.info` rely on it); every other name is bound by SNI to a certificate in
+`LocalMachine\WebHosting`; win-acme (`\win-acme renew`, daily) renews the per-name certificates by
+HTTP-01 from memory (`SelfHosting`) and the wildcard by a manual DNS record; Centralized SSL
+Certificate Support is installed and off; port 80 is open.
+
+| Try | Result |
+| --- | --- |
+| 1. The store's catch-all, `https *:443:` with SslFlags 2 | Refused by IIS: a binding with SslFlags other than 0 must name a host |
+| 2. A store binding by name (SslFlags 3) | Not served: the scratch name got the wildcard certificate. IIS adds no HTTP.sys store entry (`ccs=443`) for a binding made by script, and such an entry is port-wide, ahead of the `0.0.0.0:443` fallback that `vaultapi.` and `www.kitchino.info` need. Every other name kept its certificate |
+| 3. `site-bindings.ps1` over a PFX as the worker writes one (AES-256) | The name served by its own certificate and the scratch site's file; every other name kept its certificate; the file removed and the script run again, the bindings, HTTP.sys's entry and the certificate were gone. The redirect below added for a moment: the scratch name's `/.well-known/acme-challenge/<probe>` went from 404 to `302 https://pages.cashgearerp.com/.well-known/acme-challenge/<probe>`, its `/` stayed 200, and `www.cashgearerp.com` (bound on 80 by its own site) answered as before |
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| The test host name | `docs.test.cashgearerp.com` (two labels under the domain, so the wildcard does not cover it) |
+| Port 80 for ACME | Default Web Site holds the catch-all `http *:80:`: send ACME's path alone (`/.well-known/acme-challenge/*`) from it to `https://pages.cashgearerp.com/.well-known/acme-challenge/*`, which the Sites process answers |
+| The store's account for the try | You made a local account (`cgw-ccs`) for try 2. The store was dropped after it, so nothing needs the account |
+| How names are bound, after try 2 | A scheduled task on the host, as SYSTEM every 2 minutes: an https binding by name for each certificate the worker writes, removed when it is gone; never a name another site binds; it reads no database |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| No Centralized Certificate Store | The task imports each `<host>.pfx` into `LocalMachine\WebHosting` (not exportable, friendly name `cgw-site <host>`) and binds the name by SNI with that certificate, swapped after a renewal; a marked certificate no name uses is removed. Replaces the store and the catch-all of 2026-11-22's "Certificates" answer: the store's folder is now just the worker's folder, readable by administrators, SYSTEM and the worker | Tries 1 and 2: the store needs a host name per binding anyway, plus a port-wide HTTP.sys entry that would stand between the host's unbound names and their certificate. Binding by name is how every other site on the host is bound, and needs no account or second password |
+| The PFX password for the task | Read, as SYSTEM, from the worker service's environment in the registry (`Sites__CertificatePassword`), or `CGW_SITES_CERT_PASSWORD` when run by hand | No second copy of the secret anywhere |
+| A file the task cannot read | Its name stays bound as it was (logged), rather than taken off the web | A changed password must not take every site down |
+| http by name too | The task also binds `http *:80:<host>` on the sites' site, so a renewal's challenge and a plain-http visit reach the Sites process (which sends the visit to https); the redirect on Default Web Site matters only for a name's first certificate | Without it `http://<host>/` would show Default Web Site's page |
+| The Sites process on its own host | Answers `/.well-known/acme-challenge/<token>` by the token alone (`SiteReader.ChallengeAsync(null, token)`), from the domains' rows of an order under way, never cached, outside the rate limit | Where the redirect lands; a token is the CA's random value and its answer is published by the order anyway |
+| The redirect | A `location` `Default Web Site/.well-known/acme-challenge` with `httpRedirect` to `https://<sites host>$V` (302, exact destination), added by `install.ps1 -CustomDomains` to whichever site holds the catch-all; with none, the sites' site takes the catch-all. win-acme's in-memory validation listens on HTTP.sys's `http://+:80/.well-known/acme-challenge/` while it runs, which comes before any IIS site, so it is unaffected | Your answer; the spike's third try |
+| The task's script | `<Root>\scripts\site-bindings.ps1`, the folder changeable by administrators only (it runs as SYSTEM); log `<Root>\logs\site-bindings.log` (names and thumbprints, its last 2,000 lines) | A script SYSTEM runs must not be writable by anyone else |
+
+Seen on the host and not Workspace's to change (said to you, nothing done): the `*.cashgearerp.com`
+certificate that `pages.`, `plugins.`, `workspace-api.`, `api.` and the host's fallback use ends on
+2027-01-02 and is renewed by hand (win-acme's manual DNS validation); `cg.` (started) and
+`blockhub.`, `blockhubapi.` (stopped) are bound to a certificate for `assissto.cashgearerp.com` that
+ended on 2026-04-05.

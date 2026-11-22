@@ -1962,6 +1962,12 @@ Phase 9's Sites process and Phase 11's proof of a domain by DNS. A spike on the 
 before M14.4's certificates: its IIS bindings read, and one catch-all binding tried on a scratch site.
 A test host name of yours, and Let's Encrypt's subscriber agreement, which are yours to give.
 
+The spike ran on 2026-11-22 (DECISIONS.md, "Phase 14: the host spike"): IIS refuses a catch-all
+binding over its Centralized Certificate Store, and a store binding by name needs a port-wide HTTP.sys
+entry that would stand between the host's unbound names and its default certificate. So each name is
+bound as the host's other sites are, by a scheduled task (`deploy/iis/site-bindings.ps1`), and the
+host's catch-all http site sends ACME's path alone to the sites' own host.
+
 Sized on 2026-11-22, against 0.13.0 (nothing run):
 
 - **Custom domains.** The Sites process routes by path only (`/{slug}`, `/{slug}/{pageId}`,
@@ -2040,7 +2046,7 @@ can read the site's root page, a domain's to owners and admins.
 
 *M14.4 Custom domains*
 
-- [ ] The spike, on the host.
+- [ ] The spike, on the host (done 2026-11-22; the binding by a scheduled task, not the store).
 - [ ] A workspace's host names, proven by DNS and checked again before each renewal; one attached
       to a site by whoever may publish it (the share dialog's publish view); Settings → Publishing's
       domains for owners and admins; audit.
@@ -2048,7 +2054,9 @@ can read the site's root page, a domain's to owners and admins.
       `robots.txt`; the slug's redirect; a host it does not know, the 404 page.
 - [ ] Certificates as answered: an ACME client in the worker (account, order, HTTP-01, a CSR by
       .NET's `CertificateRequest`), the challenge answered by the Sites process, the certificate in
-      the store, renewal and removal; a mock ACME server for the tests; `install.ps1`'s part.
+      a folder the host's scheduled task binds from, renewal and removal; a mock ACME server for the
+      tests; `install.ps1`'s part (the task, and ACME's path sent on from the host's catch-all http
+      site).
 
 **Acceptance criteria**
 
@@ -2073,7 +2081,8 @@ can read the site's root page, a domain's to owners and admins.
 **Risks**
 
 - A catch-all binding takes another site's requests on the host: the spike reads every binding
-  first; an administrator's step per domain if it cannot be done safely.
+  first; an administrator's step per domain if it cannot be done safely. (Found: the store's
+  catch-all is refused by IIS; names are bound one by one by a task that touches no other site's.)
 - A domain taken over: a token per workspace in `TXT`, read again before every renewal; a name
   removed stops serving at once and its certificate is deleted.
 - Let's Encrypt's limits (certificates per registered domain a week, orders per account): staging in
