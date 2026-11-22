@@ -229,6 +229,10 @@ test('an invited member sees the workspace; signing out hides it, signing in aga
   // whoever uses it next; the first run's screen is, with its Sign in.
   await second.goto('/#/settings');
   await second.getByRole('button', { name: 'Sign out' }).click();
+  // Signed out before the app is loaded again: a load while the sign-out is still on its way can
+  // ask who is signed in before the server has ended the session, and the pass's 401 after it
+  // keeps the workspace shown, as for a session that ended elsewhere.
+  await expect(second.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();
   await second.goto('/');
   await expect(second.getByLabel('Workspace name')).toBeVisible({ timeout: 20000 });
   await expect(second.getByRole('treeitem', { name: /Getting started/ })).toHaveCount(0);
