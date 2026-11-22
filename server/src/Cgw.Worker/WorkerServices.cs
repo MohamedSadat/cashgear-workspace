@@ -2,6 +2,8 @@ using Cgw.LocalModel;
 using Cgw.Core;
 using Cgw.Core.Ai;
 using Cgw.Core.Data;
+using Cgw.Core.Domains;
+using Cgw.Core.Sites;
 using Cgw.Core.Sync;
 using Cgw.Worker.Jobs;
 using Cgw.Ydoc;
@@ -63,6 +65,11 @@ public static class WorkerServices
         services.AddLocalModel(configuration);
         services.AddSingleton<IJob, EmbedJob>();
         services.AddSingleton<IJob, Phase10CleanupJob>();
+        // Phase 14: a site's host names' certificates, by ACME, into IIS's Centralized Certificate Store.
+        services.AddSingleton(sp => SitesOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton(sp => SiteCertificateOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton(sp => DomainDns.From(sp.GetRequiredService<IHostEnvironment>().IsProduction() ? null : configuration[DomainDns.BaseUrlKey]));
+        services.AddSingleton<IJob, SiteCertificateJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

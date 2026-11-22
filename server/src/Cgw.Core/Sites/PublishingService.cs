@@ -8,7 +8,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core.Sites;
 
-/// <summary>A live site (the streams contract's <c>SiteDto</c>): its address, its settings, who published it and when.</summary>
+/// <summary>
+/// A live site (the streams contract's <c>SiteDto</c>): its address, its settings, who published it
+/// and when. Phase 14: its host name, if it has one, and <c>Url</c> there once its certificate is live.
+/// </summary>
 public sealed record SiteDto(
     Guid Id,
     Guid PageId,
@@ -19,7 +22,11 @@ public sealed record SiteDto(
     long Version,
     DateTimeOffset PublishedAt,
     UserRefDto PublishedBy,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    SiteDomainStateDto? Domain);
+
+/// <summary>Phase 14: a site's host name, its certificate's state, and its address there.</summary>
+public sealed record SiteDomainStateDto(string Host, string Certificate, string Url);
 
 /// <summary>A page that is (or would be) published: parents first, the root's parent null.</summary>
 public sealed record SitePageDto(Guid Id, string Title, string? Icon, Guid? ParentPageId);
@@ -47,7 +54,8 @@ public sealed record WorkspaceSiteDto(
     UserRefDto PublishedBy,
     DateTimeOffset UpdatedAt,
     string PageTitle,
-    string? PageIcon);
+    string? PageIcon,
+    string? Domain);
 
 /// <summary><c>GET</c> and <c>PUT /workspaces/{id}/publishing</c>: the switch, and (to owners and admins) every live site.</summary>
 public sealed record PublishingDto(bool Enabled, IReadOnlyList<WorkspaceSiteDto> Sites);
@@ -78,8 +86,90 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
     {
         var people = await People.RefsAsync(db, [site.PublishedBy], ct);
         var by = People.Of(people, site.PublishedBy);
-        return new SiteDto(site.Id, site.RootPageId, site.Slug, sites.SiteUrl(site.Slug), site.Indexing, site.Language, site.Version, site.PublishedAt,
-            new UserRefDto(by.Id, by.Name), site.UpdatedAt);
+        var domain = site.UnpublishedAt is null
+            ? await db.SiteDomains.AsNoTracking().Where(d => d.SiteId == site.Id && d.VerifiedAt != null).Select(d => new { d.Host, d.Certificate }).FirstOrDefaultAsync(ct)
+            : null;
+        var state = domain is null ? null : new SiteDomainStateDto(domain.Host, domain.Certificate, sites.DomainUrl(domain.Host));
+        return new SiteDto(site.Id, site.RootPageId, site.Slug, state is { Certificate: CertificateStates.Live } ? state.Url : sites.SiteUrl(site.Slug),
+            site.Indexing, site.Language, site.Version, site.PublishedAt, new UserRefDto(by.Id, by.Name), site.UpdatedAt, state);
+    }
+
+    /// <summary>
+    /// Phase 14 (M14.4): gives the page's live site one of the workspace's proven host names, or (null)
+    /// takes its name away, by someone with full on the page; one site a name, one name a site. Under
+    /// the workspace's lock, with a <c>site</c> and a <c>publishing</c> change, audited <c>site.domain.attach</c>.
+    /// </summary>
+    public async Task<Result<SiteDto>> SetDomainAsync(Member member, Actor actor, Page page, string level, SiteDomainChoice? request, CancellationToken ct = default)
+    {
+        if (level != Levels.Full) return Failure.Denied("Giving this page's site a host name needs full access");
+        if (request is null) return Failure.Invalid("Send host, or null for the site's own address alone");
+        var host = request.Host is null ? null : SiteHosts.Normalize(request.Host, sites);
+        if (request.Host is not null && host is null) return Failure.Invalid("host is one of the workspace's host names");
+        db.ChangeTracker.Clear();
+        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        await changes.LockAsync(member.WorkspaceId, ct);
+        var site = await db.PublishedSites.AsNoTracking().FirstOrDefaultAsync(s => s.RootPageId == page.Id && s.UnpublishedAt == null, ct);
+        if (site is null) return Failure.NotFound("The page is not published");
+        var current = await db.SiteDomains.FirstOrDefaultAsync(d => d.SiteId == site.Id, ct);
+        SiteDomain? chosen = null;
+        if (host is not null)
+        {
+            chosen = await db.SiteDomains.FirstOrDefaultAsync(d => d.Host == host, ct);
+            if (chosen is null) return Failure.NotFound("The workspace has no such host name");
+            if (chosen.VerifiedAt is null) return new Failure(Codes.DomainNotVerified, 400, "Prove the host name first: an owner or admin verifies its TXT record in Settings");
+            if (chosen.SiteId is { } other && other != site.Id) return Failure.Conflict(Codes.DomainInUse, "The host name serves another page's site");
+        }
+        if (current?.Id == chosen?.Id) return await DtoAsync(site, ct);
+        var now = clock.GetUtcNow();
+        if (current is not null)
+        {
+            current.SiteId = null;
+            current.AttachedBy = null;
+            current.AttachedAt = null;
+            current.Version++;
+        }
+        if (chosen is not null)
+        {
+            chosen.SiteId = site.Id;
+            chosen.AttachedBy = member.UserId;
+            chosen.AttachedAt = now;
+            // A name not yet given a certificate is ordered at once.
+            if (chosen.Certificate != CertificateStates.Live) chosen.CertificateNextAttemptAt = null;
+            chosen.Version++;
+        }
+        audit.Add(actor, "site.domain.attach", member.WorkspaceId, "page", page.Id, new { siteId = site.Id, host, was = current?.Host });
+        changes.Add(SiteRules.SiteChange, page.Id, "upsert", site.Version, member.UserId);
+        changes.Add(SiteRules.PublishingChange, member.WorkspaceId, "upsert", 1, member.UserId);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            await changes.FlushAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException e) when (e.InnerException is SqlException { Number: 2601 or 2627 })
+        {
+            return Failure.Conflict(Codes.DomainInUse, "The host name serves another page's site");
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Failure.Conflict(Codes.VersionConflict, "The host name changed meanwhile");
+        }
+        return await DtoAsync(site, ct);
+    }
+
+    /// <summary>The host names these sites served go back to serving nothing (an unpublish, the switch); call in its transaction.</summary>
+    private async Task<bool> FreeDomainsAsync(IReadOnlyCollection<Guid> siteIds, CancellationToken ct)
+    {
+        if (siteIds.Count == 0) return false;
+        var freed = await db.SiteDomains.Where(d => d.SiteId != null && siteIds.Contains(d.SiteId.Value)).ToListAsync(ct);
+        foreach (var domain in freed)
+        {
+            domain.SiteId = null;
+            domain.AttachedBy = null;
+            domain.AttachedAt = null;
+            domain.Version++;
+        }
+        return freed.Count > 0;
     }
 
     /// <summary>What may and would be published of a page (full on it; the route checks).</summary>
@@ -201,6 +291,7 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
         Unpublish(site, member.UserId, SiteRules.ReasonPerson);
         audit.Add(actor, "site.unpublish", member.WorkspaceId, "page", page.Id, new { siteId = site.Id, site.Slug, reason = SiteRules.ReasonPerson });
         changes.Add(SiteRules.SiteChange, page.Id, "delete", site.Version, member.UserId);
+        if (await FreeDomainsAsync([site.Id], ct)) changes.Add(SiteRules.PublishingChange, member.WorkspaceId, "upsert", 1, member.UserId);
         await db.SaveChangesAsync(ct);
         await changes.FlushAsync(ct);
         await tx.CommitAsync(ct);
@@ -227,14 +318,19 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
         var live = await db.PublishedSites.AsNoTracking().Where(s => s.UnpublishedAt == null)
             .Join(db.Pages, s => s.RootPageId, p => p.Id, (s, p) => new { Site = s, p.Title, p.Icon })
             .ToListAsync(ct);
+        var named = await db.SiteDomains.AsNoTracking().Where(d => d.SiteId != null && d.VerifiedAt != null)
+            .Select(d => new { SiteId = d.SiteId!.Value, d.Host, d.Certificate }).ToListAsync(ct);
+        var domains = named.ToDictionary(d => d.SiteId);
         var people = await People.RefsAsync(db, live.Select(l => l.Site.PublishedBy), ct);
         return new PublishingDto(enabled, live
             .OrderBy(l => l.Site.Slug, StringComparer.Ordinal)
             .Select(l =>
             {
                 var by = People.Of(people, l.Site.PublishedBy);
-                return new WorkspaceSiteDto(l.Site.Id, l.Site.RootPageId, l.Site.Slug, sites.SiteUrl(l.Site.Slug), l.Site.Indexing, l.Site.Language, l.Site.Version,
-                    l.Site.PublishedAt, new UserRefDto(by.Id, by.Name), l.Site.UpdatedAt, l.Title, l.Icon);
+                var domain = domains.GetValueOrDefault(l.Site.Id);
+                var url = domain is { Certificate: CertificateStates.Live } ? sites.DomainUrl(domain.Host) : sites.SiteUrl(l.Site.Slug);
+                return new WorkspaceSiteDto(l.Site.Id, l.Site.RootPageId, l.Site.Slug, url, l.Site.Indexing, l.Site.Language, l.Site.Version,
+                    l.Site.PublishedAt, new UserRefDto(by.Id, by.Name), l.Site.UpdatedAt, l.Title, l.Icon, domain?.Host);
             }).ToList());
     }
 
@@ -255,15 +351,18 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
             {
                 workspace.PublishingEnabled = request.Enabled;
                 var taken = 0;
+                var down = new List<Guid>();
                 if (!request.Enabled)
                     foreach (var site in await db.PublishedSites.Where(s => s.UnpublishedAt == null).ToListAsync(ct))
                     {
+                        down.Add(site.Id);
                         Unpublish(site, member.UserId, SiteRules.ReasonPublishingOff);
                         audit.Add(actor, "site.unpublish", member.WorkspaceId, "page", site.RootPageId, new { siteId = site.Id, site.Slug, reason = SiteRules.ReasonPublishingOff });
                         changes.Add(SiteRules.SiteChange, site.RootPageId, "delete", site.Version, member.UserId);
                         taken++;
                     }
                 audit.Add(actor, "workspace.publishing", member.WorkspaceId, "workspace", member.WorkspaceId, new { enabled = request.Enabled, unpublished = taken });
+                await FreeDomainsAsync(down, ct);
                 changes.Add(SiteRules.PublishingChange, member.WorkspaceId, "upsert", 1, member.UserId);
                 await db.SaveChangesAsync(ct);
                 await changes.FlushAsync(ct);
@@ -285,6 +384,8 @@ public sealed class PublishingService(CgwDb db, SharedReader reader, ChangeLog c
             site.UnpublishReason = SiteRules.ReasonPageDeleted;
             site.Version++;
             site.UpdatedAt = now;
+            await db.SiteDomains.Where(d => d.SiteId == site.Id)
+                .ExecuteUpdateAsync(u => u.SetProperty(d => d.SiteId, (Guid?)null).SetProperty(d => d.AttachedBy, (Guid?)null).SetProperty(d => d.AttachedAt, (DateTimeOffset?)null), ct);
             new Audit(db).Add(Actor.System, "site.unpublish", site.WorkspaceId, "page", pageId, new { siteId = site.Id, site.Slug, reason = SiteRules.ReasonPageDeleted });
         }
         await db.SaveChangesAsync(ct);

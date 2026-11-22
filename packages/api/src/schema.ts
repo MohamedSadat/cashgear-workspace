@@ -657,6 +657,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/pages/{pageId}/site/domain': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['setSiteDomain'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/pages/{pageId}/versions': {
     parameters: {
       query?: never;
@@ -1425,6 +1441,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/publishing/domains': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getSiteDomains'];
+    put?: never;
+    post: operations['addSiteDomain'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/publishing/domains/{domainId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['removeSiteDomain'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/publishing/domains/{domainId}/verify': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['verifySiteDomain'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/search': {
     parameters: {
       query?: never;
@@ -2043,6 +2107,9 @@ export interface components {
       /** Format: int32 */
       expiresInDays: null | number | string;
     };
+    NewSiteDomain: {
+      host: null | string;
+    };
     NewSsoDomain: {
       domain: null | string;
     };
@@ -2537,7 +2604,49 @@ export interface components {
       id: string;
       level: string;
     };
+    SiteDomainChoice: {
+      host: null | string;
+    };
+    SiteDomainChoiceDto: {
+      host: string;
+      /** Format: uuid */
+      pageId: null | string;
+    };
+    SiteDomainDto: {
+      certificate: string;
+      certificateError: null | string;
+      /** Format: date-time */
+      certificateExpiresAt: null | string;
+      host: string;
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      pageId: null | string;
+      pageTitle: null | string;
+      record: components['schemas']['SiteDomainRecordDto'];
+      target: string;
+      /** Format: date-time */
+      verifiedAt: null | string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    SiteDomainRecordDto: {
+      name: string;
+      value: string;
+    };
+    SiteDomainsDto: {
+      certificates: boolean;
+      choices: components['schemas']['SiteDomainChoiceDto'][];
+      domains: components['schemas']['SiteDomainDto'][];
+      target: string;
+    };
+    SiteDomainStateDto: {
+      certificate: string;
+      host: string;
+      url: string;
+    };
     SiteDto: {
+      domain: null | components['schemas']['SiteDomainStateDto'];
       /** Format: uuid */
       id: string;
       indexing: boolean;
@@ -2871,6 +2980,7 @@ export interface components {
       plugins: components['schemas']['WorkspacePluginDto'][];
     };
     WorkspaceSiteDto: {
+      domain: null | string;
       /** Format: uuid */
       id: string;
       indexing: boolean;
@@ -4124,6 +4234,32 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  setSiteDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SiteDomainChoice'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SiteDto'];
+        };
       };
     };
   };
@@ -5860,6 +5996,98 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PublishingDto'];
+        };
+      };
+    };
+  };
+  getSiteDomains: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SiteDomainsDto'];
+        };
+      };
+    };
+  };
+  addSiteDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewSiteDomain'];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SiteDomainDto'];
+        };
+      };
+    };
+  };
+  removeSiteDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        domainId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  verifySiteDomain: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        domainId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SiteDomainDto'];
         };
       };
     };

@@ -256,6 +256,15 @@ const env = {
         Ai__Subscription__EmbeddingsMonthlyTokens: '1000000',
         Ai__LocalModel__Path: join(root, 'tests', 'fixtures', 'local-model'),
         Ai__LocalModel__Threads: '1',
+        // Phase 14: a site's host names' certificates from the mock ACME server (tests/mocks/acme,
+        // started by Playwright; it fetches HTTP-01 from the Sites process on 5290), into a folder of
+        // the stack's own under a password made here at start and kept in memory only, looked for
+        // every 5 s; agreeing to the mock's terms is the stack's (a real directory's is its operator's).
+        Sites__Acme__Directory: `http://127.0.0.1:${process.env.ACME_MOCK_PORT ?? 4289}/directory`,
+        Sites__Acme__AgreeToTerms: 'true',
+        Sites__Acme__IntervalSeconds: '5',
+        Sites__CertificateStore: join(data, 'certificates'),
+        Sites__CertificatePassword: randomUUID(),
       }
     : {}),
 };

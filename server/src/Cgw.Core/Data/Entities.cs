@@ -636,6 +636,58 @@ public sealed class PublishedSite : ITenantOwned
 }
 
 /// <summary>
+/// Phase 14 (M14.4): a host name a workspace's owners or admins add for its sites, proven by a DNS
+/// <c>TXT</c> record, attached to one live site by whoever may publish it, and served there once its
+/// certificate is live. A name verified by one workspace cannot be by another until it is removed.
+/// </summary>
+public sealed class SiteDomain : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    /// <summary>Lower-case ASCII (an IDN as punycode), as <c>SiteHosts.Normalize</c> keeps it.</summary>
+    public string Host { get; set; } = "";
+    /// <summary>128 random bits, base64url: the <c>TXT</c> record's <c>cgw-verify=</c> value.</summary>
+    public string Token { get; set; } = "";
+    public Guid CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
+    public Guid? VerifiedBy { get; set; }
+    /// <summary>The live site it serves, or null.</summary>
+    public Guid? SiteId { get; set; }
+    public Guid? AttachedBy { get; set; }
+    public DateTimeOffset? AttachedAt { get; set; }
+    /// <summary>When the worker last read its <c>TXT</c> record, and since when it has been missing.</summary>
+    public DateTimeOffset? ProofCheckedAt { get; set; }
+    public DateTimeOffset? ProofMissingSince { get; set; }
+    /// <summary><c>none</c>, <c>ordering</c>, <c>live</c> or <c>failed</c> (<c>CertificateStates</c>).</summary>
+    public string Certificate { get; set; } = "none";
+    public DateTimeOffset? CertificateExpiresAt { get; set; }
+    /// <summary>When the worker orders the next one: once a third of the lifetime is left.</summary>
+    public DateTimeOffset? CertificateRenewAt { get; set; }
+    public DateTimeOffset? CertificateNextAttemptAt { get; set; }
+    public int CertificateAttempts { get; set; }
+    /// <summary>Why the last order failed, as a short code (<c>notPointed</c>, <c>challenge</c>, <c>rateLimited</c>...).</summary>
+    public string? CertificateError { get; set; }
+    public string? CertificateThumbprint { get; set; }
+    /// <summary>An order's HTTP-01 token and the key authorisation the Sites process answers it with, while it lasts.</summary>
+    public string? ChallengeToken { get; set; }
+    public string? ChallengeAnswer { get; set; }
+    public long Version { get; set; } = 1;
+}
+
+/// <summary>
+/// Phase 14: the server's account at an ACME directory (Let's Encrypt), one a directory: its key as Data
+/// Protection's output (the worker holds the key ring), never a file, and its URL.
+/// </summary>
+public sealed class AcmeAccount
+{
+    public string Directory { get; set; } = "";
+    public string KeyCipher { get; set; } = "";
+    public string AccountUrl { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
 /// Sheet's file session, redeemed from a ticket: an opaque token kept only as its SHA-256, 30
 /// minutes idle and 10 hours at most, scoped to one workbook (or to the copy it saved). Access is
 /// checked again on every request.

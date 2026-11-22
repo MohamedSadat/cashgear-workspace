@@ -10,8 +10,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core.Sites;
 
-/// <summary>A live site as the Sites process holds it for a while: its record, its scope, and a hash of the scope's names.</summary>
-public sealed record SiteState(PublishedSite Site, PageScope Scope, string ScopeHash, IReadOnlyList<Guid> Databases);
+/// <summary>
+/// A live site as the Sites process holds it for a while: its record, its scope, and a hash of the
+/// scope's names. Phase 14: <c>Base</c>, what its addresses start with (<c>/&lt;slug&gt;</c> on the
+/// sites' host, empty at its own host name), and <c>Domain</c>, its host name once that serves it
+/// (the slug's addresses then lead there).
+/// </summary>
+public sealed record SiteState(PublishedSite Site, PageScope Scope, string ScopeHash, IReadOnlyList<Guid> Databases)
+{
+    public string Base { get; init; } = "/" + Site.Slug;
+    public string? Domain { get; init; }
+}
 
 /// <summary>A page answered once: its bytes and its strong entity tag.</summary>
 public sealed record RenderedPage(byte[] Body, string ETag);
@@ -101,16 +110,55 @@ public sealed class SiteReader(CgwDb db, SharedReader reader, SharedDatabases da
             if (kept is not null) db.Scope.Enter(kept.Site.WorkspaceId);
             return kept;
         }
-        var state = await ReadStateAsync(slug, ct);
+        var site = await db.PublishedSites.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Slug == slug && s.UnpublishedAt == null, ct);
+        var state = site is null ? null : await ReadStateAsync(site, ct);
+        if (state is not null)
+            state = state with { Domain = await LiveDomainAsync(site!.Id, ct) };
         cache.PutState(slug, state);
         return state;
     }
 
-    private async Task<SiteState?> ReadStateAsync(string slug, CancellationToken ct)
+    /// <summary>
+    /// Phase 14: the live site a host name serves: proven, attached, its certificate live; null for any
+    /// other name. Held as long as a slug's.
+    /// </summary>
+    public async Task<SiteState?> StateByHostAsync(string host, CancellationToken ct = default)
     {
-        var site = await db.PublishedSites.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Slug == slug && s.UnpublishedAt == null, ct);
-        if (site is null) return null;
+        var key = "host:" + host;
+        if (cache.TryState(key, out var kept))
+        {
+            if (kept is not null) db.Scope.Enter(kept.Site.WorkspaceId);
+            return kept;
+        }
+        var domain = await db.SiteDomains.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(d => d.Host == host && d.VerifiedAt != null && d.SiteId != null && d.Certificate == CertificateStates.Live)
+            .Select(d => new { d.SiteId, d.WorkspaceId }).FirstOrDefaultAsync(ct);
+        var site = domain is null ? null : await db.PublishedSites.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == domain.SiteId && s.WorkspaceId == domain.WorkspaceId && s.UnpublishedAt == null, ct);
+        var state = site is null ? null : await ReadStateAsync(site, ct);
+        if (state is not null) state = state with { Base = "", Domain = host };
+        cache.PutState(key, state);
+        return state;
+    }
+
+    /// <summary>The host name that serves this site now, if any.</summary>
+    private Task<string?> LiveDomainAsync(Guid siteId, CancellationToken ct) =>
+        db.SiteDomains.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(d => d.SiteId == siteId && d.VerifiedAt != null && d.Certificate == CertificateStates.Live)
+            .Select(d => d.Host).FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Phase 14: ACME's HTTP-01 answer for a token of a proven name's order under way (RFC 8555, 8.3),
+    /// or null. Never cached: the validator asks a few times while the order lasts.
+    /// </summary>
+    public Task<string?> ChallengeAsync(string host, string token, CancellationToken ct = default) =>
+        db.SiteDomains.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(d => d.Host == host && d.VerifiedAt != null && d.ChallengeToken == token)
+            .Select(d => d.ChallengeAnswer).FirstOrDefaultAsync(ct);
+
+    private async Task<SiteState?> ReadStateAsync(PublishedSite site, CancellationToken ct)
+    {
         if (!await db.Workspaces.AnyAsync(w => w.Id == site.WorkspaceId && w.DeletedAt == null && w.PublishingEnabled, ct)) return null;
         db.Scope.Enter(site.WorkspaceId);
         var scope = await reader.ScopeAsync(site.RootPageId, ct);
@@ -145,7 +193,7 @@ public sealed class SiteReader(CgwDb db, SharedReader reader, SharedDatabases da
         }
         var today = databases.Context(null).Today;
         var dbHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(versions.ToString())));
-        return string.Join('|', state.Site.Id, state.Site.Version, page.Id, seq, state.ScopeHash, dbHash, today, pageNumber);
+        return string.Join('|', state.Site.Id, state.Site.Version, state.Base, page.Id, seq, state.ScopeHash, dbHash, today, pageNumber);
     }
 
     /// <summary>Everything a page is drawn from, read now.</summary>
@@ -189,6 +237,7 @@ public sealed class SiteReader(CgwDb db, SharedReader reader, SharedDatabases da
         return new SitePage
         {
             Site = state.Site,
+            Base = state.Base,
             Scope = state.Scope,
             Page = page,
             Json = json,

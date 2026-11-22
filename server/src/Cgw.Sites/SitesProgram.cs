@@ -30,6 +30,13 @@ namespace Cgw.Sites;
 /// Policy that allows no network. The process loads no Data Protection, as in 0.9.0. <c>/f/</c> on the pages host, and
 /// anything else on the plugins host, is the 404 page.
 /// </para>
+/// <para>
+/// Phase 14: any other host name is a site's own (a workspace's, proven by DNS, its certificate live):
+/// the site's root at <c>/</c>, its pages at <c>/{pageId}</c>, its files at <c>/files/{assetId}</c>, a
+/// <c>robots.txt</c> of its own, ACME's HTTP-01 answers at <c>/.well-known/acme-challenge/{token}</c>
+/// while an order lasts, and <c>http</c> sent on to <c>https</c> in Production; the slug's addresses of
+/// a site with such a name lead there (302). An address past its window is answered 429 first (SiteLimits).
+/// </para>
 /// </summary>
 public sealed class SitesProgram
 {
@@ -72,6 +79,7 @@ public sealed class SitesProgram
         });
         app.UseRateLimiter();
         app.UsePluginsHost(app.Services.GetRequiredService<PluginsOptions>(), hsts: !local);
+        app.UseSiteDomains(app.Services.GetRequiredService<SitesOptions>(), https: !local);
         app.MapSites();
         return app;
     }
@@ -92,6 +100,8 @@ public static class SitesHost
         services.AddSingleton<DatabaseRowCache>();
         services.AddSingleton<SiteCache>();
         services.AddScoped<SiteReader>();
+        // Phase 14: the sites' own host name, and the addresses of a site at its own.
+        services.AddSingleton(sp => SitesOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         // Phase 10: the plugins host. Frame tickets are stored hashed (found by their hash): this
         // process holds no Data Protection, and its identity is denied the key ring's table.
         services.AddSingleton(sp => PluginsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
@@ -209,6 +219,77 @@ public static class SitesHost
         return true;
     }
 
+    /// <summary>
+    /// Phase 14: a host name that is neither the sites' own nor the plugins' (which answers before
+    /// this): a site's own, or the 404 page.
+    /// </summary>
+    public static IApplicationBuilder UseSiteDomains(this IApplicationBuilder app, SitesOptions sites, bool https)
+    {
+        var own = sites.Host;
+        return app.Use(async (context, next) =>
+        {
+            var host = context.Request.Host.Host.ToLowerInvariant();
+            // Without its own address (Sites__PublicUrl) the process cannot tell a site's own name
+            // from its own: every host is served as the sites' (0.13.0's behaviour).
+            if (own.Length == 0 || host.Length == 0 || host == own)
+            {
+                await next();
+                return;
+            }
+            var result = Readable(context) ? await DomainAsync(context, host, https) : NotFound(context);
+            await result.ExecuteAsync(context);
+        });
+    }
+
+    private static async Task<IResult> DomainAsync(HttpContext http, string host, bool https)
+    {
+        var reader = http.RequestServices.GetRequiredService<SiteReader>();
+        var ct = http.RequestAborted;
+        var path = http.Request.Path.Value ?? "/";
+        const string challenge = "/.well-known/acme-challenge/";
+        if (path.StartsWith(challenge, StringComparison.Ordinal))
+        {
+            var token = path[challenge.Length..];
+            if (token.Length is 0 or > 128 || !token.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')) return NotFound(http);
+            if (await reader.ChallengeAsync(host, token, ct) is not { } answer) return NotFound(http);
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.Text(answer, "text/plain; charset=utf-8");
+        }
+        if (await reader.StateByHostAsync(host, ct) is not { } state) return NotFound(http);
+        if (https && !http.Request.IsHttps)
+            return Results.Redirect($"https://{host}{http.Request.Path}{http.Request.QueryString}", permanent: true, preserveMethod: true);
+        if (path == "/robots.txt")
+        {
+            http.Response.Headers.CacheControl = "no-cache";
+            if (state.Site.Indexing) http.Items[IndexedKey] = true;
+            return Results.Text("User-agent: *\n" + (state.Site.Indexing ? "Allow: /\n" : "Disallow: /\n"), "text/plain; charset=utf-8");
+        }
+        if (path == "/") return await PageAsync(state, null, http);
+        var rest = path[1..];
+        if (Guid.TryParse(rest, out var pageId) && rest.Length == 36) return await PageAsync(state, pageId, http);
+        if (rest.StartsWith("files/", StringComparison.Ordinal) && Guid.TryParse(rest["files/".Length..], out var assetId))
+            return await FileAsync(state, assetId, http);
+        return NotFound(http);
+    }
+
+    /// <summary>A slug's address of a site that has its own host name: there, with the same path and query (302).</summary>
+    private static IResult? ToDomain(SiteState state, HttpContext http, string rest)
+    {
+        if (state.Domain is not { } host) return null;
+        var sites = http.RequestServices.GetRequiredService<SitesOptions>();
+        http.Response.Headers.CacheControl = "no-cache";
+        return Results.Redirect(sites.DomainUrl(host) + (rest.Length == 0 ? "/" : rest) + http.Request.QueryString, permanent: false);
+    }
+
+    private static async Task<IResult> FileAsync(SiteState state, Guid assetId, HttpContext http)
+    {
+        var reader = http.RequestServices.GetRequiredService<SiteReader>();
+        if (await reader.FileAsync(state, assetId, http.RequestAborted) is not { } url) return NotFound(http);
+        http.Response.Headers.CacheControl = "no-store";
+        if (state.Site.Indexing) http.Items[IndexedKey] = true;
+        return Results.Redirect(url.Url, permanent: false);
+    }
+
     private static IResult NotFound(HttpContext http)
     {
         http.Response.Headers.CacheControl = "no-cache";
@@ -228,28 +309,32 @@ public static class SitesHost
             return Results.Text(await reader.RobotsAsync(http.RequestAborted), "text/plain; charset=utf-8");
         });
 
-        app.Map("/{slug}", (string slug, HttpContext http, SiteReader reader, SiteCache cache) => PageAsync(slug, null, http, reader, cache));
-        app.Map("/{slug}/{pageId:guid}", (string slug, Guid pageId, HttpContext http, SiteReader reader, SiteCache cache) => PageAsync(slug, pageId, http, reader, cache));
+        app.Map("/{slug}", (string slug, HttpContext http, SiteReader reader) => SlugAsync(slug, null, http, reader));
+        app.Map("/{slug}/{pageId:guid}", (string slug, Guid pageId, HttpContext http, SiteReader reader) => SlugAsync(slug, pageId, http, reader));
 
         // A file a page of the site shows, checked now: a redirect to a signed URL of a few minutes.
         app.Map("/{slug}/files/{assetId:guid}", async (string slug, Guid assetId, HttpContext http, SiteReader reader) =>
         {
             if (!Readable(http) || await reader.StateAsync(slug, http.RequestAborted) is not { } state) return NotFound(http);
-            if (await reader.FileAsync(state, assetId, http.RequestAborted) is not { } url) return NotFound(http);
-            http.Response.Headers.CacheControl = "no-store";
-            if (state.Site.Indexing) http.Items[IndexedKey] = true;
-            return Results.Redirect(url.Url, permanent: false);
+            return ToDomain(state, http, $"/files/{assetId}") ?? await FileAsync(state, assetId, http);
         });
 
         app.MapFallback((HttpContext http) => NotFound(http));
         return app;
     }
 
-    private static async Task<IResult> PageAsync(string slug, Guid? pageId, HttpContext http, SiteReader reader, SiteCache cache)
+    private static async Task<IResult> SlugAsync(string slug, Guid? pageId, HttpContext http, SiteReader reader)
     {
         if (!Readable(http)) return NotFound(http);
+        if (await reader.StateAsync(slug, http.RequestAborted) is not { } state) return NotFound(http);
+        return ToDomain(state, http, pageId is { } id ? $"/{id}" : "") ?? await PageAsync(state, pageId, http);
+    }
+
+    private static async Task<IResult> PageAsync(SiteState state, Guid? pageId, HttpContext http)
+    {
         var ct = http.RequestAborted;
-        if (await reader.StateAsync(slug, ct) is not { } state) return NotFound(http);
+        var reader = http.RequestServices.GetRequiredService<SiteReader>();
+        var cache = http.RequestServices.GetRequiredService<SiteCache>();
         var page = pageId is { } id ? state.Scope.Pages.FirstOrDefault(p => p.Id == id) : state.Scope.Root;
         if (page is null) return NotFound(http);
         var number = 1;

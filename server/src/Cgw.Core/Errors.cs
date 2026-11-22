@@ -98,6 +98,17 @@ public static class Codes
     /// </summary>
     public const string ChartHidden = "chart.hidden";
 
+    // Phase 14: a site's host names.
+
+    /// <summary>The host name is verified by another workspace (409).</summary>
+    public const string DomainTaken = "domain.taken";
+    /// <summary>The host name's <c>TXT</c> record is missing or holds another value, or DNS could not be read (400).</summary>
+    public const string DomainDnsNotFound = "domain.dnsNotFound";
+    /// <summary>The host name serves another site (409).</summary>
+    public const string DomainInUse = "domain.inUse";
+    /// <summary>A site given a host name the workspace has not proven (400).</summary>
+    public const string DomainNotVerified = "domain.notVerified";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -111,6 +122,7 @@ public static class Codes
         PluginInvalid, PluginOlder,
         SsoDomainTaken, SsoDnsNotFound, SsoNotTested, SsoDiscoveryFailed, SsoRequired, SsoFailed,
         ChartHidden,
+        DomainTaken, DomainDnsNotFound, DomainInUse, DomainNotVerified,
     ];
 }
 

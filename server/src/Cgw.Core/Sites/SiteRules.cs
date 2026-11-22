@@ -59,14 +59,43 @@ public sealed record SitesOptions(string PublicUrl)
     public const string PublicUrlKey = "Sites:PublicUrl";
     public const string DevPublicUrl = "http://localhost:5290";
 
+    /// <summary>
+    /// Phase 14: the server's own host names (the sites', the plugins', the API's, the web app's),
+    /// which no workspace may take for a site, compared lower case without a port.
+    /// </summary>
+    public IReadOnlySet<string> OwnHosts { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>Phase 14: outside Production a site's host name may be a <c>*.localhost</c> name (the e2e stack's).</summary>
+    public bool AllowLocalhost { get; init; }
+
+    /// <summary>The sites' own host name, lower case, no port (<c>pages.cashgearerp.com</c>; <c>localhost</c> in development).</summary>
+    public string Host => Uri.TryCreate(PublicUrl, UriKind.Absolute, out var uri) ? uri.Host.ToLowerInvariant() : "";
+
     public static SitesOptions From(IConfiguration configuration, bool production)
     {
         var value = configuration[PublicUrlKey];
         var origin = Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https"
             ? uri.GetLeftPart(UriPartial.Authority).TrimEnd('/')
             : null;
-        return new SitesOptions(origin ?? (production ? "" : DevPublicUrl));
+        var own = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var key in new[] { PublicUrlKey, "Plugins:PublicUrl", "Api:PublicUrl", "Web:AppUrl" })
+            if (Uri.TryCreate(configuration[key]?.Trim(), UriKind.Absolute, out var named)) own.Add(named.Host.ToLowerInvariant());
+        foreach (var child in configuration.GetSection("Web:Origins").GetChildren())
+            if (Uri.TryCreate(child.Value?.Trim(), UriKind.Absolute, out var named)) own.Add(named.Host.ToLowerInvariant());
+        var options = new SitesOptions(origin ?? (production ? "" : DevPublicUrl)) { AllowLocalhost = !production };
+        own.Add(options.Host);
+        return options with { OwnHosts = own };
     }
 
     public string SiteUrl(string slug) => $"{PublicUrl}/{slug}";
+
+    /// <summary>
+    /// Phase 14: a site's address at its own host name: https in Production; elsewhere the sites'
+    /// own scheme and port (<c>http://docs.example.localhost:5290</c> on a developer's machine).
+    /// </summary>
+    public string DomainUrl(string host)
+    {
+        if (!AllowLocalhost || !Uri.TryCreate(PublicUrl, UriKind.Absolute, out var uri)) return $"https://{host}";
+        return uri.IsDefaultPort ? $"{uri.Scheme}://{host}" : $"{uri.Scheme}://{host}:{uri.Port}";
+    }
 }

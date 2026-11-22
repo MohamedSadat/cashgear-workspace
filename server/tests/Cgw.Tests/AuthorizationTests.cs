@@ -193,6 +193,8 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         // Phase 11: a domain of the workspace's single sign-on.
         var domain = SsoKit.NewDomain();
         Assert.Equal(HttpStatusCode.Created, (await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/sso/domains", new { domain })).StatusCode);
+        // Phase 14: a host name of the workspace's sites.
+        var siteDomain = await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/publishing/domains", new { host = $"docs-{Guid.NewGuid():N}.example.test" }));
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -211,6 +213,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["pluginId"] = plugin.ToString(),
             ["groupId"] = group.ToString(),
             ["domain"] = domain,
+            ["domainId"] = siteDomain.GetProperty("id").GetString()!,
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };

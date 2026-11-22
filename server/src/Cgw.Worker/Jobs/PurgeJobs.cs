@@ -123,6 +123,8 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.AiSettings.ExecuteDeleteAsync(ct);
         await db.AiUsage.ExecuteDeleteAsync(ct);
         await db.AiReservations.ExecuteDeleteAsync(ct);
+        // Phase 14: its host names, freed for another workspace (their certificates' files go with the worker's next pass).
+        await db.SiteDomains.ExecuteDeleteAsync(ct);
         await db.PublishedSites.ExecuteDeleteAsync(ct);
         // Phase 10: vectors and their changes; plugins (their files go with the workspace's blobs below).
         await db.PageEmbeddings.ExecuteDeleteAsync(ct);

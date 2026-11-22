@@ -2751,6 +2751,47 @@
         }
       }
     },
+    "/api/v1/pages/{pageId}/site/domain": {
+      "put": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "setSiteDomain",
+        "parameters": [
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteDomainChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/publishing": {
       "get": {
         "tags": [
@@ -2817,6 +2858,149 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/publishing/domains": {
+      "get": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "getSiteDomains",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDomainsDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "addSiteDomain",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewSiteDomain"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDomainDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/publishing/domains/{domainId}/verify": {
+      "post": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "verifySiteDomain",
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDomainDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/publishing/domains/{domainId}": {
+      "delete": {
+        "tags": [
+          "Publishing"
+        ],
+        "operationId": "removeSiteDomain",
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
           }
         }
       }
@@ -6927,6 +7111,20 @@
           }
         }
       },
+      "NewSiteDomain": {
+        "required": [
+          "host"
+        ],
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "NewSsoDomain": {
         "required": [
           "domain"
@@ -9011,6 +9209,177 @@
           }
         }
       },
+      "SiteDomainChoice": {
+        "required": [
+          "host"
+        ],
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SiteDomainChoiceDto": {
+        "required": [
+          "host",
+          "pageId"
+        ],
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "SiteDomainDto": {
+        "required": [
+          "id",
+          "host",
+          "record",
+          "target",
+          "verifiedAt",
+          "pageId",
+          "pageTitle",
+          "certificate",
+          "certificateExpiresAt",
+          "certificateError",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "host": {
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/SiteDomainRecordDto"
+          },
+          "target": {
+            "type": "string"
+          },
+          "verifiedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "pageId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "pageTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "certificateExpiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "certificateError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "SiteDomainRecordDto": {
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "SiteDomainsDto": {
+        "required": [
+          "domains",
+          "choices",
+          "target",
+          "certificates"
+        ],
+        "type": "object",
+        "properties": {
+          "domains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteDomainDto"
+            }
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteDomainChoiceDto"
+            }
+          },
+          "target": {
+            "type": "string"
+          },
+          "certificates": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SiteDomainStateDto": {
+        "required": [
+          "host",
+          "certificate",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "certificate": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
       "SiteDto": {
         "required": [
           "id",
@@ -9022,7 +9391,8 @@
           "version",
           "publishedAt",
           "publishedBy",
-          "updatedAt"
+          "updatedAt",
+          "domain"
         ],
         "type": "object",
         "properties": {
@@ -9064,6 +9434,16 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "domain": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SiteDomainStateDto"
+              }
+            ]
           }
         }
       },
@@ -10360,7 +10740,8 @@
           "publishedBy",
           "updatedAt",
           "pageTitle",
-          "pageIcon"
+          "pageIcon",
+          "domain"
         ],
         "type": "object",
         "properties": {
@@ -10407,6 +10788,12 @@
             "type": "string"
           },
           "pageIcon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "domain": {
             "type": [
               "null",
               "string"

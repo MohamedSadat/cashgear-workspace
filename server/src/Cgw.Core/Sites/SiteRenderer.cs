@@ -22,6 +22,14 @@ public sealed class SiteViewData
 public sealed class SitePage
 {
     public required PublishedSite Site { get; init; }
+    /// <summary>Phase 14: what the site's addresses start with: <c>/&lt;slug&gt;</c> (unless set), or empty at its own host name.</summary>
+    public string Base
+    {
+        get => given ?? "/" + Site.Slug;
+        init => given = value;
+    }
+
+    private readonly string? given;
     public required PageScope Scope { get; init; }
     public required Page Page { get; init; }
     /// <summary>The worker's derived JSON of the page; null when it has none yet.</summary>
@@ -136,10 +144,11 @@ public static class SiteRenderer
 
     // The page ---------------------------------------------------------------------------------------------
 
-    public static string PageUrl(PublishedSite site, PageScope scope, Guid pageId) =>
-        pageId == scope.Root.Id ? $"/{site.Slug}" : $"/{site.Slug}/{pageId}";
+    /// <summary>A page's address under the site's base (Phase 14: from <c>/</c> at its own host name).</summary>
+    public static string PageUrl(string @base, PageScope scope, Guid pageId) =>
+        pageId == scope.Root.Id ? (@base.Length == 0 ? "/" : @base) : $"{@base}/{pageId}";
 
-    public static string FileUrl(PublishedSite site, Guid assetId) => $"/{site.Slug}/files/{assetId}";
+    public static string FileUrl(string @base, Guid assetId) => $"{@base}/files/{assetId}";
 
     public static string Render(SitePage page)
     {
@@ -155,12 +164,12 @@ public static class SiteRenderer
         h.Raw("<title>").Text(page.Page.Id == root.Id ? siteTitle : $"{title} · {siteTitle}").Raw("</title>\n");
         h.Raw("<style>").Raw(SiteStyle.Css).Raw("</style>\n</head>\n<body>\n");
         h.Raw("<a class=\"skip\" href=\"#main\">").Text(words.Skip).Raw("</a>\n");
-        h.Raw("<header class=\"site-header\"><a").Attr("href", $"/{page.Site.Slug}").Raw(">");
+        h.Raw("<header class=\"site-header\"><a").Attr("href", PageUrl(page.Base, page.Scope, page.Scope.Root.Id)).Raw(">");
         Icon(h, root.Icon);
         h.Text(siteTitle).Raw("</a></header>\n<div class=\"layout\">\n");
         Tree(h, page, words);
         h.Raw("<main id=\"main\">\n");
-        if (page.Page.CoverAssetId is { } cover) h.Raw("<img class=\"cover\"").Attr("src", FileUrl(page.Site, cover)).Attr("alt", "").Raw(">\n");
+        if (page.Page.CoverAssetId is { } cover) h.Raw("<img class=\"cover\"").Attr("src", FileUrl(page.Base, cover)).Attr("alt", "").Raw(">\n");
         h.Raw("<h1>");
         Icon(h, page.Page.Icon);
         h.Text(title).Raw("</h1>\n");
@@ -200,7 +209,7 @@ public static class SiteRenderer
         h.Raw("<nav class=\"tree\"").Attr("aria-label", words.Pages).Raw(">\n<ul>");
         void Item(Page p, int depth)
         {
-            h.Raw("<li><a").Attr("href", PageUrl(page.Site, scope, p.Id));
+            h.Raw("<li><a").Attr("href", PageUrl(page.Base, scope, p.Id));
             if (p.Id == page.Page.Id) h.Raw(" aria-current=\"page\"");
             h.Raw(">");
             Icon(h, p.Icon);
@@ -461,7 +470,7 @@ public static class SiteRenderer
                     h.Raw("<figure");
                     MarkId();
                     if (align is "center" or "end") h.Attr("class", "align-" + align);
-                    h.Raw("><img").Attr("src", FileUrl(page.Site, asset)).Attr("alt", Attr(body, "alt") ?? "").Raw(" loading=\"lazy\"");
+                    h.Raw("><img").Attr("src", FileUrl(page.Base, asset)).Attr("alt", Attr(body, "alt") ?? "").Raw(" loading=\"lazy\"");
                     var width = Js.Number(Js.Prop(Js.Prop(body, "attrs"), "width"));
                     if (double.IsFinite(width) && width >= 1) h.Attr("width", (long)Math.Min(width, 4096));
                     h.Raw(">");
@@ -475,7 +484,7 @@ public static class SiteRenderer
                     var name = page.Assets.TryGetValue(asset, out var known) ? known.FileName : words.File;
                     h.Raw("<p");
                     MarkId();
-                    h.Raw("><a class=\"file\"").Attr("href", FileUrl(page.Site, asset)).Raw(" download>").Text(name).Raw("</a></p>\n");
+                    h.Raw("><a class=\"file\"").Attr("href", FileUrl(page.Base, asset)).Raw(" download>").Text(name).Raw("</a></p>\n");
                     return;
                 }
                 case "bookmark":
@@ -492,7 +501,7 @@ public static class SiteRenderer
                     if (Id(Attr(body, "pageId")) is not { } child || page.Scope.Pages.FirstOrDefault(p => p.Id == child) is not { } target) return;
                     h.Raw("<p");
                     MarkId();
-                    h.Raw("><a").Attr("href", PageUrl(page.Site, page.Scope, child)).Raw(">");
+                    h.Raw("><a").Attr("href", PageUrl(page.Base, page.Scope, child)).Raw(">");
                     Icon(h, target.Icon);
                     h.Text(target.Title.Length > 0 ? target.Title : words.Untitled).Raw("</a></p>\n");
                     return;
@@ -614,7 +623,7 @@ public static class SiteRenderer
                             h.Raw("<span class=\"mention\">").Text(words.APage).Raw("</span>");
                             break;
                         }
-                        var href = PageUrl(page.Site, page.Scope, target.Id);
+                        var href = PageUrl(page.Base, page.Scope, target.Id);
                         if (Attr(node, "blockId") is { } blockId && SiteHtml.IsBlockId(blockId)) href += "#b-" + blockId;
                         if (links) h.Raw("<a class=\"mention\"").Attr("href", href).Raw(">");
                         else h.Raw("<span class=\"mention\">");
@@ -687,7 +696,7 @@ public static class SiteRenderer
             if (value.StartsWith("#/p/", StringComparison.Ordinal))
             {
                 var id = value.Length >= 40 ? Id(value[4..40]) : null;
-                return id is { } page1 && page.Scope.Holds(page1) ? PageUrl(page.Site, page.Scope, page1) : null;
+                return id is { } page1 && page.Scope.Holds(page1) ? PageUrl(page.Base, page.Scope, page1) : null;
             }
             return SiteHtml.SafeUrl(value);
         }

@@ -50,6 +50,14 @@ export const mocks = [
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
+  // Phase 14: the mock ACME server the e2e stack's worker gets a site's certificates from; it
+  // fetches the HTTP-01 challenge from the Sites process on 5290, whatever the name.
+  {
+    command: 'node tests/mocks/acme/server.mjs --challenge-port 5290',
+    url: 'http://127.0.0.1:4289/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 ];
 
 // Chrome and Edge are the first-class browsers, as in Sheet. E2E_BASE_URL points the specs at a

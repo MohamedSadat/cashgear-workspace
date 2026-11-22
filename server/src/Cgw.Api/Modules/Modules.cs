@@ -44,6 +44,9 @@ public static class Modules
         // Phase 9: publishing (the sites themselves are the Sites process's).
         services.AddSingleton(sp => SitesOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddScoped<PublishingService>();
+        // Phase 14: a site's host names, and whether this server makes their certificates.
+        services.AddSingleton(sp => SiteCertificateOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddScoped<SiteDomainService>();
         services.AddSingleton<FullText>();
         services.AddScoped<SearchService>();
         services.AddScoped<VersionService>();

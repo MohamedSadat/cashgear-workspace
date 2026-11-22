@@ -10,7 +10,8 @@ namespace Cgw.Api.Modules;
 /// <summary>
 /// Publishing (Phase 9, M9.1): a page's site (full on the page), and the workspace's switch (owners
 /// and admins change it). The site itself is served by the Sites process on its own origin
-/// (<c>Sites__PublicUrl</c>), never by this one.
+/// (<c>Sites__PublicUrl</c>), never by this one. Phase 14: a workspace's host names for its sites,
+/// and a site given one.
 /// </summary>
 public static class PublishingEndpoints
 {
@@ -56,6 +57,17 @@ public static class PublishingEndpoints
             })
             .WithName("unpublishPage");
 
+        // Phase 14: the site's host name, one of the workspace's proven ones, or null.
+        page.MapPut("/domain", async Task<Results<Ok<SiteDto>, ProblemHttpResult>> (SiteDomainChoice body, PublishingService publishing, HttpContext http) =>
+            {
+                var access = http.PageAccess();
+                var result = await publishing.SetDomainAsync(access.Member, http.Actor(), access.Page, access.Level, body, http.RequestAborted);
+                if (!result.Ok) return Problems.From(result.Failure!);
+                http.Response.Headers.ETag = PublishingService.Etag(result.Value!.Version);
+                return TypedResults.Ok(result.Value);
+            })
+            .WithName("setSiteDomain");
+
         var workspace = api.MapGroup("/workspaces/{workspaceId:guid}/publishing").WithTags("Publishing").RequireAuthorization()
             .AddEndpointFilter<MemberFilter>().RequireRateLimiting(RateLimits.User);
 
@@ -69,5 +81,32 @@ public static class PublishingEndpoints
                 return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
             })
             .WithName("setPublishing");
+
+        // Phase 14: the workspace's host names (owners and admins add, prove and remove them; everyone
+        // in it reads the proven ones a site may be given).
+        workspace.MapGet("/domains", async (SiteDomainService domains, HttpContext http) =>
+                TypedResults.Ok(await domains.ListAsync(http.Member(), http.RequestAborted)))
+            .WithName("getSiteDomains");
+
+        workspace.MapPost("/domains", async Task<Results<Created<SiteDomainDto>, ProblemHttpResult>> (NewSiteDomain body, SiteDomainService domains, HttpContext http) =>
+            {
+                var result = await domains.AddAsync(http.Member(), http.Actor(), body, http.RequestAborted);
+                return result.Ok ? TypedResults.Created($"/api/v1/workspaces/{http.Member().WorkspaceId}/publishing/domains/{result.Value!.Id}", result.Value) : Problems.From(result.Failure!);
+            })
+            .WithName("addSiteDomain");
+
+        workspace.MapPost("/domains/{domainId:guid}/verify", async Task<Results<Ok<SiteDomainDto>, ProblemHttpResult>> (Guid domainId, SiteDomainService domains, HttpContext http) =>
+            {
+                var result = await domains.VerifyAsync(http.Member(), http.Actor(), domainId, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("verifySiteDomain");
+
+        workspace.MapDelete("/domains/{domainId:guid}", async Task<Results<NoContent, ProblemHttpResult>> (Guid domainId, SiteDomainService domains, HttpContext http) =>
+            {
+                var result = await domains.RemoveAsync(http.Member(), http.Actor(), domainId, http.RequestAborted);
+                return result.Ok ? TypedResults.NoContent() : Problems.From(result.Failure!);
+            })
+            .WithName("removeSiteDomain");
     }
 }

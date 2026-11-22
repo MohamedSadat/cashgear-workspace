@@ -41,6 +41,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<AssetRef> AssetRefs => Set<AssetRef>();
     public DbSet<DatabaseRowFile> DatabaseRowFiles => Set<DatabaseRowFile>();
+    public DbSet<SiteDomain> SiteDomains => Set<SiteDomain>();
+    public DbSet<AcmeAccount> AcmeAccounts => Set<AcmeAccount>();
     public DbSet<PagePermission> PagePermissions => Set<PagePermission>();
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<WorkspaceChange> WorkspaceChanges => Set<WorkspaceChange>();
@@ -525,6 +527,31 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         });
 
         // Phase 9: published sites.
+        b.Entity<SiteDomain>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.WorkspaceId, x.Host }).IsUnique().HasDatabaseName("IX_SiteDomains_Workspace");
+            // A verified name belongs to one workspace: the Sites process finds it by this index.
+            e.HasIndex(x => x.Host).IsUnique().HasFilter("[VerifiedAt] IS NOT NULL")
+                .IncludeProperties(x => new { x.WorkspaceId, x.SiteId, x.Certificate }).HasDatabaseName("IX_SiteDomains_Verified");
+            // A site serves at most one name.
+            e.HasIndex(x => x.SiteId).IsUnique().HasFilter("[SiteId] IS NOT NULL").HasDatabaseName("IX_SiteDomains_Site");
+            e.Property(x => x.Host).HasMaxLength(253).IsUnicode(false);
+            e.Property(x => x.Token).HasMaxLength(32).IsUnicode(false);
+            e.Property(x => x.Certificate).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.CertificateError).HasMaxLength(40).IsUnicode(false);
+            e.Property(x => x.CertificateThumbprint).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.ChallengeToken).HasMaxLength(128).IsUnicode(false);
+            e.Property(x => x.ChallengeAnswer).HasMaxLength(256).IsUnicode(false);
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+        b.Entity<AcmeAccount>(e =>
+        {
+            e.HasKey(x => x.Directory);
+            e.Property(x => x.Directory).HasMaxLength(500).IsUnicode(false);
+            e.Property(x => x.KeyCipher).HasMaxLength(4000).IsUnicode(false);
+            e.Property(x => x.AccountUrl).HasMaxLength(500).IsUnicode(false);
+        });
         b.Entity<PublishedSite>(e =>
         {
             e.HasKey(x => x.Id);
@@ -662,6 +689,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<AiUsage>(b);
         Filter<AiReservation>(b);
         Filter<PublishedSite>(b);
+        Filter<SiteDomain>(b);
         Filter<PageEmbedding>(b);
         Filter<EmbeddingChange>(b);
         Filter<WorkspacePlugin>(b);

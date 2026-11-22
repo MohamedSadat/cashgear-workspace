@@ -22,6 +22,33 @@ namespace Cgw.Core.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Cgw.Core.Data.AcmeAccount", b =>
+                {
+                    b.Property<string>("Directory")
+                        .HasMaxLength(500)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("AccountUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("KeyCipher")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4000)");
+
+                    b.HasKey("Directory");
+
+                    b.ToTable("AcmeAccounts");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.AiReservation", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -1787,6 +1814,119 @@ namespace Cgw.Core.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ShareLinks");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.SiteDomain", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("AttachedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("AttachedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Certificate")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("CertificateAttempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CertificateError")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<DateTimeOffset?>("CertificateExpiresAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("CertificateNextAttemptAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("CertificateRenewAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("CertificateThumbprint")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ChallengeAnswer")
+                        .HasMaxLength(256)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("ChallengeToken")
+                        .HasMaxLength(128)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(128)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(253)");
+
+                    b.Property<DateTimeOffset?>("ProofCheckedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("ProofMissingSince")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("SiteId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("VerifiedBy")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Host")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SiteDomains_Verified")
+                        .HasFilter("[VerifiedAt] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("Host"), new[] { "WorkspaceId", "SiteId", "Certificate" });
+
+                    b.HasIndex("SiteId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SiteDomains_Site")
+                        .HasFilter("[SiteId] IS NOT NULL");
+
+                    b.HasIndex("WorkspaceId", "Host")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SiteDomains_Workspace");
+
+                    b.ToTable("SiteDomains");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.SsoDomain", b =>

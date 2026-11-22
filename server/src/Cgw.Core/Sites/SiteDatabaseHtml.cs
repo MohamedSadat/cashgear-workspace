@@ -34,7 +34,7 @@ public static class SiteDatabaseHtml
     public static void Block(SiteHtml h, SitePage page, SiteViewData data, SiteWords words)
     {
         var view = data.View;
-        h.Raw("<section class=\"database\">\n<div class=\"db-title\"><a").Attr("href", SiteRenderer.PageUrl(page.Site, page.Scope, view.Database.Id)).Raw(">");
+        h.Raw("<section class=\"database\">\n<div class=\"db-title\"><a").Attr("href", SiteRenderer.PageUrl(page.Base, page.Scope, view.Database.Id)).Raw(">");
         Icon(h, view.Database.Icon);
         h.Text(view.Database.Title.Length > 0 ? view.Database.Title : words.Untitled).Raw("</a></div>\n");
         if (view.Type == ChartView.Type) ViewChart(h, data, words);
@@ -66,7 +66,7 @@ public static class SiteDatabaseHtml
         Count(h, rows.Count, view.Rows.Count, words);
         if (pages > 1)
         {
-            var url = SiteRenderer.PageUrl(page.Site, page.Scope, view.Database.Id);
+            var url = SiteRenderer.PageUrl(page.Base, page.Scope, view.Database.Id);
             h.Raw("<nav class=\"pager\"").Attr("aria-label", words.PageNumber(number, pages)).Raw(">");
             if (number > 1) h.Raw("<a").Attr("href", number == 2 ? url : $"{url}?page={number - 1}").Attr("rel", "prev").Raw(">").Text(words.Previous).Raw("</a>");
             h.Raw("<span>").Text(words.PageNumber(number, pages)).Raw("</span>");
@@ -189,7 +189,7 @@ public static class SiteDatabaseHtml
                      && AssetTypes.Images.Contains(asset.ContentType))
                 picture = first;
             h.Raw("<li class=\"card\">");
-            if (picture is { } p) h.Raw("<img").Attr("src", SiteRenderer.FileUrl(page.Site, p)).Attr("alt", "").Raw(" loading=\"lazy\">");
+            if (picture is { } p) h.Raw("<img").Attr("src", SiteRenderer.FileUrl(page.Base, p)).Attr("alt", "").Raw(" loading=\"lazy\">");
             h.Raw("<div dir=\"auto\">").Text(Name(row, words)).Raw("</div>");
             var defs = view.Shown.Where(d => d.Type != PropertyTypes.Title && view.Visible.Contains(d.Id) && Cells.Read(d, row) is not null).ToList();
             if (defs.Count > 0)
@@ -257,7 +257,7 @@ public static class SiteDatabaseHtml
                     if (!Guid.TryParse(id, out var asset) || !page.Assets.TryGetValue(asset, out var file)) continue;
                     if (!first) h.Raw(", ");
                     first = false;
-                    h.Raw("<a").Attr("href", SiteRenderer.FileUrl(page.Site, asset)).Raw(" download>").Text(file.FileName).Raw("</a>");
+                    h.Raw("<a").Attr("href", SiteRenderer.FileUrl(page.Base, asset)).Raw(" download>").Text(file.FileName).Raw("</a>");
                 }
                 return;
             }
