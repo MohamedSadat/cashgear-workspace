@@ -1792,6 +1792,9 @@ Certificate Support is installed and off; port 80 is open.
 | The redirect | A `location` `Default Web Site/.well-known/acme-challenge` with `httpRedirect` to `https://<sites host>$V` (302, exact destination), added by `install.ps1 -CustomDomains` to whichever site holds the catch-all; with none, the sites' site takes the catch-all. win-acme's in-memory validation listens on HTTP.sys's `http://+:80/.well-known/acme-challenge/` while it runs, which comes before any IIS site, so it is unaffected | Your answer; the spike's third try |
 | The task's script | `<Root>\scripts\site-bindings.ps1`, the folder changeable by administrators only (it runs as SYSTEM); log `<Root>\logs\site-bindings.log` (names and thumbprints, its last 2,000 lines) | A script SYSTEM runs must not be writable by anyone else |
 
+"Later" reviewed after Phase 14 (you answered): kept as it is, nothing moved (Phase 15 is next), with
+Phase 14's two deferrals added: more than one host name a site, and names proven by DNS-01.
+
 Seen on the host and not Workspace's to change (said to you, nothing done): the `*.cashgearerp.com`
 certificate that `pages.`, `plugins.`, `workspace-api.`, `api.` and the host's fallback use ends on
 2027-01-02 and is renewed by hand (win-acme's manual DNS validation); `cg.` (started) and

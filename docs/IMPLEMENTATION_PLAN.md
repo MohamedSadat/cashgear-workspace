@@ -2183,7 +2183,8 @@ Reviewed again on 2026-11-18, after 0.10.0: sign-in and permissions, ERP at scal
 and the database items were chosen, and went to Phases 11 to 13 on 2026-11-19 (`DECISIONS.md`).
 Reviewed again on 2026-11-22, after 0.13.0: publishing (Phase 9's four items) and AI further (AI
 completions on a local model, billing for the subscription) were chosen, and went to Phases 14 and
-15 the same day; the rest stays (`DECISIONS.md`).
+15 the same day; the rest stays (`DECISIONS.md`). Reviewed again on 2026-11-22, after Phase 14:
+nothing moves (Phase 15 is next); Phase 14's two deferrals are added.
 
 - Embedded presentations, once that app exists.
 - Comments offline (online only from 0.6.0).
@@ -2201,6 +2202,9 @@ completions on a local model, billing for the subscription) were chosen, and wen
   second device has them offline.
 - Not while the hard limit stands: snapshotting an ERP view into a database, which would store ERP
   data in a Workspace table.
+- Left by Phase 14: more than one host name a site (one in 0.14.0, its slug's address leading
+  there); names proven for a certificate by DNS-01 (a wildcard, or a name whose port 80 cannot reach
+  the host), where 0.14.0 uses HTTP-01 alone.
 
 ## Top risks, by the earliest phase that exposes them
 
