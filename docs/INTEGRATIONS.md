@@ -1545,6 +1545,42 @@ Notification mail for mentions and replies goes through the SMTP account already
 `Auto-Submitted: auto-generated`. Account mails (sign-in, invitations) share the account and are
 not counted in the cap.
 
+## Certificates for a site's own host name: ACME (Phase 14)
+
+A workspace's owners and admins prove a host name for its sites by a DNS `TXT` record (as single
+sign-on's domains, through the same reader: `IDomainDns` in `Cgw.Core/Domains`, the mock provider's
+stand-in outside Production) and point it at the sites' own host (`pages.cashgearerp.com`) by a
+`CNAME`, or by `A`/`AAAA` records holding its addresses. Once a site is given the name, the worker
+(`SiteCertificateJob`) gets it a certificate by ACME (RFC 8555), from Let's Encrypt in production:
+
+- **The client** is the server's own (`Cgw.Core/Sites/Acme.cs`, over `HttpClient`, no package): an
+  ES256 account (made once a directory, its key kept as Data Protection's output in `AcmeAccounts`),
+  an order for the one name, its HTTP-01 challenge, a CSR made by .NET (RSA 2048, the name as its
+  only SAN), the chain downloaded and packed as a PFX (AES-256) under `Sites__CertificatePassword`. A
+  `badNonce` is tried once more; an authorisation and an order are polled as their `Retry-After`
+  says, for at most two minutes.
+- **The challenge** is answered by the Sites process at `http://<host>/.well-known/acme-challenge/<token>`
+  from the database (`SiteDomains.ChallengeToken` and `ChallengeAnswer`, set while the order lasts),
+  over the sites' catch-all binding on port 80, outside the rate limit, never cached.
+- **The terms.** No order is made unless `Sites__Acme__AgreeToTerms` is `true`: whoever runs the
+  server sets it once they have read the directory's subscriber agreement (`install.ps1
+  -AgreeToAcmeTerms`); the code never agrees by itself.
+- **Before each order** the name's `TXT` record is read again, and it must lead to the sites' own
+  addresses (`notPointed` otherwise, tried again later), which also keeps a failed validation from
+  spending the directory's limits. A name whose record is missing on two reads a day apart leaves its
+  site and its certificate is deleted.
+- **Renewal** once two thirds of the lifetime have passed (Let's Encrypt's 90 days today; shorter
+  lifetimes later need no change); a failed renewal keeps the live certificate and is tried again
+  after 1 h, 6 h, then daily. The store's files of names no workspace holds with a live certificate
+  are deleted.
+- **Where it goes**: IIS's Centralized Certificate Store (`Sites__CertificateStore`), one
+  `<host>.pfx` a name, which IIS reads by the name a browser asks for through the sites' catch-all
+  `https` binding (SslFlags 2); a name another site binds keeps its own binding.
+- **The tests** never reach a real directory: the mock ACME server (`tests/mocks/acme`, port 4289:
+  JWS checked, HTTP-01 fetched from the Sites process, certificates signed by a CA made in memory) for
+  the server's tests (`SiteDomainTests`, through a bridge to the Sites test server) and the e2e stack
+  (`site-domains.spec.ts`, a `*.localhost` name); Let's Encrypt's staging directory first on the host.
+
 ## Future applications
 
 A new Cash Gear app (presentations, for example) integrates the way Sheet does:

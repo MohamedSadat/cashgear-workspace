@@ -407,6 +407,21 @@ answer is `no-cache` with a strong ETag and a strict CSP (`default-src 'none'`, 
 stylesheet, images from the site and the blob account). It reads SQL and Blob with the API's
 configuration names.
 
+Phase 14: a site at its workspace's own host name (`Cgw.Core/Sites/SiteDomains.cs`, routes under
+`/workspaces/{id}/publishing/domains` and `/pages/{id}/site/domain`). The Sites process tells its own
+host name (`Sites__PublicUrl`) and the plugins' from any other: any other is a site's own, found by
+the name (`SiteReader.StateByHostAsync`: proven, attached, its certificate live) and drawn from `/`
+(`SitePage.Base` empty, the renderer's links from it), with its own `robots.txt`, ACME's HTTP-01
+answers, and `http` sent on to `https` in Production; the slug's addresses of such a site lead there
+(302); an unknown name is the 404 page. Its rate limit (`Cgw.Sites/SiteLimits.cs`) runs before all
+of it. The worker's `SiteCertificateJob` makes and renews the certificates by ACME
+(`Cgw.Core/Sites/Acme.cs`, the server's own client) into IIS's Centralized Certificate Store, reads
+each name's proof again, and takes a name whose proof is lost off its site (INTEGRATIONS.md). Phase
+11's DNS reader moved into the core for it (`Cgw.Core/Domains`, `IDomainDns`), for the API and the
+worker alike. Phase 14 also indexes rows' files (`DatabaseRowFiles`, `Databases/RowFiles.cs`) for
+members' reads, the clean-up and a site's file check, and writes `site` and `publishing` changes to
+the feed.
+
 Conventions:
 
 - **API style.** REST under `/api/v1`. JSON in camelCase. Resource routes, not verbs.
@@ -555,7 +570,7 @@ Paint does not wait for storage, and storage does not wait for the network.
 | Workspace roles | Owner, admin, member, guest |
 | Page sharing | Per page with inheritance; access lists by user, by group (Phase 11: a workspace's groups, made by owners and admins, holding members, admins and owners, never guests) or whole workspace; a group's rows are sent only to a client that asks for them (`?principals=group`) and kept by a save that does not say it knows them, and never named to a guest; share links off by default, created by a person, hashed, expiring, revocable, view-only at first |
 | No public URLs | Nothing is reachable without a session, a share link someone made, or a site someone published (Phase 9). Blob containers are private |
-| Published sites (Phase 9) | Published by someone with `full` on the page, while the workspace's switch is on; a share link's scope; unpublished at once, holding within 30 s; audited. They cannot read a session: another origin (`pages.` against `workspace.` and `workspace-api.`; `localhost` against `127.0.0.1` in development), no cookie on the Sites process at all, no script allowed by its CSP, `frame-ancestors 'none'`, COOP and CORP `same-origin`. Proven by `SiteTests` (the same answer with the API's session cookie or without) and `tests/e2e/site.spec.ts` |
+| Published sites (Phase 9) | Published by someone with `full` on the page, while the workspace's switch is on; a share link's scope; unpublished at once, holding within 30 s; audited. They cannot read a session: another origin (`pages.` against `workspace.` and `workspace-api.`; `localhost` against `127.0.0.1` in development), no cookie on the Sites process at all, no script allowed by its CSP, `frame-ancestors 'none'`, COOP and CORP `same-origin`. Proven by `SiteTests` (the same answer with the API's session cookie or without) and `tests/e2e/site.spec.ts`. Phase 14: a site at a host name only once its workspace proved the name by DNS and a certificate made for it is live; a name proven by one workspace never by another until removed, and read again before each renewal and daily, lost after two reads a day apart; a row's file read by whoever can read its database (`RowFileTests`, `SiteDomainTests`) |
 | Attachments | Signed URL for one blob, about 5 minutes, issued after a permission check. Downloads are served with `Content-Disposition: attachment` and a safe content type; images are served only as images |
 | Upload safety | Allow-list of types; size limit; type checked against the bytes; SVG is not rendered inline; a hook for malware scanning before `ready` |
 | XSS | Content is drawn only through the ProseMirror schema, which whitelists nodes and attributes. No `innerHTML` from document data. Pasted HTML goes through the schema parser, so scripts, handlers and unknown attributes do not survive |

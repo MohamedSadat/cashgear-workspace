@@ -175,8 +175,10 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Realtime__Metrics` | `true` maps `GET`/`DELETE /api/v1/realtime/metrics` (relay times, connections) for the bench; ignored in Production |
 | `Sheet__Origin`, `Sheet__Origins__N` | Phase 5: Cash Gear Sheet's origin for launch links (`{origin}/cloud#launch=…`), and the origins allowed to redeem them, to call the sheet-session routes (CORS without credentials) and, outside production, to read Azurite. Required, https, in production |
 | `Sheet__DesktopOrigins__N` | Phase 9 (Track S6): the origins of Sheet's desktop app, which alone redeem a desktop launch ticket (`cashgear-sheet://workspace/launch#ticket=…`) and are allowed by the sheet-session routes' CORS. Default `http://tauri.localhost` and `tauri://localhost`, in production too; leave unset |
+| `Sites__Acme__Directory`, `Sites__Acme__AgreeToTerms`, `Sites__Acme__Email`, `Sites__Acme__IntervalSeconds`, `Sites__CertificateStore` | Phase 14, the API and the worker: where a site's own host names' certificates come from (an ACME directory, https in Production; `install.ps1 -CustomDomains` sets Let's Encrypt's, or its staging's with `-AcmeStaging`), that its operator agreed to its terms (`true`; nothing is ordered otherwise), an optional contact, how often the worker looks (60 s), and IIS's Centralized Certificate Store's folder. Without them the app says the server makes no certificates |
+| `Sites__CertificatePassword` | Phase 14, the worker only: the certificates' private key password, the store's too. A secret, from `CGW_SITES_CERT_PASSWORD` in the installing session |
 | `RateLimits__sites`, `RateLimits__sitesPlugins` | Phase 14, the Sites process: pages and files a minute one address may ask of every site together (300), and of the plugins host (1,200); an IPv6 address counted by its /64; `robots.txt`, `/health/live` and ACME's challenges are outside both. The address is the connection's (IIS in process). Leave unset in production |
-| `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*`, `Logging__*` and (Phase 10) the two below |
+| `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*`, `Logging__*`, (Phase 10) the two below, (Phase 14) this one, to tell its own host name from a site's own, and its rate limits |
 | `Plugins__PublicUrl` | Phase 10, the API and the Sites process: the plugins' origin (`https://plugins.cashgearerp.com`). The API builds a frame's address from it (`{origin}/f/{ticket}/{entry}`) and refuses to start in production without an https one; the Sites process answers that host name alone with plugins' files (`install.ps1` sets both from `-PluginsHostName`). Development and e2e: `http://localhost:5291` |
 | `Identity__Passkeys__ServerDomain` | Phase 11, the API: the passkeys' relying party id, the API's own host (`workspace-api.cashgearerp.com`), never a wider domain (the ERP, the sites and the plugins could then ask for assertions). Required in production, and it must be the host of `Api__PublicUrl`, or the API does not start (`install.ps1 -PasskeyDomain`, default `workspace-api.cashgearerp.com`, refused unless it is `-HostName`). A ceremony is accepted only from the origin of `Api__PublicUrl`. Changing it later makes every passkey made for the old name useless (people sign in with their password and add one again). Unset on a developer's machine: the request's host, and the request's own origin too, so the e2e stack's passkey specs run on `http://localhost:5280` |
 | `Sso__DnsBaseUrl` | Phase 11, development and the e2e stack only: a domain's `TXT` record is read from the mock OpenID Connect provider's DNS stand-in (`{base}/__mock/dns?name=`, `tests/mocks/oidc`) instead of DNS. The API refuses to start in Production with it set. In production the API asks the host's own resolvers (DnsClient, no cache, 5 s, two tries, TCP when UDP is cut short) for `TXT _cashgear-workspace.<domain>` when an owner presses Verify, and at no other time: the API host needs DNS on 53 (UDP and TCP) to its resolvers |
@@ -235,6 +237,36 @@ configured on the server but the network:
   sessions not made through the provider (each `device.revoke` audited); a session made through
   the provider ends after the workspace's session length (24 hours unless set), as no one is
   told when someone leaves the organisation (there is no SCIM).
+
+### A site's own host name (Phase 14)
+
+A workspace's owners and admins add and prove host names in the app (Settings → Publishing); the
+server makes their certificates once it is set up for it, which is whoever runs it's to do, once:
+
+- **IIS**: `install.ps1 -CustomDomains` turns on IIS's Centralized SSL Certificate Support
+  (`Web-CertProvider`), makes `<Root>\certificates` readable by administrators, the worker (which
+  writes the files) and `-CertificateStoreUser` (the account IIS reads the store as: a local account
+  with read on that folder alone; its password in `CGW_CCS_PASSWORD` in the session), points the
+  store at it with the certificates' private key password (`CGW_SITES_CERT_PASSWORD`, which the
+  worker gets as `Sites__CertificatePassword` and the API never does), and adds the sites' site two
+  catch-all bindings: `https *:443:` by the store (SslFlags 2) and `http *:80:` for ACME's HTTP-01.
+  It refuses if another site holds either, and an update without `-CustomDomains` on a host whose
+  store holds certificates stops rather than turn them off. A host name another site binds by SNI
+  (`workspace-api.`, `pages.`, `plugins.`, the ERP's) keeps its own binding and certificate: HTTP.sys
+  answers a name's own binding first and the store only for names nobody binds. The spike on the
+  production host before the first install proves this there (decisions, 2026-11-22).
+- **The directory**: `-AcmeStaging` first (Let's Encrypt's staging, whose certificates no browser
+  trusts), then the production directory (the default). `-AgreeToAcmeTerms` says you have read its
+  subscriber agreement; nothing is ordered without it. `-AcmeEmail` gives an optional contact for
+  its expiry mails.
+- **Network**: the host reaches the directory over https; the directory reaches the host on port 80
+  for each name (the firewall open to the Internet on 80, as it is on 443), and the name's `CNAME`
+  (or `A`/`AAAA`) leads to the host.
+- **What the app shows** for each name: waiting for its `TXT` record, proven, the page whose site it
+  serves, and its certificate (none yet, being made, live until a date, or why not: not pointed
+  here, the authority could not reach the site, asked to wait, could not be reached, DNS could not
+  be read). The worker looks every minute (`Sites__Acme__IntervalSeconds`); a failed order is tried
+  again after 1 hour, 6 hours, then daily, and renewal starts with a third of the lifetime left.
 
 ## Updating
 

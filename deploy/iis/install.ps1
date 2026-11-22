@@ -14,7 +14,9 @@
   environment of the session that runs this script and stored as an app-pool and service
   environment variable, which only administrators can read. Phase 13: Cash Gear's own AI keys for
   its subscription are read the same way (CGW_AI_ANTHROPIC_KEY, CGW_AI_VOYAGE_KEY), and given to the
-  API and the worker only.
+  API and the worker only. Phase 14: with -CustomDomains, the certificates' private key password
+  (CGW_SITES_CERT_PASSWORD, the worker's only) and the Centralized Certificate Store's account's
+  password (CGW_CCS_PASSWORD, handed to IIS) the same way.
 
   On a host outside a domain (no gMSA), leave out -ServiceAccount: the app pool runs as its own
   ApplicationPoolIdentity and the worker as its virtual account (NT SERVICE\<service name>), and
@@ -106,7 +108,22 @@ param(
   [long] $AiMonthlyTokens = 0,
   [long] $AiEmbeddingsMonthlyTokens = 0,
   [hashtable] $AiWorkspaceMonthlyTokens = @{},
-  [hashtable] $AiWorkspaceEmbeddingsMonthlyTokens = @{}
+  [hashtable] $AiWorkspaceEmbeddingsMonthlyTokens = @{},
+  # Phase 14: published sites at a workspace's own host names (docs/OPERATIONS.md, "A site's own host
+  # name"). Certificates by ACME, written by the worker into IIS's Centralized Certificate Store at
+  # <Root>\certificates, which IIS reads as -CertificateStoreUser (an account with read on that
+  # folder; its password from CGW_CCS_PASSWORD in this session); their private key password from
+  # CGW_SITES_CERT_PASSWORD. One catch-all binding on the sites' site: 443 by the store, 80 for ACME's
+  # HTTP-01; refused if another site holds either. -AgreeToAcmeTerms says you have read the
+  # directory's subscriber agreement: the code never agrees by itself. -AcmeStaging is Let's
+  # Encrypt's staging directory (try it first). Left out on an update of a host whose store holds
+  # certificates, the script stops rather than turn custom domains off.
+  [switch] $CustomDomains,
+  [string] $CertificateStoreUser = '',
+  [string] $AcmeDirectory = 'https://acme-v02.api.letsencrypt.org/directory',
+  [switch] $AcmeStaging,
+  [string] $AcmeEmail = '',
+  [switch] $AgreeToAcmeTerms
 )
 
 $ErrorActionPreference = 'Stop'
@@ -189,6 +206,27 @@ if ($LocalModel -or (Test-Path (Join-Path $modelFolder 'cgw-model.json'))) {
   if ($LocalModelThreads -gt 0) { $environment['Ai__LocalModel__Threads'] = "$LocalModelThreads" }
 }
 
+# Phase 14: a site's own host names, their certificates made and renewed by the worker.
+$certificateFolder = Join-Path $Root 'certificates'
+$workerOnly = [ordered]@{}
+if ($CustomDomains) {
+  if (-not $AgreeToAcmeTerms) {
+    throw "-CustomDomains needs -AgreeToAcmeTerms: read the ACME directory's subscriber agreement first (Let's Encrypt's: https://letsencrypt.org/repository/)."
+  }
+  if (-not $env:CGW_SITES_CERT_PASSWORD) { throw '-CustomDomains: set CGW_SITES_CERT_PASSWORD in this session (the certificates'' private key password).' }
+  if (-not $CertificateStoreUser -or -not $env:CGW_CCS_PASSWORD) {
+    throw '-CustomDomains: -CertificateStoreUser and its password in CGW_CCS_PASSWORD, the account IIS reads the Centralized Certificate Store as.'
+  }
+  $environment['Sites__Acme__Directory'] = if ($AcmeStaging) { 'https://acme-staging-v02.api.letsencrypt.org/directory' } else { $AcmeDirectory }
+  $environment['Sites__Acme__AgreeToTerms'] = 'true'
+  if ($AcmeEmail) { $environment['Sites__Acme__Email'] = $AcmeEmail }
+  $environment['Sites__CertificateStore'] = $certificateFolder
+  # The API says whether certificates are made; only the worker writes them, under the password.
+  $workerOnly['Sites__CertificatePassword'] = $env:CGW_SITES_CERT_PASSWORD
+} elseif (Test-Path (Join-Path $certificateFolder '*.pfx')) {
+  throw "$certificateFolder holds sites' certificates: pass -CustomDomains again (with CGW_SITES_CERT_PASSWORD and CGW_CCS_PASSWORD), or custom domains stop on this update."
+}
+
 # Phase 9: the Sites process reads the database and Blob Storage with the same names, and is given
 # nothing else: no SMTP password, no OpenID Connect certificates, no Data Protection. Phase 10: the
 # plugins' origin and the Workspace origins that may frame a plugin (it finds frame tickets by their
@@ -200,6 +238,8 @@ $sitesEnvironment = [ordered]@{
   Blob__ServiceUri = $BlobServiceUri
   Blob__Container = 'workspace'
   Plugins__PublicUrl = "https://$PluginsHostName"
+  # Phase 14: its own host name, told apart from a site's own host names.
+  Sites__PublicUrl = "https://$SitesHostName"
   Web__Origins__0 = $WebOrigin
   Web__Origins__1 = 'http://tauri.localhost'
   Web__Origins__2 = 'tauri://localhost'
@@ -338,6 +378,36 @@ if (-not (Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $Plugi
   $binding = Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $PluginsHostName
   $binding.AddSslCertificate($PluginsCertificateThumbprint, $CertificateStore)
 }
+# Phase 14: IIS's Centralized Certificate Store and the sites' catch-all bindings (443 by the store,
+# 80 for ACME's HTTP-01), for a site's own host names. A host name bound by another site keeps its
+# binding: HTTP.sys gives a name's own binding first, the store only to names nobody else binds.
+if ($CustomDomains) {
+  if (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) {
+    if (-not (Get-WindowsFeature Web-CertProvider).Installed) {
+      Write-Host "Turning on IIS's Centralized SSL Certificate Support..."
+      Install-WindowsFeature Web-CertProvider | Out-Null
+    }
+  } elseif ((Get-WindowsOptionalFeature -Online -FeatureName IIS-CertProvider).State -ne 'Enabled') {
+    Enable-WindowsOptionalFeature -Online -FeatureName IIS-CertProvider -All -NoRestart | Out-Null
+  }
+  New-Item -ItemType Directory -Force $certificateFolder | Out-Null
+  # Administrators, the worker (which writes the files) and the store's account (which IIS reads them as).
+  & icacls.exe $certificateFolder /inheritance:r /grant:r 'Administrators:(OI)(CI)F' 'SYSTEM:(OI)(CI)F' "${workerIdentity}:(OI)(CI)M" "${CertificateStoreUser}:(OI)(CI)R" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Setting who may read $certificateFolder failed ($LASTEXITCODE)" }
+  Enable-WebCentralCertProvider -CertStoreLocation $certificateFolder -UserName $CertificateStoreUser -Password $env:CGW_CCS_PASSWORD -PrivateKeyPassword $env:CGW_SITES_CERT_PASSWORD
+  foreach ($catchAll in @(@{ Protocol = 'https'; Port = 443 }, @{ Protocol = 'http'; Port = 80 })) {
+    $information = "*:$($catchAll.Port):"
+    $held = Get-WebBinding -Protocol $catchAll.Protocol -Port $catchAll.Port |
+      Where-Object { $_.bindingInformation -eq $information -and $_.ItemXPath -notmatch "@name='$SitesSiteName'" }
+    if ($held) { throw "Another site holds the catch-all $($catchAll.Protocol) binding $information ($($held.ItemXPath)): custom domains need it (docs/OPERATIONS.md)." }
+    $ours = Get-WebBinding -Name $SitesSiteName -Protocol $catchAll.Protocol -Port $catchAll.Port | Where-Object { $_.bindingInformation -eq $information }
+    if (-not $ours) {
+      # SslFlags 2: the Centralized Certificate Store, by the name the browser asks for.
+      if ($catchAll.Protocol -eq 'https') { New-WebBinding -Name $SitesSiteName -Protocol https -Port 443 -HostHeader '' -SslFlags 2 | Out-Null }
+      else { New-WebBinding -Name $SitesSiteName -Protocol http -Port 80 -HostHeader '' | Out-Null }
+    }
+  }
+}
 # A site's page addresses carry no secret, but its log keeps the same fields as the API's.
 Set-ItemProperty "IIS:\Sites\$SitesSiteName" -Name logFile.logExtFileFlags `
   -Value 'Date,Time,ClientIP,UserName,ServerIP,Method,UriStem,HttpStatus,Win32Status,TimeTaken,ServerPort,UserAgent,Referer,HttpSubStatus'
@@ -350,7 +420,7 @@ if (-not (Get-Service $ServiceName -ErrorAction SilentlyContinue)) {
 & sc.exe config $ServiceName obj= $workerIdentity | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Setting the worker's account failed ($LASTEXITCODE)" }
 & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
-$values = $environment.Keys | ForEach-Object { "$_=$($environment[$_])" }
+$values = @($environment.Keys | ForEach-Object { "$_=$($environment[$_])" }) + @($workerOnly.Keys | ForEach-Object { "$_=$($workerOnly[$_])" })
 Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $values
 
 # 5. The built-in identities exist only now: give them the database and the keys they read.
