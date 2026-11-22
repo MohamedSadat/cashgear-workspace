@@ -413,10 +413,13 @@ host name (`Sites__PublicUrl`) and the plugins' from any other: any other is a s
 the name (`SiteReader.StateByHostAsync`: proven, attached, its certificate live) and drawn from `/`
 (`SitePage.Base` empty, the renderer's links from it), with its own `robots.txt`, ACME's HTTP-01
 answers, and `http` sent on to `https` in Production; the slug's addresses of such a site lead there
-(302); an unknown name is the 404 page. Its rate limit (`Cgw.Sites/SiteLimits.cs`) runs before all
-of it. The worker's `SiteCertificateJob` makes and renews the certificates by ACME
-(`Cgw.Core/Sites/Acme.cs`, the server's own client) into IIS's Centralized Certificate Store, reads
-each name's proof again, and takes a name whose proof is lost off its site (INTEGRATIONS.md). Phase
+(302); an unknown name is the 404 page. On its own host it answers ACME's path by the token alone (the
+IIS host's catch-all http site sends it there for a name not bound yet). Its rate limit
+(`Cgw.Sites/SiteLimits.cs`) runs before all of it. The worker's `SiteCertificateJob` makes and renews
+the certificates by ACME (`Cgw.Core/Sites/Acme.cs`, the server's own client) into a folder of PFX
+files, which a scheduled task on the IIS host (`deploy/iis/site-bindings.ps1`, as SYSTEM) imports and
+binds by name, as the host's other sites are bound; it reads each name's proof again, and takes a name
+whose proof is lost off its site (INTEGRATIONS.md). Phase
 11's DNS reader moved into the core for it (`Cgw.Core/Domains`, `IDomainDns`), for the API and the
 worker alike. Phase 14 also indexes rows' files (`DatabaseRowFiles`, `Databases/RowFiles.cs`) for
 members' reads, the clean-up and a site's file check, and writes `site` and `publishing` changes to

@@ -14,7 +14,8 @@ namespace Cgw.Worker.Jobs;
 /// <summary>
 /// Phase 14 (M14.4; decisions, 2026-11-22): every proven host name that serves a site gets a
 /// certificate by ACME (HTTP-01, the Sites process answering the challenge from the database) into
-/// IIS's Centralized Certificate Store, renewed once a third of its lifetime is left. Before each
+/// <c>Sites__CertificateStore</c>, where the IIS host's scheduled task binds it by name
+/// (<c>deploy/iis/site-bindings.ps1</c>), renewed once a third of its lifetime is left. Before each
 /// order, and once a day, the name's <c>TXT</c> record is read again: missing on two reads a day
 /// apart, the name is taken off its site, stops serving and its certificate is deleted (audited
 /// <c>site.domain</c>, reason <c>proof.lost</c>). A name must lead to the sites' own addresses before an

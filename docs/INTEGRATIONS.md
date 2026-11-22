@@ -1561,7 +1561,11 @@ stand-in outside Production) and point it at the sites' own host (`pages.cashgea
   says, for at most two minutes.
 - **The challenge** is answered by the Sites process at `http://<host>/.well-known/acme-challenge/<token>`
   from the database (`SiteDomains.ChallengeToken` and `ChallengeAnswer`, set while the order lasts),
-  over the sites' catch-all binding on port 80, outside the rate limit, never cached.
+  outside the rate limit, never cached. Once a name is bound (renewals), its port 80 reaches the Sites
+  process by name; before its first certificate it reaches the IIS host's catch-all http site, whose
+  ACME path alone is sent (302) to `https://pages.cashgearerp.com/.well-known/acme-challenge/<token>`,
+  where the Sites process answers by the token alone (docs/OPERATIONS.md). The directory follows the
+  redirect.
 - **The terms.** No order is made unless `Sites__Acme__AgreeToTerms` is `true`: whoever runs the
   server sets it once they have read the directory's subscriber agreement (`install.ps1
   -AgreeToAcmeTerms`); the code never agrees by itself.
@@ -1573,9 +1577,11 @@ stand-in outside Production) and point it at the sites' own host (`pages.cashgea
   lifetimes later need no change); a failed renewal keeps the live certificate and is tried again
   after 1 h, 6 h, then daily. The store's files of names no workspace holds with a live certificate
   are deleted.
-- **Where it goes**: IIS's Centralized Certificate Store (`Sites__CertificateStore`), one
-  `<host>.pfx` a name, which IIS reads by the name a browser asks for through the sites' catch-all
-  `https` binding (SslFlags 2); a name another site binds keeps its own binding.
+- **Where it goes**: a folder (`Sites__CertificateStore`), one `<host>.pfx` a name, which the IIS
+  host's scheduled task (`deploy/iis/site-bindings.ps1`, as SYSTEM every 2 minutes) imports into
+  `LocalMachine\WebHosting` and binds by name (SNI) on the sites' site, as the host's other sites are
+  bound; a name another site binds is never touched. IIS's Centralized Certificate Store was tried on
+  the production host and dropped (decisions, 2026-11-22).
 - **The tests** never reach a real directory: the mock ACME server (`tests/mocks/acme`, port 4289:
   JWS checked, HTTP-01 fetched from the Sites process, certificates signed by a CA made in memory) for
   the server's tests (`SiteDomainTests`, through a bridge to the Sites test server) and the e2e stack

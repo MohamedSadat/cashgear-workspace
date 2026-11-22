@@ -7,10 +7,10 @@ namespace Cgw.Core.Sites;
 /// <c>Sites__Acme__Directory</c> (Let's Encrypt's, or its staging's; https in Production),
 /// <c>Sites__Acme__AgreeToTerms</c> (<c>true</c>, set by whoever runs the server, who has read the
 /// directory's subscriber agreement: never by the code), <c>Sites__Acme__Email</c> (an optional
-/// contact), <c>Sites__CertificateStore</c> (IIS's Centralized Certificate Store's folder, one
-/// <c>&lt;host&gt;.pfx</c> a name) and <c>Sites__CertificatePassword</c> (the store's private key
-/// password, from the environment only). Without all of them no certificate is made, and Settings
-/// says so.
+/// contact), <c>Sites__CertificateStore</c> (a folder, one <c>&lt;host&gt;.pfx</c> a name, which the
+/// IIS host's scheduled task <c>deploy/iis/site-bindings.ps1</c> imports and binds by name) and
+/// <c>Sites__CertificatePassword</c> (the files' private key password, from the environment only).
+/// Without all of them no certificate is made, and Settings says so.
 /// </summary>
 public sealed record SiteCertificateOptions(Uri? Directory, bool AgreeToTerms, string? Email, string? Store, string? Password)
 {

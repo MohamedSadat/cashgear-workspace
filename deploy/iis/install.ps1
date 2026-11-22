@@ -15,8 +15,8 @@
   environment variable, which only administrators can read. Phase 13: Cash Gear's own AI keys for
   its subscription are read the same way (CGW_AI_ANTHROPIC_KEY, CGW_AI_VOYAGE_KEY), and given to the
   API and the worker only. Phase 14: with -CustomDomains, the certificates' private key password
-  (CGW_SITES_CERT_PASSWORD, the worker's only) and the Centralized Certificate Store's account's
-  password (CGW_CCS_PASSWORD, handed to IIS) the same way.
+  (CGW_SITES_CERT_PASSWORD) the same way, the worker's only (the scheduled task that binds the
+  certificates, as SYSTEM, reads it from the worker service's environment).
 
   On a host outside a domain (no gMSA), leave out -ServiceAccount: the app pool runs as its own
   ApplicationPoolIdentity and the worker as its virtual account (NT SERVICE\<service name>), and
@@ -110,16 +110,16 @@ param(
   [hashtable] $AiWorkspaceMonthlyTokens = @{},
   [hashtable] $AiWorkspaceEmbeddingsMonthlyTokens = @{},
   # Phase 14: published sites at a workspace's own host names (docs/OPERATIONS.md, "A site's own host
-  # name"). Certificates by ACME, written by the worker into IIS's Centralized Certificate Store at
-  # <Root>\certificates, which IIS reads as -CertificateStoreUser (an account with read on that
-  # folder; its password from CGW_CCS_PASSWORD in this session); their private key password from
-  # CGW_SITES_CERT_PASSWORD. One catch-all binding on the sites' site: 443 by the store, 80 for ACME's
-  # HTTP-01; refused if another site holds either. -AgreeToAcmeTerms says you have read the
-  # directory's subscriber agreement: the code never agrees by itself. -AcmeStaging is Let's
-  # Encrypt's staging directory (try it first). Left out on an update of a host whose store holds
-  # certificates, the script stops rather than turn custom domains off.
+  # name"). Certificates by ACME, written by the worker to <Root>\certificates (<host>.pfx, their
+  # password from CGW_SITES_CERT_PASSWORD); a scheduled task (site-bindings.ps1, as SYSTEM, every 2
+  # minutes) imports each into WebHosting and binds its name on the sites' site by SNI, as the
+  # host's other sites are bound. ACME's path on the site holding the host's catch-all http binding
+  # is sent to the sites' own host (that path only); with no such site, the sites' site takes the
+  # catch-all. -AgreeToAcmeTerms says you have read the directory's subscriber agreement: the code
+  # never agrees by itself. -AcmeStaging is Let's Encrypt's staging directory (try it first). Left
+  # out on an update of a host whose folder holds certificates, the script stops rather than turn
+  # custom domains off.
   [switch] $CustomDomains,
-  [string] $CertificateStoreUser = '',
   [string] $AcmeDirectory = 'https://acme-v02.api.letsencrypt.org/directory',
   [switch] $AcmeStaging,
   [string] $AcmeEmail = '',
@@ -214,9 +214,6 @@ if ($CustomDomains) {
     throw "-CustomDomains needs -AgreeToAcmeTerms: read the ACME directory's subscriber agreement first (Let's Encrypt's: https://letsencrypt.org/repository/)."
   }
   if (-not $env:CGW_SITES_CERT_PASSWORD) { throw '-CustomDomains: set CGW_SITES_CERT_PASSWORD in this session (the certificates'' private key password).' }
-  if (-not $CertificateStoreUser -or -not $env:CGW_CCS_PASSWORD) {
-    throw '-CustomDomains: -CertificateStoreUser and its password in CGW_CCS_PASSWORD, the account IIS reads the Centralized Certificate Store as.'
-  }
   $environment['Sites__Acme__Directory'] = if ($AcmeStaging) { 'https://acme-staging-v02.api.letsencrypt.org/directory' } else { $AcmeDirectory }
   $environment['Sites__Acme__AgreeToTerms'] = 'true'
   if ($AcmeEmail) { $environment['Sites__Acme__Email'] = $AcmeEmail }
@@ -224,7 +221,7 @@ if ($CustomDomains) {
   # The API says whether certificates are made; only the worker writes them, under the password.
   $workerOnly['Sites__CertificatePassword'] = $env:CGW_SITES_CERT_PASSWORD
 } elseif (Test-Path (Join-Path $certificateFolder '*.pfx')) {
-  throw "$certificateFolder holds sites' certificates: pass -CustomDomains again (with CGW_SITES_CERT_PASSWORD and CGW_CCS_PASSWORD), or custom domains stop on this update."
+  throw "$certificateFolder holds sites' certificates: pass -CustomDomains again (with CGW_SITES_CERT_PASSWORD), or custom domains stop on this update."
 }
 
 # Phase 9: the Sites process reads the database and Blob Storage with the same names, and is given
@@ -378,34 +375,50 @@ if (-not (Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $Plugi
   $binding = Get-WebBinding -Name $SitesSiteName -Protocol https -HostHeader $PluginsHostName
   $binding.AddSslCertificate($PluginsCertificateThumbprint, $CertificateStore)
 }
-# Phase 14: IIS's Centralized Certificate Store and the sites' catch-all bindings (443 by the store,
-# 80 for ACME's HTTP-01), for a site's own host names. A host name bound by another site keeps its
-# binding: HTTP.sys gives a name's own binding first, the store only to names nobody else binds.
+# Phase 14: a site's own host names. The spike on the production host (DECISIONS.md, 2026-11-22)
+# chose this over IIS's Centralized Certificate Store, which needs a port-wide HTTP.sys entry
+# (ccs=443) standing between every name without an SNI binding of its own and the host's default
+# certificate.
 if ($CustomDomains) {
-  if (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) {
-    if (-not (Get-WindowsFeature Web-CertProvider).Installed) {
-      Write-Host "Turning on IIS's Centralized SSL Certificate Support..."
-      Install-WindowsFeature Web-CertProvider | Out-Null
-    }
-  } elseif ((Get-WindowsOptionalFeature -Online -FeatureName IIS-CertProvider).State -ne 'Enabled') {
-    Enable-WindowsOptionalFeature -Online -FeatureName IIS-CertProvider -All -NoRestart | Out-Null
-  }
   New-Item -ItemType Directory -Force $certificateFolder | Out-Null
-  # Administrators, the worker (which writes the files) and the store's account (which IIS reads them as).
-  & icacls.exe $certificateFolder /inheritance:r /grant:r 'Administrators:(OI)(CI)F' 'SYSTEM:(OI)(CI)F' "${workerIdentity}:(OI)(CI)M" "${CertificateStoreUser}:(OI)(CI)R" | Out-Null
+  # Administrators and SYSTEM (the task reads the files), and the worker, which writes them.
+  & icacls.exe $certificateFolder /inheritance:r /grant:r 'Administrators:(OI)(CI)F' 'SYSTEM:(OI)(CI)F' "${workerIdentity}:(OI)(CI)M" | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "Setting who may read $certificateFolder failed ($LASTEXITCODE)" }
-  Enable-WebCentralCertProvider -CertStoreLocation $certificateFolder -UserName $CertificateStoreUser -Password $env:CGW_CCS_PASSWORD -PrivateKeyPassword $env:CGW_SITES_CERT_PASSWORD
-  foreach ($catchAll in @(@{ Protocol = 'https'; Port = 443 }, @{ Protocol = 'http'; Port = 80 })) {
-    $information = "*:$($catchAll.Port):"
-    $held = Get-WebBinding -Protocol $catchAll.Protocol -Port $catchAll.Port |
-      Where-Object { $_.bindingInformation -eq $information -and $_.ItemXPath -notmatch "@name='$SitesSiteName'" }
-    if ($held) { throw "Another site holds the catch-all $($catchAll.Protocol) binding $information ($($held.ItemXPath)): custom domains need it (docs/OPERATIONS.md)." }
-    $ours = Get-WebBinding -Name $SitesSiteName -Protocol $catchAll.Protocol -Port $catchAll.Port | Where-Object { $_.bindingInformation -eq $information }
-    if (-not $ours) {
-      # SslFlags 2: the Centralized Certificate Store, by the name the browser asks for.
-      if ($catchAll.Protocol -eq 'https') { New-WebBinding -Name $SitesSiteName -Protocol https -Port 443 -HostHeader '' -SslFlags 2 | Out-Null }
-      else { New-WebBinding -Name $SitesSiteName -Protocol http -Port 80 -HostHeader '' | Out-Null }
+
+  # The task's script runs as SYSTEM: kept where only administrators can change it.
+  $scripts = Join-Path $Root 'scripts'
+  New-Item -ItemType Directory -Force $scripts | Out-Null
+  & icacls.exe $scripts /inheritance:r /grant:r 'Administrators:(OI)(CI)F' 'SYSTEM:(OI)(CI)F' 'Users:(OI)(CI)RX' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Setting who may change $scripts failed ($LASTEXITCODE)" }
+  Copy-Item (Join-Path $PSScriptRoot 'site-bindings.ps1') (Join-Path $scripts 'site-bindings.ps1') -Force
+  $logs = Join-Path $Root 'logs'
+  New-Item -ItemType Directory -Force $logs | Out-Null
+  $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$scripts\site-bindings.ps1`" -Store `"$certificateFolder`" -Site `"$SitesSiteName`" -ServiceName `"$ServiceName`" -Log `"$logs\site-bindings.log`""
+  $action = New-ScheduledTaskAction -Execute "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument $arguments
+  $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 2)
+  $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+  Register-ScheduledTask -TaskPath '\Cash Gear Workspace\' -TaskName 'Site bindings' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+  Write-Host "Site bindings: the scheduled task '\Cash Gear Workspace\Site bindings' every 2 minutes, its log $logs\site-bindings.log"
+
+  # Before a name's first certificate, its port 80 reaches the site holding the host's catch-all http
+  # binding: ACME's path there (that path only) goes to the sites' own host, which answers by the
+  # token. win-acme's in-memory validation (HTTP.sys's http://+:80/.well-known/acme-challenge/ while
+  # it runs) comes before any IIS site, so it is not in the way.
+  $holder = @(Get-Website | Where-Object { $_.name -ne $SitesSiteName -and ($_.bindings.Collection | Where-Object { $_.protocol -eq 'http' -and $_.bindingInformation -eq '*:80:' }) })
+  if ($holder.Count) {
+    if (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue) {
+      if (-not (Get-WindowsFeature Web-Http-Redirect).Installed) { Install-WindowsFeature Web-Http-Redirect | Out-Null }
+    } elseif ((Get-WindowsOptionalFeature -Online -FeatureName IIS-HttpRedirect).State -ne 'Enabled') {
+      Enable-WindowsOptionalFeature -Online -FeatureName IIS-HttpRedirect -All -NoRestart | Out-Null
     }
+    $at = "$($holder[0].name)/.well-known/acme-challenge"
+    Set-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $at -Filter system.webServer/httpRedirect `
+      -Value @{ enabled = $true; destination = "https://$SitesHostName`$V"; exactDestination = $true; httpResponseStatus = 'Found' }
+    Write-Host "ACME's path on $($holder[0].name), the host's catch-all http site, goes to https://$SitesHostName"
+  } elseif (-not (Get-WebBinding -Name $SitesSiteName -Protocol http -Port 80 | Where-Object { $_.bindingInformation -eq '*:80:' })) {
+    New-WebBinding -Name $SitesSiteName -Protocol http -Port 80 -HostHeader '' | Out-Null
+    Write-Host "No site holds the host's catch-all http binding: $SitesSiteName takes it"
   }
 }
 # A site's page addresses carry no secret, but its log keeps the same fields as the API's.

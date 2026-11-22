@@ -641,9 +641,9 @@ A name serves its site once it is attached and its certificate is live: the Site
 site by the request's host name (`SiteReader.StateByHostAsync`, held as a slug's is) and draws it
 from `/` (its pages at `/<pageId>`, files at `/files/<assetId>`, a `robots.txt` of its own), and the
 slug's addresses of that site redirect there (302). The certificate's private key is a PFX file in
-IIS's Centralized Certificate Store's folder (`Sites__CertificateStore`, one `<host>.pfx` a name,
-under `Sites__CertificatePassword`), which is not a table: IIS reads it by the name a browser asks
-for. Audit: `site.domain.add`, `.verify`, `.remove`, `.attach` (with the host or null),
+a folder (`Sites__CertificateStore`, one `<host>.pfx` a name, under `Sites__CertificatePassword`),
+which is not a table: the IIS host's scheduled task imports it into `LocalMachine\WebHosting` and
+binds the name (`deploy/iis/site-bindings.ps1`). Audit: `site.domain.add`, `.verify`, `.remove`, `.attach` (with the host or null),
 `.certificate` (made, with its end), and `site.domain` with reason `proof.lost`.
 
 ### Sync and audit

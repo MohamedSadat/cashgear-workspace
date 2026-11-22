@@ -27,7 +27,7 @@ public sealed record AcmeCertificate(byte[] Pfx, DateTimeOffset NotBefore, DateT
 /// <summary>
 /// An ACME client (RFC 8555) for the worker (Phase 14, M14.4): an ES256 account, an order for one host
 /// name proven by HTTP-01, a CSR made by .NET (RSA 2048), the chain downloaded and packed as a PFX for
-/// IIS's Centralized Certificate Store. Over <see cref="HttpClient"/>, no package. The key
+/// the IIS host to bind (<c>deploy/iis/site-bindings.ps1</c>). Over <see cref="HttpClient"/>, no package. The key
 /// authorisation to serve is handed to <c>publish</c> before the challenge is answered (the worker
 /// writes it where the Sites process reads it) and taken back by <c>withdraw</c> when the order ends.
 /// </summary>

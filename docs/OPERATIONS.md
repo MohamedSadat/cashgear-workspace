@@ -175,8 +175,8 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Realtime__Metrics` | `true` maps `GET`/`DELETE /api/v1/realtime/metrics` (relay times, connections) for the bench; ignored in Production |
 | `Sheet__Origin`, `Sheet__Origins__N` | Phase 5: Cash Gear Sheet's origin for launch links (`{origin}/cloud#launch=…`), and the origins allowed to redeem them, to call the sheet-session routes (CORS without credentials) and, outside production, to read Azurite. Required, https, in production |
 | `Sheet__DesktopOrigins__N` | Phase 9 (Track S6): the origins of Sheet's desktop app, which alone redeem a desktop launch ticket (`cashgear-sheet://workspace/launch#ticket=…`) and are allowed by the sheet-session routes' CORS. Default `http://tauri.localhost` and `tauri://localhost`, in production too; leave unset |
-| `Sites__Acme__Directory`, `Sites__Acme__AgreeToTerms`, `Sites__Acme__Email`, `Sites__Acme__IntervalSeconds`, `Sites__CertificateStore` | Phase 14, the API and the worker: where a site's own host names' certificates come from (an ACME directory, https in Production; `install.ps1 -CustomDomains` sets Let's Encrypt's, or its staging's with `-AcmeStaging`), that its operator agreed to its terms (`true`; nothing is ordered otherwise), an optional contact, how often the worker looks (60 s), and IIS's Centralized Certificate Store's folder. Without them the app says the server makes no certificates |
-| `Sites__CertificatePassword` | Phase 14, the worker only: the certificates' private key password, the store's too. A secret, from `CGW_SITES_CERT_PASSWORD` in the installing session |
+| `Sites__Acme__Directory`, `Sites__Acme__AgreeToTerms`, `Sites__Acme__Email`, `Sites__Acme__IntervalSeconds`, `Sites__CertificateStore` | Phase 14, the API and the worker: where a site's own host names' certificates come from (an ACME directory, https in Production; `install.ps1 -CustomDomains` sets Let's Encrypt's, or its staging's with `-AcmeStaging`), that its operator agreed to its terms (`true`; nothing is ordered otherwise), an optional contact, how often the worker looks (60 s), and the folder it writes each name's `<host>.pfx` to (`<Root>\certificates`), which the host's scheduled task binds. Without them the app says the server makes no certificates |
+| `Sites__CertificatePassword` | Phase 14, the worker only: the certificates' private key password. A secret, from `CGW_SITES_CERT_PASSWORD` in the installing session; the binding task reads it, as SYSTEM, from the worker service's environment |
 | `RateLimits__sites`, `RateLimits__sitesPlugins` | Phase 14, the Sites process: pages and files a minute one address may ask of every site together (300), and of the plugins host (1,200); an IPv6 address counted by its /64; `robots.txt`, `/health/live` and ACME's challenges are outside both. The address is the connection's (IIS in process). Leave unset in production |
 | `Sites__PublicUrl` | Phase 9, the API: the sites' public origin (`https://pages.cashgearerp.com`), from which a site's address is built, never from a request. Required, https, in production (`install.ps1` sets it from `-SitesHostName`). The Sites process itself reads only `ConnectionStrings__Sql`, `Blob__*`, `AZURE_*`, `Logging__*`, (Phase 10) the two below, (Phase 14) this one, to tell its own host name from a site's own, and its rate limits |
 | `Plugins__PublicUrl` | Phase 10, the API and the Sites process: the plugins' origin (`https://plugins.cashgearerp.com`). The API builds a frame's address from it (`{origin}/f/{ticket}/{entry}`) and refuses to start in production without an https one; the Sites process answers that host name alone with plugins' files (`install.ps1` sets both from `-PluginsHostName`). Development and e2e: `http://localhost:5291` |
@@ -243,18 +243,33 @@ configured on the server but the network:
 A workspace's owners and admins add and prove host names in the app (Settings → Publishing); the
 server makes their certificates once it is set up for it, which is whoever runs it's to do, once:
 
-- **IIS**: `install.ps1 -CustomDomains` turns on IIS's Centralized SSL Certificate Support
-  (`Web-CertProvider`), makes `<Root>\certificates` readable by administrators, the worker (which
-  writes the files) and `-CertificateStoreUser` (the account IIS reads the store as: a local account
-  with read on that folder alone; its password in `CGW_CCS_PASSWORD` in the session), points the
-  store at it with the certificates' private key password (`CGW_SITES_CERT_PASSWORD`, which the
-  worker gets as `Sites__CertificatePassword` and the API never does), and adds the sites' site two
-  catch-all bindings: `https *:443:` by the store (SslFlags 2) and `http *:80:` for ACME's HTTP-01.
-  It refuses if another site holds either, and an update without `-CustomDomains` on a host whose
-  store holds certificates stops rather than turn them off. A host name another site binds by SNI
-  (`workspace-api.`, `pages.`, `plugins.`, the ERP's) keeps its own binding and certificate: HTTP.sys
-  answers a name's own binding first and the store only for names nobody binds. The spike on the
-  production host before the first install proves this there (decisions, 2026-11-22).
+- **IIS**: `install.ps1 -CustomDomains` makes `<Root>\certificates`, where the worker writes one
+  `<host>.pfx` a name under the certificates' private key password (`CGW_SITES_CERT_PASSWORD`, which
+  the worker gets as `Sites__CertificatePassword` and the API never does), readable by
+  administrators, SYSTEM and the worker alone. It copies `site-bindings.ps1` to `<Root>\scripts`
+  (changeable by administrators only) and registers the scheduled task `\Cash Gear Workspace\Site
+  bindings`, as SYSTEM every 2 minutes, which binds each name as the host's other sites are bound:
+  the certificate imported into `LocalMachine\WebHosting` (not exportable, friendly name
+  `cgw-site <host>`), an `https *:443:<host>` binding by SNI and an `http *:80:<host>` binding on the
+  sites' site, the certificate swapped after a renewal; a name whose file is gone is unbound and its
+  certificate removed. It never touches a name another site binds, a binding whose certificate it
+  did not import, or another site. Its log is `<Root>\logs\site-bindings.log` (names and
+  thumbprints). An update without `-CustomDomains` on a host whose folder holds certificates stops
+  rather than turn them off.
+- **Port 80 before a name's first certificate**: the name is not bound yet, so the directory's
+  HTTP-01 request reaches the site holding the host's catch-all `http *:80:` (Default Web Site on
+  the production host). `install.ps1` sends ACME's path there, and only that path, to the sites' own
+  host (a `location` of `<that site>/.well-known/acme-challenge` with `httpRedirect` to
+  `https://pages.cashgearerp.com$V`, 302; IIS's HTTP Redirection turned on if it is not), where the
+  Sites process answers by the token. With no site holding the catch-all, the sites' site takes it.
+  win-acme's in-memory validation, which the production host uses for its other sites' certificates,
+  listens on HTTP.sys's `http://+:80/.well-known/acme-challenge/` while it runs, which comes before
+  any IIS site: the two do not meet. To take the redirect off: `Remove-WebConfigurationLocation
+  -Name 'Default Web Site/.well-known/acme-challenge'`.
+- **The spike** (`deploy/iis/domains-spike.ps1`; decisions, 2026-11-22): the report alone changes
+  nothing; `-Try` runs `site-bindings.ps1` on a scratch site and name, adds the redirect for a moment,
+  checks every other name keeps its certificate, and removes all of it. Run it on a host before its
+  first `-CustomDomains` install.
 - **The directory**: `-AcmeStaging` first (Let's Encrypt's staging, whose certificates no browser
   trusts), then the production directory (the default). `-AgreeToAcmeTerms` says you have read its
   subscriber agreement; nothing is ordered without it. `-AcmeEmail` gives an optional contact for
