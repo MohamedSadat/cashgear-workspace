@@ -104,7 +104,7 @@ jobs:
           run=$(gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$run" ]; then
             gh run download "$run" --name phase2-server --dir bench/previous-run
-            for name in phase2.json phase4.json phase10.json phase11.json phase13.json; do
+            for name in phase2.json phase4.json phase10.json phase11.json phase13.json phase14.json; do
               found=$(find bench/previous-run -name "$name" | head -n 1)
               if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" "bench/previous/$name"; fi
             done
@@ -142,6 +142,13 @@ jobs:
       # budget is taken on the host's processor (bench/phase13.mjs --local-model), not here.
       - name: Phase 13 server budget (retrieval by meaning over 1,000,000 chunks)
         run: pnpm bench:phase13 -- --server
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+      # Phase 14's server budget (bench/phase14.mjs --server, Phase14Bench): a site's or share link's
+      # check of a file in a database of 50,000 rows holding 100,000 files, by the index of rows'
+      # files; a file no row holds, and 0.13.0's scan of the rows' values, tracked beside it.
+      - name: Phase 14 server budget (a file check at 50,000 rows)
+        run: pnpm bench:phase14 -- --server
         env:
           CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
       - uses: actions/upload-artifact@v4
@@ -288,7 +295,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -357,6 +364,12 @@ jobs:
       # server stack above. The server's retrieval at 1,000,000 chunks runs in the server job.
       - name: Phase 13 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase13 -- --no-server
+      # Phase 14's (bench/phase14.mjs --no-server): a published page of 2,000 blocks at its own host
+      # name (a `*.localhost` name proven in the DNS stand-in, its certificate from the mock ACME
+      # server), read over HTTP from the Sites process's cache, against the server stack above. The
+      # server's file check at 50,000 rows runs in the server job.
+      - name: Phase 14 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase14 -- --no-server
       - uses: actions/upload-artifact@v4
         if: always()
         with:
