@@ -4,6 +4,43 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.14.0] - 2026-11-23
+
+Publish a site at a host name of your own, see publishing change as it happens, and keep files in
+database rows safe.
+
+- **Files in database rows are kept.** A file in a row's file cell is now held by the row from the
+  moment it is put there: every member who can read the row can open it, and it is never cleaned up
+  while a row holds it. Until now a file was held only once the row's own page had been written to,
+  so other members could not open it and the server deleted it 30 days after it was added (the
+  storage keeps deleted files 30 more days). The server fills this in once for every row written
+  before.
+- **Your own host name.** An owner or admin adds a host name in Settings → Publishing (for example
+  docs.example.com), proves it with the DNS record shown, and points it at the sites; whoever may
+  publish a page then gives its site the name in "Publish to the web". The server gets the name its
+  certificate, renews it, and serves the site there over https; the site's own address leads to it.
+  Settings shows each name's state and why a certificate is not made yet. A name whose record is
+  removed stops serving after a day.
+- **Publishing changes reach open tabs.** A site published, changed or unpublished, a name proven
+  or given, the switch turned off, and a certificate made appear in an open share dialog and in
+  Settings without a reload.
+- **The sites are harder to flood.** One address may ask a minute's worth of pages and files (300)
+  of every published site together; past that it is told to wait.
+- **Older versions.** 0.13.0 and earlier ignore the publishing changes in the feed, and show a site
+  with its own host name at the site's own address.
+- **For whoever runs the server.** Three migrations: the index of rows' files (`DatabaseRowFiles`,
+  filled by the worker once; the asset clean-up deletes nothing until it is done), a site's host
+  names (`SiteDomains`, `AcmeAccounts`) and an index of pages by their cover. Install it before
+  2026-12-14, when the first files in rows could otherwise be cleaned up. The Sites process now
+  needs `Sites__PublicUrl` too, which `install.ps1` gives it. Custom domains are off until
+  `install.ps1 -CustomDomains` sets them up:
+  the certificates' folder, a scheduled task that binds each name on IIS as the host's other sites
+  are bound (`site-bindings.ps1`, as SYSTEM every 2 minutes), ACME's path on the host's catch-all
+  http site sent to the sites' own host, and the certificates' directory (`-AgreeToAcmeTerms` once
+  you have read its subscriber agreement; `-AcmeStaging` to try it first). No step per name.
+  `deploy/iis/domains-spike.ps1` reports what a host holds, changing nothing, and `-Try` proves it
+  on a scratch site; it ran on the production host on 2026-11-22.
+
 ## [0.13.0] - 2026-11-22
 
 Let a plugin reach the services it names, find database rows by what their properties say, search
