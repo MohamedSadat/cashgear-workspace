@@ -211,12 +211,26 @@ body {
   .cgw-page {
     padding: 24px 18px 0;
   }
+
+  /* The editor's frame reaches 32 px into the page's margin for the block handle; here the margin
+     is 18 px, and the frame made the page 28 px wider than the phone (a sideways scroll). */
+  .cgw-page .cgw-editor-frame {
+    padding-inline: 18px;
+    margin-inline: -18px;
+  }
 }
 
 /* Narrow screens (Frame.tsx): the sidebar is a CgDrawer over the page. */
 .cgw-drawer .cgw-sidebar {
   block-size: 100%;
   border-inline-end: 0;
+}
+
+/* CgDrawer's overlay mode lays its application area out as a block of its content's height, and the
+   frame clips it: nothing scrolled on a phone (Settings cut off, typed lines under the keyboard).
+   The area fills the frame, so the page area is the one that scrolls, as on a wide screen. */
+.cgw-frame[data-layout='narrow'] > main {
+  block-size: 100%;
 }
 
 .cgw-frame[data-layout='narrow'] .cgw-topbar {
