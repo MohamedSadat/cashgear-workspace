@@ -23,7 +23,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 11: Sign-in and permissions | Done, 2026-11-19 (0.11.0; proven against the mock OpenID Connect provider and Chrome's and Edge's virtual authenticators; a live check with a real provider and a real authenticator, and installing it with the passkeys' domain, are yours) | `phase-11`, `v0.11.0` |
 | Phase 12: Databases and ERP at scale | Done, 2026-11-20 (0.12.0; proven against the mocks in CI and against the real ERP on LocalDB; the three screen readers by hand, from `SCREEN_READERS.md`, are yours) | `phase-12`, `v0.12.0` |
 | Phase 13: AI and plugins | Done, 2026-11-22 (0.13.0; proven against the mock providers in CI; the local model measured here and on the host; Cash Gear's own provider keys, and installing it, are yours) | `phase-13`, `v0.13.0` |
-| Phase 14: Publishing | Planned 2026-11-22 | |
+| Phase 14: Publishing | Done, 2026-11-22 (0.14.0; proven against the mock ACME server in CI and on the e2e stack, the binding task on the production host; installing it, a name's DNS records and its Let's Encrypt certificate are yours) | `phase-14`, `v0.14.0` |
 | Phase 15: AI, further | Planned 2026-11-22 | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `9f5a208` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
@@ -1627,6 +1627,98 @@ Benchmarks (`bench/phase13.mjs`: the server's part in CI's server job, the plugi
 | The local model: a question, p95 | 100 ms | — | 48.3 ms (8 threads); the host 31 (6 threads) |
 | Typing between ten networked plugin frames, work per key p95 / key to the next frame p95 | 8 ms (16 on CI) / 33 ms | 2.3 ms / 16.4 ms | 5.3 ms / 17.1 ms |
 | The initial JavaScript | 350 kB (Phase 1) | 349.5 kB | 349.5 kB |
+
+## Phase 14: Publishing
+
+Done 2026-11-23. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45038442456 (commit `65f7d6f`, the server's and licence jobs green on the first attempt and the Windows job on its fifth, the code unchanged (below): 386 browser e2e cases passed, 1 of them on a retry, and 14 skipped, the desktop app's 64 passed, every kill test 25 of 25 and the migration's 10 of 10, every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45038442384 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, SQL Server LocalDB 2025, Azurite) and the e2e server stack; the host spike's from the production host. Answers, defaults and the spike's results are in `DECISIONS.md` (2026-11-22: Phase 14, and Phase 14, the host spike); the design in `INTEGRATIONS.md` (ACME, the challenge, where certificates go), `DATA_MODEL.md` (`DatabaseRowFiles`, `SiteDomains`, `AcmeAccounts`, the feed's `site` and `publishing`), `ARCHITECTURE.md` (the Sites process by host name, its rate limit) and `OPERATIONS.md` (0.14.0's migrations, `install.ps1 -CustomDomains`, the binding task, port 80, the spike); what changed for users in `CHANGELOG.md` (0.14.0).
+
+Milestones
+
+- [x] M14.1 Rows' files. Commit `40f4c15` (the defect shown by a test first; `DatabaseRowFiles`
+      written with a row's values on every server path, `RowFilesFillJob` once, the clean-up
+      waiting for it, a row's file read by its database's readers, the site's and share link's
+      check by the index)
+- [x] M14.2 Publishing in the change feed. Commit `70126e7` (`site` and `publishing` changes, the
+      engine's `publishing` event, the share dialog's publish view and Settings read again)
+- [x] M14.3 A rate limit in the Sites process. Commit `065148c` (`SiteLimits`, 429 with
+      `Retry-After` and a page in both languages, an IPv6 address by its /64)
+- [x] M14.4 Custom domains. Commits `fc5b8e1` (the DNS reader in the core), `8af4e6e` (the names,
+      their proof, the Sites process by host name, the ACME client and `SiteCertificateJob`, the mock
+      ACME server), `0ed32eb` (Settings → Publishing's names, the share dialog's address,
+      `site-domains.spec.ts`), `c6b079f` (a server before 0.14.0 offers none), the host spike
+      (decisions; `5242392`, `752e05a`, `dc86e02`, `6d53ef9`: the binding task and ACME's path),
+      `1aeea7b`
+- Budgets, deploy and docs: `314149f` (`bench/phase14.mjs`, `Phase14Bench`, CI's steps), `5242392`,
+  `dc86e02` (`install.ps1 -CustomDomains`, `site-bindings.ps1`, `domains-spike.ps1`), `7f09251`
+
+Notes
+
+- **Found while sizing, fixed first: rows' files were deleted.** A file in a row's file cell was in
+  `AssetRefs` only once the row's own document was derived, so other members got 404 and the hourly
+  clean-up deleted it 30 days after its upload. Production has held rows' files since 0.5.0
+  (2026-11-14): the first could have gone on 2026-12-14, so 0.14.0 needs installing before then
+  (`RowFileTests.Rows_written_before_the_index_are_filled_in_by_the_worker_once` covers the rows it
+  wrote).
+- **The host spike changed the design.** IIS refuses the Centralized Certificate Store's catch-all
+  binding, and a store binding by name needs a port-wide HTTP.sys entry that would stand between the
+  host's unbound names and their certificate. Each name is bound instead as the host's other sites
+  are, by a scheduled task (`site-bindings.ps1`), proven there on a scratch site and name with every
+  other name's certificate unchanged; ACME's path on Default Web Site, which holds the host's
+  catch-all http binding, goes to `pages.cashgearerp.com`, proven there too (decisions).
+- **Not tried against the real world yet:** a Let's Encrypt certificate (staging, then production)
+  for `docs.test.cashgearerp.com` on the host, which needs 0.14.0 installed with `-CustomDomains`
+  and the name's `CNAME` and `TXT` records: yours. Every certificate in CI and here came from the
+  mock ACME server; the e2e stack serves the site over http at a `*.localhost` name. Production runs
+  0.12.0.
+- **The initial JavaScript** is 349.6 kB of 350 (0.13.0: 349.5): the domain screens and their
+  words load with Settings and the share dialog.
+- **What CI found before the evidence run, all in the specs:** the Arabic walks of Settings read the
+  example host name as English (`27508a4`: a host name is in no language); two sign-out specs read
+  the store, or loaded the app again, before the sign-out had finished (`5a00c96`, `65f7d6f`: they
+  wait for it, as the file's others did).
+- **The evidence run's Windows job passed on its fifth attempt, the code unchanged.** Attempts 1
+  and 3 failed `realtime.spec.ts`'s typing case in Edge on both tries: the keys' p95 1,007 then
+  2,299 ms, and 3,098 then 1,976 ms, against CI's 1 s, while the server's own relay p95 was 337 to
+  1,787 ms; Chrome's, half an hour earlier in the same runs, was 77 and 98 ms. Edge's half of the
+  run has been as slow before: a relay p95 of 733 and 868 ms in run 44903991353 (Phase 13), and 680
+  and 619 ms in 0.12.0's release run, against 70 to 110 ms on a quiet runner. Phase 14 changed
+  nothing on the push's path, and on the reference machine the e2e stack went back to idle within
+  seconds of `site-domains.spec.ts` (the certificate job's pass every 5 s takes 0.08 s of
+  processor). Attempt 2 passed every browser case and failed one of Phase 8's budgets: a paste of
+  1,000 cells reached the server in 5,973 ms against 5 s, in one of six pastes (p50 2,526, below
+  Phase 8's 3,190 on that runner). Phase 14 adds one comparison in memory per pasted row (its
+  files, written only when they change); on the reference machine the bench gave 3,599 and 3,674 ms
+  at worst (p50 2,946 and 2,642) against Phase 8's 3,021 (2,453), on a day the machine was as much
+  slower at the import, which runs on the device alone (3,776 ms against 3,430). Attempt 4 passed
+  every browser case, with a relay p95 of 381 and 359 ms in both browsers that time, and failed
+  Phase 4's import of 50,000 rows through the import route: 24,752 ms, more than 1.5 times the last
+  green run's 9,745 (attempt 2 on the same commit: 10,749 ms; main's eight runs before it: 8,164 to
+  14,996). Its other figures were as much slower (the first open 2,363 ms against 1,518, a cell
+  edit's p95 11.1 ms against 7.4); the import's only Phase 14 work for a row holding no file is a
+  look at the schema's files properties. Attempt 5 passed every case and every budget, with a relay
+  p95 of 93 ms in Chrome and 100 ms in Edge; its one retry was `timeline.spec.ts`'s lane move in
+  Chrome.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A file in a row's file cell is readable by every member who can read the row and is never cleaned up while a row holds it; a site's and a share link's file check answer by the index | Pass | Server: `RowFileTests` (read by another member at once and held by the clean-up; read only by those who can read its database; the index follows every write of a row's values: an edit, a type change, a deletion for good, the purge, a CSV import; rows written before filled in once by the worker, the clean-up deleting nothing until then); `SharedDatabaseTests`' file reads through a share link (`A_file_property_added_after_a_chart_view_is_not_readable_through_it` among them) now answered by the index; `Phase14Bench` times the check by it |
+| A publish, change or unpublish from any device reaches an open share dialog and Settings without a reload; an older build ignores it | Pass | `site-domains.spec.ts` (Chrome, Edge): the share dialog open while the worker makes the certificate shows the name's address and "Certificate until" without a reload, and Settings the name serving the page. Server: `PublishingTests.Every_publish_change_and_unpublish_is_a_site_change_for_those_who_read_the_page` (a person, the switch, the purge; the domains' `publishing` change to everyone in the workspace). Unit: the engine's `publishing` event (`realtime.test.ts`), the share dialog and Settings read again (`publishing.test.ts`); older builds drop a type they do not know (`entityRecord`, `batchOf`, since 0.1.0) |
+| An address past its limit is answered 429 on every host of the Sites process while other addresses read on, and nothing it asks past the limit reaches the database | Pass | Server: `SiteLimitTests` (past its window 429 with `Retry-After` and the page in both languages, no SQL command carrying the request's own values; another address reads on; an IPv6 address by its /64; the plugins host's own window; `robots.txt`, health and ACME's path outside it) |
+| A site attached to a proven domain reads there with no account and with script off, over https by a certificate made for it, in English and in Arabic; its slug's address leads there; a name not proven, or proven by another workspace, never serves a site; an unpublish holds at the domain within a minute too | Pass, over http at a `*.localhost` name with a certificate from the mock ACME server; https on the host is yours (above) | `site-domains.spec.ts` (Chrome, Edge): "a site at a host name its workspace proved, by a certificate from ACME, its slug leading there" (no account, script off; the slug's address 302 there; an unknown name 404; unpublished, 404 within a minute; Axe on Settings, the dialog and the site). Server: `SiteDomainTests` (owners and admins prove and remove, others read; served from its root once live; `An_arabic_site_reads_at_its_own_name_right_to_left_in_its_language`; the challenge for an order under way only, on the sites' own host by its token; the worker's certificate by ACME through the Sites process, renewed, a lost proof taken off; a name not pointed here not ordered). The spike: a name bound by `site-bindings.ps1` on the production host served by its own certificate |
+
+Also: `site-domains.spec.ts`'s Axe on Settings → Publishing's names (one to prove, one serving a site), the share dialog with a name and the site at its name; the Arabic walks of Settings read its names (`arabic.spec.ts`, the example host name allowed). Unit: 3,857 tests in `pnpm test` (3,851 passed, 6 skipped); 469 server tests (17 skipped: the benches and the real provider calls); every standing check passes.
+
+Benchmarks (`bench/phase14.mjs`: the server's part in CI's server job, the site's in its Windows job)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A published page of 2,000 blocks at its own host name, first byte p95 from the cache, the limiter and the host's lookup included | 200 ms | 1.6 ms | 12.7 ms |
+| The same, its first, fresh answer | tracked | 144.2 ms | 358.9 ms |
+| A site's file check in a database of 50,000 rows holding 100,000 files, p95, by the index | 20 ms | 2.8 ms | 4.2 ms |
+| A file no row holds; 0.13.0's scan of the rows' values | tracked | 1.5 ms; 468.2 ms | 2.2 ms; 822.6 ms |
+| The initial JavaScript | 350 kB (Phase 1) | 349.6 kB | 349.6 kB |
 
 ## Track U: `CashGear.React.UI`
 

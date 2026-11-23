@@ -3,7 +3,7 @@
 A Notion-style workspace for the Cash Gear ecosystem: block documents, a page tree, databases,
 embedded sheets and ERP data, in the browser and as a Tauri desktop app.
 
-Status: Phases 0 to 13 are done (0.13.0: the local-first editor; accounts, sync, sharing, server
+Status: Phases 0 to 14 are done (0.14.0: the local-first editor; accounts, sync, sharing, server
 search and history; offline, conflicts, migrations and the Mac app; workspace databases and their
 views; Sheet workbooks embedded in pages and read-only ERP blocks; real-time editing, presence,
 comments, mentions and the inbox; editable ERP blocks for Vendors, chart and kanban plugin
@@ -24,8 +24,11 @@ documents through a batch pull, ERP report blocks, and the ERP's queries filtere
 paged in its database by Tracks E10 and E11; then AI and plugins: a plugin's own network to the
 hosts an admin approved, plugins in the change feed, a row's property values by meaning, an
 approximate index for a million chunks, a local embedding model on the server, and AI on Cash
-Gear's subscription). No phase is planned after Phase 13; what could come next is under "Later"
-in `docs/IMPLEMENTATION_PLAN.md`.
+Gear's subscription; then publishing: a site at its workspace's own host name with its
+certificate by ACME, bound on IIS by a scheduled task, publishing in the change feed, a rate limit
+in the Sites process, and an index of rows' files that keeps them from the clean-up). Phase 15,
+AI further (completions on a local model, billing), is planned and asks its questions when it
+starts; what could come after is under "Later" in `docs/IMPLEMENTATION_PLAN.md`.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.
 
@@ -883,3 +886,24 @@ Added as they are found, grouped by phase.
   profile may never show it. A spec that presses near a view's foot sets `cgw-persist-notice` in
   `localStorage` first (`timeline.spec.ts`). Which bars a timeline shows moves with today's date,
   so such a spec can pass for weeks and fail one day (run 44962093078, on 2026-11-22).
+
+### Phase 14
+
+- IIS refuses a binding with SslFlags other than 0 and no host name, so there is no catch-all https
+  binding over the Centralized Certificate Store; and a store binding by name made by script is not
+  served until HTTP.sys has a `ccs=443` entry, which is port-wide and sits before the `0.0.0.0:443`
+  fallback that names without an SNI entry rely on. The production host binds every name by SNI to a
+  certificate in `WebHosting`; `deploy/iis/site-bindings.ps1` does the same.
+- Windows PowerShell 5.1 run with `-File` has an empty `$PSScriptRoot` in a parameter's default:
+  resolve it after `param` from `$MyInvocation.MyCommand.Path`. `$host` is a read-only automatic
+  variable; `??` does not parse. Scripts for the host are kept ASCII (`Set-Content` writes the ANSI
+  code page) and parsed by `[System.Management.Automation.Language.Parser]::ParseFile` first.
+- The production host runs win-acme for its other sites, by HTTP-01 from memory (an HTTP.sys
+  reservation on `http://+:80/.well-known/acme-challenge/` while it runs, ahead of every IIS site),
+  and the `*.cashgearerp.com` certificate by a manual DNS record.
+- Over Remote Desktop, a script reaches the host by the clipboard (`Set-Clipboard` here,
+  `Get-Clipboard -Raw | Set-Content` there) and a report comes back the same way. Typing a command
+  goes through the clipboard too and puts back what was there, so a file put there first is still
+  there when the command runs; read a report back only after its command has finished.
+- `Pages` had no index on `CoverAssetId`: any lookup of a page by its cover read a database's rows
+  whole (24.8 ms at 50,000 rows). `IX_Pages_Cover` (Phase 14) is filtered to pages with one.
