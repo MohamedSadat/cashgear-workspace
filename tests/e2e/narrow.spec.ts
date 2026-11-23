@@ -112,4 +112,58 @@ test.describe('narrow screens', () => {
     await page.getByLabel('Page title').click();
     await expect(tools(page)).toBeHidden();
   });
+
+  // Until 2026-11-23 the drawer's main column grew to its content's height inside a frame that
+  // clipped it: nothing scrolled on a phone, so Settings was cut off and lines typed at a page's
+  // foot went under the keyboard.
+  test('Settings scrolls to its end', async ({ page }) => {
+    const errors = watchErrors(page);
+    await createWorkspace(page);
+    await page.goto('/#/settings');
+    const about = page.getByRole('heading', { name: 'About' });
+    await expect(about).toBeAttached();
+    await expect(about).not.toBeInViewport();
+    // A wheel, as a finger: a script's scroll would move even a clipped box.
+    await page.mouse.move(195, 420);
+    for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 600);
+    await expect(about).toBeInViewport();
+    expect(errors).toEqual([]);
+  });
+
+  test('a line typed at the foot of a page stays above the touch toolbar', async ({ page }) => {
+    const errors = watchErrors(page);
+    await createWorkspace(page);
+    await toggle(page).click();
+    await drawer(page)
+      .getByRole('button', { name: /^Add a page in/ })
+      .first()
+      .click();
+    await closed(page);
+    await expect(page.getByLabel('Page title')).toBeFocused();
+    await page.getByLabel('Page title').fill('Typed on a phone');
+    await page.keyboard.press('Enter');
+    await expect(editor(page)).toBeFocused();
+    // The layout with the on-screen keyboard open (index.html: interactive-widget=resizes-content).
+    await page.setViewportSize({ width: 390, height: 420 });
+    await expect(tools(page)).toBeVisible();
+    for (let i = 1; i <= 16; i++) {
+      await page.keyboard.type(`Line ${i}`);
+      await page.keyboard.press('Enter');
+    }
+    await page.keyboard.type('The last line');
+    await expect(editor(page)).toContainText('The last line');
+    const place = () =>
+      page.evaluate(() => {
+        const caret = getSelection()!.getRangeAt(0).getBoundingClientRect();
+        const toolbar = document.querySelector('.cgw-touchbar')!.getBoundingClientRect();
+        const area = document.querySelector('.cgw-page-area')!;
+        return {
+          above: caret.bottom <= toolbar.top,
+          shown: caret.top >= area.getBoundingClientRect().top,
+          sideways: area.scrollWidth - area.clientWidth,
+        };
+      });
+    await expect.poll(place).toEqual({ above: true, shown: true, sideways: 0 });
+    expect(errors).toEqual([]);
+  });
 });

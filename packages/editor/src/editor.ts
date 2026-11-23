@@ -30,6 +30,7 @@ import { sheetEmbedView } from './nodeviews/sheet';
 import { textBodyView } from './nodeviews/textBody';
 import { Tables } from './tables';
 import { TableOfContents, tableOfContentsView } from './toc';
+import { TouchbarMargin } from './touchbarMargin';
 
 export interface BlockEditorOptions {
   element: HTMLElement;
@@ -138,6 +139,7 @@ export function createBlockEditor(options: BlockEditorOptions): BlockEditor {
       BlockKeymap.configure({ host: getHost, ui: () => ui }),
       BlockDecorations.configure({ host: getHost }),
       StableTyping,
+      TouchbarMargin,
       MarkdownShortcuts,
       SlashCommands.configure({ keys: () => ui.slashKeys }),
       Mentions.configure({ keys: () => ui.mentionKeys }),

@@ -9,6 +9,7 @@ import { currentBlock, indent, moveSibling, outdent, type BlockInfo } from '../b
 import type { BlockEditor } from '../editor';
 import type { EditorHost } from '../host';
 import { openSlash } from '../slash';
+import type { TouchbarMarginStorage } from '../touchbarMargin';
 
 const QUERY = '(pointer: coarse), (max-width: 767px)';
 
@@ -123,7 +124,20 @@ export function TouchToolbar({
     ];
   }, [s, state, editor, blockEditor]);
 
-  if (!wanted || !focused || !editor.isEditable || !s?.touchToolbar) return null;
+  const shown = wanted && focused && editor.isEditable && !!s?.touchToolbar;
+  // The caret scrolls into view above the toolbar while it shows (touchbarMargin.ts).
+  useEffect(() => {
+    const storage = (editor.storage as unknown as Record<string, TouchbarMarginStorage | undefined>)
+      .cgwTouchbarMargin;
+    if (!shown || !storage) return;
+    const mine = () => bar.current;
+    storage.bar = mine;
+    return () => {
+      if (storage.bar === mine) storage.bar = null;
+    };
+  }, [editor, shown]);
+
+  if (!shown) return null;
 
   return (
     <CgSelectionToolbar
