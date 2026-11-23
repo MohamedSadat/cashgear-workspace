@@ -907,3 +907,16 @@ Added as they are found, grouped by phase.
   there when the command runs; read a report back only after its command has finished.
 - `Pages` had no index on `CoverAssetId`: any lookup of a page by its cover read a database's rows
   whole (24.8 ms at 50,000 rows). `IX_Pages_Cover` (Phase 14) is filtered to pages with one.
+
+### After 0.14.0
+
+- `CgDrawer`'s overlay mode makes its root `display: block`, so its application area (`main`) is as
+  tall as its content, and the root clips it: on a phone nothing scrolled (Settings cut off, typed
+  lines under the keyboard) until `shell.css` gave the narrow frame's `main` the frame's height. A
+  script's `scrollIntoView` still moves a clipped box, so a spec proves scrolling with the wheel.
+- ProseMirror's `Plugin` copies `props` when made, so a getter there is read once: define it on
+  `plugin.props` after. It scrolls the caret only once it is within `scrollThreshold` of an edge;
+  `scrollMargin` is only how far it then scrolls (`touchbarMargin.ts` sets both).
+- Android Chrome keeps the layout viewport's height under the on-screen keyboard unless the
+  viewport meta asks `interactive-widget=resizes-content` (`apps/web/index.html`); the browser
+  pane cannot show a keyboard, so a spec sets the smaller viewport itself.
