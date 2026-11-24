@@ -61,6 +61,9 @@
 // Phase 15 (v0.14.0 on :4269, twenty property types, no rules): a database with rules and a button
 // property. A property renamed there goes up without `propertyTypes` and the server keeps the
 // button; a row edited there starts the database's rule on the server, and the rules are kept.
+//
+// Phase 16 (v0.15.0 on :4267, seven view types): a form view is drawn there as a table; renamed
+// there, the server keeps it a form with its settings.
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -84,6 +87,8 @@ import {
   typeValue,
 } from './database';
 import { P, STATUS, runsOf, saveRule, seedTasks } from '../../bench/phase15-seed.mjs';
+import { answerFields, seedForm } from '../../bench/phase16-seed.mjs';
+import { API } from './database';
 import {
   ERP_API,
   ERP_CLIENT,
@@ -1428,5 +1433,86 @@ test('the v0.14.0 build edits rows of a database with rules and a button, and th
   expect(runs.map((r: { rowTitle: string; status: string }) => [r.rowTitle, r.status])).toEqual([
     ['Task 1', 'done'],
   ]);
+  await api.dispose();
+});
+
+// Phase 16 (v0.15.0 on :4267, seven view types, no forms): a form view, which v0.15.0 does not
+// know, is drawn there as a table of its questions' properties (the view's `properties` follow its
+// questions); renamed there, it goes up as a `view.upsert` of type `table` saying seven types (its
+// config as it holds it, `form` passed through untouched), and the server keeps it a form with its
+// settings. A row a form's link added is a row there like any other.
+test('the v0.15.0 build shows a form view as a table, and the server keeps it a form with its settings', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.15.0');
+  const account = await newAccount('Forms and v0.15.0');
+  const api = await apiSession(account);
+  const seeded = await seedForm(api, { name: 'Forms v0.15.0', rows: 1 });
+  const answered = await fetch(`${API}/api/v1/forms/${seeded.token}`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(answerFields('By the link')),
+  });
+  expect(answered.status).toBe(303);
+  const viewOf = async () =>
+    (
+      (await api.get(`/api/v1/workspaces/${seeded.workspaceId}/tree`)).views as {
+        id: string;
+        name: string;
+        type: string;
+        config: Record<string, unknown>;
+      }[]
+    ).find((v) => v.id === seeded.formId)!;
+  const made = await viewOf();
+  expect(made.type).toBe('form');
+
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const upserts: { type: string; payload: Record<string, unknown> }[] = [];
+  old.on('request', (request) => {
+    if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+    for (const op of (request.postDataJSON()?.ops ?? []) as typeof upserts)
+      if (op.type === 'view.upsert') upserts.push(op);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await old
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /Sign-ups/ })
+    .click({ timeout: 30000 });
+  const oldDb = fullPage(old);
+  await showView(oldDb, 'Sign-up form');
+  // A table of the form's questions, the link's row among its rows.
+  await expect(grid(oldDb)).toBeVisible({ timeout: 20000 });
+  await expect(oldDb.getByRole('columnheader', { name: 'Email', exact: true })).toBeVisible();
+  await expect(oldDb.getByRole('columnheader', { name: 'Owner', exact: true })).toHaveCount(0);
+  await expect(grid(oldDb).getByRole('row').filter({ hasText: 'By the link' })).toHaveCount(1);
+  // Renamed there, from its tab.
+  await oldDb.getByRole('tab', { name: 'Sign-up form', exact: true }).dblclick();
+  const name = old.getByLabel('View name', { exact: true });
+  await name.fill('Sign-ups as a table');
+  await name.press('Enter');
+  await expect(oldDb.getByRole('tab', { name: 'Sign-ups as a table', exact: true })).toBeVisible();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await expect.poll(() => upserts.length, { timeout: 30000 }).toBeGreaterThan(0);
+  expect(upserts.every((op) => op.payload.type === 'table' && op.payload.viewTypes === 7)).toBe(
+    true,
+  );
+  expect(oldErrors).toEqual([]);
+  await oldContext.close();
+
+  // The server kept the type and the form, and took the name.
+  await expect
+    .poll(async () => (await viewOf()).name, { timeout: 30000 })
+    .toBe('Sign-ups as a table');
+  const kept = await viewOf();
+  expect(kept.type).toBe('form');
+  expect(kept.config.form).toEqual(made.config.form);
   await api.dispose();
 });

@@ -8,7 +8,9 @@
 // block, a `pluginBlock` of a type v0.9.0 has no definition for, so it draws the editor's own
 // placeholder and never changes the node), and v0.10.0 (Phase 11's: a page whose access holds a
 // group's row, a principal v0.10.0 does not know, which its share dialog never sees and whose
-// save keeps it), and v0.14.0 (Phase 15's: a database with rules and a button property). Each is the web build of its tag: the same document code (@cgw/doc at that release's schema version, its
+// save keeps it), v0.14.0 (Phase 15's: a database with rules and a button property) and v0.15.0
+// (Phase 16's: a form view, drawn as a table there and kept a form with its settings). Each is the
+// web build of its tag: the same document code (@cgw/doc at that release's schema version, its
 // gate and its sync engine) as that release's desktop app, which embeds this very build.
 //   node scripts/old-build.mjs                 every tag's tree into target/old-build/<tag>,
 //                                              installed from its own lockfile, and its web app
@@ -21,7 +23,8 @@
 //                                              on 4278, v0.4.0 on 4277, v0.5.0 on 4276,
 //                                              v0.6.0 on 4275, v0.7.0 on 4274, v0.8.0 on
 //                                              4272, v0.9.0 on 4271, v0.10.0 on 4270, v0.14.0
-//                                              on 4269 (4273 is this build's preview)
+//                                              on 4269, v0.15.0 on 4267 (4273 is this build's
+//                                              preview; 4268 the passkey specs' build)
 // The API a build talks to is fixed at build time: VITE_CGW_API, 127.0.0.1:5280 (the e2e stack,
 // which must allow each build's origin: scripts/server-stack.mjs) unless set.
 import { spawn, spawnSync } from 'node:child_process';
@@ -44,6 +47,9 @@ export const OLD_BUILDS = {
   'v0.10.0': { port: 4270 },
   // Phase 15: a database's rules and a button property, neither of which 0.14.0 knows.
   'v0.14.0': { port: 4269 },
+  // Phase 16: a form view, the eighth type, which 0.15.0 draws as a table. 4268 is the passkey
+  // specs' build (scripts/web-localhost.mjs).
+  'v0.15.0': { port: 4267 },
 };
 export const OLD_TAG = 'v0.2.0';
 export const originOf = (tag = OLD_TAG) => `http://127.0.0.1:${OLD_BUILDS[tag].port}`;

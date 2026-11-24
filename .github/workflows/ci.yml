@@ -207,9 +207,10 @@ jobs:
       # with plugin blocks), v0.7.0 and v0.8.0 (Phase 9: a timeline view, a type neither
       # knows, drawn as a table there and kept a timeline with its settings), and v0.9.0
       # (Phase 10: a third-party plugin block, a placeholder there and kept as it is), v0.10.0
-      # (Phase 11: a page whose access holds a group's row, kept by its save), and v0.14.0 (Phase 15:
-      # a database with rules and a button, both kept while it edits rows).
-      - name: The old builds (v0.2.0's to v0.14.0's web apps)
+      # (Phase 11: a page whose access holds a group's row, kept by its save), v0.14.0 (Phase 15:
+      # a database with rules and a button, both kept while it edits rows), and v0.15.0 (Phase 16:
+      # a form view, drawn as a table there and kept a form with its settings).
+      - name: The old builds (v0.2.0's to v0.15.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs

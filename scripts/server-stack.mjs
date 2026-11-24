@@ -55,7 +55,8 @@ const origins = [
   'http://tauri.localhost',
   'tauri://localhost',
   // The old web builds that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs): v0.2.0,
-  // v0.3.0, v0.4.0, v0.5.0, v0.6.0, v0.7.0, v0.8.0, v0.9.0, v0.10.0 and (Phase 15) v0.14.0.
+  // v0.3.0, v0.4.0, v0.5.0, v0.6.0, v0.7.0, v0.8.0, v0.9.0, v0.10.0, (Phase 15) v0.14.0 and
+  // (Phase 16) v0.15.0.
   'http://127.0.0.1:4279',
   'http://127.0.0.1:4278',
   'http://127.0.0.1:4277',
@@ -66,6 +67,7 @@ const origins = [
   'http://127.0.0.1:4271',
   'http://127.0.0.1:4270',
   'http://127.0.0.1:4269',
+  'http://127.0.0.1:4267',
 ];
 
 const children = [];
