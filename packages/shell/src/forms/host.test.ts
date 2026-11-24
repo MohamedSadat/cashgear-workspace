@@ -41,12 +41,15 @@ const json = (body: unknown, status = 200) =>
 describe('the forms host', () => {
   it("reads a form's answers and link, and makes, changes and deletes the link", async () => {
     const { host, seen } = forms((request) => {
+      if (request.url.endsWith('/version')) return json({ version: '0.16.0', viewTypes: 8 });
       if (request.method === 'GET')
         return json({ answers: 7, link: LINK, canManage: true, linksAllowed: true });
       if (request.method === 'DELETE') return new Response(null, { status: 204 });
       return json({ ...LINK, enabled: request.method !== 'PUT' });
     });
     const state = await host.state(DB, VIEW);
+    // The server keeps forms: its /version counts eight view types.
+    expect(host.knowsForms()).toBe(true);
     expect(state).toEqual({
       answers: 7,
       link: { ...LINK, answers: 2, createdBy: undefined, version: undefined },
@@ -58,13 +61,22 @@ describe('the forms host', () => {
     expect((await host.updateLink(DB, VIEW, settings)).enabled).toBe(false);
     await host.deleteLink(DB, VIEW);
     const path = `https://api.test/api/v1/databases/${DB}/views/${VIEW}/form`;
-    expect(seen.map((s) => [s.method, s.url])).toEqual([
+    expect(seen.filter((s) => !s.url.endsWith('/version')).map((s) => [s.method, s.url])).toEqual([
       ['GET', path],
       ['POST', `${path}/link`],
       ['PUT', `${path}/link`],
       ['DELETE', `${path}/link`],
     ]);
-    expect(seen[2].body).toEqual(settings);
+    expect(seen.find((s) => s.method === 'PUT')!.body).toEqual(settings);
+  });
+
+  it('offers no form to a server before 0.16.0', async () => {
+    const { host } = forms((request) =>
+      request.url.endsWith('/version') ? json({ version: '0.15.0', propertyTypes: 21 }) : json({}),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(host.knowsForms()).toBe(false);
   });
 
   it('says a refusal by its code, and offline as offline', async () => {

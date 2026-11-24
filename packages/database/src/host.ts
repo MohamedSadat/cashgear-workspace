@@ -15,6 +15,7 @@ import type {
   QueryContext,
   QuerySpec,
   ViewRecord,
+  ViewType,
 } from './core';
 
 /** A person of the workspace: person cells, created and edited by, the "Me" of a filter. */
@@ -251,6 +252,12 @@ export interface DatabaseHost {
    */
   automations?: AutomationsHost;
 
+  /**
+   * Phase 16: whether the server keeps a view of this type, so a view of it may be made (a server
+   * before 0.16.0 refuses a form). Absent: every type this build knows (a local workspace).
+   */
+  viewTypeKnown?(type: ViewType): boolean;
+
   // ---- Forms (Phase 16; optional: the shell gives them for a synced workspace) ---------------
   /**
    * A form view's answers' count and its link, kept by the server: absent on a local workspace and
@@ -300,6 +307,8 @@ export interface FormLinkSettings {
  */
 export interface FormsHost {
   online(): boolean;
+  /** The server keeps form views (its `/version` counts 8 view types). */
+  knowsForms(): boolean;
   state(databaseId: Id, viewId: Id): Promise<FormState>;
   createLink(databaseId: Id, viewId: Id, settings: FormLinkSettings): Promise<FormLink>;
   updateLink(databaseId: Id, viewId: Id, settings: FormLinkSettings): Promise<FormLink>;

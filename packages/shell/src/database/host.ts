@@ -40,6 +40,7 @@ import {
   type QueryRequest,
   type RowRecord,
   type ViewRecord,
+  type ViewType,
 } from '@cgw/workspace';
 import { navigate } from '../route';
 import { canEditPage, type WorkspaceSession } from '../session';
@@ -832,6 +833,10 @@ export class ShellDatabaseHost implements DatabaseHost {
   get forms(): FormsHost | undefined {
     return this.syncsCurrent() && this.formsHost ? this.formsHost : undefined;
   }
+
+  /** A synced workspace's server keeps a form only from 0.16.0 (its `/version`). */
+  viewTypeKnown = (type: ViewType): boolean =>
+    type !== 'form' || !this.syncsCurrent() || this.formsHost?.knowsForms() === true;
 
   get exportWorkbook(): ExportWorkbook | undefined {
     return this.syncsCurrent() && this.workbooks ? this.exportToWorkbook : undefined;

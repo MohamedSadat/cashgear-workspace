@@ -484,7 +484,7 @@ export function DatabaseView({
       case 'addView':
         return (
           <CgMenuPanel label={t('views.add')} className="cgw-db-menu-panel">
-            {VIEW_ORDER.map((type, i) => (
+            {VIEW_ORDER.filter((type) => host.viewTypeKnown?.(type) ?? true).map((type, i) => (
               <CgMenuPanelItem
                 key={type}
                 icon={viewType(type).glyph}

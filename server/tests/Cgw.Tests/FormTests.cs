@@ -136,6 +136,8 @@ public sealed class FormTests(ServerFixture server)
     {
         var s = await FormDatabase();
         Assert.Equal("form", DatabaseOps.ViewTypeOrder[^1]);
+        // A client offers a form only once its server's /version counts it.
+        Assert.Equal(8, (await server.Anonymous().GetFromJsonAsync<JsonElement>("/api/v1/version")).GetProperty("viewTypes").GetInt32());
         Assert.True(DatabaseOps.ConfigKeysKnownBy(8).SetEquals([.. DatabaseOps.ConfigKeysKnownBy(7), "form"]));
 
         // 0.15.0 (seven types) drew it as a table, changed its filter and sent it back without `form`.

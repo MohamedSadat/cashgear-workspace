@@ -11157,7 +11157,8 @@
         "required": [
           "version",
           "api",
-          "propertyTypes"
+          "propertyTypes",
+          "viewTypes"
         ],
         "type": "object",
         "properties": {
@@ -11168,6 +11169,14 @@
             "type": "string"
           },
           "propertyTypes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "viewTypes": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",

@@ -285,4 +285,26 @@ describe('the form view', () => {
     expect(container.textContent).toContain('الأسئلة المعلّمة بـ * مطلوبة.');
     expect(button('إرسال')).toBeDefined();
   });
+
+  it('is offered only where the server keeps forms', async () => {
+    const s = seed(1);
+    const menu = async () => {
+      await click(document.querySelector('[aria-label="Add a view"]'));
+      // Each item's words after its glyph.
+      const offered = [...document.querySelectorAll('[role="menuitem"]')].map((i) =>
+        i.textContent?.trim().slice(1),
+      );
+      await act(async () => root?.unmount());
+      root = null;
+      return offered;
+    };
+    await mount(h(DatabaseView, { host: s.host, databaseId: s.tasksId }));
+    expect(await menu()).toContain('Form');
+    // A server before 0.16.0 refuses a form view: the menu leaves it out.
+    (s.host as import('../../host').DatabaseHost).viewTypeKnown = (type) => type !== 'form';
+    await mount(h(DatabaseView, { host: s.host, databaseId: s.tasksId }));
+    const offered = await menu();
+    expect(offered).toContain('Chart');
+    expect(offered).not.toContain('Form');
+  });
 });

@@ -3108,6 +3108,8 @@ export interface components {
       /** Format: int32 */
       propertyTypes: number | string;
       version: string;
+      /** Format: int32 */
+      viewTypes: number | string;
     };
     ViewDto: {
       config: components['schemas']['JsonElement'];

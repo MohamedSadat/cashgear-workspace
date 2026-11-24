@@ -265,7 +265,10 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     });
     // Phase 16: form views' answers and links, over the same connection.
     void import('./forms/host').then(({ ShellForms }) => {
-      if (live) databases.connectForms(new ShellForms(cloud.automationsCloud()));
+      if (live)
+        databases.connectForms(
+          new ShellForms(cloud.automationsCloud(), () => databases.automationsChanged()),
+        );
     });
     return () => {
       live = false;

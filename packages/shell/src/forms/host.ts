@@ -3,7 +3,7 @@
 // the cloud, as the automations' host is; a member's answer itself is a row through the outbox.
 import type { FormLink, FormLinkSettings, FormState, FormsHost } from '@cgw/database';
 import type { ApiClient } from '@cgw/api';
-import { SyncHttpError, type Id } from '@cgw/workspace';
+import { KNOWN_VIEW_TYPES, SyncHttpError, type Id } from '@cgw/workspace';
 
 /** What the host needs of the connection (cloud/cloud.ts's `automationsCloud()` gives it). */
 export interface FormsCloud {
@@ -57,10 +57,33 @@ export const linkOf = (dto: FormLinkDto): FormLink => ({
 });
 
 export class ShellForms implements FormsHost {
-  constructor(private readonly cloud: FormsCloud) {}
+  private viewTypes: number | null = null;
+
+  constructor(
+    private readonly cloud: FormsCloud,
+    /** The views' host is told when the server's count of view types is known. */
+    private readonly changed: () => void = () => undefined,
+  ) {
+    void this.readVersion();
+  }
+
+  /** The server's `/version`: how many view types it keeps (none sent: a server before 0.16.0). */
+  private async readVersion() {
+    try {
+      const answer = await data(this.cloud.api.GET('/api/v1/version'));
+      this.viewTypes = Number((answer as { viewTypes?: number }).viewTypes ?? 7);
+    } catch {
+      this.viewTypes = null;
+    }
+    this.changed();
+  }
 
   online() {
     return this.cloud.online();
+  }
+
+  knowsForms() {
+    return (this.viewTypes ?? 0) > KNOWN_VIEW_TYPES.indexOf('form');
   }
 
   private path(databaseId: Id, viewId: Id) {
