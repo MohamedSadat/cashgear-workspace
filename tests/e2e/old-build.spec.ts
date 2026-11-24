@@ -57,6 +57,10 @@
 // which neither knows, is drawn as a table there; renamed and its filter changed there, it goes up
 // as a table, and the server keeps it a chart with its `chart` settings (`viewTypes` read as the
 // count of types the build knows).
+//
+// Phase 15 (v0.14.0 on :4269, twenty property types, no rules): a database with rules and a button
+// property. A property renamed there goes up without `propertyTypes` and the server keeps the
+// button; a row edited there starts the database's rule on the server, and the rules are kept.
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -67,7 +71,19 @@ import { newAccount, signIn, signedIn, syncStatus } from './cloud';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import { oldBuild, originOf, serveOldBuild } from '../../scripts/old-build.mjs';
 import { writePluginBundles } from '../fixtures/plugins/make.mjs';
-import { addView, chooseOptions, fullPage, grid, newDatabase, openRow, showView } from './database';
+import {
+  addView,
+  chooseOptions,
+  fullPage,
+  grid,
+  newDatabase,
+  openRow,
+  propertyMenu,
+  rowValue,
+  showView,
+  typeValue,
+} from './database';
+import { P, STATUS, runsOf, saveRule, seedTasks } from '../../bench/phase15-seed.mjs';
 import {
   ERP_API,
   ERP_CLIENT,
@@ -1315,3 +1331,102 @@ for (const tag of ['v0.10.0', 'v0.8.0'] as const)
     await again.close();
     await api.dispose();
   });
+
+// Phase 15 (v0.14.0 on :4269, twenty property types, no rules): a database with rules and a
+// button property, neither of which v0.14.0 knows. It draws the button's column with nothing in
+// it and the feed's `automation` change passes it by (it stays synced); a property renamed there
+// goes up in a `db.update` without `propertyTypes`, and the server keeps the button's type and its
+// words (the older-build rule, as for Phase 12's views); a row's value edited there starts the
+// database's rule on the server as any device's change does, and the step's change reaches it.
+test('the v0.14.0 build edits rows of a database with rules and a button, and the server keeps both', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.14.0');
+  const account = await newAccount('Rules and v0.14.0');
+  const api = await apiSession(account);
+  const seeded = await seedTasks(api, { rows: 3, name: 'Rules v0.14.0' });
+  const rule = await saveRule(api, seeded, {
+    name: 'Points seen',
+    trigger: { kind: 'propertyChanged', propertyId: P.points },
+    steps: [{ kind: 'set', values: { [P.notes]: 'points seen' } }],
+  });
+  await saveRule(api, seeded, {
+    name: 'Approve',
+    trigger: { kind: 'button', propertyId: P.approve },
+    steps: [{ kind: 'set', values: { [P.status]: STATUS.done } }],
+  });
+  const databaseOf = async () =>
+    (
+      (await api.get(`/api/v1/workspaces/${seeded.workspaceId}/tree`)).databases as {
+        id: string;
+        properties: { id: string; name: string; type: string; button?: unknown }[];
+      }[]
+    ).find((d) => d.id === seeded.databaseId)!;
+  const button = (await databaseOf()).properties.find((p) => p.id === P.approve)!;
+  expect(button).toMatchObject({ type: 'button', button: { label: 'Approve' } });
+  const rulesBefore = await api.get(`/api/v1/databases/${seeded.databaseId}/automations`);
+  expect(rulesBefore.automations).toHaveLength(2);
+
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const sent: { type: string; payload: Record<string, unknown> }[] = [];
+  old.on('request', (request) => {
+    if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+    sent.push(...((request.postDataJSON()?.ops ?? []) as typeof sent));
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await old
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /Tasks/ })
+    .click({ timeout: 30000 });
+  const oldDb = fullPage(old);
+  await expect(grid(oldDb)).toBeVisible({ timeout: 20000 });
+  // The button's column is there with nothing to press in it.
+  await expect(oldDb.getByRole('columnheader', { name: 'Approve', exact: true })).toHaveCount(1);
+  await expect(grid(oldDb).getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+
+  // A property renamed there: Notes is Remarks.
+  const menu = await propertyMenu(old, 'Notes', 'Text', oldDb);
+  await menu.getByRole('textbox', { name: 'Property name' }).fill('Remarks');
+  await menu.getByRole('textbox', { name: 'Property name' }).press('Enter');
+  await old.keyboard.press('Escape');
+  await expect(oldDb.getByRole('columnheader', { name: 'Remarks', exact: true })).toBeVisible();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+
+  // A row's Points edited there, on its page: the rule runs on the server and its step comes back.
+  await openRow(old, 'Task 1', oldDb);
+  await typeValue(old, 'Points', '42');
+  await expect(rowValue(old, 'Remarks')).toHaveText('points seen', { timeout: 30000 });
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  expect(oldErrors).toEqual([]);
+
+  // What it sent: the rename as a `db.update` without `propertyTypes`, the edit as a `row.update`,
+  // and nothing of the rules.
+  const updates = sent.filter((op) => op.type === 'db.update');
+  expect(updates.length).toBeGreaterThan(0);
+  expect(updates.some((op) => 'propertyTypes' in op.payload)).toBe(false);
+  expect(sent.some((op) => op.type === 'row.update')).toBe(true);
+  expect(sent.some((op) => op.type.startsWith('automation.'))).toBe(false);
+  await oldContext.close();
+
+  // The server kept the button's type and its words, took the name, and kept both rules; the one
+  // the edit started ran once, done.
+  const kept = await databaseOf();
+  expect(kept.properties.find((p) => p.id === P.approve)).toEqual(button);
+  expect(kept.properties.find((p) => p.id === P.notes)?.name).toBe('Remarks');
+  const rulesAfter = await api.get(`/api/v1/databases/${seeded.databaseId}/automations`);
+  const rulesOf = (list: { automations: { rule: unknown }[] }) =>
+    list.automations.map((a) => a.rule);
+  expect(rulesOf(rulesAfter)).toEqual(rulesOf(rulesBefore));
+  const runs = await runsOf(api, seeded, rule.id);
+  expect(runs.map((r: { rowTitle: string; status: string }) => [r.rowTitle, r.status])).toEqual([
+    ['Task 1', 'done'],
+  ]);
+  await api.dispose();
+});

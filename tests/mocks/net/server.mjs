@@ -1,7 +1,8 @@
 // A host a plugin may reach (Phase 13, M13.1): the e2e specs and the bench name it in a plugin's
 // manifest. It answers anything with CORS open to any origin (a sandboxed frame's is "null") and
 // records each request it took: the method, the host the request named (`localhost:4288` and
-// `127.0.0.1:4288` are two hosts to a browser's CSP, one server here), the path and the body. Plain
+// `127.0.0.1:4288` are two hosts to a browser's CSP, one server here), the path, the body and
+// (Phase 15: a webhook's call) the headers. Plain
 // Node, no dependencies.
 //
 //   node tests/mocks/net/server.mjs [--port 4288]
@@ -17,7 +18,7 @@ export const DEFAULT_PORT = 4288;
 const MAX_BODY = 64 * 1024;
 
 export function startNetMock({ port = DEFAULT_PORT } = {}) {
-  /** @type {{ method: string, host: string, path: string, body: string, at: string }[]} */
+  /** @type {{ method: string, host: string, path: string, body: string, headers: Record<string, string>, at: string }[]} */
   let requests = [];
   const handler = (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -53,6 +54,13 @@ export function startNetMock({ port = DEFAULT_PORT } = {}) {
         host: String(req.headers.host ?? ''),
         path: url.pathname + url.search,
         body: Buffer.concat(chunks).toString('utf8'),
+        // Phase 15: a webhook's signature and its parts, which a spec checks as a receiver would.
+        headers: Object.fromEntries(
+          Object.entries(req.headers).map(([k, v]) => [
+            k,
+            Array.isArray(v) ? v.join(', ') : String(v ?? ''),
+          ]),
+        ),
         at: new Date().toISOString(),
       });
       if (requests.length > 10_000) requests = requests.slice(-5_000);
