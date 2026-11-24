@@ -6,7 +6,8 @@ import type { ApiClient } from '@cgw/api';
 import type { Id } from '@cgw/workspace';
 import { answer, type PersonRef } from './comments';
 
-export type NotificationKind = 'mention' | 'commentMention' | 'reply';
+/** Phase 15: `automation`, a rule's notice or (with `reason`) a run of one's own that stopped. */
+export type NotificationKind = 'mention' | 'commentMention' | 'reply' | 'automation';
 
 export interface NotificationDto {
   id: Id;
@@ -21,6 +22,9 @@ export interface NotificationDto {
   excerpt: string;
   createdAt: string;
   readAt: string | null;
+  /** Phase 15: the rule's name as it is now, and why its run stopped. */
+  automationName?: string | null;
+  reason?: string | null;
 }
 
 export interface NotificationPage {
@@ -38,7 +42,7 @@ export interface NotificationsApi {
   read(body: { ids?: Id[]; all?: boolean }): Promise<{ unread: number }>;
 }
 
-const KINDS = new Set<string>(['mention', 'commentMention', 'reply']);
+const KINDS = new Set<string>(['mention', 'commentMention', 'reply', 'automation']);
 
 export function readNotification(value: unknown): NotificationDto | null {
   const n = value as Record<string, unknown>;
@@ -57,6 +61,8 @@ export function readNotification(value: unknown): NotificationDto | null {
     excerpt: String(n.excerpt ?? ''),
     createdAt: String(n.createdAt),
     readAt: (n.readAt as string | null | undefined) ?? null,
+    automationName: (n.automationName as string | null | undefined) ?? null,
+    reason: (n.reason as string | null | undefined) ?? null,
   };
 }
 

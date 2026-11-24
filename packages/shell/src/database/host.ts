@@ -10,6 +10,7 @@
 // "showing rows on this device". A view showing a database in a synced workspace starts a hold of
 // it (and of the databases its relations point into), so it is fetched and kept.
 import type {
+  AutomationsHost,
   DatabaseAssets,
   DatabaseHost,
   DatabaseRef,
@@ -800,6 +801,23 @@ export class ShellDatabaseHost implements DatabaseHost {
   connectWorkbooks(workbooks: WorkbookSync | null) {
     this.workbooks = workbooks;
     this.schedule();
+  }
+
+  /** Phase 15: the automations of a synced workspace's databases (loaded with the cloud), or none. */
+  private automationsHost: AutomationsHost | null = null;
+
+  connectAutomations(automations: AutomationsHost | null) {
+    this.automationsHost = automations;
+    this.schedule();
+  }
+
+  /** What the automations know changed (the server's count of property types came). */
+  automationsChanged() {
+    this.schedule();
+  }
+
+  get automations(): AutomationsHost | undefined {
+    return this.syncsCurrent() && this.automationsHost ? this.automationsHost : undefined;
   }
 
   get exportWorkbook(): ExportWorkbook | undefined {

@@ -11,6 +11,26 @@ import type { Collab } from './collab';
 import { avatarColours } from './colour';
 import type { NotificationDto } from './inbox';
 import { openThread } from './threads';
+import { useSection } from '../i18n/sections';
+import { automationsWords } from '../automations/words';
+
+type Loose = (key: string, options?: Record<string, unknown>) => string;
+
+const REASONS = new Set(['author.access', 'access.denied', 'not.found', 'webhook.access']);
+
+/** Phase 15: a rule's notice, or a run of the person's own rule that stopped, in words. */
+function automationText(n: NotificationDto, t: Loose, name: string, title: string) {
+  const rule = n.automationName || t('automations.settings.untitled');
+  if (n.reason)
+    return {
+      line: t('automations.inbox.stopped', { name: `“${rule}”` }),
+      excerpt: t(`automations.inbox.reasons.${REASONS.has(n.reason) ? n.reason : 'other'}`),
+    };
+  return {
+    line: t('automations.inbox.notice', { actor: name, name: `“${rule}”`, title }),
+    excerpt: n.excerpt,
+  };
+}
 
 const textKey = (kind: NotificationDto['kind']) =>
   kind === 'mention'
@@ -21,6 +41,7 @@ const textKey = (kind: NotificationDto['kind']) =>
 
 export function InboxView({ collab, session }: { collab: Collab; session: WorkspaceSession }) {
   const { t, i18n } = useTranslation();
+  useSection(automationsWords);
   const inbox = collab.inbox;
   const snap = useSyncExternalStore(inbox.subscribe, inbox.snapshot);
   const format = useMemo(
@@ -110,11 +131,19 @@ export function InboxView({ collab, session }: { collab: Collab; session: Worksp
                           <span className="cgw-visually-hidden">{t('inbox.unread')}</span>
                         </span>
                       )}
-                      <span dir="auto">{t(textKey(n.kind), { name, title })}</span>
+                      <span dir="auto">
+                        {n.kind === 'automation'
+                          ? automationText(n, t as unknown as Loose, name, title).line
+                          : t(textKey(n.kind), { name, title })}
+                      </span>
                     </span>
-                    {n.excerpt && (
+                    {(n.kind === 'automation'
+                      ? automationText(n, t as unknown as Loose, name, title).excerpt
+                      : n.excerpt) && (
                       <span className="cgw-inbox-excerpt" dir="auto">
-                        {n.excerpt}
+                        {n.kind === 'automation'
+                          ? automationText(n, t as unknown as Loose, name, title).excerpt
+                          : n.excerpt}
                       </span>
                     )}
                     <time className="cgw-muted" dateTime={n.createdAt}>

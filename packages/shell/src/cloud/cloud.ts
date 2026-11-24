@@ -96,6 +96,7 @@ export class Cloud {
   private readonly notificationListeners = new Set<(workspaceId: Id) => void>();
   private readonly pluginListeners = new Set<(workspaceId: Id) => void>();
   private readonly publishingListeners = new Set<(workspaceId: Id, pageIds: Id[] | null) => void>();
+  private readonly automationListeners = new Set<(workspaceId: Id) => void>();
   private checked = false;
   /** The server said who is signed in, this session (else the account is the cached one). */
   private verified = false;
@@ -224,6 +225,22 @@ export class Cloud {
     return () => void this.pluginListeners.delete(listener);
   }
 
+  /** Phase 15: a database's rules changed (the feed's `automation` change): an editor reads them again. */
+  onAutomations(listener: (workspaceId: Id) => void): () => void {
+    this.automationListeners.add(listener);
+    return () => void this.automationListeners.delete(listener);
+  }
+
+  /** Phase 15: what the database views' automations need of the connection. */
+  automationsCloud() {
+    return {
+      api: this.api,
+      online: () => this.databaseSync().online(),
+      syncNow: () => this.engine.syncNow(),
+      onAutomations: (listener: (workspaceId: Id) => void) => this.onAutomations(listener),
+    };
+  }
+
   /** Phase 14: sites of these root pages changed, or (null) the workspace's switch or domains did. */
   onPublishing(listener: (workspaceId: Id, pageIds: Id[] | null) => void): () => void {
     this.publishingListeners.add(listener);
@@ -325,6 +342,9 @@ export class Cloud {
         break;
       case 'publishing':
         for (const listener of this.publishingListeners) listener(event.workspaceId, event.pageIds);
+        break;
+      case 'automations':
+        for (const listener of this.automationListeners) listener(event.workspaceId);
         break;
     }
   }

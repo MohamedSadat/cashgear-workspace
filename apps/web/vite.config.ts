@@ -157,6 +157,13 @@ export default defineConfig({
               name: 'ui-core',
               test: /@cashgear[\\/]ui[\\/]dist[\\/](internal[\\/](icons|EditorButton|EditorButton\.module|PositionedOverlay|validation|InputShell|listBox|field[\\/]useFieldControl)|vendor[\\/]fluent-icons[\\/]icons|components[\\/]Button[\\/]CgButton|components[\\/]UiText[\\/](CgUiText|uiLabels)|hooks[\\/](useCgId|useDirection|useAsyncOperation|useControllableState|useDebouncedCallback|useFormReset))\.js$/,
             },
+            {
+              // Phase 15: the flyout, menu and drag code the first screen loads, in one chunk: the
+              // automations' screens (loaded later) use the flyout without the drag code, which
+              // split this chunk in two, 0.5 kB more in the first screen with no new code.
+              name: 'ui-overlay',
+              test: /@cashgear[\\/]ui[\\/]dist[\\/](internal[\\/](MenuSurface|MenuSurface\.module|OverlaySurface|OverlaySurface\.module|overlayDom|menuTree|menuNavigation|useOverlayLifecycle|useFocusReturn|inert|dialogClosePolicy)|components[\\/]Flyout[\\/](CgFlyout|CgFlyout\.module)|components[\\/]DragDrop[\\/](dragTracking|CgDragDrop|CgDragDrop\.module))\.js$/,
+            },
           ],
         },
       },

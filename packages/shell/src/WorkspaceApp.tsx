@@ -249,6 +249,26 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     };
   }, [cloud, session, i18n]);
   useEffect(() => databases.connect(cloud ? cloud.databaseSync() : null), [databases, cloud]);
+  // Phase 15: the views' automations, loaded with the cloud (their code and words are not in the
+  // initial JavaScript).
+  useEffect(() => {
+    if (!cloud) return databases.connectAutomations(null);
+    let live = true;
+    let made: { dispose(): void } | null = null;
+    void import('./automations/host').then(({ ShellAutomations }) => {
+      if (!live) return;
+      const automations = new ShellAutomations(cloud.automationsCloud(), session, () =>
+        databases.automationsChanged(),
+      );
+      made = automations;
+      databases.connectAutomations(automations);
+    });
+    return () => {
+      live = false;
+      made?.dispose();
+      databases.connectAutomations(null);
+    };
+  }, [databases, cloud, session]);
   // "Export to a workbook" in the database views (Phase 5), over the same connection.
   useEffect(
     () => databases.connectWorkbooks(cloud ? workbookSync(cloud, services.platform) : null),

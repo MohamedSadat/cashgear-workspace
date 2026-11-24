@@ -22,6 +22,10 @@ import { AiSettingsSection } from '../ai/AiSettings';
 const PublishingSettings = lazy(() =>
   import('../cloud/PublishingSettings').then((m) => ({ default: m.PublishingSettings })),
 );
+/** Phase 15: Settings → Automations, loaded the same way. */
+const AutomationsSettings = lazy(() =>
+  import('../automations/AutomationsSettings').then((m) => ({ default: m.AutomationsSettings })),
+);
 /** Phase 10: the plugins section, loaded the same way. */
 const PluginsSettings = lazy(() =>
   import('../plugins/PluginsSettings').then((m) => ({ default: m.PluginsSettings })),
@@ -96,6 +100,11 @@ export function Settings({
       {cloud && session.workspaceId && (
         <Suspense fallback={null}>
           <PluginsSettings cloud={cloud} session={session} />
+        </Suspense>
+      )}
+      {cloud && session.workspaceId && (
+        <Suspense fallback={null}>
+          <AutomationsSettings cloud={cloud} session={session} />
         </Suspense>
       )}
       {cloud && session.workspaceId && (

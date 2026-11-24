@@ -1,0 +1,66 @@
+/* Settings → Automations (Phase 15): the rules, the switches, the time zone, the webhooks. */
+.cgw-automations-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cgw-automations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-automations-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-md, 6px);
+}
+
+.cgw-automations-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.cgw-automations-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cgw-automations-zone,
+.cgw-automations-hook-form,
+.cgw-automations-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-automations-zone > p,
+.cgw-automations-hook-form > p,
+.cgw-automations-secret > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.cgw-automations-input,
+.cgw-automations-select {
+  box-sizing: border-box;
+  min-inline-size: min(20rem, 100%);
+  min-block-size: 28px;
+  padding-inline: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font: inherit;
+}
