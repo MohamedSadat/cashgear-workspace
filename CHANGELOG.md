@@ -4,6 +4,36 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.16.0] - 2026-11-24
+
+Collect rows by a form: a database's form view, answered by your team in the app and by anyone
+with its link, with script off, in English and Arabic.
+
+- **The form view.** A database's eighth kind of view asks its properties as questions, in the order
+  you choose, each with a label, help text and whether it must be answered; a select question may
+  show only some of its options. Questions go on pages, and a page can be shown only for certain
+  earlier answers. Whoever can edit the database answers it in the app a page at a time, offline
+  too: each answer is a row, sent once you are online. Readers see the questions; the form shows
+  how many answers it has.
+- **Form links.** Whoever has full access to the database shares a form by its link. Anyone with the
+  link answers it without an account and with script off, on pages in the form's language (English
+  or Arabic), and sees nothing of the database but the form's questions. A link has its own switch,
+  an optional closing date and a maximum number of answers; switched off, closed, full or deleted,
+  it takes no more and says so. A database in a private section has no link.
+- **Answers start rules.** An answer adds a row, so it starts the database's "a row is added" rules,
+  and rules on the new "a form is answered", each once. A row added by a link shows the form as
+  its creator. "Tell me of new answers", under Share form, adds a rule that tells you of each one.
+- **Limits.** One address answers a link at most 10 times a minute and 100 a day, past which it is
+  asked to wait while others answer on; an answer is at most 64 KB; a hidden field catches bots
+  that fill in every field. No CAPTCHA.
+- **Older versions.** 0.15.0 and earlier show a form view as a table of its questions' columns and
+  keep the form as it is while they edit the database; they do not add form views.
+- **For whoever runs the server.** One migration (`Phase16Forms`: form links, and the form a row and
+  a rule's change came from). The Sites process draws a form link's pages
+  (`pages.cashgearerp.com/_form/…`) and now needs the API's address (`Api__PublicUrl`, which
+  `install.ps1` gives it). Install the server before the web app: the app offers a form view only
+  once the server keeps one.
+
 ## [0.15.0] - 2026-11-24
 
 Let a database act on its own: rules that set properties, add rows, tell people and call your
