@@ -20,8 +20,9 @@
 //     another page at a key every 35 ms: Phase 6's keystroke budget there (keydown to the end of the
 //     editor's transaction p95 8 ms, 16 on CI's runner; to the next frame p95 33 ms);
 //   - date triggers over a database of 50,000 rows (server/tests/Cgw.Tests/Phase15Bench.cs,
-//     `dotnet test -c Release`): the worker's time a pass after a row changed, p95 (budget 500 ms);
-//     the first pass and passes with nothing changed tracked.
+//     `dotnet test -c Release`): the worker's time a pass after a row changed (the rows written
+//     since read), and a pass reading every row's date (after the rule is saved, and every ten
+//     minutes), p95, each budget 500 ms; the first pass and passes with nothing changed tracked.
 // The fourth budget, the server's processor time per push to a database with 10 rules within 10 % of
 // the same push with none, is bench/phase8-server.mjs's (`--rows --before . --rules-before 0
 // --rules-after 10`), over real processes and taken locally (PROGRESS.md, Phase 15).
@@ -72,6 +73,7 @@ const BUDGETS = {
   pasteKeyWorkP95: { max: KEY_WORK_MAX, unit: 'ms', slack: 2 },
   pasteKeyFrameP95: { max: 33, unit: 'ms', slack: 5 },
   dates50000AfterChangeP95Ms: { max: 500, unit: 'ms', slack: 75 },
+  dates50000FullP95Ms: { max: 500, unit: 'ms', slack: 75 },
   // Tracked, not budgeted.
   firstStepShownP50Ms: { max: Infinity, unit: 'ms', slack: 300 },
   dates50000FirstPassMs: { max: Infinity, unit: 'ms', slack: 500 },
@@ -237,9 +239,10 @@ async function paste(browser, errors) {
     const typist = await deviceOf(browser, account, errors);
     await typist.page.evaluate(probes);
     await typist.page.evaluate((id) => (location.hash = `#/p/${id}`), seeded.other);
-    const body = typist.page.locator('.cgw-page .cgw-editor > [data-block] .cgw-body').first();
-    await body.waitFor({ timeout: 60000 });
-    await body.click();
+    // A page made with no document: its editor, empty, takes what is typed.
+    const editor = typist.page.locator('.cgw-page .ProseMirror');
+    await editor.waitFor({ timeout: 60000 });
+    await editor.click();
     await typist.page.waitForFunction(() => window.__watchEditor?.());
     // The paster: the database's table, its first cell.
     const paster = await deviceOf(browser, account, errors);
@@ -429,6 +432,7 @@ const figures = {
   pasteKeyWorkP95: out.web?.paste?.workP95,
   pasteKeyFrameP95: out.web?.paste?.frameP95,
   dates50000AfterChangeP95Ms: out.server?.afterChange?.p95,
+  dates50000FullP95Ms: out.server?.full?.p95,
   dates50000FirstPassMs: out.server?.firstPassMs,
   dates50000HeldP95Ms: out.server?.held?.p95,
 };
