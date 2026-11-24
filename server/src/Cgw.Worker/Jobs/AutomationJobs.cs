@@ -39,7 +39,10 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
     public static TimeSpan TimesEvery { get; set; } = TimeSpan.FromSeconds(15);
 
     private DateTimeOffset nextTimes = DateTimeOffset.MinValue;
-    private readonly DateDueCache dues = new();
+    private readonly DateDueCache dues = new(clock);
+
+    /// <summary>The dates' cache, for the bench's breakdown of a read.</summary>
+    public DateDueCache Dues => dues;
 
     /// <summary>The work one pass did, for the bench and the tests.</summary>
     public sealed record PassReport(int Events, int Runs, int DateRules, int DueRows, TimeSpan DateTime);
@@ -195,11 +198,15 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
 
 /// <summary>
 /// The moments a database's dates reach a rule (its trigger's property, offset and time of day in
-/// the workspace's zone), each row's in order, kept while the database's rows and the rule do not
-/// change: read from SQL by the one property (<c>JSON_VALUE</c>), never every value of every row.
+/// the workspace's zone), each row's in order. Read from SQL by the one property (<c>JSON_VALUE</c>),
+/// never every value of every row; then, while the rule and the zone do not change, only the rows
+/// written since (their <c>Seq</c> past the rows version read, as the query cache reads them), and
+/// the whole again every <see cref="FullEvery"/> in case a row went without a stamp.
 /// </summary>
-public sealed class DateDueCache
+public sealed class DateDueCache(TimeProvider clock)
 {
+    public static readonly TimeSpan FullEvery = TimeSpan.FromMinutes(10);
+
     public sealed class Dues(List<(DateTimeOffset At, Guid Row)> sorted)
     {
         public int Count => sorted.Count;
@@ -221,55 +228,78 @@ public sealed class DateDueCache
         }
     }
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, (long Version, long RowsVersion, string Zone, Dues Dues)> cache = new();
+    private sealed record Entry(long Version, long RowsVersion, string Zone, DateTimeOffset ReadAt, Dictionary<Guid, DateTimeOffset> ByRow, Dues Dues);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Entry> cache = new();
+
+    /// <summary>The last read from SQL: whole or the rows written since, the rows read, the query's time and the rest (the bench).</summary>
+    public (bool Full, int Rows, TimeSpan Sql, TimeSpan Work)? LastRead { get; private set; }
 
     public async Task<Dues> ForAsync(CgwDb db, Automation rule, JsonObject trigger, WorkspaceDatabase record, TimeZoneInfo zone, CancellationToken ct)
     {
-        if (cache.TryGetValue(rule.Id, out var known) && known.Version == rule.Version && known.RowsVersion == record.RowsVersion && known.Zone == zone.Id)
-            return known.Dues;
+        var now = clock.GetUtcNow();
+        cache.TryGetValue(rule.Id, out var known);
+        var same = known is not null && known.Version == rule.Version && known.Zone == zone.Id && now - known.ReadAt < FullEvery;
+        if (same && known!.RowsVersion == record.RowsVersion) return known.Dues;
         var property = (string)trigger["propertyId"]!;
         var offset = (int)trigger["offsetMinutes"]!;
         var at = (string?)trigger["at"];
         var schema = DbSchema.Parse(record.PageId, record.Version, record.Properties);
-        var list = new List<(DateTimeOffset, Guid)>();
+        var byRow = same ? new Dictionary<Guid, DateTimeOffset>(known!.ByRow) : [];
         if (schema.Live(property) is { } def)
         {
-            if (def.Type == PropertyTypes.CreatedTime)
+            var created = def.Type == PropertyTypes.CreatedTime;
+            // The property's start alone, as text: a few bytes a row, read once (a second
+            // JSON_VALUE in the filter doubled the read: 50,000 rows in 530 ms against 300). A row
+            // read again that is no longer live, or holds no date, leaves the list.
+            var path = $"$.\"{property}\".start";
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var rows = await db.Database.SqlQueryRaw<DateRow>(same
+                ? """
+                  SELECT r.[PageId] AS [Id], JSON_VALUE(r.[Values], @path) AS [Start], p.[CreatedAt],
+                      CAST(CASE WHEN p.[DeletedAt] IS NULL AND p.[TrashedAt] IS NULL AND p.[IsTemplate] = 0 THEN 1 ELSE 0 END AS bit) AS [Live]
+                  FROM [DatabaseRows] r INNER JOIN [Pages] p ON p.[Id] = r.[PageId]
+                  WHERE r.[DatabaseId] = @database AND r.[Seq] > @since
+                  """
+                : """
+                  SELECT r.[PageId] AS [Id], JSON_VALUE(r.[Values], @path) AS [Start], p.[CreatedAt], CAST(1 AS bit) AS [Live]
+                  FROM [DatabaseRows] r INNER JOIN [Pages] p ON p.[Id] = r.[PageId]
+                  WHERE r.[DatabaseId] = @database AND p.[DeletedAt] IS NULL AND p.[TrashedAt] IS NULL AND p.[IsTemplate] = 0
+                  """,
+                new Microsoft.Data.SqlClient.SqlParameter("@path", path),
+                new Microsoft.Data.SqlClient.SqlParameter("@database", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(record.PageId) },
+                new Microsoft.Data.SqlClient.SqlParameter("@since", System.Data.SqlDbType.BigInt) { Value = same ? known!.RowsVersion : 0L })
+                .ToListAsync(ct);
+            var sql = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            // Dates repeat (a day without a time most of all): each worked out once a read.
+            var dues = new Dictionary<string, DateTimeOffset?>(StringComparer.Ordinal);
+            foreach (var row in rows)
             {
-                foreach (var row in await Rows(db, record.PageId).Select(p => new { p.Id, p.CreatedAt }).ToListAsync(ct))
-                    list.Add((AutomationTimes.Due(row.CreatedAt, offset), row.Id));
+                var id = GuidBytes.FromBytes(row.Id);
+                DateTimeOffset? when = null;
+                if (row.Live && created) when = AutomationTimes.Due(row.CreatedAt, offset);
+                else if (row.Live && row.Start is { } start && !dues.TryGetValue(start, out when))
+                    dues[start] = when = AutomationTimes.Due(start, offset, at, zone);
+                if (when is { } due) byRow[id] = due;
+                else byRow.Remove(id);
             }
-            else
-            {
-                // The property's start alone, as text: a few bytes a row.
-                var path = $"$.\"{property}\".start";
-                var rows = await db.Database.SqlQueryRaw<DateRow>("""
-                    SELECT r.[PageId] AS [Id], JSON_VALUE(r.[Values], @path) AS [Start]
-                    FROM [DatabaseRows] r INNER JOIN [Pages] p ON p.[Id] = r.[PageId]
-                    WHERE r.[DatabaseId] = @database AND p.[DeletedAt] IS NULL AND p.[TrashedAt] IS NULL AND p.[IsTemplate] = 0
-                        AND JSON_VALUE(r.[Values], @path) IS NOT NULL
-                    """,
-                    new Microsoft.Data.SqlClient.SqlParameter("@path", path),
-                    new Microsoft.Data.SqlClient.SqlParameter("@database", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(record.PageId) })
-                    .ToListAsync(ct);
-                foreach (var row in rows)
-                    if (AutomationTimes.Due(row.Start, offset, at, zone) is { } when) list.Add((when, GuidBytes.FromBytes(row.Id)));
-            }
+            LastRead = (!same, rows.Count, sql, System.Diagnostics.Stopwatch.GetElapsedTime(started) - sql);
         }
-        list.Sort((a, b) => a.Item1.CompareTo(b.Item1));
-        var dues = new Dues(list);
-        cache[rule.Id] = (rule.Version, record.RowsVersion, zone.Id, dues);
-        return dues;
+        else byRow.Clear();
+        var list = new List<(DateTimeOffset, Guid)>(byRow.Count);
+        foreach (var (row, due) in byRow) list.Add((due, row));
+        list.Sort((a, b) => a.Item1 != b.Item1 ? a.Item1.CompareTo(b.Item1) : a.Item2.CompareTo(b.Item2));
+        var entry = new Entry(rule.Version, record.RowsVersion, zone.Id, same ? known!.ReadAt : now, byRow, new Dues(list));
+        cache[rule.Id] = entry;
+        return entry.Dues;
     }
-
-    private static IQueryable<Page> Rows(CgwDb db, Guid database) =>
-        db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
-            .Where(p => p.ParentPageId == database && p.Kind == PageKinds.Row && p.DeletedAt == null && p.TrashedAt == null && !p.IsTemplate);
 
     public sealed class DateRow
     {
         public byte[] Id { get; set; } = [];
         public string? Start { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public bool Live { get; set; }
     }
 }
 
