@@ -4,6 +4,40 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.15.0] - 2026-11-24
+
+Let a database act on its own: rules that set properties, add rows, tell people and call your
+services when rows change, dates arrive or a button is pressed.
+
+- **Automations.** Whoever has full access to a database adds rules from the toolbar's ⚡: what
+  starts a rule (a row added, a property changed to or from a value, a date reached with an offset,
+  a schedule daily, weekly or monthly, or a button pressed), the rows it is for, and its steps in
+  order, each with its own condition: set properties (to a value, today, or whoever made the
+  change), add a row to this database or another (from a template, its page copied too), notify
+  people, groups or a row's people in their inbox and by mail, or call a webhook. A rule runs on the
+  server as the person who saved it, doing only what they may; a change made on any device runs it
+  once, and changes made offline run their rules in the order they reach the server.
+- **Run logs.** Each rule shows how its last run went, and its log every run in the last 30 days:
+  what started it, each step and how it ended. A row shows the runs it had under its properties. A
+  run that stops because its author can no longer do what it asks says why and tells them.
+- **The button property.** A database's new property type: a button in every row that runs its
+  rules when pressed (once a press, for whoever may edit the row). Offline, it says to press it again
+  once online, and never runs later on its own.
+- **Settings → Automations.** Owners and admins see every rule of the workspace with a switch each
+  and one for all, set the time zone its dates and schedules are read in, and add webhooks: an
+  https address their rules may call, its signing secret shown once. Each call is signed, so the
+  receiver can check it came from the workspace, and it is tried again for a few hours if the
+  receiver does not answer.
+- **Limits.** Rules that start each other stop three deep; a rule runs at most 100 times a minute
+  and a workspace's rules 1,000; a database holds at most 50 rules. No step reads or writes the ERP.
+- **Older versions.** 0.14.0 and earlier keep a database's rules and button properties as they
+  are while they edit its rows: a button's column is empty there, and the rules run on the server
+  for their changes too.
+- **For whoever runs the server.** One migration (`Phase15Automations`: the rules, their changes,
+  runs and webhooks, a workspace's time zone). The worker gains the rules' runner and webhooks'
+  calls: a webhook leaves from the worker's host on 443 to the addresses owners and admins name,
+  never to a private, loopback or link-local one. Nothing to set.
+
 ## [0.14.0] - 2026-11-23
 
 Publish a site at a host name of your own, see publishing change as it happens, and keep files in
