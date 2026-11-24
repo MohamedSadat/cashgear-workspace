@@ -3,7 +3,7 @@
 // a click edits, Escape cancels, a commit is one write). The title is the page's own and is left
 // to the page.
 import type { Id, RowRecord } from '@cgw/workspace';
-import { useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { lazy, Suspense, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { renderCell } from './cells/CellDisplay';
 import { useCellEnv, type CellEnv } from './cells/env';
 import { InlineEditor } from './cells/InlineEditor';
@@ -24,7 +24,11 @@ import { NewPropertySetup, SET_UP_FIRST } from './properties/NewPropertySetup';
 import { PropertyMenu } from './properties/PropertyMenu';
 import { TypePicker } from './properties/TypePicker';
 import { CellFlyout } from './cells/CellFlyout';
+import { AutomationsButton } from './automations/AutomationsButton';
 import './database.css';
+
+/** Phase 15: a row's automation runs, loaded when its automations are there. */
+const RowRuns = lazy(() => import('./automations/RowRuns').then((m) => ({ default: m.RowRuns })));
 
 export interface RowPropertiesProps {
   host: DatabaseHost;
@@ -54,6 +58,7 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
     () => (database ? liveProperties(database).filter((p) => p.type !== 'title') : []),
     [database],
   );
+  const automations = useHost(host, () => host.automations);
 
   if (!row || !database) return null;
   const menuDef = menu ? properties.find((p) => p.id === menu.id) : undefined;
@@ -126,6 +131,15 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
               }}
             />
           </CellFlyout>
+        ) : null}
+        {automations && !row.isTemplate ? (
+          <>
+            {/* A button property's "Add an automation" opens the dialog from here too. */}
+            <AutomationsButton databaseId={database.id} hidden />
+            <Suspense fallback={null}>
+              <RowRuns automations={automations} databaseId={database.id} rowId={row.id} />
+            </Suspense>
+          </>
         ) : null}
         {settingUp ? (
           <NewPropertySetup

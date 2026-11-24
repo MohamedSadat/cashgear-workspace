@@ -39,6 +39,7 @@ import { conversionRule, previewConversion, shapeForType } from './defs';
 import { FormulaEditor } from './FormulaEditor';
 import { RelationSetup, RollupSetup } from './RelationSetup';
 import { TypePicker } from './TypePicker';
+import { ButtonSettings } from '../automations/ButtonSettings';
 
 export type PropertyPanel =
   | { kind: 'main' }
@@ -48,7 +49,8 @@ export type PropertyPanel =
   | { kind: 'options' }
   | { kind: 'formula' }
   | { kind: 'relation' }
-  | { kind: 'rollup' };
+  | { kind: 'rollup' }
+  | { kind: 'button' };
 
 export interface PropertyMenuProps {
   def: PropertyDef;
@@ -244,6 +246,19 @@ export function PropertyMenuBody({
       </div>
     );
 
+  if (panel.kind === 'button')
+    return (
+      <div className="cgw-panel">
+        {header(t('type.button'))}
+        <ButtonSettings
+          def={def}
+          database={database}
+          onChange={(next) => void actions.updateProperty(next)}
+          onClose={onClose}
+        />
+      </div>
+    );
+
   if (panel.kind === 'rollup')
     return (
       <div className="cgw-panel">
@@ -324,6 +339,11 @@ export function PropertyMenuBody({
           onSelect={() => setPanel({ kind: 'type' })}
         >
           {t('property.changeType')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && def.type === 'button' ? (
+        <CgMenuPanelItem icon={TYPE_GLYPH.button} onSelect={() => setPanel({ kind: 'button' })}>
+          {t('type.button')}
         </CgMenuPanelItem>
       ) : null}
       {editable && def.type === 'number' ? (

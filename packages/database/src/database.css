@@ -1240,3 +1240,25 @@ textarea.cgw-inline-editor:focus-visible {
     outline-offset: -1px;
   }
 }
+
+/* A button property's cell (Phase 15). */
+.cgw-db-button-cell {
+  max-inline-size: 100%;
+  padding-block: 1px;
+  padding-inline: 8px;
+  overflow: hidden;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font: inherit;
+  font-size: var(--cg-font-size-sm, 13px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cgw-db-button-cell:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

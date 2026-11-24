@@ -7,7 +7,15 @@
 // Reads are synchronous and live: each read returns the same object while it is unchanged, so a
 // read can be a `useSyncExternalStore` snapshot, and `subscribe` says when any of them changed.
 import type { Id, Operation, PageRecord, RowRecord } from '@cgw/workspace';
-import type { DatabaseRecord, PropertyId, QueryContext, QuerySpec, ViewRecord } from './core';
+import type {
+  AutomationRecord,
+  DatabaseRecord,
+  PropertyDef,
+  PropertyId,
+  QueryContext,
+  QuerySpec,
+  ViewRecord,
+} from './core';
 
 /** A person of the workspace: person cells, created and edited by, the "Me" of a filter. */
 export interface Person {
@@ -235,6 +243,93 @@ export interface DatabaseHost {
   exportWorkbook?(databaseId: Id, viewId: Id, name: string): Promise<WorkbookExportResult>;
   /** "Open in Cash Gear Sheet" for a workbook (after an export). */
   openWorkbook?(workbookId: Id): void;
+
+  // ---- Automations (Phase 15; optional: the shell gives them for a synced workspace) ----------
+  /**
+   * A database's rules, kept and run by the server: absent on a local workspace and a share link.
+   * The same object while it is there; `subscribe` says when it comes or goes.
+   */
+  automations?: AutomationsHost;
+}
+
+/** A rule's run, as the run log shows it. */
+export interface AutomationRun {
+  id: Id;
+  automationId: Id;
+  automationName: string;
+  databaseId: Id;
+  rowId: Id | null;
+  /** The row's title when the person can read it; null for a schedule's or a row gone. */
+  rowTitle: string | null;
+  trigger: string;
+  depth: number;
+  actor: Person | null;
+  author: Person;
+  /** `done`, `stopped`, `skipped` or `running`. */
+  status: string;
+  /** Why it stopped or was skipped: `depth`, `limit.rule`, `author.access`, a step's code. */
+  reason: string | null;
+  steps: {
+    index: number;
+    kind: string;
+    status: string;
+    code?: string | null;
+    count?: number | null;
+  }[];
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface AutomationRunsPage {
+  runs: AutomationRun[];
+  /** The cursor of the next (older) page, or null. */
+  next: string | null;
+}
+
+/** A database's rules for its editor, and what the person may do with them. */
+export interface DatabaseAutomations {
+  automations: {
+    rule: AutomationRecord;
+    author: Person | null;
+    lastRun: { status: string; reason: string | null; startedAt: string } | null;
+  }[];
+  /** Full access to the database: the person makes, changes and deletes its rules. */
+  canManage: boolean;
+  /** An owner or admin: their rules may call the workspace's webhooks, listed here. */
+  canCallWebhooks: boolean;
+  webhooks: { id: Id; name: string }[];
+  /** The workspace's time zone (null: UTC until one is set or a rule saved). */
+  timeZone: string | null;
+  /** Every rule of the workspace is switched off (Settings). */
+  allOff: boolean;
+}
+
+/**
+ * What the rule editor, the run log and the button cell are given (the shell's, over the server's
+ * routes; rules are saved as operations through `DatabaseHost.apply`). Every read rejects with a
+ * notice code (`offline`, `access.denied`, ...) as the error's message.
+ */
+export interface AutomationsHost {
+  /** Online: rules are read and buttons pressed only then (they run on the server). */
+  online(): boolean;
+  /** The server knows the button property (its `/version` counts 21 property types). */
+  knowsButtons(): boolean;
+  list(databaseId: Id): Promise<DatabaseAutomations>;
+  /** Saves a rule (an `automation.upsert`), with the browser's time zone for a workspace without one. */
+  save(rule: AutomationRecord): Promise<void>;
+  remove(rule: AutomationRecord): Promise<void>;
+  setEnabled(rule: AutomationRecord, enabled: boolean): Promise<void>;
+  runs(databaseId: Id, automationId: Id, before?: string | null): Promise<AutomationRunsPage>;
+  rowRuns(databaseId: Id, rowId: Id, before?: string | null): Promise<AutomationRunsPage>;
+  /**
+   * A button pressed: sent once (a press of its own id), never queued while offline; the shell
+   * tells the person what came of it.
+   */
+  press(databaseId: Id, rowId: Id, def: PropertyDef): Promise<void>;
+  /** The workspace's groups, for a notice. */
+  groups(): Promise<{ id: Id; name: string }[]>;
+  /** Says when a database's rules changed (the feed's `automation` change). */
+  onChange(listener: () => void): () => void;
 }
 
 /** A workbook a view was exported to. */

@@ -1,0 +1,189 @@
+/* A database's automations (Phase 15): the dialog, the rule editor and the run logs. Loaded with
+   them, never with the views. Classes are the package's own (`cgw-db-*`). */
+.cgw-db-auto {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-block-size: 0;
+  overflow: auto;
+  max-block-size: min(70vh, 40rem);
+  padding-block-end: 4px;
+}
+
+.cgw-db-auto-list,
+.cgw-db-auto-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-db-auto-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-md, 6px);
+}
+
+.cgw-db-auto-item-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.cgw-db-auto-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cgw-db-auto-note {
+  margin: 0;
+  color: var(--cg-text-muted, var(--cg-text));
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-db-auto-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cgw-db-auto-part {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-md, 6px);
+}
+
+.cgw-db-auto-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cgw-db-auto-row,
+.cgw-db-auto-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cgw-db-auto-short {
+  inline-size: 8rem;
+}
+
+.cgw-db-auto-message {
+  min-block-size: 4.5em;
+  resize: vertical;
+}
+
+.cgw-db-auto-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cgw-db-auto-step,
+.cgw-db-auto-set {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+  min-inline-size: 0;
+}
+
+.cgw-db-auto-values {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cgw-db-auto-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-db-auto-value-name {
+  min-inline-size: 7rem;
+}
+
+.cgw-db-auto-when {
+  padding-inline-start: 8px;
+  border-inline-start: 3px solid var(--cg-border);
+}
+
+.cgw-db-auto-actions,
+.cgw-db-auto-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-db-auto-head {
+  justify-content: space-between;
+}
+
+.cgw-db-auto-problem {
+  margin: 0;
+  color: var(--cg-danger, #b42318);
+}
+
+.cgw-db-auto-run {
+  padding: 8px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+}
+
+.cgw-db-auto-run-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cgw-db-auto-status {
+  font-weight: 600;
+}
+
+.cgw-db-auto-run[data-status='stopped'] .cgw-db-auto-status,
+.cgw-db-auto-run[data-status='skipped'] .cgw-db-auto-status {
+  color: var(--cg-danger, #b42318);
+}
+
+.cgw-db-auto-run-steps {
+  margin: 4px 0 0;
+  padding-inline-start: 1.25em;
+  font-size: var(--cg-font-size-sm, 13px);
+}
+
+.cgw-db-auto-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cgw-db-auto-message-line {
+  margin: 0;
+}
+
+.cgw-db-auto-row-runs {
+  margin-block-start: 8px;
+}

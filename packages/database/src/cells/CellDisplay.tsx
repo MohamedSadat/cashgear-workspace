@@ -170,6 +170,25 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
       />
     );
   }
+  if (def.type === 'button') {
+    // Phase 15: a button runs its automations on the server, once a press; offline it says so.
+    const automations = env.host.automations;
+    return (
+      <button
+        type="button"
+        className="cgw-db-button-cell"
+        dir="auto"
+        disabled={!automations || !env.editable || row.isTemplate || !!row.trashedAt}
+        onMouseDown={stop}
+        onClick={(event) => {
+          stop(event);
+          void automations?.press(row.databaseId, row.id, def).catch(() => undefined);
+        }}
+      >
+        {def.button?.label || def.name}
+      </button>
+    );
+  }
   const value = readCell(row, def);
   if (value === null || value === undefined) return null;
   switch (def.type) {

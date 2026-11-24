@@ -2,6 +2,13 @@
 // `db/`): the records, values and query definitions, and the pure functions the views call.
 // Everything else in this package imports them from here.
 export type {
+  AutomationRecord,
+  AutomationStep,
+  AutomationTrigger,
+  StepKind,
+  StepValue,
+  TriggerKind,
+  TriggerValue,
   CellError,
   CellValue,
   ChartConfig,

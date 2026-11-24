@@ -70,6 +70,8 @@ export function shapeForType(
       return { ...base, relation: def.relation ?? { databaseId: '', reversePropertyId: null } };
     case 'rollup':
       return def.rollup ? { ...base, rollup: def.rollup } : base;
+    case 'button':
+      return { ...base, button: def.button ?? { label: null } };
     default:
       return base;
   }

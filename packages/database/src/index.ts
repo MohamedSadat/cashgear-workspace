@@ -6,6 +6,10 @@ export { DatabaseView, type DatabaseViewProps } from './DatabaseView';
 export { RowProperties, type RowPropertiesProps } from './RowProperties';
 export type {
   AssetInfo,
+  AutomationRun,
+  AutomationRunsPage,
+  AutomationsHost,
+  DatabaseAutomations,
   DatabaseAssets,
   DatabaseHost,
   DatabaseRef,

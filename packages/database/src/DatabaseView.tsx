@@ -37,6 +37,7 @@ import {
   withSorts,
 } from './model/viewConfig';
 import { FilterEditor, newCondition } from './toolbar/FilterEditor';
+import { AutomationsButton } from './automations/AutomationsButton';
 import { GroupEditor } from './toolbar/GroupEditor';
 import { PropertiesEditor } from './toolbar/PropertiesEditor';
 import { SortEditor } from './toolbar/SortEditor';
@@ -395,6 +396,7 @@ export function DatabaseView({
           <span aria-hidden="true">↵</span>
         </button>
       ) : null}
+      <AutomationsButton databaseId={database.id} />
       <input
         ref={searchInput}
         type="search"

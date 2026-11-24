@@ -30,6 +30,7 @@ import {
 } from '../core';
 import type {
   AssetInfo,
+  AutomationsHost,
   DatabaseAssets,
   DatabaseHost,
   DatabaseRef,
@@ -71,6 +72,8 @@ export class MemoryDatabaseHost implements DatabaseHost {
   readonly rowRecords = new Map<Id, RowRecord>();
   readonly applied: Operation[] = [];
   readonly opened: { kind: 'row' | 'page' | 'link'; id: string }[] = [];
+  /** Phase 15: a test's automations (absent: as a local workspace, none). */
+  automations?: AutomationsHost;
   private listeners = new Set<Listener>();
   private rowListeners = new Set<(changed: Set<Id>, props: Set<PropertyId> | null) => void>();
   private viewCache = new Map<Id, ViewRecord[]>();
