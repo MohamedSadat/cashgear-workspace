@@ -342,4 +342,25 @@ public sealed class AutomationTests(ServerFixture server)
         var zoned = await ws.Client.PutAsJsonAsync($"/api/v1/workspaces/{ws.Id}/automations/settings", new { timeZone = "Asia/Riyadh" });
         Assert.Equal("Asia/Riyadh", (await Kit.Json(zoned)).GetProperty("timeZone").GetString());
     }
+
+    [Fact]
+    public async Task A_workspace_takes_its_makers_time_zone_or_its_first_rule_savers()
+    {
+        // Made by the app: the browser's zone comes with it.
+        var account = await server.NewAccount();
+        var id = Guid.CreateVersion7();
+        Assert.True((await account.Client.PostAsJsonAsync("/api/v1/workspaces", new { id, name = "Zoned", timeZone = "Europe/London" })).IsSuccessStatusCode);
+        Assert.Equal("Europe/London", (await account.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{id}/automations")).GetProperty("timeZone").GetString());
+        // Made before 0.15.0 (none): the first person to save a rule there gives theirs; a zone this server does not know is no zone.
+        var ws = await Ws.Create(server);
+        var database = await DatabaseTests.NewDatabase(ws, "Tasks", Properties.DeepClone().AsArray());
+        var rule = Rule(ws, Guid.CreateVersion7(), database, Added, SetNotes("x"));
+        rule["timeZone"] = "Mars/Olympus";
+        await Save(ws, rule);
+        Assert.Equal(JsonValueKind.Null, (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/automations")).GetProperty("timeZone").ValueKind);
+        rule["timeZone"] = "Africa/Cairo";
+        rule["name"] = "Again";
+        await Save(ws, rule);
+        Assert.Equal("Africa/Cairo", (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/automations")).GetProperty("timeZone").GetString());
+    }
 }

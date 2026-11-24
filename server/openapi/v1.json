@@ -7854,6 +7854,12 @@
               "null",
               "string"
             ]
+          },
+          "timeZone": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

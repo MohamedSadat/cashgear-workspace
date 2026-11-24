@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Cgw.Core.Workspaces;
 
-public sealed record NewWorkspace(Guid Id, string Name, string? Icon);
+/// <summary>Phase 15: <paramref name="TimeZone"/> is the creating person's browser's (an IANA name), for its rules' dates and schedules.</summary>
+public sealed record NewWorkspace(Guid Id, string Name, string? Icon, string? TimeZone = null);
 public sealed record InviteDto(Guid Id, string Email, string Role, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
 public sealed record CreatedInvite(InviteDto Invite, string Token);
 
@@ -39,7 +40,16 @@ public sealed class WorkspaceService(CgwDb db, Access access, ChangeLog changes,
         var existing = await db.Workspaces.AsNoTracking().FirstOrDefaultAsync(w => w.Id == request.Id, ct);
         if (existing is not null) return await AgainAsync(existing, userId, ct);
         var now = clock.GetUtcNow();
-        db.Workspaces.Add(new Workspace { Id = request.Id, Name = name, Icon = request.Icon, OwnerUserId = userId, CreatedAt = now, Version = 1 });
+        db.Workspaces.Add(new Workspace
+        {
+            Id = request.Id,
+            Name = name,
+            Icon = request.Icon,
+            OwnerUserId = userId,
+            CreatedAt = now,
+            Version = 1,
+            TimeZone = Automations.AutomationTimes.IsZone(request.TimeZone) ? request.TimeZone : null,
+        });
         db.Scope.Switch(request.Id);
         db.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = request.Id, UserId = userId, Role = Roles.Owner, CreatedAt = now });
         audit.Add(actor, "workspace.create", request.Id, "workspace", request.Id);

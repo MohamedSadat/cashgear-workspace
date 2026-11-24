@@ -2321,6 +2321,7 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+      timeZone?: null | string;
     };
     NotificationDto: {
       actor: components['schemas']['PersonRef'];
