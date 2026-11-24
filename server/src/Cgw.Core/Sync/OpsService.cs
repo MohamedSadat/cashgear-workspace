@@ -27,6 +27,14 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Phase 15: a row's first document update, written with its <c>page.create</c> in the same
+    /// transaction (a rule's new row and its template's body, copied by the worker): the update as
+    /// the page's sequence 1, already valid, and the schema version it is written in. Only for a page
+    /// the operation makes, so never into an existing document.
+    /// </summary>
+    public Dictionary<Guid, (byte[] Data, int SchemaVersion)> FirstDocuments { get; } = [];
+
     public async Task<OpsResponse> ApplyAsync(Member member, Actor actor, OpsRequest request, CancellationToken ct = default)
     {
         var results = new List<OpResultDto>();
@@ -537,6 +545,25 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
         }
         db.Pages.Add(page);
         await databases.CreateRowAsync(member, page, database, p, ct);
+        if (FirstDocuments.TryGetValue(page.Id, out var first))
+        {
+            page.DocSeq = 1;
+            page.DocHeadSeq = 1;
+            page.DocSchemaVersion = first.SchemaVersion;
+            db.PageDocUpdates.Add(new PageDocUpdate
+            {
+                PageId = page.Id,
+                Seq = 1,
+                UpdateId = Guid.CreateVersion7(),
+                WorkspaceId = member.WorkspaceId,
+                Epoch = 0,
+                UserId = member.UserId,
+                Data = first.Data,
+                ClientSchemaVersion = first.SchemaVersion,
+                Status = Data.UpdateStatus.Valid,
+                CreatedAt = now,
+            });
+        }
         return Applied(op, "row", Pending);
     }
 

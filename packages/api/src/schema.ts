@@ -2324,6 +2324,9 @@ export interface components {
     };
     NotificationDto: {
       actor: components['schemas']['PersonRef'];
+      /** Format: uuid */
+      automationId?: null | string;
+      automationName?: null | string;
       blockId: null | string;
       /** Format: uuid */
       commentId: null | string;
@@ -2338,6 +2341,7 @@ export interface components {
       pageTitle: string;
       /** Format: date-time */
       readAt: null | string;
+      reason?: null | string;
       /** Format: uuid */
       threadId: null | string;
       /** Format: uuid */

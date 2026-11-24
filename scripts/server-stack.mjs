@@ -215,6 +215,9 @@ const env = {
   // started by Playwright or by hand), never from real DNS, unless CGW_SSO_DNS_BASE_URL names another.
   Sso__DnsBaseUrl:
     process.env.CGW_SSO_DNS_BASE_URL ?? `http://127.0.0.1:${process.env.OIDC_MOCK_PORT ?? 4287}`,
+  // Phase 15: a webhook may call the receiver on this machine (tests/mocks/net's), in development
+  // and the e2e stack only: never in Production, where only https to a public host is called.
+  Automations__AllowLoopback: 'true',
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   ...(e2e
     ? {

@@ -70,6 +70,19 @@ public static class WorkerServices
         services.AddSingleton(sp => SiteCertificateOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddSingleton(sp => DomainDns.From(sp.GetRequiredService<IHostEnvironment>().IsProduction() ? null : configuration[DomainDns.BaseUrlKey]));
         services.AddSingleton<IJob, SiteCertificateJob>();
+        // Phase 15: automations, run as their authors through the operations (the same checks as a
+        // person's edit), webhooks called, runs kept 30 days.
+        services.AddScoped<Cgw.Core.Access>();
+        services.AddScoped<Cgw.Core.Assets.AssetService>();
+        services.AddScoped<Cgw.Core.Databases.DatabaseOps>();
+        services.AddScoped<Cgw.Core.Automations.AutomationService>();
+        services.AddScoped<OpsService>();
+        services.AddSingleton<Cgw.Core.Automations.WebhookKeys>();
+        services.AddSingleton(sp => Cgw.Core.Automations.WebhookOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>()));
+        services.AddSingleton<Cgw.Core.Automations.WebhookSender>();
+        services.AddSingleton<IJob, AutomationJob>();
+        services.AddSingleton<IJob, WebhookJob>();
+        services.AddSingleton<IJob, AutomationRetentionJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

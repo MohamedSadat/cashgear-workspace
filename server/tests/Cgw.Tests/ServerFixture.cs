@@ -137,6 +137,8 @@ public sealed class ServerFixture : IAsyncLifetime
         ["Plugins:PublicUrl"] = PluginsUrl,
         // Phase 11: a domain's TXT record is read from the mock provider's DNS stand-in, never from DNS.
         ["Sso:DnsBaseUrl"] = OidcMockUrl,
+        // Phase 15: webhooks to the tests' own receiver on loopback (never in production).
+        ["Automations:AllowLoopback"] = "true",
     };
 
     /// <summary>Phase 10: the plugins origin, as development has it.</summary>

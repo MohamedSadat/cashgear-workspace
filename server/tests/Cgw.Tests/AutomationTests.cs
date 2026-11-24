@@ -180,7 +180,7 @@ public sealed class AutomationTests(ServerFixture server)
         // A member with full access cannot take over an owner's rule that calls one.
         Assert.Equal("access.denied", Status(await Save(ws, Rule(ws, id, database, Added, Call(), name: "Renamed"), member.Client)));
         // Nor is it called on an address that is not https to a public host.
-        foreach (var url in new[] { "http://hooks.example.com/in", "https://10.0.0.5/in", "https://169.254.169.254/latest", "https://localhost/in", "https://hooks.example.com:8443/in", "https://user:pw@hooks.example.com/" })
+        foreach (var url in new[] { "http://hooks.example.com/in", "https://10.0.0.5/in", "https://169.254.169.254/latest", "https://app.localhost/in", "https://hooks.example.com:8443/in", "https://user:pw@hooks.example.com/" })
         {
             var refused = await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/webhooks", new { name = "Bad", url });
             Assert.Equal("webhook.address", await Kit.Code(refused));

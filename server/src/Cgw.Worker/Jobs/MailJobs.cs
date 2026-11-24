@@ -22,7 +22,7 @@ public sealed class NotificationMailJob(MailSettingsOptions options, TimeProvide
     /// <summary>A quarter of the delay (15 s with a minute's), at most 30 s.</summary>
     public TimeSpan Interval => TimeSpan.FromSeconds(Math.Clamp(options.Delay.TotalSeconds / 4, 1, 30));
     private const int PeopleAPass = 200;
-    private static readonly string[] Kinds = [NotificationKinds.Mention, NotificationKinds.CommentMention, NotificationKinds.Reply];
+    private static readonly string[] Kinds = [NotificationKinds.Mention, NotificationKinds.CommentMention, NotificationKinds.Reply, NotificationKinds.Automation];
 
     public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
     {
@@ -189,7 +189,7 @@ public sealed class MailSendJob(Mailer mailer, MailTokens tokens, MailSettingsOp
         var actors = await db.Users.AsNoTracking().Where(u => actorIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => NotificationMails.ActorName(language, u.DisplayName, u.DeletedAt is not null), ct);
         var items = notes.Select(n => new MailItem(n.Kind, n.PageId, titles.GetValueOrDefault(n.PageId, ""), n.BlockId,
-            actors.GetValueOrDefault(n.ActorUserId) ?? NotificationMails.ActorName(language, null, false), n.Excerpt)).ToList();
+            actors.GetValueOrDefault(n.ActorUserId) ?? NotificationMails.ActorName(language, null, false), n.Excerpt, n.Reason)).ToList();
         var message = NotificationMails.Compose(address, user.Locale, mail.Kind, items, options.AppUrl,
             NotificationMails.UnsubscribeUrl(options.PublicUrl, tokens.For(user.Id, settings.Stamp)));
         mail.Attempts++;

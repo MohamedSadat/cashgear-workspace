@@ -19,7 +19,11 @@ public sealed record NotificationDto(
     PersonRef Actor,
     string Excerpt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? ReadAt);
+    DateTimeOffset? ReadAt,
+    /// <summary>Phase 15, kind <c>automation</c>: the rule (its name as it is now) and, for a run that stopped, why.</summary>
+    Guid? AutomationId = null,
+    string? AutomationName = null,
+    string? Reason = null);
 
 public sealed record NotificationsDto(IReadOnlyList<NotificationDto> Notifications, int Unread, string? Next);
 
@@ -170,8 +174,12 @@ public sealed class NotificationService(CgwDb db, ChangeLog changes, TimeProvide
         var titles = await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(p => pageIds.Contains(p.Id))
             .ToDictionaryAsync(p => p.Id, p => p.Title, ct);
         var people = await People.RefsAsync(db, rows.Values.Select(r => r.ActorUserId), ct);
+        var ruleIds = rows.Values.Where(r => r.AutomationId is not null).Select(r => r.AutomationId!.Value).Distinct().ToList();
+        var rules = ruleIds.Count == 0 ? [] : await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(a => ruleIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.Name, ct);
         var list = kept.Select(k => rows[k.Id]).Select(n => new NotificationDto(n.Id, n.Kind, n.WorkspaceId, n.PageId, titles.GetValueOrDefault(n.PageId, ""),
-            n.BlockId, n.ThreadId, n.CommentId, People.Of(people, n.ActorUserId), n.Excerpt, n.CreatedAt, n.ReadAt)).ToList();
+            n.BlockId, n.ThreadId, n.CommentId, People.Of(people, n.ActorUserId), n.Excerpt, n.CreatedAt, n.ReadAt,
+            n.AutomationId, n.AutomationId is { } rule ? rules.GetValueOrDefault(rule) : null, n.Reason)).ToList();
         return new NotificationsDto(list, await UnreadAsync(userId, memberships, ct), next);
     }
 

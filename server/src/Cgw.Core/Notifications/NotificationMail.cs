@@ -131,7 +131,8 @@ public sealed class MailSettingsService(CgwDb db, MailTokens tokens, TimeProvide
 }
 
 /// <summary>One notification as a mail tells it.</summary>
-public sealed record MailItem(string Kind, Guid PageId, string PageTitle, string? BlockId, string Actor, string Excerpt);
+/// <summary>Phase 15: <paramref name="Reason"/> is a stopped run's (kind <c>automation</c>); null for a rule's notice.</summary>
+public sealed record MailItem(string Kind, Guid PageId, string PageTitle, string? BlockId, string Actor, string Excerpt, string? Reason = null);
 
 /// <summary>
 /// A notification mail's words, in English or Arabic (the person's <see cref="User.Locale"/>), as a
@@ -149,6 +150,7 @@ public static class NotificationMails
     private sealed record Words(
         string Untitled, string Deleted, string Someone,
         Func<string, string, string> Mention, Func<string, string, string> CommentMention, Func<string, string, string> Reply,
+        Func<string, string, string> Automation, Func<string, string> AutomationStopped,
         Func<int, string> Several, Func<int, string> Digest, string Intro, string DigestIntro, string Open,
         string Why, string Off, string Settings);
 
@@ -157,6 +159,8 @@ public static class NotificationMails
         (actor, page) => $"{actor} mentioned you in “{page}”",
         (actor, page) => $"{actor} mentioned you in a comment on “{page}”",
         (actor, page) => $"{actor} replied in a thread on “{page}”",
+        (actor, page) => $"{actor}'s automation on “{page}”",
+        page => $"Your automation on “{page}” stopped",
         n => string.Create(CultureInfo.InvariantCulture, $"{n} new mentions and replies in Cash Gear Workspace"),
         n => string.Create(CultureInfo.InvariantCulture, $"Your daily summary: {n} mentions and replies"),
         "While you were away:",
@@ -171,6 +175,8 @@ public static class NotificationMails
         (actor, page) => $"أشار إليك {actor} في «{page}»",
         (actor, page) => $"أشار إليك {actor} في تعليق على «{page}»",
         (actor, page) => $"ردّ {actor} في نقاش على «{page}»",
+        (actor, page) => $"أتمتة {actor} على «{page}»",
+        page => $"توقفت أتمتتك على «{page}»",
         n => string.Create(CultureInfo.InvariantCulture, $"إشارات وردود جديدة في مساحة عمل كاش جير: {n}"),
         n => string.Create(CultureInfo.InvariantCulture, $"ملخصك اليومي من مساحة عمل كاش جير: {n}"),
         "أثناء غيابك:",
@@ -214,6 +220,8 @@ public static class NotificationMails
         {
             NotificationKinds.CommentMention => words.CommentMention(OneLine(item.Actor), Title(item)),
             NotificationKinds.Reply => words.Reply(OneLine(item.Actor), Title(item)),
+            NotificationKinds.Automation when item.Reason is not null => words.AutomationStopped(Title(item)),
+            NotificationKinds.Automation => words.Automation(OneLine(item.Actor), Title(item)),
             _ => words.Mention(OneLine(item.Actor), Title(item)),
         };
         string HtmlLine(MailItem item)
@@ -226,6 +234,8 @@ public static class NotificationMails
             {
                 NotificationKinds.CommentMention => words.CommentMention(A, T),
                 NotificationKinds.Reply => words.Reply(A, T),
+                NotificationKinds.Automation when item.Reason is not null => words.AutomationStopped(T),
+                NotificationKinds.Automation => words.Automation(A, T),
                 _ => words.Mention(A, T),
             };
             // One pass, so nothing in a name or a title is read as a slot.
