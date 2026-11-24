@@ -1939,3 +1939,31 @@ Picked while building it (2026-11-24):
 | The form's toolbar | No filter, sort, search or New (`supports.rows: false`) | A form reads no rows |
 | "Tell me of new answers" | Saves a rule, "a form answered" by this form, that tells the person who pressed it; it is then in ⚡ Automations, to change, switch off or delete | Phase 15's own rule, not a setting of the link's |
 | The budget's load | Five forms' links, an answer every 20 ms for 60 s (3,000) whatever the others' answers, the time to the route's 303; the e2e stack raises `RateLimits__formMinute` and `__formDay` so one address may send them | The bench is one address; the limits have their own test |
+
+## 2026-11-24: Phase 17
+
+Phase 17's questions were put to you in one batch when it started (`IMPLEMENTATION_PLAN.md`,
+Phase 17: Workflows and tasks, sized against 0.14.0 on the same day), with Tracks U20 and U21.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Waits, branches and approvals | A rule's steps may also wait (a time, until a date property, or until the row matches conditions; at most 90 days), branch (if, else if, else over the row) and ask for an approval: of people, a group (any one, or all of it) or a person property's people; an inbox item with Approve, Reject and a comment, and a mail; a deadline after which the run takes its "no answer" path; the answer kept in the run log and, if chosen, in a property. A waiting run keeps its place in SQL, reads its row and its author's access again when it goes on, and finishes on the rule's version it started with |
+| Recurring rows and reminders, and Track U21 | A database's template with a recurrence (daily, weekly on chosen days, monthly on a day or a weekday, yearly); the next row added by the worker when the last is done or on its date, in the workspace's time zone, its dates moved by the step. Reminders on a date property for a person property's people, or by a person on a row for themselves; at the time, or 15 minutes, an hour, a day or a week before; in the inbox and by mail; a day with no time at 09:00 in the workspace's time zone. U21 (the recurrence fields and their arithmetic exported from `CgScheduler`) built by a session of its own in `CashGear.React.UI` and used by bumping the pin; the next date's arithmetic in `@cgw/workspace` and its C# port, held by shared vectors |
+| Sub-items and dependencies, and Track U20 | Sub-items: a database's switch that picks or makes a two-way relation to itself as "Parent" and "Sub-items"; the table nests sub-items under their parent up to five levels; a board and a list show a parent's count; a filter keeps a match's parents shown. Dependencies: a two-way relation to the same database as "Blocked by" and "Blocking"; the timeline draws arrows between bars (U20, built by a session of its own in `CashGear.React.UI` and used by bumping the pin); moving a bar moves the rows it blocks by the same days when the database says so; a loop refused by the planner and the C# port |
+| A unique id | The twenty-second property type, behind `propertyTypes`: a prefix and a number the server gives in the row's first insert's transaction, never reused (a deleted row's number stays taken), never edited; "—" on a device until the row reaches the server; rows already in the database numbered in the order they were made when the property is added; sorted and filtered as a number; an older build keeps it |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The order of the milestones | M17.1 (waits, branches, approvals), M17.5 (the unique id), M17.3 (sub-items), then M17.2 (recurrence, on U21's pin) and M17.4 (dependencies, on U20's) | The library's tracks run meanwhile; nothing waits on them until M17.2 |
+| Tracks U20 and U21: who builds them | One session of its own in `CashGear.React.UI`, on the branch both pins follow (`claude/cashgear-react-ui-library-xq8tsz`), U21 first, then U20, each pushed when it lands; Workspace bumps its pin for each and adapts in that bump | Two writers on one branch of one checkout would collide; Phase 12's U19 went so |
+| New step kinds and the unique id on an older server | A client offers `wait`, `branch` and `approval` steps, and the unique id, only once its server's `/version` says it knows them (`stepKinds`, as `viewTypes` and `propertyTypes`) | Production's server has been deployed after its web app |
+| The new inbox kinds | `approval` (an approval asked, with Approve and Reject) and `reminder` (a date reached), each mailed by the person's mail setting; an older build drops a kind it does not know | Phase 15's `automation` kind went so |
+| A waiting run | Holds no lock and no transaction: its place is a row of SQL (the step it waits at, until when, on which version of the rule), found by the worker by an index on when it is due; when it goes on it reads its row and its author's access again, and stops, recorded, if either is gone | A wait of 90 days cannot hold anything; a row may change or go while it waits |
+| A rule changed or deleted while runs wait | Runs waiting finish on the definition they started with (kept with the run); a rule switched off or deleted stops its waiting runs, recorded | "Finishes on the version it started with"; off means off |
+| Recurrence's vectors | `packages/workspace/vectors/db-recurrence-vectors.json`, read by both ports: the 31st in a short month, 29 February, a weekday's fifth week, a time-zone change in the workspace's zone | The risks the plan names |
+| Version | `v0.17.0` | One version per phase |
+| The old build | v0.16.0 served on 4266 for `old-build.spec.ts` | The next free port below 4267 |

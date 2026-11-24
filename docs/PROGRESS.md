@@ -24,9 +24,9 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 12: Databases and ERP at scale | Done, 2026-11-20 (0.12.0; proven against the mocks in CI and against the real ERP on LocalDB; the three screen readers by hand, from `SCREEN_READERS.md`, are yours) | `phase-12`, `v0.12.0` |
 | Phase 13: AI and plugins | Done, 2026-11-22 (0.13.0; proven against the mock providers in CI; the local model measured here and on the host; Cash Gear's own provider keys, and installing it, are yours) | `phase-13`, `v0.13.0` |
 | Phase 14: Publishing | Done, 2026-11-22 (0.14.0; proven against the mock ACME server in CI and on the e2e stack, the binding task on the production host; installing it, a name's DNS records and its Let's Encrypt certificate are yours) | `phase-14`, `v0.14.0` |
-| Phase 15: Automations | Planned 2026-11-24 | |
-| Phase 16: Forms | Planned 2026-11-24 | |
-| Phase 17: Workflows and tasks | Planned 2026-11-24 | |
+| Phase 15: Automations | Done, 2026-11-24 (0.15.0; proven against loopback receivers in CI and on the e2e stack; a webhook to a public receiver, and installing it, are yours) | `phase-15`, `v0.15.0` |
+| Phase 16: Forms | Done, 2026-11-24 (0.16.0; proven on loopback in CI and on the e2e stack; a form link on the production host, and installing it, are yours) | `phase-16`, `v0.16.0` |
+| Phase 17: Workflows and tasks | Started 2026-11-24 (answers in `DECISIONS.md`) | |
 | Phase 18: AI, further | Planned 2026-11-22 (as Phase 15; Phase 18 from 2026-11-24) | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `9f5a208` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
