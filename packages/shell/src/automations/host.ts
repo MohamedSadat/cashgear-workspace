@@ -20,7 +20,7 @@ import {
   type Id,
   type PropertyDef,
 } from '@cgw/workspace';
-import i18next from 'i18next';
+import type { i18n as I18n } from 'i18next';
 import { pageEvents } from '../page/PageMenu';
 import type { WorkspaceSession } from '../session';
 import { addSection } from '../i18n/sections';
@@ -157,10 +157,12 @@ export class ShellAutomations implements AutomationsHost {
   constructor(
     private readonly cloud: AutomationsCloud,
     private readonly session: WorkspaceSession,
+    /** The app's instance, which the press's notices are said in. */
+    private readonly i18n: I18n,
     /** The host's listeners are told when the server's count of property types is known. */
     private readonly changed: () => void,
   ) {
-    addSection(i18next, automationsWords);
+    addSection(i18n, automationsWords);
     this.off = cloud.onAutomations((workspaceId) => {
       if (workspaceId === this.session.current?.id)
         for (const listener of this.listeners) listener();
@@ -284,7 +286,7 @@ export class ShellAutomations implements AutomationsHost {
 
   /** Says it in the window's notice, in the interface language. */
   private say(key: string, options?: Record<string, unknown>) {
-    const text = (i18next.t as unknown as (k: string, o?: Record<string, unknown>) => string)(
+    const text = (this.i18n.t as unknown as (k: string, o?: Record<string, unknown>) => string)(
       `automations.press.${key}`,
       options,
     );

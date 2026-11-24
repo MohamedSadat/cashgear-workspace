@@ -257,7 +257,7 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
     let made: { dispose(): void } | null = null;
     void import('./automations/host').then(({ ShellAutomations }) => {
       if (!live) return;
-      const automations = new ShellAutomations(cloud.automationsCloud(), session, () =>
+      const automations = new ShellAutomations(cloud.automationsCloud(), session, i18n, () =>
         databases.automationsChanged(),
       );
       made = automations;
@@ -268,7 +268,7 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
       made?.dispose();
       databases.connectAutomations(null);
     };
-  }, [databases, cloud, session]);
+  }, [databases, cloud, session, i18n]);
   // "Export to a workbook" in the database views (Phase 5), over the same connection.
   useEffect(
     () => databases.connectWorkbooks(cloud ? workbookSync(cloud, services.platform) : null),
