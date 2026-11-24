@@ -144,7 +144,8 @@ const statusCounts = (
 
 describe('the chart view', () => {
   it('is the seventh view type: grouped by the toolbar, its own layout, no Properties', () => {
-    expect(VIEW_ORDER.at(-1)).toBe('chart');
+    // The seventh; Phase 16's form is after it.
+    expect(VIEW_ORDER[6]).toBe('chart');
     const chart = VIEW_TYPES.chart;
     expect(chart.supports).toEqual({ group: true, wrap: false, properties: false });
     expect(chart.settings).toBeTypeOf('function');

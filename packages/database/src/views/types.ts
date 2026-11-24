@@ -40,8 +40,11 @@ export interface ViewTypeDefinition {
   component: ComponentType<ViewProps> | null;
   /** A new view's configuration. */
   defaultConfig(database: DatabaseRecord): ViewConfig;
-  /** What the toolbar offers for it. */
-  supports: { group: boolean; wrap: boolean; properties: boolean };
+  /**
+   * What the toolbar offers for it. `rows: false` (Phase 16: a form) shows no rows: no filter,
+   * sort, search or New.
+   */
+  supports: { group: boolean; wrap: boolean; properties: boolean; rows?: boolean };
   /**
    * The view reads its rows by queries of its own, built from `ViewProps.request` (the calendar's
    * and the timeline's date window and their rows with no date; Phase 9): `DatabaseView` runs

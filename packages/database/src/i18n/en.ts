@@ -186,6 +186,7 @@ export const en = {
       edit: 'Edit {{name}}',
       checked: 'Checked',
       unchecked: 'Not checked',
+      form: 'A form',
       invalidNumber: 'Not a number; the value was kept.',
       unsafeLink: 'Not a link that can be opened',
     },

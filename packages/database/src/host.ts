@@ -250,6 +250,60 @@ export interface DatabaseHost {
    * The same object while it is there; `subscribe` says when it comes or goes.
    */
   automations?: AutomationsHost;
+
+  // ---- Forms (Phase 16; optional: the shell gives them for a synced workspace) ---------------
+  /**
+   * A form view's answers' count and its link, kept by the server: absent on a local workspace and
+   * a share link (a member's answer is a row like any other, through `apply`, offline too).
+   */
+  forms?: FormsHost;
+}
+
+/** Whether a form's link takes answers now. */
+export type FormLinkState = 'open' | 'off' | 'closed' | 'full';
+
+/** A form view's link, as the server answers it. */
+export interface FormLink {
+  id: Id;
+  /** The address anyone answers by (the Sites process's `/_form/{token}`). */
+  url: string;
+  enabled: boolean;
+  /** ISO time it takes no answers from, or null. */
+  closesAt: string | null;
+  maxAnswers: number | null;
+  /** Answers it has taken. */
+  answers: number;
+  state: FormLinkState;
+  createdAt: string;
+}
+
+/** A form view's answers and its link. */
+export interface FormState {
+  /** Rows its answers added, in the app and by its link, not in the trash. */
+  answers: number;
+  link: FormLink | null;
+  /** Full access: the person makes, changes and deletes the link. */
+  canManage: boolean;
+  /** False for a database in a private section (it takes no link). */
+  linksAllowed: boolean;
+}
+
+export interface FormLinkSettings {
+  enabled: boolean;
+  closesAt: string | null;
+  maxAnswers: number | null;
+}
+
+/**
+ * What a form view's share panel is given (the shell's, over the server's routes). Every call
+ * rejects with a notice code (`offline`, `access.denied`, `form.linkExists`, ...) as its message.
+ */
+export interface FormsHost {
+  online(): boolean;
+  state(databaseId: Id, viewId: Id): Promise<FormState>;
+  createLink(databaseId: Id, viewId: Id, settings: FormLinkSettings): Promise<FormLink>;
+  updateLink(databaseId: Id, viewId: Id, settings: FormLinkSettings): Promise<FormLink>;
+  deleteLink(databaseId: Id, viewId: Id): Promise<void>;
 }
 
 /** A rule's run, as the run log shows it. */

@@ -189,6 +189,15 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
       </button>
     );
   }
+  // Phase 16: a row a form's link added was made by no person: created by shows the form.
+  if (def.type === 'createdBy' && !row.createdBy && row.formId) {
+    const form = env.host.views(row.databaseId).find((v) => v.id === row.formId);
+    return (
+      <span className="cgw-cell-text cgw-db-form-maker" dir="auto">
+        {form?.name || env.t('cell.form')}
+      </span>
+    );
+  }
   const value = readCell(row, def);
   if (value === null || value === undefined) return null;
   switch (def.type) {

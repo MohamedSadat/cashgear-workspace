@@ -14,6 +14,7 @@ import type {
   DatabaseAssets,
   DatabaseHost,
   DatabaseRef,
+  FormsHost,
   Person,
   RowPlace,
   RowRef,
@@ -818,6 +819,18 @@ export class ShellDatabaseHost implements DatabaseHost {
 
   get automations(): AutomationsHost | undefined {
     return this.syncsCurrent() && this.automationsHost ? this.automationsHost : undefined;
+  }
+
+  /** Phase 16: form views' answers and links of a synced workspace (loaded with the cloud), or none. */
+  private formsHost: FormsHost | null = null;
+
+  connectForms(forms: FormsHost | null) {
+    this.formsHost = forms;
+    this.schedule();
+  }
+
+  get forms(): FormsHost | undefined {
+    return this.syncsCurrent() && this.formsHost ? this.formsHost : undefined;
   }
 
   get exportWorkbook(): ExportWorkbook | undefined {

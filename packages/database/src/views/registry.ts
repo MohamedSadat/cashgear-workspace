@@ -10,6 +10,8 @@ import { BoardView } from './board/BoardView';
 import { ChartSettings } from './chart/ChartSettings';
 import { ChartView } from './chart/ChartView';
 import { defaultChartGroup, withChart } from './chart/config';
+import { defaultFormConfig } from './form/config';
+import { FormView } from './form/FormView';
 import { CalendarSettings } from './calendar/CalendarSettings';
 import { CalendarView } from './calendar/CalendarView';
 import { GallerySettings } from './gallery/GallerySettings';
@@ -132,13 +134,14 @@ export const VIEW_TYPES: Record<ViewType, ViewTypeDefinition> = {
     supports: { group: true, wrap: false, properties: false },
     ownErrors: true,
   },
-  // Phase 16: the form view (its questions, answered as rows); drawn in the next step.
+  // Phase 16: a form, its properties as questions answered as rows. It shows no rows: the
+  // toolbar has no filter, sort, search or New for it.
   form: {
     type: 'form',
     glyph: '▭',
-    component: null,
-    defaultConfig: () => emptyConfig('form'),
-    supports: { group: false, wrap: false, properties: false },
+    component: FormView,
+    defaultConfig: (database) => defaultFormConfig(database),
+    supports: { group: false, wrap: false, properties: false, rows: false },
     ownRows: true,
   },
 };
@@ -151,6 +154,7 @@ export const VIEW_ORDER: readonly ViewType[] = [
   'gallery',
   'timeline',
   'chart',
+  'form',
 ];
 
 export const viewType = (type: ViewType): ViewTypeDefinition =>

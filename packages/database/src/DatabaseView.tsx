@@ -182,6 +182,8 @@ export function DatabaseView({
 
   const definition = viewType(view.type);
   const View = definition.component;
+  // Phase 16: a form shows no rows, so nothing of the toolbar's rows (filter, sort, search, New).
+  const rows = definition.supports.rows !== false;
   const actions = context.actions;
   const title = page?.title || t('untitledDatabase');
   const filters = conditionCount(view.config.filter);
@@ -331,27 +333,31 @@ export function DatabaseView({
         <span aria-hidden="true">⋯</span>
       </button>
       <span className="cgw-toolbar-gap" />
-      <CgButton
-        ref={filterButton}
-        appearance="ghost"
-        intent={filters ? 'primary' : 'neutral'}
-        size="small"
-        aria-haspopup="dialog"
-        onClick={(event) => setPanel({ kind: 'filter', anchor: event.currentTarget })}
-      >
-        {filters ? t('toolbar.filterCount', { count: filters }) : t('toolbar.filter')}
-      </CgButton>
-      <CgButton
-        appearance="ghost"
-        intent={view.config.sorts.length ? 'primary' : 'neutral'}
-        size="small"
-        aria-haspopup="dialog"
-        onClick={(event) => setPanel({ kind: 'sort', anchor: event.currentTarget })}
-      >
-        {view.config.sorts.length
-          ? t('toolbar.sortCount', { count: view.config.sorts.length })
-          : t('toolbar.sort')}
-      </CgButton>
+      {rows ? (
+        <>
+          <CgButton
+            ref={filterButton}
+            appearance="ghost"
+            intent={filters ? 'primary' : 'neutral'}
+            size="small"
+            aria-haspopup="dialog"
+            onClick={(event) => setPanel({ kind: 'filter', anchor: event.currentTarget })}
+          >
+            {filters ? t('toolbar.filterCount', { count: filters }) : t('toolbar.filter')}
+          </CgButton>
+          <CgButton
+            appearance="ghost"
+            intent={view.config.sorts.length ? 'primary' : 'neutral'}
+            size="small"
+            aria-haspopup="dialog"
+            onClick={(event) => setPanel({ kind: 'sort', anchor: event.currentTarget })}
+          >
+            {view.config.sorts.length
+              ? t('toolbar.sortCount', { count: view.config.sorts.length })
+              : t('toolbar.sort')}
+          </CgButton>
+        </>
+      ) : null}
       {definition.supports.group ? (
         <CgButton
           appearance="ghost"
@@ -397,23 +403,25 @@ export function DatabaseView({
         </button>
       ) : null}
       <AutomationsButton databaseId={database.id} />
-      <input
-        ref={searchInput}
-        type="search"
-        className="cgw-db-search"
-        aria-label={t('toolbar.searchLabel')}
-        placeholder={t('toolbar.searchPlaceholder')}
-        dir="auto"
-        onChange={(event) => onSearchInput(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && event.currentTarget.value) {
-            event.preventDefault();
-            event.currentTarget.value = '';
-            onSearchInput('');
-          }
-        }}
-      />
-      {editable ? (
+      {rows ? (
+        <input
+          ref={searchInput}
+          type="search"
+          className="cgw-db-search"
+          aria-label={t('toolbar.searchLabel')}
+          placeholder={t('toolbar.searchPlaceholder')}
+          dir="auto"
+          onChange={(event) => onSearchInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && event.currentTarget.value) {
+              event.preventDefault();
+              event.currentTarget.value = '';
+              onSearchInput('');
+            }
+          }}
+        />
+      ) : null}
+      {editable && rows ? (
         <span className="cgw-new-group">
           <CgButton intent="primary" size="small" onClick={() => setNewRowRequest((n) => n + 1)}>
             {t('toolbar.newRow')}

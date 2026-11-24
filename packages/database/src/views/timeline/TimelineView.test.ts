@@ -163,6 +163,8 @@ describe('the timeline', () => {
       'timeline',
       // Phase 12.
       'chart',
+      // Phase 16.
+      'form',
     ]);
     expect(VIEW_TYPES.timeline.ownRows).toBe(true);
     expect(VIEW_TYPES.calendar.ownRows).toBe(true);

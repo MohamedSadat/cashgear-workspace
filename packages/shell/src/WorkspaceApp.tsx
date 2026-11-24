@@ -263,10 +263,15 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
       made = automations;
       databases.connectAutomations(automations);
     });
+    // Phase 16: form views' answers and links, over the same connection.
+    void import('./forms/host').then(({ ShellForms }) => {
+      if (live) databases.connectForms(new ShellForms(cloud.automationsCloud()));
+    });
     return () => {
       live = false;
       made?.dispose();
       databases.connectAutomations(null);
+      databases.connectForms(null);
     };
   }, [databases, cloud, session, i18n]);
   // "Export to a workbook" in the database views (Phase 5), over the same connection.

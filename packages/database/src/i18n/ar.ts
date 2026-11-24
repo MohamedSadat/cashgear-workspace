@@ -186,6 +186,7 @@ export const ar: DatabaseCatalogue = {
       edit: 'عدّل {{name}}',
       checked: 'محدد',
       unchecked: 'غير محدد',
+      form: 'نموذج',
       invalidNumber: 'ليس رقمًا؛ أُبقيت القيمة كما كانت.',
       unsafeLink: 'ليس رابطًا يمكن فتحه',
     },

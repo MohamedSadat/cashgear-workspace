@@ -26,6 +26,8 @@ import type { DatabaseHost } from './host';
 import { valuesForNewRow } from './model/newRow';
 import { placeProperty } from './model/viewConfig';
 import { chartProperties } from './views/chart/config';
+import { formProperties } from './views/form/config';
+import { readForm } from '@cgw/workspace/forms';
 
 /** A key between two order keys that never throws on ties or a wrong order. */
 export function safeKeyBetween(a: string | null, b: string | null): string {
@@ -54,6 +56,8 @@ export interface NewRowInit {
   view?: ViewRecord | null;
   groupKey?: string | null;
   isTemplate?: boolean;
+  /** Phase 16: the form view this row answers (the server keeps it when it is a form of the database). */
+  formId?: Id;
 }
 
 export type DatabaseActions = ReturnType<typeof createActions>;
@@ -119,6 +123,7 @@ export function createActions(host: DatabaseHost, databaseId: Id) {
         trashedAt: null,
         trashRootId: null,
         row: { values: { ...preset.values, ...init.values } },
+        ...(init.formId ? { formId: init.formId } : {}),
       };
       await send([newOp('page.create', db.workspaceId, id, record)]);
       return id;
@@ -263,9 +268,14 @@ export function createActions(host: DatabaseHost, databaseId: Id) {
     // ---- Views ------------------------------------------------------------------------------
     updateView(view: ViewRecord, config: ViewConfig): Promise<void> {
       // Phase 12: a chart's properties follow its group and its measure, whoever changed them
-      // (the toolbar's Group writes here too): it has no Properties menu.
-      const db = view.type === 'chart' ? database() : null;
-      const next = db ? { ...config, properties: chartProperties(db, config) } : config;
+      // (the toolbar's Group writes here too): it has no Properties menu. Phase 16: a form's follow
+      // its questions.
+      const db = view.type === 'chart' || view.type === 'form' ? database() : null;
+      const next = !db
+        ? config
+        : view.type === 'chart'
+          ? { ...config, properties: chartProperties(db, config) }
+          : { ...config, properties: formProperties(db, readForm(config, db, 'app')) };
       if (sameValue(view.config, next)) return Promise.resolve();
       return send([viewUpsert({ ...view, config: next })]);
     },
