@@ -1723,6 +1723,86 @@ Benchmarks (`bench/phase14.mjs`: the server's part in CI's server job, the site'
 | A file no row holds; 0.13.0's scan of the rows' values | tracked | 1.5 ms; 468.2 ms | 2.2 ms; 822.6 ms |
 | The initial JavaScript | 350 kB (Phase 1) | 349.6 kB | 349.6 kB |
 
+## Phase 15: Automations
+
+Done 2026-11-24. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45380211590 (commit `25c390c`, every job green on the first attempt: 400 browser e2e cases passed, 2 of them on a retry (Edge's v0.4.0 old-build case and the timeline's lane move, neither touched by this phase), 14 skipped; the desktop app's 64 passed; every kill test 25 of 25 and the migration's 10 of 10; every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45380211696 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, SQL Server LocalDB 2025, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-24: Automations first, and Phase 15's answers, with the defaults picked while building it); the design in `DATA_MODEL.md` (Automations, the button and `propertyTypes`, `Workspaces.TimeZone`, `Databases.EventRules`, the inbox's `automation`), `SYNC_DESIGN.md` (the rules' operations, the feed's `automation`, the press), `ARCHITECTURE.md` (the runner, the screens), `INTEGRATIONS.md` (the webhook's contract and signature) and `OPERATIONS.md` (0.15.0's migration, the worker's jobs, webhooks' way out); what changed for users in `CHANGELOG.md` (0.15.0).
+
+Milestones
+
+- [x] M15.1 Rules and their events. Commits `768f610` (the rules as records in
+      `db/automations.ts` with their vectors, the button type and `propertyTypes`, the operations
+      and the feed's change in the engine), `505f1bc` (the C# port held to the vectors, the
+      operations checked and saved, `AutomationEvents` written in `FlushAsync` while
+      `Databases.EventRules` is above 0, the button kept from older builds, `/version`'s
+      `propertyTypes`)
+- [x] M15.2 The runner. Commits `6794ebc` (`cgw-ydoc`'s `cgw_copy_body`: a template's body as a
+      new page's first update), `d97ef3a` (`AutomationJob`: events in order, dates, schedules; runs
+      as the author through `OpsService` with ids made from the run; the depth and the limits;
+      notices in the inbox and their mail; webhooks signed and tried again; the retention),
+      `1cd96fc` (a workspace's time zone), `bb1b4d8` (dates read by the rows written since)
+- [x] M15.3 Screens and buttons. Commits `6e12c92` (the rules' code an entry of its own),
+      `561ac36` (the rule editor, run logs, a row's runs, the button property's cell and settings),
+      `fa19b3a` (Settings → Automations, the inbox's notices, the press, the time zone), `4e3db8c`
+      and `a5d41b6` (found by the e2e specs, below)
+- Specs, budgets and docs: `3212807` (`automations.spec.ts`, `old-build.spec.ts`'s v0.14.0 case),
+  `6ec81ca` and `1b1dd7b` (`bench/phase15.mjs`, `Phase15Bench`, `bench/phase8-server.mjs --rows`,
+  CI's steps), `25c390c` (the design, decisions and operations), and this evidence with the release
+
+Notes
+
+- **What the e2e specs found.** In the built app the automations' host added its words to
+  i18next's default instance, not the app's, and threw as the cloud connected, so no database
+  showed its Automations button while every unit test passed (`4e3db8c`); and a rule's summary
+  named a status option by its id ("StDone01") until the Arabic walk read it (`a5d41b6`).
+- **The dates' pass at 50,000 rows** first read every row's date whenever any row changed: 588 ms a
+  pass (p95 673) against 500. It now reads only the rows written since (their `Seq`, as the query
+  cache does), and the whole every ten minutes and when the rule changes, each row's date read once
+  (`bb1b4d8`).
+- **What a push pays.** A row's change to a database with rules switched on writes one
+  `AutomationEvents` row in its own transaction, read from the database's record the flush holds
+  already; a database with none writes nothing (`AutomationTests.Row_events_are_written_only_while_a_rule_a_change_starts_is_on`).
+  Over real processes (`bench/phase8-server.mjs --rows`, this build against itself, three
+  alternated pairs of 30 s of a row's change every 35 ms after a minute's warm-up), the API's
+  processor time a push to a database with ten rules switched on that the changes do not start was
+  10.29 ms against 10.00 with none (the pairs' ratios 1.106, 1.003, 1.025; median 1.025); the
+  worker's, reading and matching each change, 0.38 ms a push against 0.27 while typing; the two
+  together 3.4 % more (`bench/results/phase15-server-push.json`).
+- **The initial JavaScript** is 349.5 kB of 350 (0.14.0: 349.6): the rules' code is an entry of its
+  own (`@cgw/workspace/automations`) loaded with the rule editor, the screens and their words load
+  with the cloud and their dialog, and the library's flyout, menu and drag code is kept in one chunk
+  (`ui-overlay`), which the new screens had split.
+- **Not tried against the real world:** a webhook to a public receiver over https. Every call in CI
+  and here went to a receiver on loopback (the server's tests' Kestrel receiver, the e2e stack's
+  mock), which `Automations__AllowLoopback` allows outside Production only; the address checks are
+  proven by `AutomationRunTests.A_webhook_never_reaches_an_address_inside_by_its_name_or_a_redirect`
+  with a resolver standing for DNS. Production runs 0.12.0.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A rule started by a change from any device, online or synced later, runs once; changes made offline run their rules in order when they reach the server | Pass | `automations.spec.ts` (Chrome, Edge): a rule made in the database's editor runs on another device's change and its step shows in the open tab, its run log saying so; two edits made offline (Task 2's, then Task 1's) run their rule in that order once pushed, each once. Server: `AutomationRunTests.A_change_from_any_device_runs_its_rule_once_as_its_author` (a replayed operation and a worker that takes an event again change nothing twice), `Changes_made_offline_run_their_rules_in_the_order_they_reached_the_server`. Unit: `sync/automations.test.ts` (a rule saved offline reaches the server once online; another device told of it) |
+| A rule does only what its author may: one whose author lost access stops, recorded; nothing a rule does is shown to anyone who could not read the row | Pass | Server: `AutomationRunTests.A_rule_whose_author_lost_access_stops_says_why_and_tells_them` (stopped, `author.access`, the author told in the inbox), `A_notice_reaches_only_those_who_can_read_the_row`; `AutomationTests.Full_access_saves_a_rule_its_author_the_last_to_save_it_and_its_readers_are_told`, `Only_owners_and_admins_save_a_rule_that_calls_a_webhook`; `AuthorizationTests` over every automations route (the rules, a rule's and a row's runs, the press, Settings, the webhooks) |
+| Rules that start each other stop at the depth limit, recorded, the rows as the last allowed run left them | Pass | Server: `AutomationRunTests.Rules_that_start_each_other_stop_at_the_depth_limit_the_row_as_the_last_run_left_it`, `A_rule_runs_at_most_a_hundred_times_a_minute` (the 101st skipped, `limit.rule`) |
+| A webhook never reaches a private, loopback or link-local address, by its name or a redirect, and its receiver can check its signature | Pass | Server: `AutomationRunTests.A_webhook_never_reaches_an_address_inside_by_its_name_or_a_redirect` (loopback, private, link-local, CGNAT and cloud metadata addresses refused when the webhook is made, and at connect for a name resolving to any of them, or to one inside among public ones; a 307 never followed), `A_webhook_is_called_signed_retried_and_its_receiver_can_check_it`. `automations.spec.ts`: a webhook added in Settings, its secret shown once, called on a row added; the net mock checks `X-Cgw-Signature` against the secret as a receiver would, and the body holds no email |
+| An older build keeps a database's rules and button properties while editing its rows | Pass | `old-build.spec.ts` (Chrome, Edge), v0.14.0 on :4269: the button's column drawn with nothing in it; a property renamed there goes up without `propertyTypes` and the server keeps the button's type and words; a row edited there starts the rule on the server, whose step comes back there; both rules unchanged. Server: `AutomationTests.A_button_property_is_kept_by_a_build_that_does_not_know_it` |
+| No step reads or writes the ERP | Pass | Server: `AutomationRunTests.No_step_reaches_the_erp` (the four steps, and the rules', runner's and webhooks' code naming nothing of the ERP); the server holds no ERP session or key |
+
+Also: `automations.spec.ts`'s Axe walks of the rule dialog and editor and of Settings → Automations, and its Arabic walk of the dialog and the editor (the person's own names allowed); a button runs its rule once a press, and offline says so and sends nothing (`A_button_runs_its_rule_once_per_press_as_its_author` on the server); dates and schedules in the workspace's zone, a day's time, a clock's gaps (`A_date_reached_runs_its_rule_once_for_each_row_in_the_workspaces_zone`, `A_schedule_runs_when_due_and_next_by_the_workspaces_zone`); a new row from a template with its body copied (`A_new_row_is_added_from_a_template_its_values_and_its_body_copied`, and `cgw-ydoc`'s `copy_tests.rs` against `copyBody.test.ts`'s fixture). Unit: 3,967 tests in `pnpm test` (3,961 passed, 6 skipped); server: 493 server tests (18 skipped: the benches and the real provider calls); every standing check passes.
+
+Benchmarks (`bench/phase15.mjs`: the server's part in CI's server job, the rest in its Windows job; `bench/phase8-server.mjs --rows` locally)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A rule's first step after the change that starts it, shown in an open tab, p95 | 2 s | 715 ms (p50 698) | 713 ms (p50 689) |
+| A paste of 1,000 cells that starts a rule in each row: every run done | 60 s | 5,880 ms (100 runs done) | 4,010 ms (100 runs done) |
+| Typing on another page meanwhile: key to the editor's work, p95; to the next frame, p95 | 8 ms (16 on CI); 33 ms | 2.4 ms; 17.5 ms | 3.9 ms; 17.4 ms |
+| Date triggers over 50,000 rows, the worker's time a pass after a row changed, p95 | 500 ms | 41.9 ms | 56.2 ms |
+| The same, a pass reading every row's date (the rule saved, or every ten minutes), p95 | 500 ms | 312.2 ms (p50 287.8) | 473.7 ms (p50 390.9; its SQL 331.3) |
+| The first pass after the worker starts; a pass with nothing changed, p95 | tracked | 315.5 ms; 3.5 ms | 520.4 ms; 4.5 ms |
+| The server's processor time per push to a database with 10 rules, against none | within 10 % | — | API +2.5 % (10.29 against 10.00 ms, median of three pairs); API and worker +3.4 % |
+| The initial JavaScript | 350 kB (Phase 1) | 349.5 kB | 349.5 kB |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
