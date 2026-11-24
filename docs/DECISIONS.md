@@ -1885,3 +1885,38 @@ Picked while building it (2026-11-24):
 | The push budget | `bench/phase8-server.mjs --rows`: a person changing one row's Points through the operations route at a key's pace, against a database with ten rules switched on that the edits never start (rules on its Status), and the same with none; the same build both sides | A push pays for its event being written and matched; a rule that runs is the run's own work |
 | The dates budget | `Phase15Bench`: the worker's time on the dates in a pass after one row of 50,000 changed (every row's date read again), p95; the first pass and passes with nothing changed tracked | The worst a pass meets on a database being edited |
 | The old build | v0.14.0 served on 4269 for `old-build.spec.ts` | The next free port below 4270 |
+
+## 2026-11-24: Phase 16
+
+Phase 16's questions were put to you in one batch when it started (`IMPLEMENTATION_PLAN.md`,
+Phase 16: Forms, sized against 0.14.0 on the same day).
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Who may answer, and where a link's page is drawn | Members who can edit the database, in the app, offline too, as a row they add; and anyone with a form link, one a form, made by whoever has full access to the database, with its own switch, an optional closing date and a maximum number of answers. The link's page is drawn by the Sites process, under a path no slug can take on the sites' host (`/_form/{token}`), as HTML with no script, in the form's language, and posts to the API's `POST /api/v1/forms/{token}`, which adds the row and sends the browser to the form's thank-you page. The link shows the form's questions and nothing else |
+| Questions | A form's questions are its database's properties in an order, each with a label, help text and whether it is required: title, text, number, select, multi-select, status, date, checkbox, URL, email and phone; a select question may show only some of its options. Files, people and relations are asked of members in the app only (nothing takes an upload or shows a person without a session). Questions on pages, a page shown or skipped by earlier answers, decided on the server between pages for a link |
+| Abuse | An address answers a form at most 10 times a minute and 100 a day, past which it is answered 429 while others answer on; a hidden field a person never fills (an answer that fills it is dropped); an answer at most 64 KB; no CAPTCHA, which would be a third-party script on a page with none (on "Later") |
+| What an answer starts | Both: an answer adds a row, so it starts the database's "a row added" rules as any row does, and rules on a new trigger, "a form answered", that name its form; each once, with the answer's values. A link's row shows the form as its creator (no person). The form's settings offer "Tell people of new answers", which makes a rule with Phase 15's notify step |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The view type | `form`, the eighth (`KNOWN_VIEW_TYPES`, C#'s `ViewTypeOrder`), `viewTypes` 8, with `ViewConfig.form` (its title, description, pages of questions, each page's condition, the thank-you text, the language); an older build draws it as a table and keeps its type and `form` (`ConfigKeysByTypes`: 8 → `form`) | Phase 12's rule for the chart, unchanged |
+| A form link | A `FormLinks` record of its own (a form view's, one live a form): its token 32 random bytes kept as its SHA-256, as a share link's is, never a share link's scope; its switch, closing date, maximum and count of answers; deleted for good (a new link is a new token). Audit `form.link.create`, `form.link.update`, `form.link.delete` | A link that writes must never read; a share link's scope reads a subtree |
+| A link in a private section | None, as for share links: a database in a private section makes no form link, and one moved there stops taking answers | "A page in a private section takes no access list and no link" (Phase 2) |
+| The answer route | `POST /api/v1/forms/{token}`, `application/x-www-form-urlencoded` only, outside antiforgery (it has no session, and a session cookie sent with it is ignored), every value checked by the C# port's coercion and the form's own rules (required, the options shown, the pages its conditions show), the row added through `DatabaseOps` with no member in the workspace's lock. It answers 303 to the thank-you page; an unknown or deleted link 404; a link switched off, closed or full 303 to its page, which says so; a value refused 303 to the form's first page naming the question; past an address's limit 429 with `Retry-After` and a fixed page in both languages holding nothing of the form | A plain HTML form with script off reads only a navigation; nothing the person typed is drawn on the API's origin |
+| Pages between | The Sites process takes a page's `POST /_form/{token}`, checks its answers, decides the next page by the conditions and draws it with the earlier answers in hidden fields; it writes nothing. The last page posts to the API, which checks every page again | The Sites process stays a reader; the API's origin draws no text of a form |
+| The Sites process's policy | A form link's pages say `form-action 'self' <the API's origin>`; every other page keeps `form-action 'none'` | Only a form posts |
+| An answer's address | In its audit entry (`form.answer`: the link, the row, the address), never with the row | The row is the database's; the address is for abuse |
+| A member's answer | `page.create` of a row with `formId` (the view) and the answers as its values, through the outbox, offline too; the server keeps `Pages.FormId` when the view is a form of that database. A member who cannot edit the database sees the form's questions and that they cannot add rows here (with the link when there is one) | The rows' ordinary path; nothing new to sync |
+| The row's creator | A link's row: `CreatedBy` empty and `FormId` its form, shown in created by as the form's name; a member's: the member | No principal stands for a form |
+| Conditions | A page's `when`, in `queryRows`' filter language over the answers so far, evaluated by the shared rules on the device and in the C# port (held by vectors); relative dates in the workspace's time zone | One filter language, as Phase 15's steps |
+| On a share link and a site | A form view shows no rows anywhere outside the app: a block naming it draws the form's title and, while its link takes answers, a link to it; a share link's query of it is refused (403 `form.rows`) | "The link showing nothing of the database but its questions" |
+| The trigger | `formAnswered` (a form view), beside `rowAdded`: the row's `added` event carries its `FormId`, `EventRules` counts the trigger, and each rule runs once on it | One event, two triggers, runs unique by rule and event (Phase 15) |
+| The day's limit | Counted in the API process's memory, partitioned by address (an IPv6 address by its /64) and link; a restart of the API starts the counts again | One API process (DECISIONS.md, production hosting); the minute's limit is what holds a flood |
+| The form's language | `en` or `ar`, the words and direction of its link's pages (as a site's), first the maker's app language | The person answering is not signed in |
+| Version | `v0.16.0` | One version per phase |
+| The old build | v0.15.0 served on 4267 for `old-build.spec.ts` | 4268 is the passkey specs' build |
