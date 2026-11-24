@@ -83,6 +83,9 @@ internal static class Native
 
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
     public static extern int cgw_doc_to_text(DocHandle doc, out CgwBuffer output);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    public static extern int cgw_copy_body(CgwSlice update, CgwSlice pageId, ulong clientId, CgwSlice seed, out CgwBuffer output);
 }
 
 /// A document the library loaded and keeps until it is freed.
@@ -304,6 +307,29 @@ public static class Yjs
             var status = Native.cgw_diff(
                 new CgwSlice { Ptr = (IntPtr)u, Len = (UIntPtr)update.Length },
                 new CgwSlice { Ptr = (IntPtr)v, Len = (UIntPtr)stateVector.Length },
+                out var output);
+            return Take(status, output);
+        }
+    }
+
+    /// <summary>
+    /// Phase 15: a template's body (its whole state) as a new page's first update, written as
+    /// <paramref name="clientId"/>, every block given a new id made from <paramref name="seed"/>
+    /// (crates/cgw-ydoc/src/copy.rs).
+    /// </summary>
+    public static unsafe byte[] CopyBody(ReadOnlySpan<byte> template, Guid pageId, ulong clientId, ReadOnlySpan<byte> seed)
+    {
+        Counted();
+        var page = Encoding.UTF8.GetBytes(pageId.ToString());
+        fixed (byte* u = template)
+        fixed (byte* p = page)
+        fixed (byte* s = seed)
+        {
+            var status = Native.cgw_copy_body(
+                new CgwSlice { Ptr = (IntPtr)u, Len = (UIntPtr)template.Length },
+                new CgwSlice { Ptr = (IntPtr)p, Len = (UIntPtr)page.Length },
+                clientId,
+                new CgwSlice { Ptr = (IntPtr)s, Len = (UIntPtr)seed.Length },
                 out var output);
             return Take(status, output);
         }

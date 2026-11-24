@@ -360,3 +360,23 @@ pub unsafe extern "C" fn cgw_validate(
             .into_bytes())
     })
 }
+
+/// Phase 15: a template's body as a new page's first update ([`crate::copy::copy_body`]):
+/// `page_id` UTF-8, `client_id` 32 bits, `seed` at least 16 bytes.
+///
+/// # Safety
+/// As [`cgw_merge`], for three slices.
+#[no_mangle]
+pub unsafe extern "C" fn cgw_copy_body(
+    update: CgwSlice,
+    page_id: CgwSlice,
+    client_id: u64,
+    seed: CgwSlice,
+    out: *mut CgwBuffer,
+) -> i32 {
+    run(out, || {
+        let page = std::str::from_utf8(borrow(&page_id)?)
+            .map_err(|e| YdocError::Decode(format!("page id: {e}")))?;
+        crate::copy::copy_body(borrow(&update)?, page, client_id, borrow(&seed)?)
+    })
+}

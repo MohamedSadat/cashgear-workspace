@@ -4,6 +4,7 @@
 //! bad input: the C ABI in [`ffi`] also catches any panic and returns it as an error, so nothing
 //! unwinds into the .NET host.
 
+pub mod copy;
 pub mod ffi;
 
 use std::fmt;
@@ -104,6 +105,11 @@ fn load(update: &[u8]) -> Result<Doc> {
         }
     }
     Ok(doc)
+}
+
+/// [`load`], for the other modules of this library.
+pub(crate) fn load_doc(update: &[u8]) -> Result<Doc> {
+    load(update)
 }
 
 /// Merges updates into one, without loading a document (no garbage collection). Each input is
@@ -599,6 +605,8 @@ impl Loaded {
     }
 }
 
+#[cfg(test)]
+mod copy_tests;
 #[cfg(test)]
 mod hostile_tests;
 #[cfg(test)]
