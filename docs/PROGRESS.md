@@ -1803,6 +1803,76 @@ Benchmarks (`bench/phase15.mjs`: the server's part in CI's server job, the rest 
 | The server's processor time per push to a database with 10 rules, against none | within 10 % | — | API +2.5 % (10.29 against 10.00 ms, median of three pairs); API and worker +3.4 % |
 | The initial JavaScript | 350 kB (Phase 1) | 349.5 kB | 349.5 kB |
 
+## Phase 16: Forms
+
+Done 2026-11-24. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45446415450 (commit `cbe1a0e`, every job green on the first attempt: 415 browser e2e cases passed, 1 of them on a retry (Chrome's timeline lane move, which this phase did not touch), 14 skipped; the desktop app's 64 passed; every kill test 25 of 25 and the migration's 10 of 10; every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45446415787 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, SQL Server LocalDB 2025, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-24: Phase 16, with the defaults picked while building it); the design in `DATA_MODEL.md` (a form view's rules, Forms: `FormLinks`, `Pages.FormId`, `AutomationEvents.FormId`, the trigger `formAnswered`, the audit), `SYNC_DESIGN.md` (a member's answer as a row's `page.create`, `/version`'s `viewTypes`), `ARCHITECTURE.md` (forms in the client, the Sites process's form pages, the answer route) and `OPERATIONS.md` (0.16.0's migration, the Sites process's `Api__PublicUrl`, the answers' limits, the server before the web app); what changed for users in `CHANGELOG.md` (0.16.0).
+
+Milestones
+
+- [x] M16.1 The form view. Commits `caff4c6` (the rules in `db/forms.ts`, the entry
+      `@cgw/workspace/forms`, with their vectors; the eighth view type, a row's `formId`, the
+      trigger `formAnswered` and the rule editor's), `d56173d` (the view: a page at a time, the
+      builder, the reader's form, Share form and "Tell me of new answers"; the Contacts template's
+      form), `69f550e` and `5ce37da` (a form offered, and the template's made, only once the server
+      keeps one)
+- [x] M16.2 Form links. Commits `33642a7` (`FormLinks` and their routes with audit, the answer
+      route with no session, its limits and the C# port held to the vectors; the Sites process's
+      pages of a link with no script, in English and Arabic, the last page sent on to the API),
+      `afdcddf` (the Sites process's `Api__PublicUrl` in `install.ps1` and the dev stack)
+- [x] M16.3 Answers and rules. In `caff4c6` and `33642a7` (the trigger counted by `EventRules`, an
+      answer's `added` event carrying its form, each rule once), `d56173d` (the count of answers
+      on the view, the notice by a rule)
+- Specs, budgets and docs: `11cb1fe` (`forms.spec.ts`, `old-build.spec.ts`'s v0.15.0 case),
+  `738cba9` (`bench/phase16.mjs`, CI's step), `cbe1a0e` (the design, decisions and operations), and
+  this evidence with the release
+
+Notes
+
+- **What building it found.** Production's server has been deployed after its web app (Phase 15's
+  button found it), and the web app deploys on every push to `main`: a 0.16.0 app adding a form
+  view against a 0.15.0 server would have had it refused. The server's `/version` now says
+  `viewTypes`, and "Add a view" and the Contacts template offer a form only once it counts eight
+  (`69f550e`, `5ce37da`; `FormView.test.ts`'s "is offered only where the server keeps forms",
+  `forms/host.test.ts`'s "offers no form to a server before 0.16.0").
+- **With script off the browser checks first.** A link's required questions are `required` fields,
+  so a browser keeps an unanswered page itself and posts nothing; the server's own check (drawn as
+  an alert naming each question) is proven by a page whose `noValidate` the spec sets, and by the
+  server's tests posting straight to it.
+- **A block on a site draws no form's link.** The Sites process holds no key ring and finds a link
+  only by its token's hash, so it cannot build a link's address for a block naming a form; such a
+  block says "This database is not published", and on a share link it draws the form's questions
+  with nothing to send (DECISIONS.md, picked while building it).
+- **The initial JavaScript** is 349.7 kB of 350 (0.15.0: 349.5): the rules are an entry of their
+  own loaded with the view, the view and its words load with the first form drawn, and the forms'
+  host with the cloud. The room left is 0.3 kB: Phase 17's screens must load lazily too.
+- **Not tried against the real world:** a form link on the production host. Every answer in CI and
+  here went over http on loopback (the Sites process on `localhost:5290` sending the last page on to
+  the API on `127.0.0.1:5280` by a 307); the production pages say `form-action 'self'
+  https://workspace-api.cashgearerp.com` and IIS hands each process its own host. Production runs
+  0.12.0.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A member answers a form offline and the row reaches the database once online; an older build shows the form view as a table and keeps its settings | Pass | `forms.spec.ts` (Chrome, Edge): a member answers a two-page form offline, page by page (the second shown by the first's answer), and the row reaches the server once online, marked by its form. `old-build.spec.ts` (Chrome, Edge), v0.15.0 on :4267: the form view drawn as a table of its questions' columns, renamed there, kept a form with its pages, conditions and words. Server: `FormTests.A_form_is_the_eighth_view_type_and_an_older_build_keeps_it_and_its_settings`, `A_members_answer_marks_its_row_by_its_form_and_starts_both_triggers_once`. Unit: `FormView.test.ts` ("answers as one row marked by its form, after the rules' check, offline as online", "shows a page only for the answers its condition names") |
+| Anyone with a form link answers it with script off, in English and Arabic, and reads nothing of the database: no row, no option a question does not show, no person | Pass | `forms.spec.ts` (Chrome, Edge), script off: the link's pages hold no `<script>`, no option the question hides and no person; answered page by page to the thank-you page, the row of nobody marked by its form; the same in Arabic, right to left; every page, the server's refusal and the thank-you page under Axe. Server: `FormTests.A_links_pages_take_an_answer_page_by_page_with_script_off`, `A_link_reads_nothing_of_the_database_but_its_questions` (a share link's query of the form refused, `form.rows`; its default view the first that is no form), `A_links_pages_are_in_the_forms_language`, `A_links_answer_adds_a_row_of_nobody_audited_with_its_address_and_starts_its_rules_once`; `AuthorizationTests` over every form route; vectors `db-form-vectors.json` through both ports (`FormVectorTests`) |
+| A link switched off, closed, full or deleted stops taking answers within a minute | Pass | At once: `FormTests.A_link_off_closed_full_or_deleted_takes_no_answer_and_says_so` (full, off, closed: each answer refused with no row and the link's page saying so as soon as its state changes; open again it takes one; deleted, its page 404); `forms.spec.ts`: a link switched off in Share form says so to a reader and takes no answer; deleted, its address answers 404 and a new link is a new address |
+| An address past its limit is answered 429 while others answer on; a guessed token adds nothing | Pass | `FormTests.An_address_past_its_limit_is_answered_429_while_others_answer_on_and_a_guessed_token_adds_nothing` (the 11th answer in a minute 429 with `Retry-After` and a fixed page holding nothing of the form, another address answering on, an IPv6 address counted by its /64, the day's limit on a clock of its own; a guessed token adds nothing and its page is 404 on the Sites process), `The_trap_drops_an_answer_and_a_value_no_question_takes_is_refused` (the trap filled: thanked, nothing written; an option the question hides refused; a person, asked in the app only, never written; an answer over 64 KB 413) |
+| An answer starts the rules for "a form answered", once | Pass | `forms.spec.ts`: a rule on "a form is answered" runs once for a link's answer, its step shown in an open tab, its run log one run. Server: `FormTests.A_members_answer_marks_its_row_by_its_form_and_starts_both_triggers_once`, `A_links_answer_adds_a_row_of_nobody_audited_with_its_address_and_starts_its_rules_once` (a member's answer runs "a form answered" once and "a row is added" for it too; a row made through a view that is no form is not an answer, and a form trigger naming one is refused; a link's answer runs its rule once, as nobody); `AutomationVectorTests` with the trigger's cases |
+
+Also: `forms.spec.ts`'s Axe walk of the form, its builder and Share form, and its Arabic walk of them; `FormView.test.ts`'s builder (each change the view's upsert, its properties following the questions) and a reader's form that sends nothing; `forms/host.test.ts` (the routes, a refusal by its code, offline as offline). Unit: 4,035 tests in `pnpm test` (4,029 passed, 6 skipped); server: 506 server tests (18 skipped: the benches and the real provider calls); every standing check passes.
+
+Benchmarks (`bench/phase16.mjs`, in CI's Windows job)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A form link's page, first byte from the cache, p95 | 200 ms (Phase 9's) | 5.1 ms (p50 3.9) | 20.7 ms (p50 14.9) |
+| An answer by the link to its row in an open tab, p95 | 2 s | 715 ms (p50 699) | 719 ms (p50 691) |
+| 50 answers a second across five links for a minute: the answer route, p95 | 300 ms | 77.6 ms (p50 12.9; 3,000 answers) | 20.5 ms (p50 16.5; 3,000 answers) |
+| Typing on another page meanwhile: key to the editor's work, p95; to the next frame, p95 | 8 ms (16 on CI); 33 ms | 2.2 ms; 17.5 ms | 3.5 ms; 17.8 ms |
+| The initial JavaScript | 350 kB (Phase 1) | 349.7 kB | 349.7 kB |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
