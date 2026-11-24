@@ -62,20 +62,27 @@ describe('automations: records', { timeout: 30_000 }, () => {
     expect(await one.store.readMirror(ws.id)).toEqual(before);
   });
 
-  it('the planner refuses a rule the server would, and a rule for a database not held', async () => {
+  it('the planner refuses a rule of no shape and one for a database not held; the server, the rest', async () => {
     const server = new FakeServer();
     const { one, ws, section, a } = await sharedWorkspace(server);
     const { db } = await makeDatabase(one.store, ws.id, section.id, a.id);
-    const formula = rule(ws.id, db.id, { steps: [{ kind: 'set', values: { title: 5 as never } }] });
+    await one.engine.syncOnce();
+    const empty = rule(ws.id, db.id, { steps: [] });
     await expect(
-      one.store.applyLocalOp(newOp('automation.upsert', ws.id, formula.id, formula)),
-    ).rejects.toThrow(/title is text/);
+      one.store.applyLocalOp(newOp('automation.upsert', ws.id, empty.id, empty)),
+    ).rejects.toMatchObject({ code: 'invalid' });
     const elsewhere = rule(ws.id, uuidv7());
     await expect(
       one.store.applyLocalOp(newOp('automation.upsert', ws.id, elsewhere.id, elsewhere)),
     ).rejects.toThrow();
-    const queued = await one.store.nextOutboxBatch(100, ws.id);
-    expect(queued.filter((o) => o.type.startsWith('automation.'))).toEqual([]);
+    expect(await one.store.nextOutboxBatch(100, ws.id)).toEqual([]);
+    // A title that is not text has the shape of a rule: the server refuses it (the editor would
+    // not have sent it), and the outbox lets it go.
+    const titled = rule(ws.id, db.id, { steps: [{ kind: 'set', values: { title: 5 as never } }] });
+    await one.store.applyLocalOp(newOp('automation.upsert', ws.id, titled.id, titled));
+    await one.engine.syncOnce();
+    expect(await one.store.nextOutboxBatch(100, ws.id)).toEqual([]);
+    expect(server.automations(ws.id, db.id)).toEqual([]);
   });
 
   it('another device is told of a rule made, changed and deleted, once a page of the feed', async () => {

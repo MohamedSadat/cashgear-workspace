@@ -348,7 +348,11 @@ export function httpSyncApi(api: ApiClient): SyncApi {
     },
 
     async createWorkspace(workspace) {
-      return workspaceRecord(await call(() => api.POST('/api/v1/workspaces', { body: workspace })));
+      // Phase 15: the browser's time zone, for the workspace's rules' dates and schedules.
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+      return workspaceRecord(
+        await call(() => api.POST('/api/v1/workspaces', { body: { ...workspace, timeZone } })),
+      );
     },
 
     async pushOps(workspaceId, deviceId, ops) {

@@ -8,6 +8,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./automations": "./src/db/automations.ts",
     "./testing": "./src/testing/conformance.ts"
   },
   "scripts": {

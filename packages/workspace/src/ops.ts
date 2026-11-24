@@ -8,7 +8,6 @@
 // under a row, and a row's move only reorders it among its database's rows. The database rules
 // (per-property merges, coercion, type changes, relations) are in `db/plan.ts`.
 import type { DatabaseRecord, ViewRecord } from './db/types';
-import { checkAutomation } from './db/automations';
 import {
   planDatabaseUpdate,
   planRelationEdits,
@@ -573,18 +572,21 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
         break;
       }
       case 'automation.upsert': {
-        // Checked as the server checks it, against the database as this device holds it; nothing
-        // is kept here but the operation (rules are the server's: DATA_MODEL.md, Automations).
+        // Its shape only, as a view's: the rule editor checks a rule whole before saving it
+        // (`checkAutomation`) and the server checks it again; its code is not the app's to load at
+        // start. Nothing is kept here but the operation (rules are the server's).
         const rule = op.payload;
         if (rule?.id !== op.entityId || rule.workspaceId !== op.workspaceId)
           throw new OpError('invalid', 'Id mismatch');
         const db = await liveDatabase(rule.databaseId);
         if (db.workspaceId !== op.workspaceId) throw new OpError('invalid', 'Id mismatch');
-        const targets = new Map<Id, DatabaseRecord | null>();
-        for (const step of Array.isArray(rule.steps) ? rule.steps : [])
-          if (step?.kind === 'addRow' && typeof step.databaseId === 'string')
-            targets.set(step.databaseId, (await reader.database(step.databaseId)) ?? null);
-        checkAutomation(rule, db, (id) => targets.get(id) ?? null);
+        if (
+          typeof rule.trigger?.kind !== 'string' ||
+          !Array.isArray(rule.steps) ||
+          rule.steps.length < 1 ||
+          rule.steps.length > 20
+        )
+          throw new OpError('invalid', 'A rule has a trigger and 1 to 20 steps');
         break;
       }
       case 'automation.delete':

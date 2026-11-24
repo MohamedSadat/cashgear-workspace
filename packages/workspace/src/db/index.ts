@@ -73,4 +73,16 @@ export {
   utf8Length,
   type CsvLookups,
 } from './csv';
-export * from './automations';
+// Phase 15: a database's rules. Only their types here: the rules' code is its own entry,
+// `@cgw/workspace/automations`, imported by the screens that edit rules (loaded on demand) and the
+// planner's lazy import, so the app's initial JavaScript holds none of it.
+export type {
+  AutomationRecord,
+  AutomationStep,
+  AutomationTrigger,
+  RowChange,
+  StepKind,
+  StepValue,
+  TriggerKind,
+  TriggerValue,
+} from './automations';
