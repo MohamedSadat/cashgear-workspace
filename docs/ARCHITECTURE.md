@@ -375,6 +375,23 @@ documents), and catalogues a lazily loaded package merges into the app's instanc
 the first chart; `database.grid`, `table/words.ts`, the table's announcements, with the first table;
 the ERP's report words under `erp`, `packages/erp/src/i18n/reports.ts`, with the first ERP block).
 
+### Automations in the client (Phase 15)
+
+A database's rules are edited in its views (`packages/database/src/automations/`): the toolbar's
+Automations opens a dialog of its rules (each with its switch, its trigger and its last run), the
+rule editor (the trigger, the rows it is for in the views' own filter editor, steps in order in
+`CgSortableList`, each checked by `checkAutomation` before it is saved), a rule's run log and a row's
+runs under its properties. The views know rules only through `DatabaseHost.automations`, which the
+shell gives a synced workspace (`packages/shell/src/automations/host.ts`, `ShellAutomations`: saves
+through the outbox, reads and presses over the server's routes, the server's `/version` for the
+button); a local workspace has none, and the toolbar shows nothing. The rules' code is
+`@cgw/workspace/automations`, an entry of its own: the rule editor imports it when it loads, so the
+initial JavaScript holds none of it (349.5 kB of 350 at 0.15.0, with the library's flyout, menu and
+drag code kept in one chunk, `ui-overlay`, which the new screens had split). The screens' words come
+with them (`automations` in `@cgw/database`'s lazily merged catalogue, the shell's `automations`
+section for Settings → Automations and a press's notices). The button property's cell presses once
+for an editor, never offline.
+
 ## The backend
 
 One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites process from Phase 9).
@@ -382,7 +399,7 @@ One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites pro
 | Process | Does | Never |
 | --- | --- | --- |
 | API | Authentication, authorisation, operations, change feed, document push and pull (Phase 12: a batch pull of up to 100 pages, `Cgw.Core/Documents/DocPulls.cs`), asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
-| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap) | Serves requests |
+| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap); Phase 15: the rules' runner (`automations`, a loop of its own every 100 ms) and webhooks' calls (`webhooks`, every second) | Serves requests; holds an ERP session or key |
 | Sites (Phase 9) | Published pages as HTML on an origin of its own (`server/src/Cgw.Sites`, IIS site `CashGearWorkspaceSites`, `pages.cashgearerp.com`; `http://localhost:5290` in development), rendered on the server from the worker's derived JSON; `robots.txt`; a page's files by a redirect to a short signed URL checked on every request. From Phase 10 also the plugins origin, a second host name of the same site (`plugins.cashgearerp.com`; `http://localhost:5291` in development): a third-party plugin's bundle files under a frame ticket found by its hash, with a CSP of no network (Phase 13: a CSP per bundle, `connect-src` the hosts an owner or admin approved) | Signs anyone in, sets or reads a cookie, sends script on the pages origin, loads a Yjs library, Data Protection or the local model, writes anything |
 
 Both processes share one Data Protection key ring (`DataProtectionKeys`): from Phase 8 the worker
@@ -424,6 +441,28 @@ whose proof is lost off its site (INTEGRATIONS.md). Phase
 worker alike. Phase 14 also indexes rows' files (`DatabaseRowFiles`, `Databases/RowFiles.cs`) for
 members' reads, the clean-up and a site's file check, and writes `site` and `publishing` changes to
 the feed.
+
+Phase 15's Automations (`Cgw.Core/Automations`, the routes in `Cgw.Api/Modules/AutomationEndpoints.cs`,
+the worker's `Jobs/AutomationJobs.cs` and `Jobs/WebhookJobs.cs`). A rule is checked by the C# port of
+`db/automations.ts` (`AutomationRules`, held to it by `db-automation-vectors.json`) and saved as an
+operation (`AutomationService`). What starts rules is written where rows are written:
+`DatabaseOps.FlushAsync` adds an `AutomationEvents` row for every row it writes, in the same
+transaction, while the database's `EventRules` count is above 0 (read from the record the flush
+holds already, so a database without rules pays nothing), and a button's press adds one by its own
+route. The worker's `AutomationJob` takes the events in order (one statement, `UPDLOCK, READPAST`,
+so a second worker takes the next), the dates reached (each date rule's dates read by one property,
+`JSON_VALUE`, and held while the database's rows and the rule do not change: `DateDueCache`) and the
+schedules due (`NextAt`, worked out in the workspace's time zone by `AutomationTimes`); for each
+matching rule it records a run (unique by its event or moment), checks its author can still edit,
+the depth (3) and the limits (100 a minute a rule, 1,000 a workspace), then runs its conditions and
+steps as the author through the operations' own path (`OpsService` in a child scope, with
+`DatabaseOps.Origin` naming the run, so the events its changes write carry it). A row's new page
+copies its template's body by `cgw-ydoc`'s `cgw_copy_body` in the worker (new block ids from a seed,
+the update written as the page's first validated one), as the API loads no Yjs library. Notices are
+the inbox's (`automation`); webhooks' calls are `WebhookDeliveries` the `WebhookJob` sends
+(`WebhookSender`: POST only, no redirect, the address checked at connect by `SafeFetcher`'s rules,
+signed; INTEGRATIONS.md). No step reaches the ERP: the runner holds no ERP session or key, and a
+test reads its sources for any.
 
 Conventions:
 

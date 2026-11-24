@@ -1587,6 +1587,51 @@ stand-in outside Production) and point it at the sites' own host (`pages.cashgea
   the server's tests (`SiteDomainTests`, through a bridge to the Sites test server) and the e2e stack
   (`site-domains.spec.ts`, a `*.localhost` name); Let's Encrypt's staging directory first on the host.
 
+## Webhooks: a rule's call out (Phase 15)
+
+A rule's `webhook` step calls an address a workspace's owners and admins named in Settings →
+Automations (DATA_MODEL.md, Automations). The contract is ours; the receiver is the workspace's
+own, and nothing of it is a track.
+
+- **The address**: https, port 443, a host name or a public address, no user or password, no
+  fragment; checked when the webhook is made and at every connect. The name is resolved at connect
+  and the connection made only to an address `SafeFetcher`'s rules call public (no loopback,
+  private, link-local, CGNAT, cloud metadata, multicast or reserved address, IPv4 or IPv6); a name
+  any of whose addresses is inside is refused whole, so DNS cannot lead it inside the host's
+  network. No proxy, no cookies.
+- **The call**: `POST`, `Content-Type: application/json; charset=utf-8`, `User-Agent:
+  CashGearWorkspace-Webhook/1.0`, 10 seconds for the connection and the answer. A 2xx is delivered;
+  any other answer, a redirect included (never followed), or none, is tried again after 1, 5 and 30
+  minutes and 2 hours, then given up; the run's step says delivered or failed with the status
+  (`http.<status>`) or `webhook.unreached`.
+- **Headers**: `X-Cgw-Webhook` (the webhook's id), `X-Cgw-Delivery` (the call's id, the same on
+  every attempt: a receiver drops one it has had), `X-Cgw-Timestamp` (Unix seconds of this attempt),
+  `X-Cgw-Signature: v1=<hex HMAC-SHA256(secret, "<timestamp>.<body>")>`, the secret the one shown
+  when the webhook was made (`cgwh_` and 64 hex digits). A receiver computes the same over the bytes
+  it got, compares in constant time, and refuses a timestamp more than a few minutes off.
+- **The body** (UTF-8 JSON, fixed when the run made the call, so every attempt sends the same bytes):
+
+```json
+{
+  "id": "<the delivery's id>",
+  "type": "automation.run",
+  "workspaceId": "…",
+  "automation": { "id": "…", "name": "Tell the shop" },
+  "database": { "id": "…", "title": "Orders" },
+  "run": { "id": "…", "trigger": "rowAdded", "startedAt": "2026-11-24T09:00:00.0000000+00:00" },
+  "row": { "id": "…", "title": "Order 7" },
+  "properties": {
+    "Status01": { "name": "Status", "type": "status", "value": "Doing" }
+  }
+}
+```
+
+  Only the properties the step names, by id, each with its name, type and value as a person reads
+  it: an option's name, a date `{start, end}`, a person `{id, name}` (never an email address), a
+  file `{id, name}` (never its bytes or a link), a related row `{id, title}` when the rule's author
+  can read its database, a formula's or rollup's result, times as UTC instants; `row` is null for a
+  schedule. Nothing of the page's document, comments or the ERP is ever sent.
+
 ## Future applications
 
 A new Cash Gear app (presentations, for example) integrates the way Sheet does:

@@ -378,7 +378,8 @@ interface Operation {
   opId: Id;                 // UUIDv7, the idempotency key
   type: 'page.create' | 'page.update' | 'page.move' | 'page.trash' | 'page.restore'
       | 'page.delete' | 'section.create' | 'section.update' | 'section.delete'
-      | 'favourite.set' | /* Phase 4 */ 'db.update' | 'view.upsert' | 'view.delete' | 'row.update';
+      | 'favourite.set' | /* Phase 4 */ 'db.update' | 'view.upsert' | 'view.delete' | 'row.update'
+      | /* Phase 15 */ 'automation.upsert' | 'automation.delete';
   entityId: Id;
   baseVersion: number | null;   // the entity's version this was based on; null for create
   payload: unknown;             // typed per operation
@@ -537,7 +538,9 @@ are in `DATA_MODEL.md` (Databases).
   `timeline` or a `chart` before), keeps the stored type, and keeps every stored setting such a
   build does not know and did not send (DATA_MODEL.md, `DatabaseViews`); one from a build that knows
   every type is taken as sent. The answers carry `entityType` `database`, `view` or `row` (a
-  database's create carries its page and its record).
+  database's create carries its page and its record). From Phase 15 a `db.update`, and a
+  `page.create` of a database, carry `propertyTypes` (21 from 0.15.0, with the button; absent, 20),
+  and a property whose stored type the sender's build does not know keeps that type and its settings.
 - **Tree and feed**: the tree holds every database and view record the account may see and never a
   row. The feed carries `database`, `view` and `row` changes; every change to a row (its values, its
   page, its document's head) is a `row` change, never a `page` one, and a row made or removed also
@@ -566,6 +569,28 @@ are in `DATA_MODEL.md` (Databases).
   reached again. A record the feed brings while an operation on its id waits whose answer carries
   something else (a page operation on a database's page, a visit, a favourite) is kept and taken
   once nothing waits on it. The convergence simulator found both.
+
+**Automations** (Phase 15): a database's rules are records on this channel (DATA_MODEL.md,
+Automations), not held in either local store, so the store's schema stays 4.
+
+- **Operations**: `automation.upsert` (the whole rule, by whoever has full access to its database;
+  the server checks it by the rules' C# port and sets its author to the sender) and
+  `automation.delete`. They wait in the outbox and are sent in order with the rest, so a rule saved
+  offline is saved when the device is back; the local planner checks only their shape (as it does a
+  view's) and changes no record, and an answer's `automation` entity is not kept.
+- **Feed**: every save and deletion writes an `automation` change, told to whoever can read the
+  database; it carries no entity. The engine turns it into its `automations` event, on which an open
+  rule editor, run log or Settings → Automations reads its route again (`GET
+  /databases/{id}/automations`, `GET /workspaces/{id}/automations`); builds before 0.15.0 ignore it.
+- **What a rule does** comes back as any device's change: its steps are its author's operations,
+  each with an id made from its run, so a run taken again after a worker stopped finds them in
+  `AppliedOps` and changes nothing twice, and the feed brings their rows and notices. The changes that
+  start rules are the rows' writes as they reach the server, in order: what a device did offline
+  starts its rules when it is pushed, in the order it was made.
+- **Buttons**: a button property's def is a record's like any other, with `propertyTypes` beside it
+  (DATA_MODEL.md, Databases). A press is not an operation and never waits in the outbox: `POST
+  /databases/{id}/rows/{rowId}/press` with its own id, online only (offline, the app says so and sends
+  nothing), answered 202; the same press sent again is one press.
 
 **Access changes from moves** (Phase 2): the server writes an `access` change when a page with
 pages under it moves, when a move or a fallback (a restore or create whose parent has gone) makes

@@ -197,6 +197,7 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Ai__Subscription__MonthlyTokens`, `__EmbeddingsMonthlyTokens`, `__Workspaces__<id>__MonthlyTokens`, `__Workspaces__<id>__EmbeddingsMonthlyTokens` | Phase 13: a workspace's allowance a calendar month (UTC) in tokens, input and output alike, for AI and for search by meaning; a workspace's own by its id. 0 or unset: not offered (`install.ps1 -AiMonthlyTokens`, `-AiEmbeddingsMonthlyTokens`, `-AiWorkspaceMonthlyTokens @{'<id>' = n}`, `-AiWorkspaceEmbeddingsMonthlyTokens`). Past it, the workspace's calls are refused until the next month (429 `ai.limit`) |
 | `Ai__EmbeddingsFloor`, `Ai__EmbeddingsFloors__<model>` | Phase 10, the API: the least cosine similarity a page found by meaning must have (0.3, for every model unless one has its own); a question with no page above it finds none. Raise it if unrelated pages show under "Related by meaning"; lower it if related ones are missed |
 | `Ai__EmbeddingsSettleSeconds` | Phase 10, the worker: how long a page is left unchanged before it is embedded (30; the e2e stack sets 1, the server's tests 0). Leave unset in production |
+| `Automations__AllowLoopback` | Phase 15, development and tests only (`true`): a webhook may call http on a loopback address (the e2e stack's mock receiver). Ignored in Production, where a webhook calls https on port 443 to a public address only. For webhooks, the worker's host must reach its receivers on 443 |
 | `Databases__CacheRows` | Database rows the API keeps in memory for queries, across databases (300,000 by default, about 300 bytes a row of five properties; the least recently used database goes first). Each API instance has its own cache |
 | `Mail__CooldownSeconds` | At most one account mail per address in this many seconds (120); leave unset in production |
 | `Mail__NotificationDelaySeconds` | Phase 8: a mention, a mention in a comment or a reply is mailed once it has been unread this long, and a person gets at most one such mail in this long (900, 15 minutes; a daily summary once a day). The e2e stack sets 5. Leave unset in production |
@@ -415,6 +416,19 @@ process now also needs `Sites__PublicUrl`, which `install.ps1` gives it; without
 is served as the sites' own, as before. A site's own host names stay off until `install.ps1
 -CustomDomains` (above).
 
+Version 0.15.0's migration (`Phase15Automations`) adds `Automations`, `AutomationEvents`,
+`AutomationRuns`, `Webhooks` and `WebhookDeliveries`, the columns `Workspaces.TimeZone` and
+`AutomationsOff`, `Databases.EventRules` and `Notifications.AutomationId` and `Reason`, in a
+transaction like the others; nothing is filled. The worker gains `automations` (a loop of its own,
+every 100 ms: the rows' changes, the dates and schedules due), `webhooks` (every second) and
+`automationRetention` (hourly: runs, deliveries, changes taken and deleted rules after 30 days). A
+workspace made before it has no time zone until an owner or admin sets one in Settings → Automations,
+or the first rule is saved there (the saver's browser's). Webhooks leave from the worker's host:
+https on 443 to the addresses owners and admins name, each checked at connect against private,
+loopback and link-local ranges (the egress rule is the receivers' hosts, if the host limits it).
+A webhook's signing secret is kept under the key ring (`DataProtectionKeys`), so a lost key ring makes
+every webhook's calls fail until an owner makes it again.
+
 The Sites process holds no Data Protection (as in 0.9.0) and must never be able to read the key
 ring: a process that serves the public must not be able to open a workspace's AI key's cipher (both
 keys' ciphers are in `AiSettings`, which it can read). `install.ps1` gives a built-in sites identity
@@ -465,6 +479,7 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 | Published sites | `https://pages.cashgearerp.com/health/live`; Event Viewer, source "Cash Gear Workspace sites"; `AuditLog` `site.publish`, `site.unpublish`, `workspace.publishing`; live sites: `PublishedSites` with `UnpublishedAt` null | A site that must go now: unpublish it in the app (or turn the workspace's publishing off); it is gone within 30 s. A page that should not be public: its share-link rules decide (restrict it, and it leaves every site within 30 s) |
 | Search by meaning | `JobStates` for `embed`; the worker's event log: "Embedding a workspace's pages failed (<code>); trying again in N minutes"; `AiUsage` rows of `embed` and `search` with their outcomes; each workspace's progress in Settings, AI (pages and those embedded) | `ai.keyInvalid`: the workspace's Voyage key was refused (an owner or admin enters it again). `ai.limit` day after day: the key's own limit at Voyage. Turning embeddings off deletes the workspace's vectors at once |
 | Plugins | `AuditLog` `plugin.add`, `plugin.update`, `plugin.enable`, `plugin.disable`, `plugin.remove`; live plugins: `WorkspacePlugins` with `RemovedAt` null; the plugins host answers only its 404 page at `https://plugins.cashgearerp.com/` | A plugin that must stop now: turn it off or remove it in Settings (owners and admins); its frames stop loading within 30 s and no new ticket is given |
+| Automations | `JobStates` for `automations`, `webhooks` and `automationRetention`; `AutomationEvents` with `DoneAt` null (waiting); `AutomationRuns` by `Status` and `Reason` (`limit.rule`, `limit.workspace`: a rule or a workspace past 100 or 1,000 runs a minute; `depth`: rules starting each other; `author.access`); `WebhookDeliveries` with `Status` `failed` and their `LastStatus` and `LastError`; the worker's event log: "Automation event … failed", "Automation … on row … failed"; `AuditLog` `automations.switch`, `automations.timeZone`, `webhook.create`, `webhook.delete` | A rule that must stop now: switch it (or every rule) off in Settings → Automations (owners and admins); nothing more runs and no change is recorded for it. Many `limit.*` runs: a rule in a loop or a bulk change; the run log says what started each. Failed deliveries: the receiver's address or the host's way out to it on 443 |
 | Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its
