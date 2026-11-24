@@ -47,6 +47,7 @@ export function rollupType(fn: RollupFunction | undefined): StaticType {
 export function typeOfProperty(type: PropertyType): StaticType {
   switch (type) {
     case 'number':
+    case 'uniqueId':
       return 'number';
     case 'checkbox':
       return 'boolean';

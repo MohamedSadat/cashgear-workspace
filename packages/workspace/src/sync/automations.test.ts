@@ -116,10 +116,11 @@ describe('automations: records', { timeout: 30_000 }, () => {
     const update = newOp('db.update', 'w', 'd', { properties: [] });
     const page = newOp('page.create', 'w', 'p', { kind: 'database' } as never);
     const row = newOp('page.create', 'w', 'r', { kind: 'row' } as never);
-    expect(KNOWN_PROPERTY_TYPES).toHaveLength(21);
-    expect(KNOWN_PROPERTY_TYPES.at(-1)).toBe('button');
-    expect(wirePayload(update)).toEqual({ properties: [], propertyTypes: 21 });
-    expect(wirePayload(page)).toEqual({ kind: 'database', propertyTypes: 21 });
+    // Phase 15's button the twenty-first, Phase 17's unique id the twenty-second.
+    expect(KNOWN_PROPERTY_TYPES).toHaveLength(22);
+    expect(KNOWN_PROPERTY_TYPES.slice(-2)).toEqual(['button', 'uniqueId']);
+    expect(wirePayload(update)).toEqual({ properties: [], propertyTypes: 22 });
+    expect(wirePayload(page)).toEqual({ kind: 'database', propertyTypes: 22 });
     expect(wirePayload(row)).toEqual({ kind: 'row' });
     expect('propertyTypes' in update.payload).toBe(false);
   });

@@ -12,6 +12,7 @@ import type {
   DatabaseRecord,
   PropertyDef,
   PropertyId,
+  PropertyType,
   QueryContext,
   QuerySpec,
   ViewRecord,
@@ -258,6 +259,13 @@ export interface DatabaseHost {
    */
   viewTypeKnown?(type: ViewType): boolean;
 
+  /**
+   * Phase 17: whether the server keeps a property of this type and does what it needs (a unique id
+   * is numbered by the server: offered on a synced workspace whose server counts it). Absent: only
+   * the types every server keeps.
+   */
+  propertyTypeKnown?(type: PropertyType): boolean;
+
   // ---- Forms (Phase 16; optional: the shell gives them for a synced workspace) ---------------
   /**
    * A form view's answers' count and its link, kept by the server: absent on a local workspace and
@@ -386,6 +394,8 @@ export interface AutomationsHost {
   online(): boolean;
   /** The server knows the button property (its `/version` counts 21 property types). */
   knowsButtons(): boolean;
+  /** Phase 17: whether the server keeps a property of the type (its `/version`'s `propertyTypes`). */
+  knowsPropertyType?(type: PropertyType): boolean;
   list(databaseId: Id): Promise<DatabaseAutomations>;
   /** Saves a rule (an `automation.upsert`), with the browser's time zone for a workspace without one. */
   save(rule: AutomationRecord): Promise<void>;

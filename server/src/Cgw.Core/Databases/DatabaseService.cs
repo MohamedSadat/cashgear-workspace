@@ -373,8 +373,9 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
                     };
                     // Formulas over the row's own cells; nothing an import writes is related yet.
                     var computed = Compute.Row(schema, data, NoRelatedRows.Instance);
+                    // Phase 17: each row's number, in the file's order, in this batch's transaction.
                     made.Add(new RowStore.NewRow(rowId, last, title, ValueJson.WriteMap(values),
-                        ValueJson.WriteVersions(values.Keys.ToDictionary(k => k, _ => 1L, StringComparer.Ordinal)), ValueJson.WriteMap(computed)));
+                        ValueJson.WriteVersions(values.Keys.ToDictionary(k => k, _ => 1L, StringComparer.Ordinal)), ValueJson.WriteMap(computed), current.NextNumber++));
                     // Text reads as no file (DATA_MODEL.md, the conversion table): kept by the one rule all the same.
                     if (RowFiles.Of(schema, values) is { Count: > 0 } held) madeFiles.Add(new RowFiles.Entry(rowId, held));
                 }

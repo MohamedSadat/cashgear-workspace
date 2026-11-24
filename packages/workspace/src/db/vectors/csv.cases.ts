@@ -326,6 +326,21 @@ const LOOKUPS = {
 };
 
 const exportCases: CsvCase[] = [
+  // Phase 17: a unique id with its prefix, text (guarded as text is); a row not numbered yet empty.
+  {
+    kind: 'export',
+    name: 'unique ids with their prefix, none while a row has no number',
+    database: database([
+      TITLE,
+      prop('pUid0001', 'uniqueId', { uniqueId: { prefix: 'TASK' } }, 'ID'),
+      prop('pUid0002', 'uniqueId', { uniqueId: { prefix: '=X' } }, 'Risky'),
+      prop('pUid0003', 'uniqueId', {}, 'Plain'),
+    ]),
+    view: { config: { properties: { order: [], hidden: [], widths: {} } } },
+    rows: [row(1, { title: 'A', number: 7 }), row(2, { title: 'B' })],
+    lookups: {},
+    expected: "\uFEFFName,ID,Risky,Plain\r\nA,TASK-7,'=X-7,7\r\nB,,,\r\n",
+  },
   {
     kind: 'export',
     name: 'shown properties in view order, canonical values, quoting',

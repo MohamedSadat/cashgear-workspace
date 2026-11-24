@@ -777,6 +777,84 @@
   },
   {
     "kind": "export",
+    "name": "unique ids with their prefix, none while a row has no number",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pUid0001",
+          "name": "ID",
+          "type": "uniqueId",
+          "uniqueId": {
+            "prefix": "TASK"
+          }
+        },
+        {
+          "id": "pUid0002",
+          "name": "Risky",
+          "type": "uniqueId",
+          "uniqueId": {
+            "prefix": "=X"
+          }
+        },
+        {
+          "id": "pUid0003",
+          "name": "Plain",
+          "type": "uniqueId"
+        }
+      ],
+      "version": 1
+    },
+    "view": {
+      "config": {
+        "properties": {
+          "order": [],
+          "hidden": [],
+          "widths": {}
+        }
+      }
+    },
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000001",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "A",
+        "orderKey": "a1",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {},
+        "number": 7
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000002",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "B",
+        "orderKey": "a2",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {}
+      }
+    ],
+    "lookups": {},
+    "expected": "\ufeffName,ID,Risky,Plain\r\nA,TASK-7,'=X-7,7\r\nB,,,\r\n"
+  },
+  {
+    "kind": "export",
     "name": "shown properties in view order, canonical values, quoting",
     "database": {
       "id": "01900000-0000-7000-8000-000000000001",

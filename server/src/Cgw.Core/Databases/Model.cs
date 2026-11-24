@@ -115,15 +115,18 @@ public static class PropertyTypes
     public const string LastEditedBy = "lastEditedBy";
     /// <summary>Phase 15: a button that starts a rule; it holds no value.</summary>
     public const string Button = "button";
+    /// <summary>Phase 17: the row's number (<c>DatabaseRow.Number</c>) with the property's prefix; it holds no value.</summary>
+    public const string UniqueId = "uniqueId";
 
     /// <summary>
     /// Every property type, in the order they were added (db/types.ts <c>KNOWN_PROPERTY_TYPES</c>):
-    /// a build that knows N types knows the first N (0.4.0 to 0.14.0: twenty; 0.15.0: <c>button</c>).
+    /// a build that knows N types knows the first N (0.4.0 to 0.14.0: twenty; 0.15.0: <c>button</c>;
+    /// 0.17.0: <c>uniqueId</c>).
     /// </summary>
     public static readonly string[] Order =
     [
         Title, Text, Number, Date, Checkbox, Select, MultiSelect, Status, Person, Url, Email, Phone, Files,
-        Relation, Formula, Rollup, CreatedTime, CreatedBy, LastEditedTime, LastEditedBy, Button,
+        Relation, Formula, Rollup, CreatedTime, CreatedBy, LastEditedTime, LastEditedBy, Button, UniqueId,
     ];
 
     public static readonly HashSet<string> All = [.. Order];

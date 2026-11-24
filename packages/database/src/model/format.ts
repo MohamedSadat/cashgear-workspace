@@ -3,6 +3,7 @@
 // `Intl` formatters are cached: a table draws thousands of cells while it scrolls.
 import type { RowRecord } from '@cgw/workspace';
 import type { CellValue, DateValue, PropertyDef, SelectOption, StatusOption, Value } from '../core';
+import { uniqueIdText } from '../core';
 
 const numberFormats = new Map<string, Intl.NumberFormat>();
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
@@ -122,6 +123,8 @@ export function readCell(row: RowRecord, def: PropertyDef): CellValue | Value | 
       return row.createdBy ? [row.createdBy] : undefined;
     case 'lastEditedBy':
       return row.updatedBy ? [row.updatedBy] : undefined;
+    case 'uniqueId':
+      return typeof row.number === 'number' ? row.number : undefined;
     case 'formula':
     case 'rollup':
       return row.computed?.[def.id] ?? null;
@@ -148,6 +151,8 @@ export function cellText(
 ): string {
   if (value === undefined || value === null) return '';
   switch (def.type) {
+    case 'uniqueId':
+      return uniqueIdText(def, typeof value === 'number' ? value : null) ?? '';
     case 'number':
       return typeof value === 'number' ? formatNumber(value, def, lookups.locale) : String(value);
     case 'checkbox':

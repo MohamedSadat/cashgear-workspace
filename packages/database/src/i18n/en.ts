@@ -85,6 +85,12 @@ export const en = {
       lastEditedTime: 'Last edited time',
       lastEditedBy: 'Last edited by',
       button: 'Button',
+      uniqueId: 'ID',
+    },
+    uniqueId: {
+      prefix: 'Prefix',
+      prefixHelp:
+        'Shown before each row’s number. Numbers are given by the server once a row reaches it.',
     },
     property: {
       menu: 'Property: {{name}}',

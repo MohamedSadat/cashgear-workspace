@@ -16,7 +16,7 @@ public static class RowStore
     private sealed record Raw(
         Guid PageId, Guid DatabaseId, string Values, string Computed, long? ComputedVersion, long Seq,
         string Title, string OrderKey, bool IsTemplate, DateTimeOffset? TrashedAt, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-        Guid CreatedBy, Guid UpdatedBy, DateTimeOffset? DeletedAt);
+        Guid CreatedBy, Guid UpdatedBy, DateTimeOffset? DeletedAt, long? Number);
 
     /// <summary>Rows joined to their pages, filtered before the projection (EF cannot filter on a projected record).</summary>
     private static IQueryable<Raw> Query(CgwDb db, System.Linq.Expressions.Expression<Func<RowAndPage, bool>> where) =>
@@ -24,7 +24,7 @@ public static class RowStore
             .Where(where)
             .Select(x => new Raw(
                 x.Row.PageId, x.Row.DatabaseId, x.Row.Values, x.Row.Computed, x.Row.ComputedVersion, x.Row.Seq, x.Page.Title, x.Page.OrderKey,
-                x.Page.IsTemplate, x.Page.TrashedAt, x.Page.CreatedAt, x.Page.UpdatedAt, x.Page.CreatedBy, x.Page.UpdatedBy, x.Page.DeletedAt));
+                x.Page.IsTemplate, x.Page.TrashedAt, x.Page.CreatedAt, x.Page.UpdatedAt, x.Page.CreatedBy, x.Page.UpdatedBy, x.Page.DeletedAt, x.Row.Number));
 
     public sealed class RowAndPage
     {
@@ -47,6 +47,7 @@ public static class RowStore
         Values = values ?? ValueJson.ReadMap(row.Values),
         Computed = computed ?? ValueJson.ReadCells(row.Computed),
         ComputedVersion = row.ComputedVersion,
+        Number = row.Number,
     };
 
     private static RowData ToData(Raw r) => new()
@@ -64,6 +65,7 @@ public static class RowStore
         Values = ValueJson.ReadMap(r.Values),
         Computed = ValueJson.ReadCells(r.Computed),
         ComputedVersion = r.ComputedVersion,
+        Number = r.Number,
     };
 
     /// <summary>Every row of a database not deleted for good, trashed rows and templates included.</summary>
@@ -139,7 +141,7 @@ public static class RowStore
     }
 
     /// <summary>A new row as an import makes it: its page's own fields and its values' JSON.</summary>
-    public sealed record NewRow(Guid Id, string OrderKey, string Title, string Values, string Versions, string Computed);
+    public sealed record NewRow(Guid Id, string OrderKey, string Title, string Values, string Versions, string Computed, long? Number = null);
 
     /// <summary>
     /// New rows of one database inserted set-based (an import): their pages and their values, one
@@ -159,6 +161,7 @@ public static class RowStore
                 v = r.Values,
                 p = r.Versions,
                 c = r.Computed,
+                n = r.Number,
             }));
             SqlParameter[] Parameters() =>
             [
@@ -177,9 +180,9 @@ public static class RowStore
                 SELECT CONVERT(binary(16), j.[i], 2), @ws, @section, @db, j.[o], N'row', j.[t], j.[s], 0,
                     1, 0, 0, 1, 0, 0, 0, @by, @by, @now, @now
                 FROM OPENJSON(@rows) WITH ([i] char(32) '$.i', [o] nvarchar(200) '$.o', [t] nvarchar(1000) '$.t', [s] nvarchar(1000) '$.s') j;
-                INSERT INTO [DatabaseRows] ([PageId], [WorkspaceId], [DatabaseId], [Values], [PropertyVersions], [Computed], [ComputedVersion], [Seq])
-                SELECT CONVERT(binary(16), j.[i], 2), @ws, @db, j.[v], j.[p], j.[c], @cv, @seq
-                FROM OPENJSON(@rows) WITH ([i] char(32) '$.i', [v] nvarchar(max) '$.v', [p] nvarchar(max) '$.p', [c] nvarchar(max) '$.c') j;
+                INSERT INTO [DatabaseRows] ([PageId], [WorkspaceId], [DatabaseId], [Values], [PropertyVersions], [Computed], [ComputedVersion], [Seq], [Number])
+                SELECT CONVERT(binary(16), j.[i], 2), @ws, @db, j.[v], j.[p], j.[c], @cv, @seq, j.[n]
+                FROM OPENJSON(@rows) WITH ([i] char(32) '$.i', [v] nvarchar(max) '$.v', [p] nvarchar(max) '$.p', [c] nvarchar(max) '$.c', [n] bigint '$.n') j;
                 """, Parameters(), ct);
         }
     }

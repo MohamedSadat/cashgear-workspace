@@ -34,7 +34,7 @@ import {
   type ViewConfig,
   type ViewRecord,
 } from './types';
-import { cellOf } from './values';
+import { cellOf, uniqueIdText } from './values';
 import { formulaCell } from './rollup';
 
 /** At most this many rows and bytes (UTF-8) are imported (413 `db.tooLarge` on the server). */
@@ -268,6 +268,8 @@ function cellParts(
   row: RowRecord,
   lookups: CsvLookups,
 ): { text: string; number: boolean } {
+  // Phase 17: a unique id as it reads, its prefix with the number (text, guarded as text is).
+  if (def.type === 'uniqueId') return { text: uniqueIdText(def, row.number) ?? '', number: false };
   const cell = cellOf(
     def,
     row,

@@ -855,6 +855,9 @@ namespace Cgw.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("binary(16)");
 
+                    b.Property<long?>("Number")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("PropertyVersions")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -871,6 +874,11 @@ namespace Cgw.Core.Data.Migrations
                         .HasColumnType("binary(16)");
 
                     b.HasKey("PageId");
+
+                    b.HasIndex("DatabaseId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DatabaseRows_Number")
+                        .HasFilter("[Number] IS NOT NULL");
 
                     b.HasIndex("DatabaseId", "PageId");
 
@@ -3024,6 +3032,9 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<int>("EventRules")
                         .HasColumnType("int");
+
+                    b.Property<long>("NextNumber")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Properties")
                         .IsRequired()

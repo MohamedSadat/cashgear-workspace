@@ -55,6 +55,8 @@ public sealed class DatabaseVectorTests(ServerFixture server)
             UpdatedBy = Str(e, "updatedBy"),
             Values = values,
             Computed = computed,
+            // Phase 17: a row's number (a unique id reads it).
+            Number = e.TryGetProperty("number", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetInt64() : null,
         };
     }
 

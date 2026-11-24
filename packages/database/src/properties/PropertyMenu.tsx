@@ -50,7 +50,8 @@ export type PropertyPanel =
   | { kind: 'formula' }
   | { kind: 'relation' }
   | { kind: 'rollup' }
-  | { kind: 'button' };
+  | { kind: 'button' }
+  | { kind: 'uniqueId' };
 
 export interface PropertyMenuProps {
   def: PropertyDef;
@@ -259,6 +260,32 @@ export function PropertyMenuBody({
       </div>
     );
 
+  // Phase 17: a unique id's prefix.
+  if (panel.kind === 'uniqueId')
+    return (
+      <div className="cgw-panel">
+        {header(t('type.uniqueId'))}
+        <label className="cgw-label">
+          {t('uniqueId.prefix')}
+          <input
+            className="cgw-text-input"
+            dir="auto"
+            maxLength={20}
+            defaultValue={def.uniqueId?.prefix ?? ''}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
+            }}
+            onBlur={(event) => {
+              const prefix = event.target.value.trim() || null;
+              if (prefix !== (def.uniqueId?.prefix ?? null))
+                void actions.updateProperty({ ...def, uniqueId: { prefix } });
+            }}
+          />
+        </label>
+        <p className="cgw-picker-note">{t('uniqueId.prefixHelp')}</p>
+      </div>
+    );
+
   if (panel.kind === 'rollup')
     return (
       <div className="cgw-panel">
@@ -344,6 +371,11 @@ export function PropertyMenuBody({
       {editable && def.type === 'button' ? (
         <CgMenuPanelItem icon={TYPE_GLYPH.button} onSelect={() => setPanel({ kind: 'button' })}>
           {t('type.button')}
+        </CgMenuPanelItem>
+      ) : null}
+      {editable && def.type === 'uniqueId' ? (
+        <CgMenuPanelItem icon={TYPE_GLYPH.uniqueId} onSelect={() => setPanel({ kind: 'uniqueId' })}>
+          {t('uniqueId.prefix')}
         </CgMenuPanelItem>
       ) : null}
       {editable && def.type === 'number' ? (

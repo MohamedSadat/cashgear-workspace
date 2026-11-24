@@ -58,6 +58,7 @@ export const TYPE_GLYPH: Record<PropertyType, string> = {
   lastEditedTime: '◶',
   lastEditedBy: '☻',
   button: '▶',
+  uniqueId: '№',
 };
 
 const stored = new Set<PropertyType>(STORED_TYPES);
@@ -67,6 +68,8 @@ const automatic = new Set<PropertyType>([
   'createdBy',
   'lastEditedTime',
   'lastEditedBy',
+  // Phase 17: given by the server, never edited.
+  'uniqueId',
 ]);
 
 /** A value a person writes: the title and the stored types. */

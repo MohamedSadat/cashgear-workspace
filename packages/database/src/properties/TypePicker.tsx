@@ -24,8 +24,11 @@ export function TypePicker({
   // Phase 15: a button only where the server runs automations and knows the type (its
   // `/version`): a web app deployed before its server must not offer what the server refuses.
   const buttons = useHost(host, () => host.automations?.knowsButtons() === true);
-  const types =
-    buttons || current === 'button' ? [...PICKABLE_TYPES, 'button' as const] : PICKABLE_TYPES;
+  // Phase 17: a unique id only where its server numbers rows (a synced workspace from 0.17.0).
+  const ids = useHost(host, () => host.propertyTypeKnown?.('uniqueId') === true);
+  const types: PropertyType[] = [...PICKABLE_TYPES];
+  if (buttons || current === 'button') types.push('button');
+  if (ids || current === 'uniqueId') types.push('uniqueId');
   return (
     <CgMenuPanel label={label} header={header} className="cgw-db-menu-panel">
       {types.map((type, i) => (

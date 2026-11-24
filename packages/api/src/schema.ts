@@ -2759,6 +2759,8 @@ export interface components {
       id: string;
       isTemplate: boolean;
       kind: string;
+      /** Format: int64 */
+      number?: null | number | string;
       orderKey: string;
       /** Format: uuid */
       parentPageId: null | string;

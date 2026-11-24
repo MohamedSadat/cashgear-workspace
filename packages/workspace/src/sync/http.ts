@@ -282,7 +282,14 @@ export const rowRecord = (r: RowDto): RowRecord => ({
   updatedBy: r.updatedBy ?? null,
   // Phase 16: only on a row a form's answer added (a server before 0.16.0 sends none).
   ...formOf(r),
+  // Phase 17: its number, once the server has given it one (a server before 0.17.0 sends none).
+  ...numberOf(r),
 });
+
+const numberOf = (r: object): { number?: number } => {
+  const n = (r as { number?: unknown }).number;
+  return typeof n === 'number' && Number.isFinite(n) ? { number: n } : {};
+};
 
 const formOf = (r: object): { formId?: Id } => {
   const formId = (r as { formId?: unknown }).formId;

@@ -810,7 +810,7 @@ public sealed class WorkbookService(
             case PropertyTypes.Checkbox:
                 return XValue.Of(Cells.Read(def, row) is true);
             case PropertyTypes.Person or PropertyTypes.CreatedBy or PropertyTypes.LastEditedBy or PropertyTypes.Relation or PropertyTypes.Files
-                or PropertyTypes.Select or PropertyTypes.Status or PropertyTypes.MultiSelect:
+                or PropertyTypes.Select or PropertyTypes.Status or PropertyTypes.MultiSelect or PropertyTypes.UniqueId:
                 return Text(Csv.CellText(def, row, lookups));
         }
         var cell = Cells.Read(def, row);

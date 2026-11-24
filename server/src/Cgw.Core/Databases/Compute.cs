@@ -18,6 +18,8 @@ public sealed class RowData
     public Dictionary<string, object> Values { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, object?> Computed { get; set; } = new(StringComparer.Ordinal);
     public long? ComputedVersion { get; set; }
+    /// <summary>Phase 17: the row's number in its database (a unique id shows it); null until given, and on a template.</summary>
+    public long? Number { get; set; }
 
     private string? idText;
     public string IdText => idText ??= Id.ToString();
@@ -75,6 +77,8 @@ public static class Cells
                 return string.IsNullOrEmpty(row.CreatedBy) ? null : new[] { row.CreatedBy };
             case PropertyTypes.LastEditedBy:
                 return string.IsNullOrEmpty(row.UpdatedBy) ? null : new[] { row.UpdatedBy };
+            case PropertyTypes.UniqueId:
+                return row.Number is { } number ? (double)number : null;
             case PropertyTypes.Formula:
             case PropertyTypes.Rollup:
                 if (computed is not null && computed.TryGetValue(def.Id, out var mine)) return mine;

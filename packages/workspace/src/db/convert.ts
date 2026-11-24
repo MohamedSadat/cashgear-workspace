@@ -123,6 +123,7 @@ export function sourceOf(
     case 'phone':
       return typeof value === 'string' ? textSource(value) : undefined;
     case 'number':
+    case 'uniqueId':
       return typeof value === 'number' && Number.isFinite(value)
         ? { kind: 'number', value }
         : undefined;

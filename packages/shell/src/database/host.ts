@@ -35,6 +35,7 @@ import {
   type Operation,
   type PageRecord,
   type PropertyId,
+  type PropertyType,
   type QueryAnswer,
   type QueryContext,
   type QueryRequest,
@@ -833,6 +834,11 @@ export class ShellDatabaseHost implements DatabaseHost {
   get forms(): FormsHost | undefined {
     return this.syncsCurrent() && this.formsHost ? this.formsHost : undefined;
   }
+
+  /** Phase 17: a unique id is numbered by a synced workspace's server from 0.17.0 (its `/version`). */
+  propertyTypeKnown = (type: PropertyType): boolean =>
+    type !== 'uniqueId' ||
+    (this.syncsCurrent() && this.automationsHost?.knowsPropertyType?.(type) === true);
 
   /** A synced workspace's server keeps a form only from 0.16.0 (its `/version`). */
   viewTypeKnown = (type: ViewType): boolean =>

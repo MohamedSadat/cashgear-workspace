@@ -1059,11 +1059,34 @@ const windowCases: QueryCase[] = [
   ),
 ];
 
+// Phase 17: a unique id reads as its row's number (given by the server; none until then): sorted
+// and filtered as a number, a row with none last in both directions.
+const UID = prop('pUid0001', 'uniqueId', { uniqueId: { prefix: 'TASK' } }, 'ID');
+const U = (n: number, number?: number) =>
+  row(n, { title: `u${n}`, orderKey: `a${n - 40}`, ...(number === undefined ? {} : { number }) });
+const UID_ROWS = [U(41, 3), U(42, 12), U(43, 1), U(44)];
+const uidCases: QueryCase[] = [
+  q(
+    'unique ids ascending, the row with none last',
+    { sorts: [asc('pUid0001')] },
+    ids(43, 41, 42, 44),
+  ),
+  q(
+    'unique ids descending, the row with none last',
+    { sorts: [desc('pUid0001')] },
+    ids(42, 41, 43, 44),
+  ),
+  q('a unique id equals a number', { filter: cond('pUid0001', 'eq', 12) }, ids(42)),
+  q('unique ids above a number', { filter: cond('pUid0001', 'gt', 2) }, ids(41, 42)),
+  q('a row not numbered yet', { filter: cond('pUid0001', 'isEmpty') }, ids(44)),
+];
+
 export const queryVectors: QuerySuite[] = [
   { name: 'every property type', database: MAIN, rows: MAIN_ROWS, cases: mainCases },
   { name: 'status out of group order', database: REORDERED, rows: STATUS_ROWS, cases: statusCases },
   { name: 'text order', database: database([TITLE]), rows: TEXT_ROWS, cases: textCases },
   { name: 'the date window', database: WINDOWED, rows: WINDOW_ROWS, cases: windowCases },
+  { name: 'unique ids', database: database([TITLE, UID]), rows: UID_ROWS, cases: uidCases },
 ];
 
 export { DB };

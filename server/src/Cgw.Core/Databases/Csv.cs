@@ -221,7 +221,8 @@ public static partial class Csv
     private static string Named(IReadOnlyDictionary<string, string> lookup, string id) => lookup.GetValueOrDefault(id) ?? id;
 
     /// <summary>A cell's canonical text (unguarded); '' when empty or an error.</summary>
-    public static string CellText(PropertyDef def, RowData row, CsvLookups lookups) => Canonical(def, Cells.Read(def, row), lookups);
+    public static string CellText(PropertyDef def, RowData row, CsvLookups lookups) =>
+        def.Type == PropertyTypes.UniqueId ? UniqueIds.Text(def, row.Number) ?? "" : Canonical(def, Cells.Read(def, row), lookups);
 
     private static string Canonical(PropertyDef def, object? cell, CsvLookups lookups)
     {
@@ -271,6 +272,8 @@ public static partial class Csv
             if (row.IsTemplate || row.Trashed) continue;
             sb.Append(string.Join(",", shown.Select(d =>
             {
+                // Phase 17: a unique id as it reads, its prefix with the number (text, guarded as text is).
+                if (d.Type == PropertyTypes.UniqueId) return Field(Guard(UniqueIds.Text(d, row.Number) ?? ""));
                 var cell = Cells.Read(d, row);
                 var text = Canonical(d, cell, lookups);
                 return Field(cell is double ? text : Guard(text));

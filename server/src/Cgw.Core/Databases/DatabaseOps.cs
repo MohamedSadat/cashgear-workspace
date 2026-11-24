@@ -209,6 +209,14 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             throw Invalid("A rollup names its relation, its property and its function");
         if (parsed.Type == PropertyTypes.Formula && (parsed.Expression is null || parsed.Expression.Length > 10_000))
             throw Invalid("A formula has an expression of at most 10,000 characters");
+        // Phase 17: a unique id's settings, its prefix (at most 20 characters).
+        if (def.ContainsKey("uniqueId"))
+        {
+            if (def["uniqueId"] is not JsonObject uid || (uid["prefix"] is { } prefix && (prefix is not JsonValue pv || !pv.TryGetValue<string>(out _))))
+                throw Invalid("A unique id's settings are an object with its prefix");
+            if (uid["prefix"] is JsonValue p && p.TryGetValue<string>(out var prefixText) && prefixText.Length > UniqueIds.MaxPrefix)
+                throw Invalid("A unique id's prefix is at most 20 characters");
+        }
         // Phase 15: a button's settings, its label.
         if (def.ContainsKey("button"))
         {
@@ -397,6 +405,7 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     private static readonly Dictionary<string, string[]> SettingsOfType = new(StringComparer.Ordinal)
     {
         [PropertyTypes.Button] = ["button"],
+        [PropertyTypes.UniqueId] = ["uniqueId"],
     };
 
     /// <summary>
@@ -703,6 +712,8 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     {
         actor = by;
         var record = new DatabaseRow { PageId = page.Id, WorkspaceId = member.WorkspaceId, DatabaseId = database.PageId };
+        // Phase 17: its number, once and for good, in this insert's transaction (under the workspace's lock).
+        if (!page.IsTemplate) record.Number = database.NextNumber++;
         db.DatabaseRows.Add(record);
         var row = rows[page.Id] = new RowState(page, record) { Bumped = true, Dirty = true };
         row.Versions.Clear();

@@ -138,6 +138,7 @@ export function propertyKind(database: DatabaseRecord, def: PropertyDef): QueryK
     case 'phone':
       return 'text';
     case 'number':
+    case 'uniqueId':
       return 'number';
     case 'date':
     case 'createdTime':
@@ -523,6 +524,7 @@ function sortKey(
     case 'phone':
       return normaliseText(cell as string);
     case 'number':
+    case 'uniqueId':
       return cell as number;
     case 'date':
     case 'createdTime':

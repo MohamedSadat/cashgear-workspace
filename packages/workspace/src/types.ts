@@ -109,6 +109,11 @@ export interface RowRecord extends Omit<PageRecord, 'kind'> {
    * link added has no `createdBy`: created by shows the form.
    */
   formId?: Id | null;
+  /**
+   * Phase 17: the row's number in its database, given by the server when it first stores the row
+   * (a unique id property shows it); absent on a device until then, and on a template.
+   */
+  number?: number | null;
 }
 
 /** A database whose rows this device keeps (store schema 4). */

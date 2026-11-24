@@ -85,6 +85,11 @@ export const ar: DatabaseCatalogue = {
       lastEditedTime: 'وقت آخر تعديل',
       lastEditedBy: 'آخر من عدّله',
       button: 'زر',
+      uniqueId: 'المعرّف',
+    },
+    uniqueId: {
+      prefix: 'البادئة',
+      prefixHelp: 'تظهر قبل رقم كل صف. يعطي الخادم الأرقام حين يصله الصف.',
     },
     property: {
       menu: 'الخاصية: {{name}}',

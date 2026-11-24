@@ -75,6 +75,7 @@ export {
   optionIndex,
   parseDateText,
   parseNumberText,
+  uniqueIdText,
   // Queries, formulas and rollups
   DATE_PATTERNS,
   DATE_UNITS,

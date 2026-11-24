@@ -448,6 +448,8 @@ public sealed class WorkspaceDatabase : ITenantOwned
     /// is above 0 (<see cref="AutomationEvent"/>), so a database without them pays nothing.
     /// </summary>
     public int EventRules { get; set; }
+    /// <summary>Phase 17: the number the next row stored gets (<see cref="DatabaseRow.Number"/>).</summary>
+    public long NextNumber { get; set; } = 1;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -483,6 +485,12 @@ public sealed class DatabaseRow : ITenantOwned
     public long? ComputedVersion { get; set; }
     /// <summary>The database's <see cref="WorkspaceDatabase.RowsVersion"/> when this row was last written: the query cache reads rows newer than it holds.</summary>
     public long Seq { get; set; }
+    /// <summary>
+    /// Phase 17: its number in its database, given when the server first stores it (from
+    /// <see cref="WorkspaceDatabase.NextNumber"/>, in the insert's transaction), never reused or
+    /// changed; null on a template. A unique id property shows it.
+    /// </summary>
+    public long? Number { get; set; }
 }
 
 public sealed class AppliedOp : ITenantOwned

@@ -104,6 +104,9 @@ public static class WebhookBodies
                 return row.UpdatedAt?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
             case PropertyTypes.Button:
                 return null;
+            // Phase 17: the row's number as it reads.
+            case PropertyTypes.UniqueId:
+                return UniqueIds.Text(def, row.Number);
             default:
                 return Cell(stored);
         }

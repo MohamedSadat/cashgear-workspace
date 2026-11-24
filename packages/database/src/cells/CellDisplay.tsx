@@ -4,6 +4,7 @@ import { CgCheckBox } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import type { MouseEvent, ReactNode } from 'react';
 import type { CellValue, DateValue, PropertyDef } from '../core';
+import { uniqueIdText } from '../core';
 import type { DbKey } from '../i18n';
 import {
   formatDatePart,
@@ -198,6 +199,13 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
       </span>
     );
   }
+  // Phase 17: the row's number, a dash until the server has given it one.
+  if (def.type === 'uniqueId')
+    return (
+      <span className="cgw-cell-text cgw-db-unique-id" dir="ltr">
+        {uniqueIdText(def, row.number) ?? '—'}
+      </span>
+    );
   const value = readCell(row, def);
   if (value === null || value === undefined) return null;
   switch (def.type) {

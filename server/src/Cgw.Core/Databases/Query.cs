@@ -131,7 +131,7 @@ public static class Query
         switch (def.Type)
         {
             case PropertyTypes.Title or PropertyTypes.Text or PropertyTypes.Url or PropertyTypes.Email or PropertyTypes.Phone: return "text";
-            case PropertyTypes.Number: return "number";
+            case PropertyTypes.Number or PropertyTypes.UniqueId: return "number";
             case PropertyTypes.Date or PropertyTypes.CreatedTime or PropertyTypes.LastEditedTime: return "date";
             case PropertyTypes.Checkbox: return "checkbox";
             case PropertyTypes.Select: return "select";
@@ -403,7 +403,7 @@ public static class Query
                 return row.NormalTitle;
             case PropertyTypes.Text or PropertyTypes.Url or PropertyTypes.Email or PropertyTypes.Phone:
                 return Normal((string)cell);
-            case PropertyTypes.Number:
+            case PropertyTypes.Number or PropertyTypes.UniqueId:
                 return (double)cell;
             case PropertyTypes.Date or PropertyTypes.CreatedTime or PropertyTypes.LastEditedTime:
                 return DbDates.PointMs((string)Raw.Field(cell, "start")!, ctx.OffsetMinutes);

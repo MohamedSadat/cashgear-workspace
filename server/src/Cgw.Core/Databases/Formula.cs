@@ -527,7 +527,7 @@ public static class Formulas
     /// <summary>The kind a property of a type gives formulas.</summary>
     public static string TypeOfProperty(string type) => type switch
     {
-        PropertyTypes.Number => "number",
+        PropertyTypes.Number or PropertyTypes.UniqueId => "number",
         PropertyTypes.Checkbox => "boolean",
         PropertyTypes.Date or PropertyTypes.CreatedTime or PropertyTypes.LastEditedTime => "date",
         PropertyTypes.MultiSelect or PropertyTypes.Person or PropertyTypes.Files or PropertyTypes.Relation or PropertyTypes.CreatedBy or PropertyTypes.LastEditedBy => "list",

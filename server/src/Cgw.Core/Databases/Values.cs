@@ -56,7 +56,7 @@ public static class Conversion
         {
             case PropertyTypes.Title or PropertyTypes.Text or PropertyTypes.Url or PropertyTypes.Email or PropertyTypes.Phone:
                 return value is string s ? Text(s) : null;
-            case PropertyTypes.Number:
+            case PropertyTypes.Number or PropertyTypes.UniqueId:
                 return value is double d && double.IsFinite(d) ? new NumberSource(d) : null;
             case PropertyTypes.Checkbox:
                 return value is true ? new CheckSource(true) : null;
@@ -325,7 +325,7 @@ public static class Values
                 return ids.Length > 0 ? ids : null;
             }
             case PropertyTypes.Formula or PropertyTypes.Rollup or PropertyTypes.CreatedTime or PropertyTypes.CreatedBy
-                or PropertyTypes.LastEditedTime or PropertyTypes.LastEditedBy or PropertyTypes.Button:
+                or PropertyTypes.LastEditedTime or PropertyTypes.LastEditedBy or PropertyTypes.Button or PropertyTypes.UniqueId:
                 return null;
             default:
                 return Conversion.JsonSource(raw) is { } source ? Conversion.ToTarget(def, source) : null;

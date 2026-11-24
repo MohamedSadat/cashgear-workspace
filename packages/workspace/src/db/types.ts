@@ -34,7 +34,12 @@ export type PropertyType =
   | 'lastEditedTime'
   | 'lastEditedBy'
   /** Phase 15: a button that starts a rule; it holds no value (`PropertyDef.button`). */
-  | 'button';
+  | 'button'
+  /**
+   * Phase 17: the row's number, given by the server when it first stores the row, with the
+   * property's prefix (`PropertyDef.uniqueId`); it holds no value (the row's `number`).
+   */
+  | 'uniqueId';
 
 /**
  * Every property type this build knows, in the order they were added (Phase 4: the first twenty;
@@ -65,6 +70,7 @@ export const KNOWN_PROPERTY_TYPES: readonly PropertyType[] = [
   'lastEditedTime',
   'lastEditedBy',
   'button',
+  'uniqueId',
 ];
 
 /** Types whose value is stored in `RowRecord.values`. The rest come from the page or `computed`. */
@@ -144,6 +150,8 @@ export interface PropertyDef {
    * are those whose trigger names it (`AutomationTrigger` of kind `button`).
    */
   button?: { label?: string | null };
+  /** Phase 17, a unique id: the words before each number (`TASK` shows `TASK-12`); none: the number alone. */
+  uniqueId?: { prefix?: string | null };
   /**
    * Set when the property was deleted: it is hidden everywhere and computes nothing, its values
    * stay on the rows, and it can be restored. Never set on the title property.

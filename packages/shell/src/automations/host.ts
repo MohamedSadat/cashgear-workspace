@@ -19,6 +19,7 @@ import {
   type AutomationRecord,
   type Id,
   type PropertyDef,
+  type PropertyType,
 } from '@cgw/workspace';
 import type { i18n as I18n } from 'i18next';
 import { pageEvents } from '../page/PageMenu';
@@ -194,7 +195,13 @@ export class ShellAutomations implements AutomationsHost {
   }
 
   knowsButtons() {
-    return (this.propertyTypes ?? 0) >= KNOWN_PROPERTY_TYPES.length;
+    return this.knowsPropertyType('button');
+  }
+
+  /** Whether the server counts the type among those it keeps (its place in `KNOWN_PROPERTY_TYPES`). */
+  knowsPropertyType(type: PropertyType) {
+    const index = KNOWN_PROPERTY_TYPES.indexOf(type);
+    return index >= 0 && (this.propertyTypes ?? 0) > index;
   }
 
   private workspaceId(): Id {

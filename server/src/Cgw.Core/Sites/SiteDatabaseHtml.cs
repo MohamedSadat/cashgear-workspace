@@ -228,6 +228,10 @@ public static class SiteDatabaseHtml
         if (cell is null || Raw.IsError(cell)) return;
         switch (def.Type)
         {
+            // Phase 17: the row's number with its prefix.
+            case PropertyTypes.UniqueId:
+                h.Text(UniqueIds.Text(def, row.Number) ?? "");
+                return;
             case PropertyTypes.Url when cell is string url && SiteHtml.SafeUrl(url) is { } safe && safe.StartsWith("http", StringComparison.OrdinalIgnoreCase):
                 h.Raw("<a").Attr("href", safe).Raw(" rel=\"noopener noreferrer nofollow\">").Text(url).Raw("</a>");
                 return;

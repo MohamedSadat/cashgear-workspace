@@ -11,6 +11,7 @@ import type { Id, RowRecord } from '@cgw/workspace';
 import type { CellEnv } from '../cells/env';
 import { dateText, errorKey } from '../cells/CellDisplay';
 import type { CellValue, PropertyDef, Value } from '../core';
+import { uniqueIdText } from '../core';
 import { formatNumber, isCellError, isDateValue, optionById, readCell } from '../model/format';
 import { toHtmlTable, toTsv } from './tsv';
 
@@ -37,6 +38,7 @@ const bool = (value: boolean) => (value ? 'TRUE' : 'FALSE');
 /** A cell's text as the table shows it. */
 export function shownText(def: PropertyDef, row: RowRecord, env: CellEnv): string {
   if (def.type === 'checkbox') return bool(row.values[def.id] === true);
+  if (def.type === 'uniqueId') return uniqueIdText(def, row.number) ?? '';
   const value = readCell(row, def);
   if (value === null || value === undefined) return '';
   switch (def.type) {

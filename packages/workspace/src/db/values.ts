@@ -99,6 +99,7 @@ export function coerceValue(def: PropertyDef, raw: unknown): Value | undefined {
     case 'lastEditedTime':
     case 'lastEditedBy':
     case 'button':
+    case 'uniqueId':
       return undefined;
     default: {
       const s = jsonSource(raw);
@@ -144,6 +145,13 @@ const stringList = (value: unknown): string[] | null => {
  * What a cell of `def` reads as on `row` (the def found already; `cellValue` finds it). Empty is
  * null; a value whose shape does not fit the type reads as empty.
  */
+/** Phase 17: a unique id as it reads: its prefix and the row's number (`TASK-12`), or null until it has one. */
+export function uniqueIdText(def: PropertyDef, number: number | null | undefined): string | null {
+  if (typeof number !== 'number' || !Number.isFinite(number)) return null;
+  const prefix = def.uniqueId?.prefix?.trim();
+  return prefix ? `${prefix}-${number}` : String(number);
+}
+
 export function cellOf(
   def: PropertyDef,
   row: RowRecord,
@@ -162,6 +170,8 @@ export function cellOf(
       return row.createdBy ? [row.createdBy] : null;
     case 'lastEditedBy':
       return row.updatedBy ? [row.updatedBy] : null;
+    case 'uniqueId':
+      return typeof row.number === 'number' && Number.isFinite(row.number) ? row.number : null;
     case 'formula':
     case 'rollup': {
       if (computed && Object.prototype.hasOwnProperty.call(computed, def.id))

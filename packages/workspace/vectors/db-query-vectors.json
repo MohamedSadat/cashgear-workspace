@@ -7730,5 +7730,252 @@
         }
       }
     ]
+  },
+  {
+    "name": "unique ids",
+    "database": {
+      "id": "01900000-0000-7000-8000-000000000001",
+      "properties": [
+        {
+          "id": "title",
+          "name": "Name",
+          "type": "title"
+        },
+        {
+          "id": "pUid0001",
+          "name": "ID",
+          "type": "uniqueId",
+          "uniqueId": {
+            "prefix": "TASK"
+          }
+        }
+      ],
+      "version": 1
+    },
+    "rows": [
+      {
+        "id": "01900000-0000-7000-8000-000000000041",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "u41",
+        "orderKey": "a1",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {},
+        "number": 3
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000042",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "u42",
+        "orderKey": "a2",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {},
+        "number": 12
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000043",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "u43",
+        "orderKey": "a3",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {},
+        "number": 1
+      },
+      {
+        "id": "01900000-0000-7000-8000-000000000044",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "title": "u44",
+        "orderKey": "a4",
+        "isTemplate": false,
+        "trashedAt": null,
+        "createdAt": "2026-01-01T09:00:00.000Z",
+        "updatedAt": "2026-01-02T10:30:00.000Z",
+        "createdBy": "01900000-0000-7000-8000-0000000000a1",
+        "updatedBy": "01900000-0000-7000-8000-0000000000a1",
+        "values": {},
+        "computed": {}
+      }
+    ],
+    "cases": [
+      {
+        "name": "unique ids ascending, the row with none last",
+        "spec": {
+          "filter": null,
+          "sorts": [
+            {
+              "propertyId": "pUid0001",
+              "direction": "asc"
+            }
+          ],
+          "group": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000043",
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000044"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "unique ids descending, the row with none last",
+        "spec": {
+          "filter": null,
+          "sorts": [
+            {
+              "propertyId": "pUid0001",
+              "direction": "desc"
+            }
+          ],
+          "group": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": [
+            "01900000-0000-7000-8000-000000000042",
+            "01900000-0000-7000-8000-000000000041",
+            "01900000-0000-7000-8000-000000000043",
+            "01900000-0000-7000-8000-000000000044"
+          ],
+          "groups": null
+        }
+      },
+      {
+        "name": "a unique id equals a number",
+        "spec": {
+          "filter": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pUid0001",
+                "operator": "eq",
+                "value": 12
+              }
+            ]
+          },
+          "sorts": [],
+          "group": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000042"],
+          "groups": null
+        }
+      },
+      {
+        "name": "unique ids above a number",
+        "spec": {
+          "filter": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pUid0001",
+                "operator": "gt",
+                "value": 2
+              }
+            ]
+          },
+          "sorts": [],
+          "group": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000041", "01900000-0000-7000-8000-000000000042"],
+          "groups": null
+        }
+      },
+      {
+        "name": "a row not numbered yet",
+        "spec": {
+          "filter": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pUid0001",
+                "operator": "isEmpty"
+              }
+            ]
+          },
+          "sorts": [],
+          "group": null
+        },
+        "ctx": {
+          "today": "2026-03-01",
+          "offsetMinutes": 0,
+          "me": "01900000-0000-7000-8000-0000000000a1",
+          "people": {
+            "01900000-0000-7000-8000-0000000000a1": "Alice",
+            "01900000-0000-7000-8000-0000000000b0": "bob",
+            "01900000-0000-7000-8000-0000000000c5": "سامي"
+          }
+        },
+        "expected": {
+          "rows": ["01900000-0000-7000-8000-000000000044"],
+          "groups": null
+        }
+      }
+    ]
   }
 ]

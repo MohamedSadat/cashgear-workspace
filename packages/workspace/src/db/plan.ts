@@ -39,6 +39,8 @@ export const MAX_PROPERTIES_CHARS = 1_000_000;
 const MAX_NAME = 200;
 const MAX_OPTIONS = 1000;
 const MAX_EXPRESSION = 10_000;
+/** Phase 17: a unique id's prefix. */
+const MAX_PREFIX = 20;
 
 const TYPES = new Set<PropertyType>(KNOWN_PROPERTY_TYPES);
 
@@ -112,6 +114,18 @@ function checkDef(def: PropertyDef) {
       throw invalid("A button's settings are an object with its label");
     if (typeof label === 'string' && label.length > MAX_NAME)
       throw invalid("A button's label is at most 200 characters");
+  }
+  // Phase 17: a unique id's prefix, at most 20 characters.
+  if (def.uniqueId !== undefined) {
+    const prefix = def.uniqueId?.prefix;
+    if (
+      typeof def.uniqueId !== 'object' ||
+      def.uniqueId === null ||
+      (prefix != null && typeof prefix !== 'string')
+    )
+      throw invalid("A unique id's settings are an object with its prefix");
+    if (typeof prefix === 'string' && prefix.length > MAX_PREFIX)
+      throw invalid("A unique id's prefix is at most 20 characters");
   }
   if (
     def.type === 'formula' &&

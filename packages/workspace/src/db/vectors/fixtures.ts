@@ -30,6 +30,7 @@ export type VectorRow = Pick<
   | 'updatedBy'
   | 'values'
   | 'computed'
+  | 'number'
 >;
 
 export type VectorDatabase = Pick<DatabaseRecord, 'id' | 'properties' | 'version'>;

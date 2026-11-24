@@ -240,6 +240,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasIndex(x => new { x.DatabaseId, x.PageId });
             // The query cache reads the rows written since the version it holds.
             e.HasIndex(x => new { x.DatabaseId, x.Seq });
+            // Phase 17: no two rows of a database share a number.
+            e.HasIndex(x => new { x.DatabaseId, x.Number }).IsUnique().HasFilter("[Number] IS NOT NULL").HasDatabaseName("IX_DatabaseRows_Number");
         });
         b.Entity<PageAncestor>(e =>
         {
