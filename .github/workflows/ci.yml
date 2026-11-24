@@ -104,7 +104,7 @@ jobs:
           run=$(gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$run" ]; then
             gh run download "$run" --name phase2-server --dir bench/previous-run
-            for name in phase2.json phase4.json phase10.json phase11.json phase13.json phase14.json; do
+            for name in phase2.json phase4.json phase10.json phase11.json phase13.json phase14.json phase15.json; do
               found=$(find bench/previous-run -name "$name" | head -n 1)
               if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" "bench/previous/$name"; fi
             done
@@ -149,6 +149,13 @@ jobs:
       # files; a file no row holds, and 0.13.0's scan of the rows' values, tracked beside it.
       - name: Phase 14 server budget (a file check at 50,000 rows)
         run: pnpm bench:phase14 -- --server
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+      # Phase 15's server budget (bench/phase15.mjs --server, Phase15Bench): date triggers over a
+      # database of 50,000 rows found within a pass of the worker, after a row changed; the first pass
+      # and passes with nothing changed tracked.
+      - name: Phase 15 server budget (date triggers at 50,000 rows)
+        run: pnpm bench:phase15 -- --server
         env:
           CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
       - uses: actions/upload-artifact@v4
@@ -199,9 +206,10 @@ jobs:
       # person, and the feed's comments and notifications), v0.6.0 (Phase 7: a schema-6 page
       # with plugin blocks), v0.7.0 and v0.8.0 (Phase 9: a timeline view, a type neither
       # knows, drawn as a table there and kept a timeline with its settings), and v0.9.0
-      # (Phase 10: a third-party plugin block, a placeholder there and kept as it is), and v0.10.0
-      # (Phase 11: a page whose access holds a group's row, kept by its save).
-      - name: The old builds (v0.2.0's to v0.10.0's web apps)
+      # (Phase 10: a third-party plugin block, a placeholder there and kept as it is), v0.10.0
+      # (Phase 11: a page whose access holds a group's row, kept by its save), and v0.14.0 (Phase 15:
+      # a database with rules and a button, both kept while it edits rows).
+      - name: The old builds (v0.2.0's to v0.14.0's web apps)
         run: |
           git fetch --tags --force
           node scripts/old-build.mjs
@@ -295,7 +303,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json', 'phase15.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -370,6 +378,13 @@ jobs:
       # server's file check at 50,000 rows runs in the server job.
       - name: Phase 14 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase14 -- --no-server
+      # Phase 15's (bench/phase15.mjs --no-server): a rule's first step after the change that starts
+      # it, shown in an open tab, and a paste of 1,000 cells starting a rule in each row (every run
+      # done, typing on another page meanwhile), in Chrome against the server stack above. The
+      # server's date triggers at 50,000 rows run in the server job; the processor time per push with
+      # ten rules is bench/phase8-server.mjs's, taken locally.
+      - name: Phase 15 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase15 -- --no-server
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -26,6 +26,14 @@
 // rows), and `--groups 20` (on a build with groups: the typist in 20 groups, and the page shared
 // with 20 others at view, so the fast path weighs each group row and still decides the push).
 // A build without groups' routes gets the same page with no rows.
+// Phase 15 (IMPLEMENTATION_PLAN.md, Phase 15: "the server's processor time per push to a database
+// with 10 rules within 10 % of the same push with none"): `--rows` makes the load a person editing a
+// database's rows instead of typing (a `row.update` of one row's Points through the operations route
+// at the same pace, as the app's outbox sends one, the second member joined to the workspace on the
+// hub), and `--rules-before N --rules-after M` the rules each side's database has switched on: rules
+// on its Status changing, which the edits never start, so a push pays only for its change being
+// written as an event and matched against every rule (a rule that runs is a run's own work, not the
+// push's). Both sides the same build: `--before . --rules-before 0 --rules-after 10`.
 // Ports: CGW_BENCH_API_PORT (5380), CGW_BENCH_BLOB_PORT (10100); database cgw_phase8_bench
 // (dropped and made again each run); data under .cgw-dev/phase8.
 import { spawn, spawnSync } from 'node:child_process';
@@ -56,6 +64,9 @@ const PRESENCE = !args.includes('--no-presence');
 const READER = !args.includes('--no-reader');
 const TYPIST = arg('--typist', 'owner');
 const GROUPS = Number(arg('--groups', 0));
+// Phase 15: rows of a database edited instead of a page typed into, and each side's rules.
+const ROWS = args.includes('--rows');
+const RULES = { before: Number(arg('--rules-before', 0)), after: Number(arg('--rules-after', 0)) };
 const WARMUP_S = Number(arg('--warmup', 60));
 const SECONDS = Number(arg('--seconds', 30));
 const CYCLES = Number(arg('--cycles', 3));
@@ -337,7 +348,108 @@ const relative = (type, index) =>
   ).toString('base64');
 
 /** The team, the page and its base, and the two hub connections. */
-async function scene() {
+/**
+ * Phase 15: a database of 200 rows (Status, Points, Notes) beside the page, and `rules` rules on
+ * its Status changing to each of ten options (none of which the load's edits touch).
+ */
+async function rowsScene(ownerApi, workspaceId, sectionId, rules) {
+  const now = new Date().toISOString();
+  const op = (type, entityId, payload) => ({
+    opId: uuidv7(),
+    type,
+    workspaceId,
+    entityId,
+    baseVersion: null,
+    payload,
+    createdAt: now,
+  });
+  const check = (answer) => {
+    const refused = answer.results.filter((r) => r.status !== 'applied');
+    if (refused.length) throw new Error('Operations refused: ' + JSON.stringify(refused[0]));
+  };
+  const databaseId = uuidv7();
+  const options = Array.from({ length: 10 }, (_, i) => ({
+    id: `Opt${String(i).padStart(5, '0')}`,
+    name: `Stage ${i}`,
+    colour: 'blue',
+    group: 'todo',
+  }));
+  check(
+    await ownerApi.post(`/api/v1/workspaces/${workspaceId}/ops`, {
+      ops: [
+        op('page.create', databaseId, {
+          id: databaseId,
+          workspaceId,
+          sectionId,
+          parentPageId: null,
+          orderKey: 'a1',
+          kind: 'database',
+          title: 'Edited rows',
+          icon: null,
+          coverAssetId: null,
+          isTemplate: false,
+          templateOfPageId: null,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+          trashedAt: null,
+          trashRootId: null,
+          database: {
+            properties: [
+              { id: 'title', name: 'Name', type: 'title' },
+              { id: 'Status01', name: 'Status', type: 'status', options },
+              { id: 'Points01', name: 'Points', type: 'number' },
+              { id: 'Notes001', name: 'Notes', type: 'text' },
+            ],
+          },
+        }),
+      ],
+    }),
+  );
+  const lines = ['Name,Points', ...Array.from({ length: 200 }, (_, i) => `Row ${i},${i}`)];
+  const imported = await ownerApi.post(`/api/v1/databases/${databaseId}/import`, {
+    csv: lines.map((line) => `${line}\r\n`).join(''),
+    columns: ['title', 'Points01'],
+    header: true,
+  });
+  if (imported.created !== 200) throw new Error('The import made ' + imported.created + ' rows');
+  if (rules > 0) {
+    const probe = await ownerApi.raw(`/api/v1/databases/${databaseId}/automations`);
+    if (probe.status === 404)
+      throw new Error('This build has no automations: --rules needs 0.15.0');
+  }
+  for (let i = 0; i < rules; i++) {
+    const id = uuidv7();
+    check(
+      await ownerApi.post(`/api/v1/workspaces/${workspaceId}/ops`, {
+        ops: [
+          op('automation.upsert', id, {
+            id,
+            workspaceId,
+            databaseId,
+            name: `Rule ${i}`,
+            enabled: true,
+            trigger: {
+              kind: 'propertyChanged',
+              propertyId: 'Status01',
+              to: { operator: 'is', value: options[i % options.length].id },
+            },
+            conditions: null,
+            steps: [{ kind: 'set', values: { Notes001: `stage ${i}` } }],
+            authorId: null,
+            version: 0,
+            createdAt: '',
+            updatedAt: '',
+          }),
+        ],
+      }),
+    );
+  }
+  const { rows } = await ownerApi.get(`/api/v1/databases/${databaseId}/rows?limit=500`);
+  return { databaseId, rowIds: rows.map((r) => r.id), op };
+}
+
+async function scene(label) {
   const owner = await newAccount('Olive Typist');
   const member = await newAccount('Mo Reader');
   const ownerApi = await apiSession(owner);
@@ -440,7 +552,14 @@ async function scene() {
     await call(connection, 'JoinPage', pageId);
   }
   const readerDoc = new Y.Doc();
+  const rowsAt = ROWS
+    ? await rowsScene(ownerApi, workspaceId, sectionId, RULES[label.split('-')[0]] ?? 0)
+    : null;
   return {
+    rows: rowsAt,
+    rules: ROWS ? (RULES[label.split('-')[0]] ?? 0) : null,
+    typistApi,
+    workspaceId,
     ownerApi,
     memberApi,
     pageId,
@@ -491,7 +610,20 @@ async function load(s, ms, typing, state) {
   // Paced by the clock, not by sleeps added up: a key every 35 ms however long a push took.
   let next = Date.now();
   while (Date.now() < until) {
-    if (typing) {
+    if (typing && s.rows) {
+      // Phase 15: one row's Points changed, as the outbox sends a cell's edit.
+      const row = s.rows.rowIds[state.keys % s.rows.rowIds.length];
+      state.keys++;
+      try {
+        const answer = await s.typistApi.post(`/api/v1/workspaces/${s.workspaceId}/ops`, {
+          ops: [s.rows.op('row.update', row, { values: { Points01: 1000 + state.keys } })],
+        });
+        if (answer.results[0]?.status === 'applied') pushes++;
+        else state.refused.push(JSON.stringify(answer.results[0]));
+      } catch (error) {
+        state.refused.push(String(error.message));
+      }
+    } else if (typing) {
       let update = null;
       const capture = (u, origin) => origin !== 'remote' && (update = u);
       s.doc.on('update', capture);
@@ -557,7 +689,7 @@ async function measureRun(label, parts) {
   log(`${label}: starting the stack`);
   const stack = await startStack(label, parts);
   try {
-    const s = await scene();
+    const s = await scene(label);
     const state = {
       keys: 0,
       text: null,
@@ -606,6 +738,8 @@ async function measureRun(label, parts) {
       label,
       // Phase 11: the groups the typist was put in (0 on a build without groups).
       groups: s.groups,
+      // Phase 15: the rules the edited database had (null: the page was typed into).
+      rules: s.rules,
       pushes,
       refused: state.refused.length,
       apiCpuMsPerPush: round(per(0)),
@@ -712,6 +846,8 @@ const out = {
     after: AFTER,
     typist: TYPIST,
     groups: GROUPS,
+    rows: ROWS,
+    rules: ROWS ? RULES : null,
   },
   summary,
   runs,
