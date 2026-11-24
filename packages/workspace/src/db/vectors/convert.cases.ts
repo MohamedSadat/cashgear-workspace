@@ -186,6 +186,8 @@ const coerceCases: ConvertCase[] = [
   coerce('rollup stores nothing', P.rollup, 5, null),
   coerce('created time stores nothing', P.created, '2026-01-01', null),
   coerce('created by stores nothing', P.createdBy, [ALICE], null),
+  coerce('a button stores nothing', P.button, 'Approve', null),
+  coerce('a button stores no list', P.button, [ALICE], null),
   coerce('edited time stores nothing', P.edited, '2026-01-01', null),
   coerce('edited by stores nothing', P.editedBy, [ALICE], null),
 ];
@@ -282,6 +284,9 @@ const convertCases: ConvertCase[] = [
   convert('person to text', P.person, P.text, [ALICE], null),
   convert('person to person', P.person, prop('pPer0002', 'person'), [ALICE, BOB], [ALICE, BOB]),
   convert('person to created by', P.person, P.createdBy, [ALICE], null),
+  convert('text to a button', P.text, P.button, 'hello', null),
+  convert('a button to text', P.button, P.text, null, null),
+  convert('a button to a checkbox', P.button, P.checkbox, null, null),
   convert('files to files', P.files, prop('pFil0002', 'files'), ['asset-1'], ['asset-1']),
   convert('files to person', P.files, P.person, ['asset-1'], null),
   convert(

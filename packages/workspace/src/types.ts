@@ -10,6 +10,7 @@ import type {
   Value,
   ViewRecord,
 } from './db/types';
+import type { AutomationRecord } from './db/automations';
 
 export type { Id };
 
@@ -171,7 +172,12 @@ export type Operation =
   | Op<'db.update', DbUpdate>
   | Op<'view.upsert', ViewRecord>
   | Op<'view.delete', Record<string, never>>
-  | Op<'row.update', RowUpdate>;
+  | Op<'row.update', RowUpdate>
+  // Phase 15: a database's rules. `entityId` is the rule's id. The server keeps them and runs
+  // them; a device holds none in its mirror (the editor reads them from the server), so the
+  // planner checks them and changes nothing but the outbox.
+  | Op<'automation.upsert', AutomationRecord>
+  | Op<'automation.delete', Record<string, never>>;
 
 export type OperationType = Operation['type'];
 
@@ -239,7 +245,16 @@ export interface OpResult {
 }
 
 export type EntityType =
-  'workspace' | 'section' | 'page' | 'favourite' | 'visit' | 'database' | 'view' | 'row';
+  | 'workspace'
+  | 'section'
+  | 'page'
+  | 'favourite'
+  | 'visit'
+  | 'database'
+  | 'view'
+  | 'row'
+  /** Phase 15: kept by the server alone; a store takes nothing of it. */
+  | 'automation';
 export type EntityRecord =
   | WorkspaceRecord
   | SectionRecord
@@ -248,7 +263,8 @@ export type EntityRecord =
   | VisitRecord
   | DatabaseRecord
   | ViewRecord
-  | RowRecord;
+  | RowRecord
+  | AutomationRecord;
 
 /** Why an operation was refused; the codes are the server's (SYNC_DESIGN.md). */
 export type OpErrorCode =

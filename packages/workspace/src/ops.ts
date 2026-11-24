@@ -8,6 +8,7 @@
 // under a row, and a row's move only reorders it among its database's rows. The database rules
 // (per-property merges, coercion, type changes, relations) are in `db/plan.ts`.
 import type { DatabaseRecord, ViewRecord } from './db/types';
+import { checkAutomation } from './db/automations';
 import {
   planDatabaseUpdate,
   planRelationEdits,
@@ -571,6 +572,24 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
         putRows(await planRelationEdits(db, next, row.values, reader, at));
         break;
       }
+      case 'automation.upsert': {
+        // Checked as the server checks it, against the database as this device holds it; nothing
+        // is kept here but the operation (rules are the server's: DATA_MODEL.md, Automations).
+        const rule = op.payload;
+        if (rule?.id !== op.entityId || rule.workspaceId !== op.workspaceId)
+          throw new OpError('invalid', 'Id mismatch');
+        const db = await liveDatabase(rule.databaseId);
+        if (db.workspaceId !== op.workspaceId) throw new OpError('invalid', 'Id mismatch');
+        const targets = new Map<Id, DatabaseRecord | null>();
+        for (const step of Array.isArray(rule.steps) ? rule.steps : [])
+          if (step?.kind === 'addRow' && typeof step.databaseId === 'string')
+            targets.set(step.databaseId, (await reader.database(step.databaseId)) ?? null);
+        checkAutomation(rule, db, (id) => targets.get(id) ?? null);
+        break;
+      }
+      case 'automation.delete':
+        // The server knows the rule; a device holds none to check.
+        break;
       default: {
         const unknown: never = op;
         throw new OpError('invalid', `Unknown operation ${(unknown as Operation).type}`);

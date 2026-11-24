@@ -21,6 +21,7 @@
 // is a `row` change in the feed; the tree carries databases and views, never rows; rows come by
 // `rows` (by id) and `query` (by `queryRows`). Formula and rollup results are not computed here
 // (`computed` stays empty).
+import { MAX_AUTOMATIONS, checkAutomation, type AutomationRecord } from '../db/automations';
 import { queryRows } from '../db/query';
 import type { PropertyId, QuerySpec, Value } from '../db/types';
 import { uuidv7, type Id } from '../ids';
@@ -81,6 +82,8 @@ interface Space {
   yjs: Map<number, Id>;
   /** The kind of every page made here, gone or not (an answer about a row deleted for good). */
   kinds: Map<Id, PageKind>;
+  /** Phase 15: the databases' rules, as the server keeps them (no device holds them). */
+  automations: Map<Id, AutomationRecord>;
 }
 
 interface DocRow {
@@ -313,6 +316,8 @@ export class FakeServer {
         return m.views.get(op.entityId) ?? null;
       case 'row':
         return m.rowRecords.get(op.entityId) ?? null;
+      case 'automation':
+        return space.automations.get(op.entityId) ?? null;
       default:
         return null;
     }
@@ -346,6 +351,10 @@ export class FakeServer {
         return op.payload.databaseId;
       case 'view.delete':
         return space.mirror.views.get(op.entityId)?.databaseId ?? null;
+      case 'automation.upsert':
+        return op.payload.databaseId;
+      case 'automation.delete':
+        return space.automations.get(op.entityId)?.databaseId ?? null;
       case 'page.create':
         // A row is made in a database the account must see.
         return op.payload.kind === 'row' ? op.payload.parentPageId : null;
@@ -741,6 +750,8 @@ export class FakeServer {
       op = { ...op, payload } as Operation;
     }
     op = this.keepRelated(m, op);
+    if (op.type === 'automation.upsert' || op.type === 'automation.delete')
+      return { op: this.applyAutomation(space, account, op) };
     const plan = await planOps([structuredClone(op)], m);
     // A reverse property added to another database needs the account to see it (edit on both).
     for (const database of plan.databases)
@@ -827,6 +838,56 @@ export class FakeServer {
           if (!old.has(id) && !held(id)) throw new Refusal('access.denied');
       }
     }
+  }
+
+  /**
+   * Phase 15: a rule kept as the server keeps it (AutomationOps.cs): checked against its database,
+   * at most 50 a database, its author whoever saved it, its version rising; an `automation`
+   * change for those who can read the database.
+   */
+  private applyAutomation(
+    space: Space,
+    account: Account,
+    op: Extract<Operation, { type: 'automation.upsert' | 'automation.delete' }>,
+  ): Operation {
+    const m = space.mirror;
+    if (op.type === 'automation.delete') {
+      if (!space.automations.delete(op.entityId)) throw new Refusal('not.found');
+      this.change(space, 'automation', op.entityId, 'delete');
+      return op;
+    }
+    const page = m.pages.get(op.payload.databaseId);
+    const db = m.databases.get(op.payload.databaseId);
+    if (!page || !db || page.kind !== 'database') throw new Refusal('not.found');
+    if (page.trashedAt) throw new OpError('page.trashed');
+    const rule = checkAutomation(op.payload, db, (id) => m.databases.get(id) ?? null);
+    const before = space.automations.get(rule.id);
+    if (before && before.databaseId !== rule.databaseId)
+      throw new OpError('invalid', 'A rule stays with its database');
+    if (
+      !before &&
+      [...space.automations.values()].filter((r) => r.databaseId === db.id).length >=
+        MAX_AUTOMATIONS
+    )
+      throw new Refusal('automation.limit');
+    const now = new Date().toISOString();
+    space.automations.set(rule.id, {
+      ...rule,
+      workspaceId: op.workspaceId,
+      authorId: account.id,
+      version: (before?.version ?? 0) + 1,
+      createdAt: before?.createdAt ?? now,
+      updatedAt: now,
+    });
+    this.change(space, 'automation', rule.id);
+    return op;
+  }
+
+  /** Phase 15: a database's rules as the server holds them (the editor's route). */
+  automations(workspaceId: Id, databaseId: Id): AutomationRecord[] {
+    return [...(this.spaces.get(workspaceId)?.automations.values() ?? [])]
+      .filter((r) => r.databaseId === databaseId)
+      .map((r) => structuredClone(r));
   }
 
   private keepRelated(m: Mirror, op: Operation): Operation {
@@ -962,6 +1023,7 @@ export class FakeServer {
           readers: new Set(),
           yjs: new Map(),
           kinds: new Map(),
+          automations: new Map(),
         };
         space.mirror.load({
           workspaces: [record],
@@ -1224,6 +1286,14 @@ export class FakeServer {
               return {
                 seq: row.seq,
                 entityType: 'site',
+                entityId: row.entityId,
+                kind: row.kind === 'delete' ? 'delete' : 'upsert',
+                entity: null,
+              };
+            case 'automation':
+              return {
+                seq: row.seq,
+                entityType: 'automation',
                 entityId: row.entityId,
                 kind: row.kind === 'delete' ? 'delete' : 'upsert',
                 entity: null,

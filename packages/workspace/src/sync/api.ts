@@ -124,7 +124,18 @@ export type ServerChange =
   /** Phase 14: a site published or changed (`upsert`) or unpublished (`delete`); `entityId` its root page. */
   | { seq: number; entityType: 'site'; entityId: Id; kind: 'upsert' | 'delete'; entity: null }
   /** Phase 14: the workspace's switch or domains changed (`entityId` the workspace); never stored. */
-  | { seq: number; entityType: 'publishing'; entityId: Id; kind: 'upsert'; entity: null };
+  | { seq: number; entityType: 'publishing'; entityId: Id; kind: 'upsert'; entity: null }
+  /**
+   * Phase 15: a rule of a database this person can read made, changed or deleted (`entityId` the
+   * rule); never stored: an open rule editor or Settings reads the rules again.
+   */
+  | {
+      seq: number;
+      entityType: 'automation';
+      entityId: Id;
+      kind: 'upsert' | 'delete';
+      entity: null;
+    };
 
 export interface ChangesPage {
   changes: ServerChange[];

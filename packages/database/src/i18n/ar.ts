@@ -83,6 +83,7 @@ export const ar: DatabaseCatalogue = {
       createdBy: 'أنشأه',
       lastEditedTime: 'وقت آخر تعديل',
       lastEditedBy: 'آخر من عدّله',
+      button: 'زر',
     },
     property: {
       menu: 'الخاصية: {{name}}',

@@ -23,8 +23,16 @@ import { convertVectors, type ConvertCase } from './vectors/convert.cases';
 import { csvVectors, type CsvCase } from './vectors/csv.cases';
 import { formulaVectors, type FormulaSuite } from './vectors/formula.cases';
 import { queryVectors, type QuerySuite } from './vectors/query.cases';
+import { automationVectors, type AutomationVectors } from './vectors/automation.cases';
+import {
+  AutomationError,
+  changeStarts,
+  checkAutomation,
+  type AutomationTrigger,
+} from './automations';
 
 const WRITE = process.env.DB_VECTORS_WRITE === '1';
+
 const file = (name: string) => new URL(`../../vectors/${name}`, import.meta.url);
 
 /** JSON with invisible format characters escaped, so the files read the same in any editor. */
@@ -313,6 +321,7 @@ describe('the vectors cover', () => {
       'createdBy',
       'lastEditedTime',
       'lastEditedBy',
+      'button',
     ];
     const coerced = new Set(
       convertVectors.filter((c) => c.kind === 'coerce').map((c) => (c.def as PropertyDef).type),
@@ -327,4 +336,28 @@ describe('the vectors cover', () => {
       expect(converted.has(type as PropertyDef['type']), type).toBe(true);
     }
   });
+});
+
+describe('db-automation-vectors.json', () => {
+  const v = vectors<AutomationVectors>('db-automation-vectors.json', automationVectors);
+  const db = asDb(v.database);
+  for (const c of v.check)
+    it(`check: ${c.name}`, () => {
+      if ('rule' in c.expected) {
+        expect(json(checkAutomation(c.rule, db))).toEqual(c.expected.rule);
+        return;
+      }
+      let reason: string | null = null;
+      try {
+        checkAutomation(c.rule, db);
+      } catch (error) {
+        if (!(error instanceof AutomationError)) throw error;
+        reason = error.reason;
+      }
+      expect(reason).toBe(c.expected.reason);
+    });
+  for (const c of v.starts)
+    it(`starts: ${c.name}`, () => {
+      expect(changeStarts(c.trigger as AutomationTrigger, db, c.change, v.ctx)).toBe(c.expected);
+    });
 });

@@ -1670,6 +1670,34 @@
   },
   {
     "kind": "coerce",
+    "name": "a button stores nothing",
+    "def": {
+      "id": "pBtn0001",
+      "name": "Approve",
+      "type": "button",
+      "button": {
+        "label": "Approve"
+      }
+    },
+    "raw": "Approve",
+    "expected": null
+  },
+  {
+    "kind": "coerce",
+    "name": "a button stores no list",
+    "def": {
+      "id": "pBtn0001",
+      "name": "Approve",
+      "type": "button",
+      "button": {
+        "label": "Approve"
+      }
+    },
+    "raw": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "coerce",
     "name": "edited time stores nothing",
     "def": {
       "id": "pEdt0001",
@@ -3088,6 +3116,63 @@
       "type": "createdBy"
     },
     "value": ["01900000-0000-7000-8000-0000000000a1"],
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "text to a button",
+    "from": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "to": {
+      "id": "pBtn0001",
+      "name": "Approve",
+      "type": "button",
+      "button": {
+        "label": "Approve"
+      }
+    },
+    "value": "hello",
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "a button to text",
+    "from": {
+      "id": "pBtn0001",
+      "name": "Approve",
+      "type": "button",
+      "button": {
+        "label": "Approve"
+      }
+    },
+    "to": {
+      "id": "pText001",
+      "name": "Notes",
+      "type": "text"
+    },
+    "value": null,
+    "expected": null
+  },
+  {
+    "kind": "convert",
+    "name": "a button to a checkbox",
+    "from": {
+      "id": "pBtn0001",
+      "name": "Approve",
+      "type": "button",
+      "button": {
+        "label": "Approve"
+      }
+    },
+    "to": {
+      "id": "pChk0001",
+      "name": "Done?",
+      "type": "checkbox"
+    },
+    "value": null,
     "expected": null
   },
   {

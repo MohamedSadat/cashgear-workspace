@@ -57,6 +57,7 @@ export const TYPE_GLYPH: Record<PropertyType, string> = {
   createdBy: '☻',
   lastEditedTime: '◶',
   lastEditedBy: '☻',
+  button: '▶',
 };
 
 const stored = new Set<PropertyType>(STORED_TYPES);

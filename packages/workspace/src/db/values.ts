@@ -98,6 +98,7 @@ export function coerceValue(def: PropertyDef, raw: unknown): Value | undefined {
     case 'createdBy':
     case 'lastEditedTime':
     case 'lastEditedBy':
+    case 'button':
       return undefined;
     default: {
       const s = jsonSource(raw);

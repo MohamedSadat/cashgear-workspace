@@ -31,7 +31,40 @@ export type PropertyType =
   | 'createdTime'
   | 'createdBy'
   | 'lastEditedTime'
-  | 'lastEditedBy';
+  | 'lastEditedBy'
+  /** Phase 15: a button that starts a rule; it holds no value (`PropertyDef.button`). */
+  | 'button';
+
+/**
+ * Every property type this build knows, in the order they were added (Phase 4: the first twenty;
+ * Phase 15: `button`, the twenty-first). Its length is the `propertyTypes` a `db.update` and a
+ * database's `page.create` carry to the server (DECISIONS.md, 2026-11-24): a def from an older
+ * build naming a property stored as a type it does not know keeps that type and its settings.
+ * A client offers `button` only once its server's `/version` counts it.
+ */
+export const KNOWN_PROPERTY_TYPES: readonly PropertyType[] = [
+  'title',
+  'text',
+  'number',
+  'date',
+  'checkbox',
+  'select',
+  'multiSelect',
+  'status',
+  'person',
+  'url',
+  'email',
+  'phone',
+  'files',
+  'relation',
+  'formula',
+  'rollup',
+  'createdTime',
+  'createdBy',
+  'lastEditedTime',
+  'lastEditedBy',
+  'button',
+];
 
 /** Types whose value is stored in `RowRecord.values`. The rest come from the page or `computed`. */
 export const STORED_TYPES: readonly PropertyType[] = [
@@ -105,6 +138,11 @@ export interface PropertyDef {
   rollup?: { relationPropertyId: PropertyId; targetPropertyId: PropertyId; fn: RollupFunction };
   /** Formula: the expression, with properties named by id: `prop("Ab12Cd34")`. */
   formula?: { expression: string };
+  /**
+   * Button (Phase 15): the words on it (absent or null: the property's name). The rules it starts
+   * are those whose trigger names it (`AutomationTrigger` of kind `button`).
+   */
+  button?: { label?: string | null };
   /**
    * Set when the property was deleted: it is hidden everywhere and computes nothing, its values
    * stay on the rows, and it can be restored. Never set on the title property.

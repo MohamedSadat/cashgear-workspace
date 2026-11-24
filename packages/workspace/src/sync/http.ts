@@ -11,6 +11,7 @@ import {
   type Schemas,
 } from '@cgw/api';
 import {
+  KNOWN_PROPERTY_TYPES,
   KNOWN_VIEW_TYPES,
   type CellValue,
   type DatabaseRecord,
@@ -318,8 +319,14 @@ const groupCounts = (groups: Schemas['QueryResponseDto']['groups']): GroupCount[
  * (and sent back as one, without the settings it does not know) from a real change: only the wire
  * carries it, never the store.
  */
-export const wirePayload = (op: Operation): unknown =>
-  op.type === 'view.upsert' ? { ...op.payload, viewTypes: KNOWN_VIEW_TYPES.length } : op.payload;
+export const wirePayload = (op: Operation): unknown => {
+  if (op.type === 'view.upsert') return { ...op.payload, viewTypes: KNOWN_VIEW_TYPES.length };
+  // Phase 15: likewise the property types it knows (`button` the twenty-first), with every change
+  // of a database's properties, so a def it cannot know keeps its stored type and settings.
+  if (op.type === 'db.update' || (op.type === 'page.create' && op.payload.kind === 'database'))
+    return { ...op.payload, propertyTypes: KNOWN_PROPERTY_TYPES.length };
+  return op.payload;
+};
 
 export function httpSyncApi(api: ApiClient): SyncApi {
   const phase3 = api as unknown as Phase3Routes;

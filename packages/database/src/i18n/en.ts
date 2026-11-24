@@ -83,6 +83,7 @@ export const en = {
       createdBy: 'Created by',
       lastEditedTime: 'Last edited time',
       lastEditedBy: 'Last edited by',
+      button: 'Button',
     },
     property: {
       menu: 'Property: {{name}}',

@@ -73,3 +73,4 @@ export {
   utf8Length,
   type CsvLookups,
 } from './csv';
+export * from './automations';

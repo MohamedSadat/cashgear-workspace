@@ -11,6 +11,7 @@ import { convertProperty } from './convert';
 import { isPropertyId } from './ids';
 import { applyRelationEdit, planRelationChange, relationTypeChangeEffects } from './relations';
 import {
+  KNOWN_PROPERTY_TYPES,
   STORED_TYPES,
   TITLE_PROPERTY,
   type DatabaseRecord,
@@ -39,28 +40,7 @@ const MAX_NAME = 200;
 const MAX_OPTIONS = 1000;
 const MAX_EXPRESSION = 10_000;
 
-const TYPES = new Set<PropertyType>([
-  'title',
-  'text',
-  'number',
-  'date',
-  'checkbox',
-  'select',
-  'multiSelect',
-  'status',
-  'person',
-  'url',
-  'email',
-  'phone',
-  'files',
-  'relation',
-  'formula',
-  'rollup',
-  'createdTime',
-  'createdBy',
-  'lastEditedTime',
-  'lastEditedBy',
-]);
+const TYPES = new Set<PropertyType>(KNOWN_PROPERTY_TYPES);
 
 const ROLLUP_FUNCTIONS = new Set<RollupFunction>([
   'count',
@@ -122,6 +102,17 @@ function checkDef(def: PropertyDef) {
       !ROLLUP_FUNCTIONS.has(def.rollup.fn))
   )
     throw invalid('A rollup names its relation, its property and its function');
+  if (def.button !== undefined) {
+    const label = def.button?.label;
+    if (
+      typeof def.button !== 'object' ||
+      def.button === null ||
+      (label != null && typeof label !== 'string')
+    )
+      throw invalid("A button's settings are an object with its label");
+    if (typeof label === 'string' && label.length > MAX_NAME)
+      throw invalid("A button's label is at most 200 characters");
+  }
   if (
     def.type === 'formula' &&
     (typeof def.formula?.expression !== 'string' || def.formula.expression.length > MAX_EXPRESSION)

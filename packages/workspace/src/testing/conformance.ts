@@ -1830,6 +1830,48 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.close();
     });
 
+    it('keeps a rule in the outbox only, checked as the server checks it (Phase 15)', async () => {
+      const store = await factory();
+      const { ws, db } = await seedDatabase(store);
+      const before = await store.readMirror(ws.id);
+      const queued = (await store.nextOutboxBatch(1000, ws.id)).length;
+      const rule = {
+        id: uuidv7(),
+        workspaceId: ws.id,
+        databaseId: db.id,
+        name: 'Seen',
+        enabled: true,
+        trigger: { kind: 'rowAdded' as const },
+        conditions: null,
+        steps: [
+          {
+            kind: 'notify' as const,
+            people: [ws.id],
+            groups: [],
+            personProperties: [],
+            message: 'Hi',
+          },
+        ],
+        authorId: null,
+        version: 0,
+        createdAt: '',
+        updatedAt: '',
+      };
+      await store.applyLocalOp(op('automation.upsert', ws.id, rule.id, rule));
+      await store.applyLocalOp(op('automation.delete', ws.id, rule.id, {}));
+      expect(await store.readMirror(ws.id)).toEqual(before);
+      const outbox = await store.nextOutboxBatch(1000, ws.id);
+      expect(outbox.slice(queued).map((o) => [o.type, o.entityId])).toEqual([
+        ['automation.upsert', rule.id],
+        ['automation.delete', rule.id],
+      ]);
+      expect(outbox[queued].payload).toEqual(rule);
+      await expect(
+        store.applyLocalOp(op('automation.upsert', ws.id, rule.id, { ...rule, steps: [] })),
+      ).rejects.toMatchObject({ code: 'invalid' });
+      await store.close();
+    });
+
     it("counts a local-only database's rows; a synced one's count is the server's", async () => {
       const store = await factory();
       const { ws, db, r1, r2 } = await seedDatabase(store);

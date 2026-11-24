@@ -177,4 +177,6 @@ export const P = {
   createdBy: prop('pCrb0001', 'createdBy', {}, 'Created by'),
   edited: prop('pEdt0001', 'lastEditedTime', {}, 'Edited'),
   editedBy: prop('pEdb0001', 'lastEditedBy', {}, 'Edited by'),
+  // Phase 15: holds no value.
+  button: prop('pBtn0001', 'button', { button: { label: 'Approve' } }, 'Approve'),
 } satisfies Record<string, PropertyDef>;

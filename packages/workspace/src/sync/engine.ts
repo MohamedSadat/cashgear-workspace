@@ -125,7 +125,9 @@ export type SyncEvent =
    * Phase 14: sites of these root pages were published, changed or unpublished, or (null) the
    * workspace's switch or domains changed: a share dialog or Settings shown reads them again.
    */
-  | { kind: 'publishing'; workspaceId: Id; pageIds: Id[] | null };
+  | { kind: 'publishing'; workspaceId: Id; pageIds: Id[] | null }
+  /** Phase 15: these rules were made, changed or deleted: a rule list shown reads them again. */
+  | { kind: 'automations'; workspaceId: Id; automationIds: Id[] };
 
 /** How much of a database this device keeps (`holdProgress`). */
 export interface HoldProgress {
@@ -3197,8 +3199,12 @@ export function batchOf(
   let plugins = false;
   const sites = new Set<Id>();
   let publishing = false;
+  const automations = new Set<Id>();
   for (const change of changes) {
     switch (change.entityType) {
+      case 'automation':
+        automations.add(change.entityId);
+        break;
       case 'site':
         sites.add(change.entityId);
         break;
@@ -3262,5 +3268,6 @@ export function batchOf(
   if (plugins) emit({ kind: 'plugins', workspaceId });
   if (publishing || sites.size)
     emit({ kind: 'publishing', workspaceId, pageIds: publishing ? null : [...sites] });
+  if (automations.size) emit({ kind: 'automations', workspaceId, automationIds: [...automations] });
   return batch;
 }

@@ -116,6 +116,8 @@ describe('queries', () => {
     for (const def of [TITLE, ...Object.values(P), FORMULA]) {
       const kind = propertyKind(DB_, def);
       if (def.type === 'rollup') expect(kind).toBe('number');
+      // Phase 15: a button holds no value; a filter, sort or group on it is ignored.
+      else if (def.type === 'button') expect(kind).toBeNull();
       else expect(kind, def.type).not.toBeNull();
       if (kind) all.push(...operatorsFor(kind));
     }

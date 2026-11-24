@@ -5,3 +5,4 @@
 *.wasm binary
 *.woff2 binary
 *.onnx binary
+*.bin binary
