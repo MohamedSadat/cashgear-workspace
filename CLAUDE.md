@@ -27,10 +27,10 @@ approximate index for a million chunks, a local embedding model on the server, a
 Gear's subscription; then publishing: a site at its workspace's own host name with its
 certificate by ACME, bound on IIS by a scheduled task, publishing in the change feed, a rate limit
 in the Sites process, and an index of rows' files that keeps them from the clean-up). Phase 15,
-AI further (completions on a local model, billing), is planned, and after it Phases 16 to 18:
-automations (a database's rules run on the server, buttons, webhooks), forms (a form view and a
-public form link whose answers start rules), and workflows and tasks (waits, branches, approvals,
-recurring rows, reminders, sub-items, dependencies, a unique id); each asks its questions when it
+automations (a database's rules run on the server, buttons, webhooks), is next; then Phase 16,
+forms (a form view and a public form link whose answers start rules), Phase 17, workflows and tasks
+(waits, branches, approvals, recurring rows, reminders, sub-items, dependencies, a unique id), and
+Phase 18, AI further (completions on a local model, billing); each asks its questions when it
 starts. What could come after is under "Later" in `docs/IMPLEMENTATION_PLAN.md`.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.

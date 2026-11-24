@@ -1833,3 +1833,33 @@ holds no time zone; `CgTimeline` draws no links, and the library's recurrence is
 | Track U | U20 (`CgTimeline`'s links between bars) and U21 (`CgScheduler`'s recurrence exported), both for Phase 18 | The library has neither as a component of its own |
 | The questions | Each phase's batch asked when it starts, as Phase 15's are | Answers given phases ahead go stale |
 | Not planned | Slides, Word's output and the integration surface stay out of the plan until you choose them ("Embedded presentations" is already on "Later") | You chose the first three |
+
+## 2026-11-24: Automations first, and Phase 15's answers
+
+You moved the three new phases ahead of AI, further, so that automations is the current phase. As
+each phase is its release (`v0.N.0`), they were numbered again: Phase 15 Automations (`v0.15.0`),
+Phase 16 Forms, Phase 17 Workflows and tasks, Phase 18 AI, further (planned on 2026-11-22 as
+Phase 15, its milestones now M18.1 and M18.2). Entries above this one keep the numbers they were
+written with. Phase 15's questions were then put to you in one batch.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| The order | Automations, forms, workflows and tasks before AI, further: Phases 15 to 17, then 18 |
+| What starts a rule | A row added; properties changed, to or from a value; a date property's day or time reached, with an offset; a schedule, daily, weekly or monthly at a time; a button pressed. Only people's edits through the operations and buttons: a CSV import, a type change and recomputed formulas start nothing in 0.15.0 |
+| Who a rule acts as | Its author, whose access is checked again at every run; a run its author could no longer make stops, says why in the run log and tells the author in the inbox; a row's editor shows "Automation" with the author's name |
+| What it does, and a new row's body | In order, each step under conditions over the row: set properties; add a row to a database the author can edit, with a template's values, icon and cover; notify people, groups or a person property's people, in the inbox and by their mail setting; call a webhook. A template's body is copied by the worker through a new `cgw-ydoc` call that writes a new page's first update, its block ids made once by the server, held to S1's rules by tests; never into an existing page. Nothing reaches the ERP |
+| Who manages rules and webhooks, and the limits | Rules on a database by whoever has full access to it, from its views' toolbar; Settings → Automations lists every rule for owners and admins, with a switch for each and one for all. Webhooks by owners and admins only: https to a public address checked by `SafeFetcher`'s rules at every connect, POST only, no redirect followed, JSON of the properties the rule names (never a person's email), signed by HMAC-SHA256 with a secret per webhook under Data Protection, 10 s, retried after 1 m, 5 m, 30 m and 2 h, then given up and logged. A change a rule made starts other rules up to 3 deep; a rule at most 100 runs a minute and a workspace 1,000; 50 rules a database; runs kept 30 days |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Rules as records | Synced as views are: `automation.upsert` and `automation.delete`, the feed's `automation` change to whoever can read the database, ignored by older builds | The pattern every record since Phase 4 follows; older builds skip a type they do not know |
+| A run's changes | Ordinary operations with ids of their own, through `DatabaseOps`' checks as the author; devices merge them by Phase 4's per-property rules; a replay changes nothing (`AppliedOps`) | No second write path; a worker that restarts mid-run cannot apply a step twice |
+| Row events | Written in `FlushAsync`'s transaction (the row, the properties changed, old and new values) only while the database has a rule switched on, and taken by the worker | The push's cost stays as it is for every database without a rule |
+| Time zone | The workspace's, an IANA name owners set in Settings, first the creating person's browser's; a day with no time is that day in the workspace's zone | A date holds no zone; a schedule and a date trigger need one |
+| The button | The twenty-first property type, with a `propertyTypes` count beside `viewTypes` so the server keeps a type an older client did not send; a client offers it only once its server's `/version` says it knows it; pressed offline, a notice, and the press is never queued | Production's server has been deployed after its web app; a button runs on the server |
+| The new inbox kind | `automation` (a rule's notice, and a run that stopped), mailed by the person's mail setting; its page the row, its actor the rule's author | Notifications need a page and an actor; older builds drop a kind they do not know |
+| Version | `v0.15.0` | One version per phase |
