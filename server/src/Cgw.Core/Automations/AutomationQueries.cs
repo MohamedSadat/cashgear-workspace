@@ -261,6 +261,7 @@ public sealed class AutomationQueries(CgwDb db, Access access, ChangeLog changes
             {
                 workspace.AutomationsOff = off;
                 audit.Add(actor, "automations.switch", member.WorkspaceId, "workspace", member.WorkspaceId, new { off });
+                if (off) await AutomationService.StopWaitingAsync(db, null, "automations.off", clock.GetUtcNow(), ct);
                 await automations.RecountAsync(workspace, null, ct);
                 // Every rule's editor and Settings shows the switch: each rule's change tells them.
                 foreach (var rule in await db.Automations.Where(a => a.DeletedAt == null).ToListAsync(ct))
@@ -298,6 +299,7 @@ public sealed class AutomationQueries(CgwDb db, Access access, ChangeLog changes
             tracked.Enabled = enabled;
             tracked.Version++;
             tracked.UpdatedAt = clock.GetUtcNow();
+            if (!enabled) await AutomationService.StopWaitingAsync(db, tracked.Id, "rule.off", clock.GetUtcNow(), ct);
             if (enabled && tracked.TriggerKind == "date") tracked.ScannedUntil = clock.GetUtcNow();
             if (enabled && tracked.TriggerKind == "schedule" && System.Text.Json.Nodes.JsonNode.Parse(tracked.Definition)?["trigger"] is System.Text.Json.Nodes.JsonObject trigger)
             {

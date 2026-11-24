@@ -37,21 +37,33 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
     public static readonly TimeSpan Stale = TimeSpan.FromMinutes(5);
     /// <summary>How often dates and schedules are looked at.</summary>
     public static TimeSpan TimesEvery { get; set; } = TimeSpan.FromSeconds(15);
+    /// <summary>Phase 17: how often the runs waiting are looked at for those due (an answered approval goes on within it).</summary>
+    public static TimeSpan WaitsEvery { get; set; } = TimeSpan.FromSeconds(1);
 
     private DateTimeOffset nextTimes = DateTimeOffset.MinValue;
+    private DateTimeOffset nextWaits = DateTimeOffset.MinValue;
     private readonly DateDueCache dues = new(clock);
 
     /// <summary>The dates' cache, for the bench's breakdown of a read.</summary>
     public DateDueCache Dues => dues;
 
     /// <summary>The work one pass did, for the bench and the tests.</summary>
-    public sealed record PassReport(int Events, int Runs, int DateRules, int DueRows, TimeSpan DateTime);
+    public sealed record PassReport(int Events, int Runs, int DateRules, int DueRows, TimeSpan DateTime, int Waits = 0, TimeSpan WaitsTime = default);
 
     public PassReport? LastPass { get; private set; }
 
     public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
     {
         var (events, runs) = await EventsAsync(services, ct);
+        var waits = 0;
+        var waitsTime = TimeSpan.Zero;
+        if (clock.GetUtcNow() >= nextWaits)
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            waits = await WaitsAsync(services, ct);
+            waitsTime = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            nextWaits = clock.GetUtcNow() + WaitsEvery;
+        }
         var dateRules = 0;
         var dueRows = 0;
         var dateTime = TimeSpan.Zero;
@@ -63,12 +75,57 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
             runs += dateRuns + await SchedulesAsync(services, ct);
             nextTimes = clock.GetUtcNow() + TimesEvery;
         }
-        LastPass = new PassReport(events, runs, dateRules, dueRows, dateTime);
-        return events >= Batch;
+        LastPass = new PassReport(events, runs, dateRules, dueRows, dateTime, waits, waitsTime);
+        return events >= Batch || waits >= Batch;
     }
 
     /// <summary>Runs the date and schedule pass at the next call, whatever its interval (tests).</summary>
     public void TimesNow() => nextTimes = DateTimeOffset.MinValue;
+
+    /// <summary>Looks at the runs waiting at the next call, whatever its interval (tests).</summary>
+    public void WaitsNow() => nextWaits = DateTimeOffset.MinValue;
+
+    // Waits (Phase 17) -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The runs whose wait is due (its time, date, limit or deadline reached, a row's change or an
+    /// answer that woke it), taken by one statement in the order they are due, each gone on from its
+    /// place. One taken and not put down within <see cref="Stale"/> (a worker that stopped) is taken
+    /// again, and goes on from the same place: its steps' ids are its own, so nothing happens twice.
+    /// </summary>
+    private async Task<int> WaitsAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var db = services.GetRequiredService<CgwDb>();
+        var now = clock.GetUtcNow();
+        // Ids come back as binary(16), as raw SQL reads them.
+        var raw = await db.Database.SqlQueryRaw<byte[]>("""
+            WITH next AS (
+                SELECT TOP (@batch) [Id], [TakenAt] FROM [AutomationRuns] WITH (UPDLOCK, READPAST)
+                WHERE [Status] = 'waiting' AND [WaitUntil] <= @now AND ([TakenAt] IS NULL OR [TakenAt] < @stale) ORDER BY [WaitUntil])
+            UPDATE next SET [TakenAt] = @now OUTPUT inserted.[Id]
+            """,
+            new Microsoft.Data.SqlClient.SqlParameter("@batch", Batch),
+            new Microsoft.Data.SqlClient.SqlParameter("@stale", now - Stale),
+            new Microsoft.Data.SqlClient.SqlParameter("@now", now)).ToListAsync(ct);
+        if (raw.Count == 0) return 0;
+        var taken = raw.Select(GuidBytes.FromBytes).ToList();
+        var runs = await db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(r => taken.Contains(r.Id)).OrderBy(r => r.WaitUntil).ToListAsync(ct);
+        var runner = new AutomationRunner(services, states, clock, logger);
+        foreach (var run in runs)
+        {
+            try
+            {
+                await runner.ResumeAsync(run, ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // Left taken: looked at again once it is stale.
+                logger.LogError(e, "Automation run {Run} could not go on", run.Id);
+            }
+        }
+        return runs.Count;
+    }
 
     // Events --------------------------------------------------------------------------------------------
 
@@ -308,6 +365,9 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Phase 17: a wait on a date or on conditions is looked at again at least this often, whatever wakes it.</summary>
+    public static readonly TimeSpan Recheck = TimeSpan.FromHours(1);
+
     private CgwDb Db => services.GetRequiredService<CgwDb>();
 
     /// <summary>An id made from a run and a part of it: the same whenever the run is taken again, ordered by the run's time.</summary>
@@ -369,12 +429,17 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
     /// <summary>The rules a change or a press starts; returns how many ran.</summary>
     public async Task<int> OnEventAsync(AutomationEvent change, CancellationToken ct)
     {
+        // Phase 17: a change of a row wakes its runs that wait on its date or on conditions.
+        var now = clock.GetUtcNow();
+        await Db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant])
+            .Where(r => r.RowId == change.RowId && r.Status == RunStatuses.Waiting && (r.WaitKind == WaitKinds.Date || r.WaitKind == WaitKinds.Match) && r.WaitUntil > now)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.WaitUntil, now), ct);
         var workspace = await WorkspaceAsync(change.WorkspaceId, ct);
         if (workspace is null || workspace.AutomationsOff) return 0;
         var rules = await RulesAsync(change.WorkspaceId, change.DatabaseId, ct);
         if (rules.Count == 0) return 0;
         var zone = AutomationTimes.Zone(workspace.TimeZone);
-        var ctx = Context(zone, clock.GetUtcNow(), change.ActorId);
+        var ctx = Context(zone, now, change.ActorId);
         var changed = JsonSerializer.Deserialize<string[]>(change.Changed) ?? [];
         var rowChange = new RowChange(change.Kind, changed, Map(change.Before), Map(change.After), change.Kind == EventKinds.Button ? changed.FirstOrDefault() : null,
             change.FormId?.ToString());
@@ -408,11 +473,50 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
     private sealed class StepRecord
     {
         public int Index { get; set; }
+        public string? Path { get; set; }
         public string Kind { get; set; } = "";
         public string Status { get; set; } = "";
         public string? Code { get; set; }
         public string? Detail { get; set; }
         public int? Count { get; set; }
+    }
+
+    private enum Flow { Next, Wait, Stop }
+
+    /// <summary>A run as its steps go: what it is for and as whom, the row as the steps left it, where it waits.</summary>
+    private sealed class RunState(AutomationRun run, Automation rule, DbSchema schema, JsonObject definition, Workspace workspace, Member member)
+    {
+        public AutomationRun Run { get; } = run;
+        public Automation Rule { get; } = rule;
+        public DbSchema Schema { get; } = schema;
+        public JsonObject Definition { get; } = definition;
+        public Workspace Workspace { get; } = workspace;
+        public Member Member { get; } = member;
+        public TimeZoneInfo Zone { get; } = AutomationTimes.Zone(workspace.TimeZone);
+        public RowData? Row { get; set; }
+        public List<StepRecord> Steps { get; set; } = [];
+        public Dictionary<string, int> Ordinals { get; } = AutomationRules.AllSteps((JsonArray)definition["steps"]!).Select((s, i) => (s.Path, i)).ToDictionary(x => x.Path, x => x.i);
+        public JsonObject Context { get; set; } = [];
+        public string? Reason { get; set; }
+        public string? Place { get; set; }
+        public string? WaitKind { get; set; }
+        public DateTimeOffset? WaitUntil { get; set; }
+        public DateTimeOffset? WaitedAt { get; set; }
+
+        public StepRecord Record(string path, string kind)
+        {
+            var known = Steps.FirstOrDefault(s => s.Path == path || (s.Path is null && s.Index.ToString(System.Globalization.CultureInfo.InvariantCulture) == path));
+            if (known is not null) return known;
+            var record = new StepRecord { Index = Ordinals.GetValueOrDefault(path), Path = path, Kind = kind };
+            Steps.Add(record);
+            return record;
+        }
+
+        public Flow Waits(string path, string kind, DateTimeOffset until, DateTimeOffset waitedAt)
+        {
+            (Place, WaitKind, WaitUntil, WaitedAt) = (path, kind, until, waitedAt);
+            return Flow.Wait;
+        }
     }
 
     /// <summary>
@@ -487,63 +591,480 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
             if (run.Status != RunStatuses.Running) return true;
         }
 
-        var steps = new List<StepRecord>();
-        string status = RunStatuses.Done;
-        string? reason = null;
-        var member = await db.WorkspaceMembers.AsNoTracking().Where(m => m.UserId == rule.AuthorId)
-            .Select(m => new Member(m.WorkspaceId, m.UserId, m.Role)).FirstOrDefaultAsync(ct);
-        if (member is null) (status, reason) = (RunStatuses.Stopped, "author.gone");
-        else if (await new Access(db).PageLevelAsync(member, rule.DatabaseId) != Levels.Full)
-        {
-            (status, reason) = (RunStatuses.Stopped, "author.access");
-            await TellAuthorAsync(run, rule, reason, ct);
-        }
-        else
-        {
-            var stepList = (JsonArray)view.Definition["steps"]!;
-            for (var i = 0; i < stepList.Count && status == RunStatuses.Done; i++)
-            {
-                var step = (JsonObject)stepList[i]!;
-                var record = new StepRecord { Index = i, Kind = (string)step["kind"]! };
-                steps.Add(record);
-                // A step's conditions read the row as the steps before it left it.
-                if (row is not null) row = (await RowStore.ByIdsAsync(db, [row.Id], ct)).FirstOrDefault();
-                if (rowId is not null && row is null)
-                {
-                    (record.Status, record.Code) = ("failed", "row.gone");
-                    (status, reason) = (RunStatuses.Stopped, "row.gone");
-                    break;
-                }
-                if (step["when"] is JsonObject when && row is not null && !Query.Matches(view.Schema, row, Raw.From(when), ctx))
-                {
-                    record.Status = "skipped";
-                    continue;
-                }
-                var (ok, code) = record.Kind switch
-                {
-                    "set" => await SetAsync(member, run, i, step, view.Schema, row!, zone, now, ct),
-                    "addRow" => await AddRowAsync(member, run, i, step, row, zone, now, ct),
-                    "notify" => await NotifyAsync(run, rule, i, step, row, record, ct),
-                    "webhook" => await WebhookAsync(member, run, rule, i, step, view.Schema, row, workspace, ct),
-                    _ => (false, "step.kind"),
-                };
-                record.Status = ok ? (record.Kind == "webhook" ? "queued" : "done") : "failed";
-                record.Code = code;
-                if (!ok)
-                {
-                    (status, reason) = (RunStatuses.Stopped, code);
-                    // What its author can no longer do is told to them.
-                    if (code is Codes.AccessDenied or Codes.NotFound or "webhook.access") await TellAuthorAsync(run, rule, code, ct);
-                }
-            }
-        }
-        await db.AutomationRuns.Where(r => r.Id == run.Id).ExecuteUpdateAsync(s => s
-            .SetProperty(r => r.Status, status)
-            .SetProperty(r => r.Reason, reason)
-            .SetProperty(r => r.Steps, JsonSerializer.Serialize(steps, Web))
-            .SetProperty(r => r.EndedAt, clock.GetUtcNow()), ct);
+        var member = await AuthorAsync(run, rule, ct);
+        if (member is null) return true;
+        var st = new RunState(run, rule, view.Schema, view.Definition, workspace, member) { Row = row };
+        var flow = await ListAsync(st, (JsonArray)view.Definition["steps"]!, "", null, ct);
+        await FinishAsync(st, flow, ct);
         return true;
     }
+
+    /// <summary>The run's author as a member with full access to its database, or null once its run is recorded stopped (and the author told).</summary>
+    private async Task<Member?> AuthorAsync(AutomationRun run, Automation rule, CancellationToken ct)
+    {
+        var db = Db;
+        var member = await db.WorkspaceMembers.AsNoTracking().Where(m => m.UserId == run.AuthorId)
+            .Select(m => new Member(m.WorkspaceId, m.UserId, m.Role)).FirstOrDefaultAsync(ct);
+        string? reason = null;
+        if (member is null) reason = "author.gone";
+        else if (await new Access(db).PageLevelAsync(member, rule.DatabaseId) != Levels.Full)
+        {
+            reason = "author.access";
+            await TellAuthorAsync(run, rule, reason, ct);
+        }
+        if (reason is null) return member;
+        await StopAsync(run, reason, null, ct);
+        return null;
+    }
+
+    /// <summary>A run ended where it is (its steps as recorded), and its approvals still open closed.</summary>
+    private async Task StopAsync(AutomationRun run, string reason, string? steps, CancellationToken ct)
+    {
+        var db = Db;
+        await db.AutomationRuns.Where(r => r.Id == run.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(r => r.Status, RunStatuses.Stopped)
+            .SetProperty(r => r.Reason, reason)
+            .SetProperty(r => r.Steps, r => steps ?? r.Steps)
+            .SetProperty(r => r.WaitUntil, (DateTimeOffset?)null)
+            .SetProperty(r => r.TakenAt, (DateTimeOffset?)null)
+            .SetProperty(r => r.EndedAt, clock.GetUtcNow()), ct);
+        await db.AutomationApprovals.Where(a => a.RunId == run.Id && a.Outcome == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Outcome, ApprovalOutcomes.Stopped), ct);
+    }
+
+    /// <summary>The run's record as its steps left it: done, stopped, or waiting at its place.</summary>
+    private async Task FinishAsync(RunState st, Flow flow, CancellationToken ct)
+    {
+        var db = Db;
+        var run = st.Run;
+        var steps = JsonSerializer.Serialize(st.Steps, Web);
+        if (flow == Flow.Stop)
+        {
+            await StopAsync(run, st.Reason ?? "stopped", steps, ct);
+            return;
+        }
+        var waiting = flow == Flow.Wait;
+        var definition = waiting ? run.Definition ?? st.Definition.ToJsonString() : run.Definition;
+        var context = st.Context.Count == 0 ? null : st.Context.ToJsonString();
+        await db.AutomationRuns.Where(r => r.Id == run.Id).ExecuteUpdateAsync(s => s
+            .SetProperty(r => r.Status, waiting ? RunStatuses.Waiting : RunStatuses.Done)
+            .SetProperty(r => r.Reason, (string?)null)
+            .SetProperty(r => r.Steps, steps)
+            .SetProperty(r => r.Definition, definition)
+            .SetProperty(r => r.Context, context)
+            .SetProperty(r => r.Place, waiting ? st.Place : null)
+            .SetProperty(r => r.WaitKind, waiting ? st.WaitKind : null)
+            .SetProperty(r => r.WaitUntil, waiting ? st.WaitUntil : null)
+            .SetProperty(r => r.WaitedAt, waiting ? st.WaitedAt : null)
+            .SetProperty(r => r.TakenAt, (DateTimeOffset?)null)
+            .SetProperty(r => r.EndedAt, waiting ? null : clock.GetUtcNow()), ct);
+    }
+
+    /// <summary>
+    /// Phase 17: a waiting run taken by the worker goes on from its place, by the definition it
+    /// started with, as the author it started as: the rule, its author's access and its row read
+    /// again first, and the run stopped, recorded, if any is gone.
+    /// </summary>
+    public async Task ResumeAsync(AutomationRun run, CancellationToken ct)
+    {
+        var db = Db;
+        var workspace = await WorkspaceAsync(run.WorkspaceId, ct);
+        if (workspace is null)
+        {
+            await db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant]).Where(r => r.Id == run.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RunStatuses.Stopped).SetProperty(r => r.Reason, "workspace.gone").SetProperty(r => r.EndedAt, clock.GetUtcNow()), ct);
+            return;
+        }
+        db.Scope.Switch(workspace.Id);
+        var rule = await db.Automations.AsNoTracking().FirstOrDefaultAsync(a => a.Id == run.AutomationId, ct);
+        var off = workspace.AutomationsOff ? "automations.off" : rule is null || rule.DeletedAt is not null ? "rule.deleted" : !rule.Enabled ? "rule.off" : null;
+        if (off is not null)
+        {
+            await StopAsync(run, off, null, ct);
+            return;
+        }
+        var member = await AuthorAsync(run, rule!, ct);
+        if (member is null) return;
+        var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == run.DatabaseId, ct);
+        if (record is null)
+        {
+            await StopAsync(run, Codes.NotFound, null, ct);
+            return;
+        }
+        var schema = DbSchema.Parse(record.PageId, record.Version, record.Properties);
+        var definition = (JsonObject)JsonNode.Parse(run.Definition ?? rule!.Definition)!;
+        var st = new RunState(run, rule!, schema, definition, workspace, member)
+        {
+            Steps = JsonSerializer.Deserialize<List<StepRecord>>(run.Steps, Web) ?? [],
+            Context = run.Context is { } c ? (JsonObject)JsonNode.Parse(c)! : [],
+        };
+        if (run.RowId is { } rowId)
+        {
+            st.Row = (await RowStore.ByIdsAsync(db, [rowId], ct)).FirstOrDefault();
+            if (st.Row is null || st.Row.Trashed || st.Row.IsTemplate)
+            {
+                if (run.Place is { } place) st.Record(place, "").Status = "failed";
+                st.Reason = "row.gone";
+                await FinishAsync(st, Flow.Stop, ct);
+                return;
+            }
+        }
+        var flow = await ListAsync(st, (JsonArray)definition["steps"]!, "", run.Place, ct);
+        await FinishAsync(st, flow, ct);
+    }
+
+    // Steps -----------------------------------------------------------------------------------------
+
+    /// <summary>A list of steps run in order from its first, or (<paramref name="resume"/>) from a place inside it.</summary>
+    private async Task<Flow> ListAsync(RunState st, JsonArray list, string prefix, string? resume, CancellationToken ct)
+    {
+        var start = 0;
+        string? inner = null;
+        if (resume is not null)
+        {
+            var slash = resume.IndexOf('/');
+            start = int.Parse(slash < 0 ? resume : resume[..slash], System.Globalization.CultureInfo.InvariantCulture);
+            inner = slash < 0 ? "" : resume[(slash + 1)..];
+        }
+        for (var i = start; i < list.Count; i++)
+        {
+            var path = prefix.Length == 0 ? i.ToString(System.Globalization.CultureInfo.InvariantCulture) : $"{prefix}/{i}";
+            var step = (JsonObject)list[i]!;
+            var flow = inner is not null && i == start ? await ResumeStepAsync(st, step, path, inner, ct) : await StepAsync(st, step, path, ct);
+            if (flow != Flow.Next) return flow;
+        }
+        return Flow.Next;
+    }
+
+    /// <summary>The step a run waits at goes on, or the list inside it the run was in.</summary>
+    private async Task<Flow> ResumeStepAsync(RunState st, JsonObject step, string path, string inner, CancellationToken ct)
+    {
+        var kind = (string)step["kind"]!;
+        if (inner.Length > 0)
+        {
+            var slash = inner.IndexOf('/');
+            var l = int.Parse(slash < 0 ? inner : inner[..slash], System.Globalization.CultureInfo.InvariantCulture);
+            var lists = AutomationRules.ChildLists(step).ToList();
+            if (l >= lists.Count) return Flow.Next;
+            return await ListAsync(st, lists[l], $"{path}/{l}", slash < 0 ? null : inner[(slash + 1)..], ct);
+        }
+        var record = st.Record(path, kind);
+        return kind switch
+        {
+            "wait" => await WaitAgainAsync(st, step, path, record, ct),
+            "approval" => await DecideAsync(st, step, path, record, ct),
+            _ => Flow.Next,
+        };
+    }
+
+    private async Task<Flow> StepAsync(RunState st, JsonObject step, string path, CancellationToken ct)
+    {
+        var db = Db;
+        var run = st.Run;
+        var kind = (string)step["kind"]!;
+        var record = st.Record(path, kind);
+        // A step's conditions read the row as the steps before it left it.
+        if (run.RowId is { } rowId)
+        {
+            st.Row = (await RowStore.ByIdsAsync(db, [rowId], ct)).FirstOrDefault();
+            if (st.Row is null)
+            {
+                (record.Status, record.Code) = ("failed", "row.gone");
+                st.Reason = "row.gone";
+                return Flow.Stop;
+            }
+        }
+        var now = clock.GetUtcNow();
+        var ctx = Context(st.Zone, now, run.ActorId);
+        if (step["when"] is JsonObject when && st.Row is not null && !Query.Matches(st.Schema, st.Row, Raw.From(when), ctx))
+        {
+            record.Status = "skipped";
+            return Flow.Next;
+        }
+        var member = st.Member;
+        switch (kind)
+        {
+            case "wait":
+                return await WaitAsync(st, step, path, record, ct);
+            case "branch":
+            {
+                var paths = (JsonArray)step["branches"]!;
+                var taken = paths.Count;
+                for (var b = 0; b < paths.Count; b++)
+                    if (st.Row is not null && paths[b]!["when"] is JsonObject condition && Query.Matches(st.Schema, st.Row, Raw.From(condition), ctx))
+                    {
+                        taken = b;
+                        break;
+                    }
+                (record.Status, record.Detail) = ("done", taken < paths.Count ? $"path:{taken}" : "otherwise");
+                var list = taken < paths.Count ? (JsonArray)paths[taken]!["steps"]! : (JsonArray)step["otherwise"]!;
+                return await ListAsync(st, list, $"{path}/{taken}", null, ct);
+            }
+            case "approval":
+                return await AskAsync(st, step, path, record, ct);
+        }
+        var (ok, code) = kind switch
+        {
+            "set" => await SetAsync(st, path, step, st.Row!, now, ct),
+            "addRow" => await AddRowAsync(st, path, step, now, ct),
+            "notify" => await NotifyAsync(st, path, step, record, ct),
+            "webhook" => await WebhookAsync(st, path, step, ct),
+            _ => (false, "step.kind"),
+        };
+        record.Status = ok ? (kind == "webhook" ? "queued" : "done") : "failed";
+        record.Code = code;
+        if (ok) return Flow.Next;
+        st.Reason = code;
+        // What its author can no longer do is told to them.
+        if (code is Codes.AccessDenied or Codes.NotFound or "webhook.access") await TellAuthorAsync(run, st.Rule, code, ct);
+        return Flow.Stop;
+    }
+
+    // Waits -----------------------------------------------------------------------------------------
+
+    private static string Iso(DateTimeOffset at) => at.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>When a wait for a date ends for the row as it is (null: it holds no date).</summary>
+    private static DateTimeOffset? DueOf(RunState st, JsonObject until)
+    {
+        if (st.Row is null || st.Schema.Live((string)until["propertyId"]!) is not { } def) return null;
+        var offset = (int)until["offsetMinutes"]!;
+        if (def.Type == PropertyTypes.CreatedTime) return st.Row.CreatedAt is { } made ? AutomationTimes.Due(made, offset) : null;
+        return st.Row.Values.GetValueOrDefault(def.Id) is DateValue date ? AutomationTimes.Due(date.Start, offset, (string?)until["at"], st.Zone) : null;
+    }
+
+    private bool Matches(RunState st, JsonObject conditions) =>
+        st.Row is not null && Query.Matches(st.Schema, st.Row, Raw.From(conditions), Context(st.Zone, clock.GetUtcNow(), st.Run.ActorId));
+
+    private static DateTimeOffset Min(DateTimeOffset a, DateTimeOffset b) => a < b ? a : b;
+
+    /// <summary>A wait reached: it ends at once when what it waits for is there, else the run keeps its place.</summary>
+    private Task<Flow> WaitAsync(RunState st, JsonObject step, string path, StepRecord record, CancellationToken ct)
+    {
+        _ = ct;
+        var now = clock.GetUtcNow();
+        var until = (JsonObject)step["until"]!;
+        var kind = (string)until["kind"]!;
+        DateTimeOffset target;
+        switch (kind)
+        {
+            case WaitKinds.Time:
+                target = now.AddMinutes((int)until["minutes"]!);
+                break;
+            case WaitKinds.Date:
+            {
+                var due = DueOf(st, until);
+                if (due is null || due <= now)
+                {
+                    (record.Status, record.Code) = ("done", due is null ? "wait.noDate" : null);
+                    return Task.FromResult(Flow.Next);
+                }
+                target = Min(due.Value, now.AddMinutes(AutomationRules.MaxWaitMinutes));
+                break;
+            }
+            case WaitKinds.Match:
+                if (Matches(st, (JsonObject)until["conditions"]!))
+                {
+                    record.Status = "done";
+                    return Task.FromResult(Flow.Next);
+                }
+                target = now.AddMinutes((int)until["minutes"]!);
+                break;
+            default:
+                (record.Status, record.Code) = ("failed", "step.kind");
+                st.Reason = "step.kind";
+                return Task.FromResult(Flow.Stop);
+        }
+        (record.Status, record.Detail) = ("waiting", Iso(target));
+        return Task.FromResult(st.Waits(path, kind, kind == WaitKinds.Time ? target : Min(target, now + Recheck), now));
+    }
+
+    /// <summary>A waiting run's wait looked at again: it ends, waits on, or has waited as long as it may.</summary>
+    private Task<Flow> WaitAgainAsync(RunState st, JsonObject step, string path, StepRecord record, CancellationToken ct)
+    {
+        _ = ct;
+        var now = clock.GetUtcNow();
+        var waitedAt = st.Run.WaitedAt ?? now;
+        var until = (JsonObject)step["until"]!;
+        var kind = (string)until["kind"]!;
+        Flow Done()
+        {
+            record.Status = "done";
+            return Flow.Next;
+        }
+        Flow Expired()
+        {
+            (record.Status, record.Code) = ("failed", "wait.expired");
+            st.Reason = "wait.expired";
+            return Flow.Stop;
+        }
+        switch (kind)
+        {
+            case WaitKinds.Time:
+            {
+                var end = waitedAt.AddMinutes((int)until["minutes"]!);
+                return Task.FromResult(now >= end ? Done() : st.Waits(path, kind, end, waitedAt));
+            }
+            case WaitKinds.Date:
+            {
+                var due = DueOf(st, until);
+                if (due is null || due <= now) return Task.FromResult(Done());
+                var limit = waitedAt.AddMinutes(AutomationRules.MaxWaitMinutes);
+                if (now >= limit) return Task.FromResult(Expired());
+                record.Detail = Iso(Min(due.Value, limit));
+                return Task.FromResult(st.Waits(path, kind, Min(Min(due.Value, limit), now + Recheck), waitedAt));
+            }
+            case WaitKinds.Match:
+            {
+                if (Matches(st, (JsonObject)until["conditions"]!)) return Task.FromResult(Done());
+                var limit = waitedAt.AddMinutes((int)until["minutes"]!);
+                if (now >= limit) return Task.FromResult(Expired());
+                return Task.FromResult(st.Waits(path, kind, Min(limit, now + Recheck), waitedAt));
+            }
+            default:
+                return Task.FromResult(Done());
+        }
+    }
+
+    // Approvals -------------------------------------------------------------------------------------
+
+    /// <summary>The members a notice or an approval goes to: its people, its groups' and its person properties', those who can read its page.</summary>
+    private async Task<(List<Member> Members, Guid Subject)> RecipientsAsync(RunState st, JsonObject step, CancellationToken ct)
+    {
+        var db = Db;
+        var row = st.Row;
+        var people = new HashSet<Guid>(((JsonArray)step["people"]!).Select(x => Guid.Parse((string)x!)));
+        var groups = ((JsonArray)step["groups"]!).Select(x => Guid.Parse((string)x!)).ToList();
+        if (groups.Count > 0)
+            people.UnionWith(await db.WorkspaceGroupMembers.AsNoTracking().Where(g => groups.Contains(g.GroupId)).Select(g => g.UserId).ToListAsync(ct));
+        var properties = ((JsonArray)step["personProperties"]!).Select(x => (string)x!).ToList();
+        if (row is not null && properties.Count > 0)
+        {
+            var schema = DbSchema.Parse(st.Rule.DatabaseId, 0, await db.Databases.AsNoTracking().Where(d => d.PageId == st.Rule.DatabaseId).Select(d => d.Properties).FirstAsync(ct));
+            foreach (var def in properties.Select(schema.Live).OfType<PropertyDef>())
+            {
+                var ids = def.Type switch
+                {
+                    PropertyTypes.CreatedBy => [row.CreatedBy ?? ""],
+                    PropertyTypes.LastEditedBy => [row.UpdatedBy ?? ""],
+                    _ => row.Values.GetValueOrDefault(def.Id) as string[] ?? [],
+                };
+                foreach (var id in ids) if (Guid.TryParse(id, out var g)) people.Add(g);
+            }
+        }
+        // Only those who can read what it is about: the row, or the database for a schedule.
+        var subject = row?.Id ?? st.Rule.DatabaseId;
+        var members = await db.WorkspaceMembers.AsNoTracking().Where(m => people.Contains(m.UserId))
+            .Select(m => new Member(m.WorkspaceId, m.UserId, m.Role)).ToListAsync(ct);
+        var readers = new List<Member>();
+        foreach (var member in members)
+            if (await new Access(db).PageLevelAsync(member, subject) != Levels.None) readers.Add(member);
+        return (readers, subject);
+    }
+
+    /// <summary>An approval reached: each person asked in their inbox (and by mail), the run waiting for their answers or its deadline.</summary>
+    private async Task<Flow> AskAsync(RunState st, JsonObject step, string path, StepRecord record, CancellationToken ct)
+    {
+        var db = Db;
+        var run = st.Run;
+        var (asked, subject) = await RecipientsAsync(st, step, ct);
+        if (asked.Count == 0)
+        {
+            // Nobody who could answer: its "no answer" path at once.
+            (record.Status, record.Code) = (ApprovalOutcomes.NoAnswer, "approval.nobody");
+            return await ListAsync(st, (JsonArray)step["noAnswer"]!, $"{path}/2", null, ct);
+        }
+        var now = clock.GetUtcNow();
+        var deadline = now.AddMinutes((int)step["deadlineMinutes"]!);
+        var mode = (string)step["mode"]!;
+        var message = (string)step["message"]!;
+        var excerpt = message.Length > 200 ? message[..200] : message;
+        await LockedAsync(run.WorkspaceId, async changes =>
+        {
+            var known = await db.AutomationApprovals.Where(a => a.RunId == run.Id && a.StepPath == path).Select(a => a.UserId).ToListAsync(ct);
+            var approvals = asked.Where(m => !known.Contains(m.UserId)).Select(m => new AutomationApproval
+            {
+                Id = Derived(run.StartedAt, run.Id, $"{path}:approval:{m.UserId:N}"),
+                WorkspaceId = run.WorkspaceId,
+                RunId = run.Id,
+                AutomationId = st.Rule.Id,
+                DatabaseId = st.Rule.DatabaseId,
+                RowId = run.RowId,
+                StepPath = path,
+                UserId = m.UserId,
+                Mode = mode,
+                DeadlineAt = deadline,
+                CreatedAt = now,
+            }).ToList();
+            db.AutomationApprovals.AddRange(approvals);
+            await NotificationService.AddAsync(db, changes, approvals.Select(a => new Notification
+            {
+                Id = Derived(run.StartedAt, run.Id, $"{path}:ask:{a.UserId:N}"),
+                WorkspaceId = run.WorkspaceId,
+                UserId = a.UserId,
+                Kind = NotificationKinds.Approval,
+                PageId = subject,
+                ActorUserId = run.AuthorId,
+                Excerpt = excerpt,
+                DedupeKey = $"approval:{run.Id:N}:{path}",
+                AutomationId = st.Rule.Id,
+                ApprovalId = a.Id,
+                CreatedAt = now,
+            }).ToList(), ct);
+        }, ct);
+        (record.Status, record.Detail, record.Count) = ("waiting", Iso(deadline), asked.Count);
+        return st.Waits(path, WaitKinds.Approval, deadline, now);
+    }
+
+    /// <summary>
+    /// A waiting approval looked at again: decided by the first answer (<c>any</c>), or by every
+    /// one asked approving or one rejecting (<c>all</c>), or past its deadline with no decision by
+    /// "no answer"; then its path for that outcome.
+    /// </summary>
+    private async Task<Flow> DecideAsync(RunState st, JsonObject step, string path, StepRecord record, CancellationToken ct)
+    {
+        var db = Db;
+        var run = st.Run;
+        var asked = await db.AutomationApprovals.AsNoTracking().Where(a => a.RunId == run.Id && a.StepPath == path).ToListAsync(ct);
+        var now = clock.GetUtcNow();
+        var answered = asked.Where(a => a.Answer is not null).OrderBy(a => a.AnsweredAt).ThenBy(a => a.Id).ToList();
+        string? outcome = null;
+        List<AutomationApproval> deciders = [];
+        if ((string)step["mode"]! == "all")
+        {
+            var reject = answered.FirstOrDefault(a => a.Answer == ApprovalAnswers.Reject);
+            if (reject is not null) (outcome, deciders) = (ApprovalOutcomes.Rejected, [reject]);
+            else if (asked.Count > 0 && answered.Count == asked.Count) (outcome, deciders) = (ApprovalOutcomes.Approved, answered);
+        }
+        else if (answered.Count > 0)
+            (outcome, deciders) = (answered[0].Answer == ApprovalAnswers.Approve ? ApprovalOutcomes.Approved : ApprovalOutcomes.Rejected, [answered[0]]);
+        var deadline = asked.Count > 0 ? asked.Min(a => a.DeadlineAt) : now;
+        if (outcome is null)
+        {
+            if (now < deadline) return st.Waits(path, WaitKinds.Approval, deadline, run.WaitedAt ?? now);
+            outcome = ApprovalOutcomes.NoAnswer;
+        }
+        await LockedAsync(run.WorkspaceId, async changes =>
+        {
+            await db.AutomationApprovals.Where(a => a.RunId == run.Id && a.StepPath == path).ExecuteUpdateAsync(s => s.SetProperty(a => a.Outcome, outcome), ct);
+            // Everyone asked sees the outcome in their inbox.
+            foreach (var n in await db.Notifications.AsNoTracking().Where(n => n.Kind == NotificationKinds.Approval && n.DedupeKey == $"approval:{run.Id:N}:{path}")
+                .Select(n => new { n.Id, n.UserId }).ToListAsync(ct))
+                changes.Add("notification", n.Id, "upsert", 1, run.AuthorId, n.UserId);
+        }, ct);
+        st.Context = outcome == ApprovalOutcomes.NoAnswer
+            ? []
+            : new JsonObject
+            {
+                ["approver"] = new JsonArray([.. deciders.Select(d => (JsonNode)JsonValue.Create(d.UserId.ToString())!)]),
+                ["comment"] = string.Join("\n", deciders.Select(d => d.Comment).Where(c => !string.IsNullOrWhiteSpace(c))),
+            };
+        (record.Status, record.Count) = (outcome, answered.Count);
+        var l = outcome switch { ApprovalOutcomes.Approved => 0, ApprovalOutcomes.Rejected => 1, _ => 2 };
+        return await ListAsync(st, AutomationRules.ChildLists(step).ElementAt(l), $"{path}/{l}", null, ct);
+    }
+
+    // The four Phase 15 steps -----------------------------------------------------------------------
 
     /// <summary>Operations applied as the author, in a scope of their own, marked as this run's (its depth).</summary>
     private async Task<OpResultDto> ApplyAsync(Member member, AutomationRun run, OperationDto op, (Guid Id, byte[] Data, int Schema)? first, CancellationToken ct)
@@ -562,9 +1083,10 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         new(opId, type, workspace, entity, null, JsonSerializer.SerializeToElement(payload, Web), at.ToString("O"));
 
     /// <summary>A step value worked out now (db/automations.ts <c>StepValue</c>); null leaves the property as it is.</summary>
-    private static JsonNode? Resolve(JsonNode? value, PropertyDef? def, AutomationRun run, TimeZoneInfo zone, DateTimeOffset now, out bool skip)
+    private static JsonNode? Resolve(JsonNode? value, PropertyDef? def, RunState st, DateTimeOffset now, out bool skip)
     {
         skip = false;
+        var run = st.Run;
         if (value is JsonObject o && (string?)o["dynamic"] is { } dynamic)
         {
             switch (dynamic)
@@ -574,7 +1096,7 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
                     var days = o["days"] is JsonValue d ? d.GetValue<double>() : 0;
                     if (def is { IncludeTime: true })
                         return new JsonObject { ["start"] = now.AddDays(days).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture) };
-                    var local = TimeZoneInfo.ConvertTime(now, zone).Date.AddDays(days);
+                    var local = TimeZoneInfo.ConvertTime(now, st.Zone).Date.AddDays(days);
                     return new JsonObject { ["start"] = local.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) };
                 }
                 case "actor":
@@ -591,38 +1113,57 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
                         return null;
                     }
                     return new JsonArray(row.ToString());
+                // Phase 17: the last approval's answer.
+                case "approver":
+                    if (st.Context["approver"] is not JsonArray approver)
+                    {
+                        skip = true;
+                        return null;
+                    }
+                    return approver.DeepClone();
+                case "comment":
+                    if (st.Context["comment"] is not JsonValue comment)
+                    {
+                        skip = true;
+                        return null;
+                    }
+                    return comment.DeepClone();
             }
         }
         return value?.DeepClone();
     }
 
-    private async Task<(bool, string?)> SetAsync(Member member, AutomationRun run, int index, JsonObject step, DbSchema schema, RowData row, TimeZoneInfo zone, DateTimeOffset now, CancellationToken ct)
+    private async Task<(bool, string?)> SetAsync(RunState st, string path, JsonObject step, RowData row, DateTimeOffset now, CancellationToken ct)
     {
+        var run = st.Run;
+        var member = st.Member;
         var values = new JsonObject();
         string? title = null;
         foreach (var (id, raw) in (JsonObject)step["values"]!)
         {
-            var value = Resolve(raw, schema.Live(id), run, zone, now, out var skip);
+            var value = Resolve(raw, st.Schema.Live(id), st, now, out var skip);
             if (skip) continue;
             if (id == PropertyDef.TitleId) title = (string?)value ?? "";
             else values[id] = value;
         }
         if (values.Count > 0)
         {
-            var result = await ApplyAsync(member, run, Op(Derived(run.StartedAt, run.Id, $"{index}:values"), "row.update", member.WorkspaceId, row.Id, new { values }, now), null, ct);
+            var result = await ApplyAsync(member, run, Op(Derived(run.StartedAt, run.Id, $"{path}:values"), "row.update", member.WorkspaceId, row.Id, new { values }, now), null, ct);
             if (result.Status != "applied") return (false, result.Error?.Code);
         }
         if (title is not null)
         {
-            var result = await ApplyAsync(member, run, Op(Derived(run.StartedAt, run.Id, $"{index}:title"), "page.update", member.WorkspaceId, row.Id, new { title }, now), null, ct);
+            var result = await ApplyAsync(member, run, Op(Derived(run.StartedAt, run.Id, $"{path}:title"), "page.update", member.WorkspaceId, row.Id, new { title }, now), null, ct);
             if (result.Status != "applied") return (false, result.Error?.Code);
         }
         return (true, null);
     }
 
-    private async Task<(bool, string?)> AddRowAsync(Member member, AutomationRun run, int index, JsonObject step, RowData? source, TimeZoneInfo zone, DateTimeOffset now, CancellationToken ct)
+    private async Task<(bool, string?)> AddRowAsync(RunState st, string path, JsonObject step, DateTimeOffset now, CancellationToken ct)
     {
         var db = Db;
+        var run = st.Run;
+        var member = st.Member;
         var target = Guid.Parse((string)step["databaseId"]!);
         var page = await db.Pages.AsNoTracking().FirstOrDefaultAsync(p => p.Id == target && p.DeletedAt == null && p.Kind == PageKinds.Database, ct);
         var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == target, ct);
@@ -639,12 +1180,12 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         string? title = template?.Title;
         foreach (var (property, raw) in (JsonObject)step["values"]!)
         {
-            var value = Resolve(raw, schema.Live(property), run, zone, now, out var skip);
+            var value = Resolve(raw, schema.Live(property), st, now, out var skip);
             if (skip) continue;
             if (property == PropertyDef.TitleId) title = (string?)value ?? "";
             else values[property] = value;
         }
-        var id = Derived(run.StartedAt, run.Id, $"{index}:row");
+        var id = Derived(run.StartedAt, run.Id, $"{path}:row");
         var last = await db.Pages.AsNoTracking().Where(p => p.ParentPageId == target && p.DeletedAt == null && p.Kind == PageKinds.Row)
             .Select(p => p.OrderKey).ToListAsync(ct);
         var orderKey = OrderKeys.Between(last.OrderBy(k => k, StringComparer.Ordinal).LastOrDefault(), null);
@@ -653,7 +1194,7 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         {
             // Its body, copied once, its block ids made now from the run (the same if taken again).
             var state = await states.LoadAsync(db, template, ct);
-            var seed = SHA256.HashData(Encoding.UTF8.GetBytes($"{run.Id:N}:{index}:body"));
+            var seed = SHA256.HashData(Encoding.UTF8.GetBytes($"{run.Id:N}:{path}:body"));
             try
             {
                 var client = await ClientIdAsync(member, now, ct);
@@ -684,7 +1225,7 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
             trashRootId = (Guid?)null,
             row = new { values },
         };
-        var result = await ApplyAsync(member, run, Op(Derived(run.StartedAt, run.Id, $"{index}:create"), "page.create", member.WorkspaceId, id, payload, now), first, ct);
+        var result = await ApplyAsync(member, run, Op(Derived(run.StartedAt, run.Id, $"{path}:create"), "page.create", member.WorkspaceId, id, payload, now), first, ct);
         return result.Status == "applied" ? (true, null) : (false, result.Error?.Code);
     }
 
@@ -703,48 +1244,25 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         }
     }
 
-    private async Task<(bool, string?)> NotifyAsync(AutomationRun run, Automation rule, int index, JsonObject step, RowData? row, StepRecord record, CancellationToken ct)
+    private async Task<(bool, string?)> NotifyAsync(RunState st, string path, JsonObject step, StepRecord record, CancellationToken ct)
     {
         var db = Db;
-        var people = new HashSet<Guid>(((JsonArray)step["people"]!).Select(x => Guid.Parse((string)x!)));
-        var groups = ((JsonArray)step["groups"]!).Select(x => Guid.Parse((string)x!)).ToList();
-        if (groups.Count > 0)
-            people.UnionWith(await db.WorkspaceGroupMembers.AsNoTracking().Where(g => groups.Contains(g.GroupId)).Select(g => g.UserId).ToListAsync(ct));
-        var properties = ((JsonArray)step["personProperties"]!).Select(x => (string)x!).ToList();
-        if (row is not null && properties.Count > 0)
-        {
-            var schema = DbSchema.Parse(rule.DatabaseId, 0, await db.Databases.AsNoTracking().Where(d => d.PageId == rule.DatabaseId).Select(d => d.Properties).FirstAsync(ct));
-            foreach (var def in properties.Select(schema.Live).OfType<PropertyDef>())
-            {
-                var ids = def.Type switch
-                {
-                    PropertyTypes.CreatedBy => [row.CreatedBy ?? ""],
-                    PropertyTypes.LastEditedBy => [row.UpdatedBy ?? ""],
-                    _ => row.Values.GetValueOrDefault(def.Id) as string[] ?? [],
-                };
-                foreach (var id in ids) if (Guid.TryParse(id, out var g)) people.Add(g);
-            }
-        }
-        // Only those who can read what the notice is about: the row, or the database for a schedule.
-        var subject = row?.Id ?? rule.DatabaseId;
-        var members = await db.WorkspaceMembers.AsNoTracking().Where(m => people.Contains(m.UserId))
-            .Select(m => new Member(m.WorkspaceId, m.UserId, m.Role)).ToListAsync(ct);
-        var told = new List<Member>();
-        foreach (var member in members)
-            if (await new Access(db).PageLevelAsync(member, subject) != Levels.None) told.Add(member);
+        var run = st.Run;
+        var rule = st.Rule;
+        var (told, subject) = await RecipientsAsync(st, step, ct);
         var message = (string)step["message"]!;
         var excerpt = message.Length > 200 ? message[..200] : message;
         var now = clock.GetUtcNow();
         await LockedAsync(run.WorkspaceId, async changes => await NotificationService.AddAsync(db, changes, told.Select(m => new Notification
         {
-            Id = Derived(run.StartedAt, run.Id, $"{index}:notice:{m.UserId:N}"),
+            Id = Derived(run.StartedAt, run.Id, $"{path}:notice:{m.UserId:N}"),
             WorkspaceId = run.WorkspaceId,
             UserId = m.UserId,
             Kind = NotificationKinds.Automation,
             PageId = subject,
-            ActorUserId = rule.AuthorId,
+            ActorUserId = run.AuthorId,
             Excerpt = excerpt,
-            DedupeKey = $"automation:{run.Id:N}:{index}",
+            DedupeKey = $"automation:{run.Id:N}:{path}",
             AutomationId = rule.Id,
             CreatedAt = now,
         }).ToList(), ct), ct);
@@ -756,17 +1274,17 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
     private async Task TellAuthorAsync(AutomationRun run, Automation rule, string? reason, CancellationToken ct)
     {
         var db = Db;
-        var member = await db.WorkspaceMembers.AsNoTracking().FirstOrDefaultAsync(m => m.UserId == rule.AuthorId, ct);
+        var member = await db.WorkspaceMembers.AsNoTracking().FirstOrDefaultAsync(m => m.UserId == run.AuthorId, ct);
         if (member is null) return;
         await LockedAsync(run.WorkspaceId, async changes => await NotificationService.AddAsync(db, changes, [new Notification
         {
             Id = Derived(run.StartedAt, run.Id, "stopped"),
             WorkspaceId = run.WorkspaceId,
-            UserId = rule.AuthorId,
+            UserId = run.AuthorId,
             Kind = NotificationKinds.Automation,
             // The database: its row may be what they can no longer read.
             PageId = rule.DatabaseId,
-            ActorUserId = rule.AuthorId,
+            ActorUserId = run.AuthorId,
             Excerpt = "",
             DedupeKey = $"automationStop:{run.Id:N}",
             AutomationId = rule.Id,
@@ -792,21 +1310,25 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         db.ChangeTracker.Clear();
     }
 
-    private async Task<(bool, string?)> WebhookAsync(Member member, AutomationRun run, Automation rule, int index, JsonObject step, DbSchema schema, RowData? row, Workspace workspace, CancellationToken ct)
+    private async Task<(bool, string?)> WebhookAsync(RunState st, string path, JsonObject step, CancellationToken ct)
     {
         var db = Db;
+        var run = st.Run;
+        var member = st.Member;
         // Owners and admins only, at every run.
         if (!member.IsAdmin) return (false, "webhook.access");
         var webhookId = Guid.Parse((string)step["webhookId"]!);
         var hook = await db.Webhooks.AsNoTracking().FirstOrDefaultAsync(w => w.Id == webhookId, ct);
         if (hook is null) return (false, "webhook.gone");
+        // A delivery a step: its place among every step of the run (a top-level step's index before Phase 17).
+        var index = st.Ordinals.GetValueOrDefault(path);
         if (await db.WebhookDeliveries.AnyAsync(d => d.RunId == run.Id && d.StepIndex == index, ct)) return (true, null);
-        var deliveryId = Derived(run.StartedAt, run.Id, $"{index}:delivery");
-        var body = await WebhookBodies.BodyAsync(db, member, run, rule, schema, row, ((JsonArray)step["properties"]!).Select(x => (string)x!).ToList(), deliveryId, ct);
+        var deliveryId = Derived(run.StartedAt, run.Id, $"{path}:delivery");
+        var body = await WebhookBodies.BodyAsync(db, member, run, st.Rule, st.Schema, st.Row, ((JsonArray)step["properties"]!).Select(x => (string)x!).ToList(), deliveryId, ct);
         db.WebhookDeliveries.Add(new WebhookDelivery
         {
             Id = deliveryId,
-            WorkspaceId = workspace.Id,
+            WorkspaceId = st.Workspace.Id,
             WebhookId = hook.Id,
             RunId = run.Id,
             StepIndex = index,

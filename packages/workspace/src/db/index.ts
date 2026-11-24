@@ -80,11 +80,13 @@ export type {
   AutomationRecord,
   AutomationStep,
   AutomationTrigger,
+  BranchPath,
   RowChange,
   StepKind,
   StepValue,
   TriggerKind,
   TriggerValue,
+  WaitFor,
 } from './automations';
 // Phase 16: a form view's questions. Only their types here: the rules' code is its own entry,
 // `@cgw/workspace/forms`, imported by the form view (loaded with it).

@@ -264,7 +264,7 @@ public static class ApiServices
     {
         var api = app.MapGroup("/api/v1").AddEndpointFilter<CsrfFilter>();
         api.MapGet("/version", () => TypedResults.Ok(new VersionInfo(typeof(ApiServices).Assembly.GetName().Version?.ToString(3) ?? "0.0.0", "v1", Cgw.Core.Databases.PropertyTypes.Order.Length,
-            Cgw.Core.Databases.DatabaseOps.ViewTypeOrder.Length)))
+            Cgw.Core.Databases.DatabaseOps.ViewTypeOrder.Length, Cgw.Core.Automations.AutomationRules.StepKinds)))
             .WithName("getVersion").AllowAnonymous().RequireRateLimiting(RateLimits.Anonymous);
         api.MapAccount();
         api.MapMail();
@@ -284,9 +284,11 @@ public static class ApiServices
 /// The server's version and what it knows that a client asks before offering it (Phase 15:
 /// <c>propertyTypes</c>, the property types it knows, 21 with the button; a server before 0.15.0
 /// sends none, which a client reads as 20. Phase 16: <c>viewTypes</c>, the view types it knows, 8
-/// with the form; a server before 0.16.0 sends none, which a client reads as 7).
+/// with the form; a server before 0.16.0 sends none, which a client reads as 7. Phase 17:
+/// <c>stepKinds</c>, a rule's step kinds it keeps, 7 with waits, branches and approvals; a server
+/// before 0.17.0 sends none, which a client reads as 4).
 /// </summary>
-public sealed record VersionInfo(string Version, string Api, int PropertyTypes, int ViewTypes);
+public sealed record VersionInfo(string Version, string Api, int PropertyTypes, int ViewTypes, int StepKinds);
 
 /// <summary>
 /// Writes from a cookie session need the antiforgery header (D16); bearer requests (the desktop)

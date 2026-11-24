@@ -6,8 +6,24 @@ import type { ApiClient } from '@cgw/api';
 import type { Id } from '@cgw/workspace';
 import { answer, type PersonRef } from './comments';
 
-/** Phase 15: `automation`, a rule's notice or (with `reason`) a run of one's own that stopped. */
-export type NotificationKind = 'mention' | 'commentMention' | 'reply' | 'automation';
+/**
+ * Phase 15: `automation`, a rule's notice or (with `reason`) a run of one's own that stopped.
+ * Phase 17: `approval`, an approval a rule asks of the person (with `approval`).
+ */
+export type NotificationKind = 'mention' | 'commentMention' | 'reply' | 'automation' | 'approval';
+
+/** Phase 17: an approval as its item shows it: `open` while it is asked, else its outcome. */
+export interface ApprovalState {
+  id: Id;
+  state: 'open' | 'approved' | 'rejected' | 'noAnswer' | 'stopped';
+  /** The person's own answer, if they gave one. */
+  answer: 'approve' | 'reject' | null;
+  comment: string | null;
+  mode: 'any' | 'all';
+  deadlineAt: string;
+  asked: number;
+  answered: number;
+}
 
 export interface NotificationDto {
   id: Id;
@@ -25,6 +41,8 @@ export interface NotificationDto {
   /** Phase 15: the rule's name as it is now, and why its run stopped. */
   automationName?: string | null;
   reason?: string | null;
+  /** Phase 17, kind `approval`. */
+  approval?: ApprovalState | null;
 }
 
 export interface NotificationPage {
@@ -40,13 +58,40 @@ export interface NotificationsApi {
     limit?: number;
   }): Promise<NotificationPage>;
   read(body: { ids?: Id[]; all?: boolean }): Promise<{ unread: number }>;
+  /** Phase 17: the person's answer to an approval; rejects with the refusal's code (`approval.closed`). */
+  answer(
+    approvalId: Id,
+    answer: 'approve' | 'reject',
+    comment: string | null,
+  ): Promise<ApprovalState>;
 }
 
-const KINDS = new Set<string>(['mention', 'commentMention', 'reply', 'automation']);
+const KINDS = new Set<string>(['mention', 'commentMention', 'reply', 'automation', 'approval']);
+
+const STATES = new Set(['open', 'approved', 'rejected', 'noAnswer', 'stopped']);
+
+export function readApproval(value: unknown): ApprovalState | null {
+  const a = value as Record<string, unknown> | null | undefined;
+  if (!a || typeof a.id !== 'string') return null;
+  return {
+    id: a.id,
+    // A state a later server names reads as no longer asked.
+    state: (STATES.has(String(a.state)) ? a.state : 'stopped') as ApprovalState['state'],
+    answer: a.answer === 'approve' || a.answer === 'reject' ? a.answer : null,
+    comment: typeof a.comment === 'string' ? a.comment : null,
+    mode: a.mode === 'all' ? 'all' : 'any',
+    deadlineAt: String(a.deadlineAt ?? ''),
+    asked: Number(a.asked ?? 0),
+    answered: Number(a.answered ?? 0),
+  };
+}
 
 export function readNotification(value: unknown): NotificationDto | null {
   const n = value as Record<string, unknown>;
   if (!n || !KINDS.has(String(n.kind))) return null;
+  // An approval with nothing to answer is no item.
+  const approval = n.kind === 'approval' ? readApproval(n.approval) : null;
+  if (n.kind === 'approval' && !approval) return null;
   const actor = (n.actor ?? {}) as { id?: unknown; name?: unknown };
   return {
     id: String(n.id),
@@ -63,6 +108,7 @@ export function readNotification(value: unknown): NotificationDto | null {
     readAt: (n.readAt as string | null | undefined) ?? null,
     automationName: (n.automationName as string | null | undefined) ?? null,
     reason: (n.reason as string | null | undefined) ?? null,
+    approval,
   };
 }
 
@@ -94,6 +140,15 @@ export function notificationsApi(api: ApiClient): NotificationsApi {
         }),
       );
       return { unread: Number(result.unread ?? 0) };
+    },
+    answer: async (approvalId, answerGiven, comment) => {
+      const result = await answer(
+        api.POST('/api/v1/account/approvals/{approvalId}', {
+          params: { path: { approvalId } },
+          body: { answer: answerGiven, comment },
+        }),
+      );
+      return readApproval(result) as ApprovalState;
     },
   };
 }
@@ -229,6 +284,29 @@ export class InboxStore {
       unread: Math.max(0, this.state.unread - 1),
     });
     this.send({ ids: [id] });
+  }
+
+  /**
+   * Phase 17: an approval answered. The item shows the answer and is read once the server took it;
+   * a refusal (decided meanwhile, past its deadline) reads the inbox again and rejects with its code.
+   */
+  async answer(id: Id, answer: 'approve' | 'reject', comment: string | null): Promise<void> {
+    const item = this.state.items.find((n) => n.id === id);
+    if (!item?.approval) return;
+    try {
+      const approval = await this.options.api.answer(item.approval.id, answer, comment);
+      const at = (this.options.now?.() ?? new Date()).toISOString();
+      this.set({
+        items: this.state.items.map((n) =>
+          n.id === id ? { ...n, approval, readAt: n.readAt ?? at } : n,
+        ),
+        unread: item.readAt ? this.state.unread : Math.max(0, this.state.unread - 1),
+      });
+    } catch (error) {
+      if (this.options.unreachable(error)) this.set({ online: false });
+      void this.load();
+      throw error;
+    }
   }
 
   markAllRead() {

@@ -35,6 +35,16 @@ public static partial class AutomationRules
     public const int RuleRunsPerMinute = 100;
     public const int WorkspaceRunsPerMinute = 1000;
     public const int RunsKeptDays = 30;
+    /// <summary>Phase 17: a wait, and an approval's deadline, last at most 90 days.</summary>
+    public const int MaxWaitMinutes = 129_600;
+    public const int MaxBranches = 10;
+    /// <summary>Phase 17: steps nest in branches and approvals at most three levels deep (the rule's own list is the first).</summary>
+    public const int MaxNesting = 3;
+    /// <summary>Phase 17: every step of a rule, inside branches and approvals too.</summary>
+    public const int MaxAllSteps = 50;
+    public const int MaxComment = 1000;
+    /// <summary>The step kinds this server keeps (<c>/version</c>'s <c>stepKinds</c>): 4 before 0.17.0.</summary>
+    public const int StepKinds = 7;
 
     /// <summary>Triggers a change of a row starts (the others are reached by time or a press); Phase 16: a form's answer too.</summary>
     public static bool IsEventTrigger(string kind) => kind is "rowAdded" or "propertyChanged" or "formAnswered";
@@ -187,13 +197,23 @@ public static partial class AutomationRules
 
     // Steps ----------------------------------------------------------------------------------------------
 
-    private static JsonNode? CheckStepValue(JsonNode? value, PropertyDef? def, bool rowTrigger)
+    private static JsonNode? CheckStepValue(JsonNode? value, PropertyDef? def, bool rowTrigger, bool answered)
     {
         if (IsNull(value)) return null;
         if (value is JsonObject o && o.ContainsKey("dynamic"))
         {
             switch (Str(o["dynamic"]))
             {
+                case "approver":
+                    if (o.Count != 1) throw Fail("step.value", "Not a value a step writes");
+                    if (!answered) throw Fail("step.value", "\"Who answered\" is known on an approval's answered paths only");
+                    if (def is not null && def.Type != PropertyTypes.Person) throw Fail("step.value", "\"Who answered\" is written into a person");
+                    return new JsonObject { ["dynamic"] = "approver" };
+                case "comment":
+                    if (o.Count != 1) throw Fail("step.value", "Not a value a step writes");
+                    if (!answered) throw Fail("step.value", "A comment is known on an approval's answered paths only");
+                    if (def is not null && def.Type != PropertyTypes.Text && def.Type != PropertyTypes.Title) throw Fail("step.value", "A comment is written into a text");
+                    return new JsonObject { ["dynamic"] = "comment" };
                 case "now":
                     if (o.Any(p => p.Key is not ("dynamic" or "days"))) throw Fail("step.value", "Not a value a step writes");
                     if (def is not null && def.Type != PropertyTypes.Date) throw Fail("step.value", "\"Now\" is written into a date");
@@ -221,7 +241,7 @@ public static partial class AutomationRules
         throw Fail("step.value", "Not a value a step writes");
     }
 
-    private static JsonObject CheckValues(JsonNode? value, Schema? db, bool rowTrigger, bool atLeastOne)
+    private static JsonObject CheckValues(JsonNode? value, Schema? db, bool rowTrigger, bool atLeastOne, bool answered)
     {
         if (value is not JsonObject values) throw Fail("step.values", "A step writes an object of values");
         if (values.Count > MaxStepValues) throw Fail("step.values", "A step writes at most 50 values");
@@ -236,8 +256,10 @@ public static partial class AutomationRules
                 def = db.Live(id);
                 if (def is null || !Writable(def)) throw Fail("step.values", $"Property {id} is not one a step writes");
             }
-            if (id == PropertyDef.TitleId && !IsNull(raw) && Str(raw) is null) throw Fail("step.value", "A title is text");
-            output[id] = CheckStepValue(raw, def, rowTrigger);
+            // A title is text, or (Phase 17) an approval's comment.
+            var comment = raw is JsonObject d && Str(d["dynamic"]) == "comment";
+            if (id == PropertyDef.TitleId && !IsNull(raw) && Str(raw) is null && !comment) throw Fail("step.value", "A title is text");
+            output[id] = CheckStepValue(raw, def, rowTrigger, answered);
         }
         return output;
     }
@@ -251,8 +273,79 @@ public static partial class AutomationRules
 
     private static JsonArray Distinct(IEnumerable<string> ids) => [.. ids.Distinct(StringComparer.Ordinal).Select(s => (JsonNode)JsonValue.Create(s)!)];
 
-    private static JsonObject CheckStep(JsonNode? value, Schema db, bool rowTrigger, Func<Guid, Schema?> target)
+    /// <summary>What a step is checked within (db/automations.ts <c>StepCtx</c>).</summary>
+    private sealed class StepCtx(Schema db, bool rowTrigger, Func<Guid, Schema?> target)
     {
+        public Schema Db { get; } = db;
+        public bool RowTrigger { get; } = rowTrigger;
+        public Func<Guid, Schema?> Target { get; } = target;
+        /// <summary>On an approval's approved or rejected path.</summary>
+        public bool Answered { get; init; }
+        /// <summary>The list's level: the rule's own steps are 1.</summary>
+        public int Level { get; init; } = 1;
+        /// <summary>Steps met so far in the whole rule (shared by every level).</summary>
+        public int[] Count { get; init; } = [0];
+
+        public StepCtx Inner(bool answered) => new(Db, RowTrigger, Target) { Answered = answered, Level = Level + 1, Count = Count };
+    }
+
+    private static (JsonArray People, JsonArray Groups, JsonArray Properties) CheckRecipients(JsonObject step, StepCtx ctx)
+    {
+        var people = CheckIds(step["people"], "step.recipients");
+        var groups = CheckIds(step["groups"], "step.recipients");
+        var properties = step["personProperties"] ?? new JsonArray();
+        if (properties is not JsonArray list || list.Count > MaxRecipients) throw Fail("step.recipients", "At most 100 person properties");
+        foreach (var id in list)
+            if (Live(ctx.Db, id) is not { } def || !PeopleTypes.Contains(def.Type))
+                throw Fail("step.recipients", "A notice goes to the people of a person property");
+        if (!ctx.RowTrigger && list.Count > 0) throw Fail("step.recipients", "A schedule has no row whose people to tell");
+        if (people.Count == 0 && groups.Count == 0 && list.Count == 0) throw Fail("step.recipients", "A notice goes to someone");
+        return (people, groups, Distinct(list.Select(x => Str(x)!)));
+    }
+
+    /// <summary>A list a branch or an approval holds: 0 to 20 steps, one level deeper.</summary>
+    private static JsonArray CheckList(JsonNode? value, StepCtx ctx, bool answered)
+    {
+        if (IsNull(value)) return [];
+        if (value is not JsonArray list || list.Count > MaxSteps) throw Fail("steps", "A path holds at most 20 steps");
+        var inner = ctx.Inner(answered);
+        var output = new JsonArray();
+        foreach (var step in list) output.Add(CheckStep(step, inner));
+        return output;
+    }
+
+    private static JsonObject CheckWait(JsonNode? value, StepCtx ctx)
+    {
+        if (value is not JsonObject w) throw Fail("step.wait", "A wait says what it waits for");
+        switch (Str(w["kind"]))
+        {
+            case "time":
+                if (!Whole(w["minutes"], 1, MaxWaitMinutes)) throw Fail("step.wait", "A wait is whole minutes, at most 90 days");
+                return new JsonObject { ["kind"] = "time", ["minutes"] = Copy(w["minutes"]) };
+            case "date":
+            {
+                if (!ctx.RowTrigger) throw Fail("step.wait", "A schedule has no row whose date to wait for");
+                if (Live(ctx.Db, w["propertyId"]) is not { } def || !DateTriggerTypes.Contains(def.Type))
+                    throw Fail("step.wait", "A wait for a date names a date or created-time property");
+                if (!Whole(w["offsetMinutes"], -MaxOffsetMinutes, MaxOffsetMinutes)) throw Fail("step.wait", "The offset is whole minutes, at most 30 days either way");
+                var at = IsNull(w["at"]) ? null : w["at"];
+                if (at is not null && !IsTimeOfDay(at)) throw Fail("step.wait", "A time of day is HH:mm");
+                return new JsonObject { ["kind"] = "date", ["propertyId"] = def.Id, ["offsetMinutes"] = Copy(w["offsetMinutes"]), ["at"] = Copy(at) };
+            }
+            case "match":
+                if (!ctx.RowTrigger) throw Fail("step.wait", "A schedule has no row to wait on");
+                if (!Whole(w["minutes"], 1, MaxWaitMinutes)) throw Fail("step.wait", "A wait is whole minutes, at most 90 days");
+                return new JsonObject { ["kind"] = "match", ["conditions"] = CheckGroup(w["conditions"], "step.wait"), ["minutes"] = Copy(w["minutes"]) };
+            default:
+                throw Fail("step.wait", "Not something a wait waits for");
+        }
+    }
+
+    private static JsonObject CheckStep(JsonNode? value, StepCtx ctx)
+    {
+        var db = ctx.Db;
+        var rowTrigger = ctx.RowTrigger;
+        if (++ctx.Count[0] > MaxAllSteps) throw Fail("steps", "A rule has at most 50 steps in all");
         if (value is not JsonObject step) throw Fail("step.kind", "A step is an object");
         var when = IsNull(step["when"]) ? null : CheckGroup(step["when"], "step.when");
         if (when is not null && !rowTrigger) throw Fail("step.when", "A schedule has no row to put conditions on");
@@ -260,41 +353,33 @@ public static partial class AutomationRules
         {
             case "set":
                 if (!rowTrigger) throw Fail("step.kind", "A schedule has no row to set");
-                return new JsonObject { ["kind"] = "set", ["values"] = CheckValues(step["values"], db, rowTrigger, true), ["when"] = when };
+                return new JsonObject { ["kind"] = "set", ["values"] = CheckValues(step["values"], db, rowTrigger, true, ctx.Answered), ["when"] = when };
             case "addRow":
             {
                 if (!IsId(step["databaseId"])) throw Fail("step.database", "A new row names its database");
                 var template = IsNull(step["templateId"]) ? null : step["templateId"];
                 if (template is not null && !IsId(template)) throw Fail("step.database", "Not a template id");
                 var databaseId = Guid.Parse(Str(step["databaseId"])!);
-                var into = Str(step["databaseId"]) == db.IdText ? db : target(databaseId);
+                var into = Str(step["databaseId"]) == db.IdText ? db : ctx.Target(databaseId);
                 return new JsonObject
                 {
                     ["kind"] = "addRow",
                     ["databaseId"] = Str(step["databaseId"]),
                     ["templateId"] = Copy(template),
-                    ["values"] = CheckValues(step["values"] ?? new JsonObject(), into, rowTrigger, false),
+                    ["values"] = CheckValues(step["values"] ?? new JsonObject(), into, rowTrigger, false, ctx.Answered),
                     ["when"] = when,
                 };
             }
             case "notify":
             {
-                var people = CheckIds(step["people"], "step.recipients");
-                var groups = CheckIds(step["groups"], "step.recipients");
-                var properties = step["personProperties"] ?? new JsonArray();
-                if (properties is not JsonArray list || list.Count > MaxRecipients) throw Fail("step.recipients", "At most 100 person properties");
-                foreach (var id in list)
-                    if (Live(db, id) is not { } def || !PeopleTypes.Contains(def.Type))
-                        throw Fail("step.recipients", "A notice goes to the people of a person property");
-                if (!rowTrigger && list.Count > 0) throw Fail("step.recipients", "A schedule has no row whose people to tell");
-                if (people.Count == 0 && groups.Count == 0 && list.Count == 0) throw Fail("step.recipients", "A notice goes to someone");
+                var (people, groups, properties) = CheckRecipients(step, ctx);
                 if (Str(step["message"]) is not { } message || message.Length > MaxMessage) throw Fail("step.message", "A notice is at most 1,000 characters");
                 return new JsonObject
                 {
                     ["kind"] = "notify",
                     ["people"] = people,
                     ["groups"] = groups,
-                    ["personProperties"] = Distinct(list.Select(x => Str(x)!)),
+                    ["personProperties"] = properties,
                     ["message"] = message,
                     ["when"] = when,
                 };
@@ -315,10 +400,87 @@ public static partial class AutomationRules
                     ["when"] = when,
                 };
             }
+            case "wait":
+                return new JsonObject { ["kind"] = "wait", ["until"] = CheckWait(step["until"], ctx), ["when"] = when };
+            case "branch":
+            {
+                if (!rowTrigger) throw Fail("step.kind", "A schedule has no row to branch on");
+                if (ctx.Level >= MaxNesting) throw Fail("step.nesting", "Steps nest at most three levels");
+                if (step["branches"] is not JsonArray paths || paths.Count < 1 || paths.Count > MaxBranches)
+                    throw Fail("step.branch", "A branch has 1 to 10 paths besides \"otherwise\"");
+                var branches = new JsonArray();
+                foreach (var path in paths)
+                {
+                    if (path is not JsonObject p) throw Fail("step.branch", "A path is an object");
+                    var condition = CheckGroup(p["when"], "step.branch");
+                    branches.Add(new JsonObject { ["when"] = condition, ["steps"] = CheckList(p["steps"], ctx, ctx.Answered) });
+                }
+                return new JsonObject { ["kind"] = "branch", ["branches"] = branches, ["otherwise"] = CheckList(step["otherwise"], ctx, ctx.Answered), ["when"] = when };
+            }
+            case "approval":
+            {
+                if (ctx.Level >= MaxNesting) throw Fail("step.nesting", "Steps nest at most three levels");
+                var (people, groups, properties) = CheckRecipients(step, ctx);
+                if (Str(step["mode"]) is not ("any" or "all")) throw Fail("step.approval", "An approval goes on by any one answer or by all");
+                if (Str(step["message"]) is not { } message || message.Length > MaxMessage) throw Fail("step.message", "A notice is at most 1,000 characters");
+                if (!Whole(step["deadlineMinutes"], 1, MaxWaitMinutes)) throw Fail("step.approval", "A deadline is whole minutes, at most 90 days");
+                return new JsonObject
+                {
+                    ["kind"] = "approval",
+                    ["people"] = people,
+                    ["groups"] = groups,
+                    ["personProperties"] = properties,
+                    ["mode"] = Str(step["mode"]),
+                    ["message"] = message,
+                    ["deadlineMinutes"] = Copy(step["deadlineMinutes"]),
+                    ["approved"] = CheckList(step["approved"], ctx, true),
+                    ["rejected"] = CheckList(step["rejected"], ctx, true),
+                    ["noAnswer"] = CheckList(step["noAnswer"], ctx, false),
+                    ["when"] = when,
+                };
+            }
             default:
                 throw Fail("step.kind", "Not a step");
         }
     }
+
+    /// <summary>Phase 17: the step lists a step holds (db/automations.ts <c>childLists</c>).</summary>
+    public static IEnumerable<JsonArray> ChildLists(JsonObject step)
+    {
+        switch (Str(step["kind"]))
+        {
+            case "branch":
+                foreach (var path in (step["branches"] as JsonArray ?? []).OfType<JsonObject>()) yield return path["steps"] as JsonArray ?? [];
+                yield return step["otherwise"] as JsonArray ?? [];
+                break;
+            case "approval":
+                yield return step["approved"] as JsonArray ?? [];
+                yield return step["rejected"] as JsonArray ?? [];
+                yield return step["noAnswer"] as JsonArray ?? [];
+                break;
+        }
+    }
+
+    /// <summary>Phase 17: every step, inside branches and approvals too, with its path (db/automations.ts <c>allSteps</c>).</summary>
+    public static IEnumerable<(JsonObject Step, string Path)> AllSteps(JsonArray steps, string prefix = "")
+    {
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (steps[i] is not JsonObject step) continue;
+            var path = prefix.Length == 0 ? i.ToString(System.Globalization.CultureInfo.InvariantCulture) : $"{prefix}/{i}";
+            yield return (step, path);
+            var l = 0;
+            foreach (var list in ChildLists(step))
+            {
+                foreach (var inner in AllSteps(list, $"{path}/{l}")) yield return inner;
+                l++;
+            }
+        }
+    }
+
+    /// <summary>Phase 17: whether a rule waits on its row (a date or conditions), so its rows' changes are written for it.</summary>
+    public static bool WatchesRows(JsonArray steps) =>
+        AllSteps(steps).Any(s => Str(s.Step["kind"]) == "wait" && s.Step["until"] is JsonObject u && Str(u["kind"]) is "date" or "match");
 
     private static readonly JsonSerializerOptions Compact = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
@@ -343,7 +505,8 @@ public static partial class AutomationRules
         if (conditions is not null && !rowTrigger) throw Fail("conditions", "A schedule has no row to put conditions on");
         if (rule["steps"] is not JsonArray steps || steps.Count < 1 || steps.Count > MaxSteps) throw Fail("steps", "A rule has 1 to 20 steps");
         var checkedSteps = new JsonArray();
-        foreach (var step in steps) checkedSteps.Add(CheckStep(step, db, rowTrigger, target));
+        var ctx = new StepCtx(db, rowTrigger, target);
+        foreach (var step in steps) checkedSteps.Add(CheckStep(step, ctx));
         var output = new JsonObject
         {
             ["id"] = Str(rule["id"]),

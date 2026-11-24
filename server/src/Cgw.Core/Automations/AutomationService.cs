@@ -79,7 +79,7 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         // The databases its steps add rows to, read first (the check reads their properties).
         var node = JsonNode.Parse(payload.GetRawText());
         var targets = new Dictionary<Guid, Schema?>();
-        foreach (var step in (node?["steps"] as JsonArray ?? []).OfType<JsonObject>())
+        foreach (var (step, _) in AutomationRules.AllSteps(node?["steps"] as JsonArray ?? []))
             if ((string?)(step["kind"] as JsonValue) == "addRow" && step["databaseId"] is JsonValue v && v.TryGetValue<string>(out var text)
                 && Guid.TryParse(text, out var target) && !targets.ContainsKey(target))
                 targets[target] = await databases.DatabaseAsync(target, ct) is { } other ? SchemaOf(other) : null;
@@ -111,6 +111,9 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         rule.AuthorId = member.UserId;
         rule.Version++;
         rule.UpdatedAt = now;
+        rule.WatchesRows = AutomationRules.WatchesRows((JsonArray)kept["steps"]!);
+        // Phase 17: switched off, its waiting runs stop; changed, they finish by what they started with.
+        if (wasOn && !enabled) await StopWaitingAsync(db, rule.Id, "rule.off", now, ct);
         var triggerChanged = !JsonNode.DeepEquals(JsonNode.Parse(before == "" ? "{}" : before)?["trigger"], trigger);
         // A date trigger runs for moments from when it was switched on or changed, never before.
         rule.ScannedUntil = kind == "date" ? (triggerChanged || !wasOn || rule.ScannedUntil is null ? now : rule.ScannedUntil) : null;
@@ -130,7 +133,7 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
             if (!await db.DatabaseViews.AnyAsync(v => v.Id == form && v.DatabaseId == databaseId && v.Type == DatabaseOps.FormView, ct))
                 throw new AutomationInvalid("trigger.form", "The form is not a form view of this database");
         }
-        foreach (var step in ((JsonArray)rule["steps"]!).OfType<JsonObject>())
+        foreach (var (step, _) in AutomationRules.AllSteps((JsonArray)rule["steps"]!))
         {
             switch ((string?)step["kind"])
             {
@@ -158,6 +161,7 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
                     break;
                 }
                 case "notify":
+                case "approval":
                 {
                     var people = ((JsonArray)step["people"]!).Select(x => Guid.Parse((string)x!)).ToList();
                     if (people.Count > 0 && await db.WorkspaceMembers.CountAsync(m => people.Contains(m.UserId), ct) != people.Count)
@@ -179,14 +183,34 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         rule.Enabled = false;
         rule.Version++;
         rule.UpdatedAt = Now;
+        await StopWaitingAsync(db, rule.Id, "rule.deleted", Now, ct);
         var workspace = await db.Workspaces.FirstAsync(w => w.Id == member.WorkspaceId, ct);
         await RecountAsync(workspace, [rule.DatabaseId], ct);
         changes.Add(ChangeType, rule.Id, "delete", rule.Version, member.UserId);
     }
 
     /// <summary>
+    /// Phase 17: a rule's waiting runs (every rule's, with none given) stopped, recorded with the
+    /// reason, and their approvals still open closed. Inside the caller's transaction.
+    /// </summary>
+    public static async Task StopWaitingAsync(CgwDb db, Guid? automationId, string reason, DateTimeOffset now, CancellationToken ct)
+    {
+        var waiting = db.AutomationRuns.Where(r => r.Status == RunStatuses.Waiting && (automationId == null || r.AutomationId == automationId));
+        var ids = await waiting.Select(r => r.Id).ToListAsync(ct);
+        if (ids.Count == 0) return;
+        await db.AutomationRuns.Where(r => ids.Contains(r.Id)).ExecuteUpdateAsync(s => s
+            .SetProperty(r => r.Status, RunStatuses.Stopped)
+            .SetProperty(r => r.Reason, reason)
+            .SetProperty(r => r.WaitUntil, (DateTimeOffset?)null)
+            .SetProperty(r => r.TakenAt, (DateTimeOffset?)null)
+            .SetProperty(r => r.EndedAt, now), ct);
+        await db.AutomationApprovals.Where(a => ids.Contains(a.RunId) && a.Outcome == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Outcome, ApprovalOutcomes.Stopped), ct);
+    }
+
+    /// <summary>
     /// Each database's <see cref="WorkspaceDatabase.EventRules"/>: its rules switched on that a
-    /// change of a row starts, or none while the workspace's rules are off. Tracked records change
+    /// change of a row starts (Phase 17: or whose steps wait on a row), or none while the workspace's rules are off. Tracked records change
     /// in place (the operation saves them); every database of the workspace with none given.
     /// </summary>
     public async Task RecountAsync(Workspace workspace, IReadOnlyCollection<Guid>? databaseIds, CancellationToken ct)
@@ -194,7 +218,7 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         // Rules saved in this transaction are tracked and not yet written: count from the tracker too.
         await db.SaveChangesAsync(ct);
         var counts = await db.Automations.AsNoTracking()
-            .Where(a => a.DeletedAt == null && a.Enabled && (a.TriggerKind == "rowAdded" || a.TriggerKind == "propertyChanged" || a.TriggerKind == "formAnswered"))
+            .Where(a => a.DeletedAt == null && a.Enabled && (a.TriggerKind == "rowAdded" || a.TriggerKind == "propertyChanged" || a.TriggerKind == "formAnswered" || a.WatchesRows))
             .Where(a => databaseIds == null || databaseIds.Contains(a.DatabaseId))
             .GroupBy(a => a.DatabaseId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
         var ids = databaseIds ?? (IReadOnlyCollection<Guid>)await db.Databases.Where(d => d.EventRules > 0).Select(d => d.PageId)

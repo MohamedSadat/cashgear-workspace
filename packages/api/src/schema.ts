@@ -17,6 +17,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/account/approvals/{approvalId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['answerApproval'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/account/confirm': {
     parameters: {
       query?: never;
@@ -1903,6 +1919,24 @@ export interface components {
       /** Format: int64 */
       used: number | string;
     };
+    ApprovalAnswerRequest: {
+      answer: string;
+      comment: null | string;
+    };
+    ApprovalDto: {
+      answer: null | string;
+      /** Format: int32 */
+      answered: number | string;
+      /** Format: int32 */
+      asked: number | string;
+      comment: null | string;
+      /** Format: date-time */
+      deadlineAt: string;
+      /** Format: uuid */
+      id: string;
+      mode: string;
+      state: string;
+    };
     AssetDto: {
       contentType: string;
       /** Format: date-time */
@@ -2390,6 +2424,7 @@ export interface components {
     };
     NotificationDto: {
       actor: components['schemas']['PersonRef'];
+      approval?: null | components['schemas']['ApprovalDto'];
       /** Format: uuid */
       automationId?: null | string;
       automationName?: null | string;
@@ -3107,6 +3142,8 @@ export interface components {
       api: string;
       /** Format: int32 */
       propertyTypes: number | string;
+      /** Format: int32 */
+      stepKinds: number | string;
       version: string;
       /** Format: int32 */
       viewTypes: number | string;
@@ -3380,6 +3417,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CsrfToken'];
+        };
+      };
+    };
+  };
+  answerApproval: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        approvalId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ApprovalAnswerRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApprovalDto'];
         };
       };
     };

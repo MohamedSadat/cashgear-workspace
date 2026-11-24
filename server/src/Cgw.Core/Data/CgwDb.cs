@@ -86,6 +86,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<Automation> Automations => Set<Automation>();
     public DbSet<AutomationEvent> AutomationEvents => Set<AutomationEvent>();
     public DbSet<AutomationRun> AutomationRuns => Set<AutomationRun>();
+    public DbSet<AutomationApproval> AutomationApprovals => Set<AutomationApproval>();
     public DbSet<FormLink> FormLinks => Set<FormLink>();
     public DbSet<Webhook> Webhooks => Set<Webhook>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
@@ -701,6 +702,22 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Trigger).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.Status).HasMaxLength(10).IsUnicode(false);
             e.Property(x => x.Reason).HasMaxLength(40).IsUnicode(false);
+            // Phase 17: the waits the worker goes on from, by when; a row's waits, which its changes wake.
+            e.HasIndex(x => x.WaitUntil).HasFilter("[Status] = 'waiting'").IncludeProperties(x => new { x.TakenAt }).HasDatabaseName("IX_AutomationRuns_Waiting");
+            e.HasIndex(x => x.RowId).HasFilter("[Status] = 'waiting' AND [RowId] IS NOT NULL").IncludeProperties(x => new { x.WaitKind }).HasDatabaseName("IX_AutomationRuns_WaitingRows");
+            e.Property(x => x.Place).HasMaxLength(40).IsUnicode(false);
+            e.Property(x => x.WaitKind).HasMaxLength(10).IsUnicode(false);
+        });
+        b.Entity<AutomationApproval>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.RunId, x.StepPath, x.UserId }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.Property(x => x.StepPath).HasMaxLength(40).IsUnicode(false);
+            e.Property(x => x.Mode).HasMaxLength(4).IsUnicode(false);
+            e.Property(x => x.Answer).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.Outcome).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.Comment).HasMaxLength(1000);
         });
         b.Entity<Webhook>(e =>
         {
@@ -788,6 +805,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<Automation>(b);
         Filter<AutomationEvent>(b);
         Filter<AutomationRun>(b);
+        Filter<AutomationApproval>(b);
         Filter<FormLink>(b);
         Filter<Webhook>(b);
         Filter<WebhookDelivery>(b);

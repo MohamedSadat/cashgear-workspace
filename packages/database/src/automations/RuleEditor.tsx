@@ -2,14 +2,13 @@
 // own filter editor), and its steps in order (the library's `CgSortableList`: drag a handle, or
 // the arrow keys on it). It is checked as the server checks it (`checkAutomation`) before it is
 // saved, and a refusal says which part is wrong.
-import { CgButton, CgCheckBox, CgSortableList } from '@cashgear/ui';
-import { cloneElement, isValidElement, useId, useState, type ReactNode } from 'react';
+import { CgButton, CgCheckBox } from '@cashgear/ui';
+import { useState } from 'react';
 import {
   AutomationError,
-  MAX_MESSAGE,
-  MAX_STEPS,
   STEP_KINDS,
   TRIGGER_KINDS,
+  allSteps,
   checkAutomation,
 } from '@cgw/workspace/automations';
 import {
@@ -18,27 +17,24 @@ import {
   type AutomationTrigger,
   type DatabaseRecord,
   type FilterGroup,
-  type PropertyDef,
   type StepKind,
-  type StepValue,
   type TriggerKind,
 } from '../core';
 import { useDatabaseContext, useViews } from '../context';
-import type { DatabaseAutomations, Person } from '../host';
-import { liveProperties, propertyOf } from '../model/properties';
+import type { DatabaseAutomations } from '../host';
+import { propertyOf } from '../model/properties';
 import { FilterEditor } from '../toolbar/FilterEditor';
 import {
   buttonProperties,
   dateProperties,
   formViews,
-  newStep,
   newTrigger,
-  peopleProperties,
   problemKey,
   stepFits,
   weekdayName,
   writable,
 } from './model';
+import { Field, StepList } from './StepList';
 import { useAutoT, type AutoT } from './words';
 
 export interface RuleEditorProps {
@@ -52,260 +48,6 @@ export interface RuleEditorProps {
 }
 
 const EMPTY_GROUP: FilterGroup = { kind: 'group', op: 'and', children: [] };
-
-function Field({ label, children, help }: { label: string; children: ReactNode; help?: string }) {
-  const id = useId();
-  return (
-    <div className="cgw-db-auto-field">
-      <label className="cgw-label" htmlFor={id}>
-        {label}
-      </label>
-      <span className="cgw-db-auto-control" id={`${id}-wrap`}>
-        {/* The control is the child; it takes the id the label names. */}
-        {wire(children, id)}
-      </span>
-      {help ? <p className="cgw-db-auto-note">{help}</p> : null}
-    </div>
-  );
-}
-
-/** The first element child given the label's id (the fields hold one control each). */
-function wire(children: ReactNode, id: string): ReactNode {
-  return isValidElement<{ id?: string }>(children) ? cloneElement(children, { id }) : children;
-}
-
-/** The value a step writes into a property, with what that property's type takes. */
-function ValueEditor({
-  def,
-  value,
-  onChange,
-  people,
-  allowActor,
-  allowRow,
-  at,
-}: {
-  def: PropertyDef;
-  value: StepValue | undefined;
-  onChange(value: StepValue): void;
-  people: Person[];
-  allowActor: boolean;
-  allowRow: boolean;
-  at: AutoT;
-}) {
-  const label = at('set.value');
-  const dynamic = value && typeof value === 'object' && 'dynamic' in value ? value.dynamic : null;
-  switch (def.type) {
-    case 'checkbox':
-      return (
-        <CgCheckBox
-          label={def.name}
-          checked={value === true}
-          onCheckedChange={(next) => onChange(next === true)}
-        />
-      );
-    case 'number':
-      return (
-        <input
-          type="number"
-          className="cgw-text-input"
-          aria-label={label}
-          defaultValue={typeof value === 'number' ? value : ''}
-          onBlur={(event) =>
-            onChange(event.target.value === '' ? null : Number(event.target.value))
-          }
-        />
-      );
-    case 'select':
-    case 'status':
-      return (
-        <select
-          className="cgw-select"
-          aria-label={label}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(event.target.value || null)}
-        >
-          <option value="">{at('set.clear')}</option>
-          {(def.options ?? []).map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-      );
-    case 'multiSelect': {
-      const chosen = Array.isArray(value) ? value : [];
-      return (
-        <span className="cgw-db-auto-choices">
-          {(def.options ?? []).map((o) => (
-            <CgCheckBox
-              key={o.id}
-              label={o.name}
-              checked={chosen.includes(o.id)}
-              onCheckedChange={(on) =>
-                onChange(on ? [...chosen, o.id] : chosen.filter((id) => id !== o.id))
-              }
-            />
-          ))}
-        </span>
-      );
-    }
-    case 'date': {
-      const days = dynamic === 'now' ? ((value as { days?: number }).days ?? 0) : 0;
-      return (
-        <span className="cgw-db-auto-choices">
-          <select
-            className="cgw-select"
-            aria-label={label}
-            value={dynamic === 'now' ? 'now' : 'date'}
-            onChange={(event) => onChange(event.target.value === 'now' ? { dynamic: 'now' } : null)}
-          >
-            <option value="now">{at('set.now')}</option>
-            <option value="date">{at('set.clear')}</option>
-          </select>
-          {dynamic === 'now' ? (
-            <input
-              type="number"
-              className="cgw-text-input cgw-db-auto-short"
-              aria-label={at('set.nowDays')}
-              defaultValue={days}
-              step={1}
-              onBlur={(event) => {
-                const n = Math.trunc(Number(event.target.value) || 0);
-                onChange(n ? { dynamic: 'now', days: n } : { dynamic: 'now' });
-              }}
-            />
-          ) : null}
-        </span>
-      );
-    }
-    case 'person': {
-      const chosen = Array.isArray(value) ? value : [];
-      return (
-        <select
-          className="cgw-select"
-          aria-label={label}
-          value={dynamic === 'actor' ? 'actor' : (chosen[0] ?? '')}
-          onChange={(event) => {
-            const next = event.target.value;
-            onChange(next === 'actor' ? { dynamic: 'actor' } : next ? [next] : null);
-          }}
-        >
-          <option value="">{at('set.clear')}</option>
-          {allowActor ? <option value="actor">{at('set.actor')}</option> : null}
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      );
-    }
-    case 'relation':
-    case 'files':
-      return (
-        <select
-          className="cgw-select"
-          aria-label={label}
-          value={dynamic === 'row' ? 'row' : ''}
-          onChange={(event) => onChange(event.target.value === 'row' ? { dynamic: 'row' } : null)}
-        >
-          <option value="">{at('set.clear')}</option>
-          {allowRow && def.type === 'relation' ? (
-            <option value="row">{at('set.thisRow')}</option>
-          ) : null}
-        </select>
-      );
-    default:
-      return (
-        <input
-          className="cgw-text-input"
-          aria-label={label}
-          dir="auto"
-          defaultValue={typeof value === 'string' ? value : ''}
-          onBlur={(event) => onChange(event.target.value === '' ? null : event.target.value)}
-        />
-      );
-  }
-}
-
-/** The values a step writes: a property and its value per line. */
-function ValuesEditor({
-  database,
-  values,
-  onChange,
-  people,
-  allowActor,
-  allowRow,
-  at,
-}: {
-  database: DatabaseRecord;
-  values: Record<string, StepValue>;
-  onChange(values: Record<string, StepValue>): void;
-  people: Person[];
-  allowActor: boolean;
-  allowRow: boolean;
-  at: AutoT;
-}) {
-  const choices = writable(database).filter((p) => !(p.id in values));
-  return (
-    <div className="cgw-db-auto-values">
-      {Object.entries(values).map(([id, value]) => {
-        const def = propertyOf(database, id);
-        if (!def) return null;
-        return (
-          <div key={id} className="cgw-db-auto-value">
-            <span className="cgw-db-auto-value-name" dir="auto">
-              {def.name}
-            </span>
-            <ValueEditor
-              def={def}
-              value={value}
-              onChange={(next) => onChange({ ...values, [id]: next })}
-              people={people}
-              allowActor={allowActor}
-              allowRow={allowRow}
-              at={at}
-            />
-            <button
-              type="button"
-              className="cgw-icon-button"
-              aria-label={at('set.remove', { name: def.name })}
-              onClick={() => {
-                const { [id]: _, ...rest } = values;
-                void _;
-                onChange(rest);
-              }}
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-        );
-      })}
-      {choices.length ? (
-        <select
-          className="cgw-select"
-          aria-label={at('set.add')}
-          value=""
-          onChange={(event) => {
-            const def = propertyOf(database, event.target.value);
-            if (!def) return;
-            onChange({
-              ...values,
-              [def.id]: def.type === 'checkbox' ? true : def.type === 'title' ? '' : null,
-            });
-          }}
-        >
-          <option value="">{at('set.add')}</option>
-          {choices.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      ) : null}
-    </div>
-  );
-}
 
 function TriggerEditor({
   database,
@@ -622,200 +364,6 @@ function TriggerEditor({
   }
 }
 
-function StepBody({
-  database,
-  step,
-  rowTrigger,
-  data,
-  groups,
-  onChange,
-  at,
-}: {
-  database: DatabaseRecord;
-  step: AutomationStep;
-  rowTrigger: boolean;
-  data: DatabaseAutomations;
-  groups: { id: string; name: string }[];
-  onChange(step: AutomationStep): void;
-  at: AutoT;
-}) {
-  const { host } = useDatabaseContext();
-  const people = host.people();
-  switch (step.kind) {
-    case 'set':
-      return (
-        <ValuesEditor
-          database={database}
-          values={step.values}
-          onChange={(values) => onChange({ ...step, values })}
-          people={people}
-          allowActor={rowTrigger}
-          allowRow={false}
-          at={at}
-        />
-      );
-    case 'addRow': {
-      const target = host.database(step.databaseId);
-      const templates = host.rowTemplates(step.databaseId);
-      return (
-        <>
-          <Field label={at('addRow.database')}>
-            <select
-              className="cgw-select"
-              value={step.databaseId}
-              onChange={(event) =>
-                onChange({ ...step, databaseId: event.target.value, templateId: null, values: {} })
-              }
-            >
-              {host.databases().map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.title || d.id}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={at('addRow.template')}>
-            <select
-              className="cgw-select"
-              value={step.templateId ?? ''}
-              onChange={(event) => onChange({ ...step, templateId: event.target.value || null })}
-            >
-              <option value="">{at('addRow.noTemplate')}</option>
-              {templates.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title || r.id}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {target ? (
-            <ValuesEditor
-              database={target}
-              values={step.values}
-              onChange={(values) => onChange({ ...step, values })}
-              people={people}
-              allowActor={rowTrigger}
-              allowRow={rowTrigger}
-              at={at}
-            />
-          ) : (
-            <p className="cgw-db-auto-note">{at('addRow.notHeld')}</p>
-          )}
-        </>
-      );
-    }
-    case 'notify': {
-      const toggle = (list: string[], id: string, on: boolean) =>
-        on ? [...list, id] : list.filter((x) => x !== id);
-      return (
-        <>
-          <fieldset className="cgw-db-auto-set">
-            <legend>{at('notify.people')}</legend>
-            {people.map((p) => (
-              <CgCheckBox
-                key={p.id}
-                label={p.name}
-                checked={step.people.includes(p.id)}
-                onCheckedChange={(on) =>
-                  onChange({ ...step, people: toggle(step.people, p.id, on === true) })
-                }
-              />
-            ))}
-          </fieldset>
-          {groups.length ? (
-            <fieldset className="cgw-db-auto-set">
-              <legend>{at('notify.groups')}</legend>
-              {groups.map((g) => (
-                <CgCheckBox
-                  key={g.id}
-                  label={g.name}
-                  checked={step.groups.includes(g.id)}
-                  onCheckedChange={(on) =>
-                    onChange({ ...step, groups: toggle(step.groups, g.id, on === true) })
-                  }
-                />
-              ))}
-            </fieldset>
-          ) : null}
-          {rowTrigger && peopleProperties(database).length ? (
-            <fieldset className="cgw-db-auto-set">
-              <legend>{at('notify.properties')}</legend>
-              {peopleProperties(database).map((p) => (
-                <CgCheckBox
-                  key={p.id}
-                  label={p.name}
-                  checked={step.personProperties.includes(p.id)}
-                  onCheckedChange={(on) =>
-                    onChange({
-                      ...step,
-                      personProperties: toggle(step.personProperties, p.id, on === true),
-                    })
-                  }
-                />
-              ))}
-            </fieldset>
-          ) : null}
-          <Field label={at('notify.message')} help={at('notify.messageHelp')}>
-            <textarea
-              className="cgw-text-input cgw-db-auto-message"
-              dir="auto"
-              maxLength={MAX_MESSAGE}
-              value={step.message}
-              onChange={(event) => onChange({ ...step, message: event.target.value })}
-            />
-          </Field>
-        </>
-      );
-    }
-    case 'webhook':
-      if (!data.canCallWebhooks || !data.webhooks.length)
-        return <p className="cgw-db-auto-note">{at('webhook.none')}</p>;
-      return (
-        <>
-          <Field label={at('webhook.webhook')}>
-            <select
-              className="cgw-select"
-              value={step.webhookId}
-              onChange={(event) => onChange({ ...step, webhookId: event.target.value })}
-            >
-              <option value="">{at('webhook.pick')}</option>
-              {data.webhooks.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {rowTrigger ? (
-            <fieldset className="cgw-db-auto-set">
-              <legend>{at('webhook.properties')}</legend>
-              {liveProperties(database)
-                .filter((p) => p.type !== 'button')
-                .map((p) => (
-                  <CgCheckBox
-                    key={p.id}
-                    label={p.name}
-                    checked={step.properties.includes(p.id)}
-                    onCheckedChange={(on) =>
-                      onChange({
-                        ...step,
-                        properties: on
-                          ? [...step.properties, p.id]
-                          : step.properties.filter((x) => x !== p.id),
-                      })
-                    }
-                  />
-                ))}
-            </fieldset>
-          ) : null}
-        </>
-      );
-  }
-}
-
-/** Steps keep a key of their own while the rule is edited (their place can change). */
-type Keyed = { key: string; step: AutomationStep };
-
 export function RuleEditor({
   database,
   rule,
@@ -831,10 +379,7 @@ export function RuleEditor({
   const [enabled, setEnabled] = useState(rule.enabled);
   const [trigger, setTrigger] = useState<AutomationTrigger>(rule.trigger);
   const [conditions, setConditions] = useState<FilterGroup | null>(rule.conditions);
-  const [steps, setSteps] = useState<Keyed[]>(() =>
-    rule.steps.map((step, i) => ({ key: `s${i}`, step })),
-  );
-  const [nextKey, setNextKey] = useState(rule.steps.length);
+  const [steps, setSteps] = useState<AutomationStep[]>(rule.steps);
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const rowTrigger = trigger.kind !== 'schedule';
@@ -846,7 +391,7 @@ export function RuleEditor({
     enabled,
     trigger,
     conditions: rowTrigger ? conditions : null,
-    steps: steps.map((s) => s.step),
+    steps,
   });
 
   const save = async () => {
@@ -865,8 +410,6 @@ export function RuleEditor({
       setSaving(false);
     }
   };
-
-  const stepName = (kind: StepKind) => at(`stepKinds.${kind}`);
 
   return (
     <form
@@ -903,7 +446,7 @@ export function RuleEditor({
           onChange={(next) => {
             setTrigger(next);
             if (next.kind === 'schedule')
-              setSteps((list) => list.filter((s) => stepFits(s.step.kind, next)));
+              setSteps((list) => list.filter((s) => stepFits(s.kind, next)));
           }}
         />
       </fieldset>
@@ -942,105 +485,23 @@ export function RuleEditor({
       ) : null}
       <section className="cgw-db-auto-part" aria-label={at('stepsLabel')}>
         <h3 className="cgw-panel-title">{at('steps')}</h3>
-        <CgSortableList
-          className="cgw-db-auto-steps"
+        <StepList
+          steps={steps}
+          onChange={setSteps}
+          level={1}
+          answered={false}
           label={at('stepsLabel')}
-          items={steps}
-          getKey={(item) => item.key}
-          disabled={!canManage}
-          handleLabel={(_, index) => at('stepDrag', { number: index + 1 })}
-          onMove={(key, to) =>
-            setSteps((list) => {
-              const from = list.findIndex((s) => s.key === key);
-              const next = [...list];
-              const [moved] = next.splice(from, 1);
-              next.splice(to, 0, moved);
-              return next;
-            })
-          }
-          renderItem={(item, { index }) => (
-            <fieldset className="cgw-db-auto-step" disabled={!canManage}>
-              <legend>
-                {at('stepNumber', { number: index + 1 })}: {stepName(item.step.kind)}
-              </legend>
-              <StepBody
-                database={database}
-                step={item.step}
-                rowTrigger={rowTrigger}
-                data={data}
-                groups={groups}
-                at={at}
-                onChange={(step) =>
-                  setSteps((list) => list.map((s) => (s.key === item.key ? { ...s, step } : s)))
-                }
-              />
-              {rowTrigger ? (
-                item.step.when ? (
-                  <div className="cgw-db-auto-when">
-                    <p className="cgw-db-auto-note">{at('stepWhen')}</p>
-                    <FilterEditor
-                      database={database}
-                      filter={item.step.when}
-                      editable={canManage}
-                      onChange={(when) =>
-                        setSteps((list) =>
-                          list.map((s) =>
-                            s.key === item.key ? { ...s, step: { ...s.step, when } } : s,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                ) : canManage ? (
-                  <CgButton
-                    appearance="ghost"
-                    size="small"
-                    onClick={() =>
-                      setSteps((list) =>
-                        list.map((s) =>
-                          s.key === item.key ? { ...s, step: { ...s.step, when: EMPTY_GROUP } } : s,
-                        ),
-                      )
-                    }
-                  >
-                    {at('stepWhenAdd')}
-                  </CgButton>
-                ) : null
-              ) : null}
-              {canManage && steps.length > 1 ? (
-                <CgButton
-                  appearance="ghost"
-                  size="small"
-                  onClick={() => setSteps((list) => list.filter((s) => s.key !== item.key))}
-                >
-                  {at('stepRemove', { number: index + 1 })}
-                </CgButton>
-              ) : null}
-            </fieldset>
-          )}
+          ctx={{
+            database,
+            trigger,
+            rowTrigger,
+            data,
+            groups,
+            canManage,
+            at,
+            total: [...allSteps(steps)].length,
+          }}
         />
-        {canManage && steps.length < MAX_STEPS ? (
-          <select
-            className="cgw-select"
-            aria-label={at('addStep')}
-            value=""
-            onChange={(event) => {
-              const kind = event.target.value as StepKind;
-              if (!kind) return;
-              setSteps((list) => [...list, { key: `s${nextKey}`, step: newStep(kind, database) }]);
-              setNextKey((n) => n + 1);
-            }}
-          >
-            <option value="">{at('addStep')}</option>
-            {STEP_KINDS.filter((k) => stepFits(k, trigger))
-              .filter((k) => k !== 'webhook' || data.canCallWebhooks)
-              .map((k) => (
-                <option key={k} value={k}>
-                  {stepName(k)}
-                </option>
-              ))}
-          </select>
-        ) : null}
       </section>
       {problem ? (
         <p role="alert" className="cgw-db-auto-problem">

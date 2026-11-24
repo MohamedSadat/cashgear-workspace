@@ -815,6 +815,8 @@ public static class NotificationKinds
     public const string Reply = "reply";
     /// <summary>Phase 15: a rule's notice (its message), or a run that stopped (told to its author, with the reason).</summary>
     public const string Automation = "automation";
+    /// <summary>Phase 17: an approval a rule asks of the person, answered from the inbox (its <c>ApprovalId</c>).</summary>
+    public const string Approval = "approval";
 }
 
 /// <summary>
@@ -847,6 +849,8 @@ public sealed class Notification : ITenantOwned
     /// <summary>Phase 15, kind <c>automation</c>: the rule, and why its run stopped (null for its notice).</summary>
     public Guid? AutomationId { get; set; }
     public string? Reason { get; set; }
+    /// <summary>Phase 17, kind <c>approval</c>: the person's approval to answer.</summary>
+    public Guid? ApprovalId { get; set; }
 }
 
 public static class MailModes

@@ -187,3 +187,28 @@
 .cgw-db-auto-row-runs {
   margin-block-start: 8px;
 }
+
+/* Phase 17: a branch's and an approval's paths, and a run's steps inside them. */
+.cgw-db-auto-path {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  border: 1px dashed var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+}
+
+.cgw-db-auto-list-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cgw-db-auto-run-steps li[data-depth='1'] {
+  margin-inline-start: 16px;
+}
+
+.cgw-db-auto-run-steps li[data-depth='2'] {
+  margin-inline-start: 32px;
+}

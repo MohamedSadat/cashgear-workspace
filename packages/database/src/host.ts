@@ -328,15 +328,19 @@ export interface AutomationRun {
   depth: number;
   actor: Person | null;
   author: Person;
-  /** `done`, `stopped`, `skipped` or `running`. */
+  /** `done`, `stopped`, `skipped`, `running`, or (Phase 17) `waiting`. */
   status: string;
   /** Why it stopped or was skipped: `depth`, `limit.rule`, `author.access`, a step's code. */
   reason: string | null;
   steps: {
     index: number;
+    /** Phase 17: the step's place inside branches and approvals (`2/0/1`); absent before 0.17.0. */
+    path?: string | null;
     kind: string;
     status: string;
     code?: string | null;
+    /** A branch's path taken (`path:0`, `otherwise`), a wait's or an approval's end (an instant). */
+    detail?: string | null;
     count?: number | null;
   }[];
   startedAt: string;
@@ -365,6 +369,11 @@ export interface DatabaseAutomations {
   timeZone: string | null;
   /** Every rule of the workspace is switched off (Settings). */
   allOff: boolean;
+  /**
+   * Phase 17: how many of `STEP_KINDS` the server keeps (its `/version`'s `stepKinds`; 4 before
+   * 0.17.0): waits, branches and approvals are offered only once it keeps 7.
+   */
+  stepKinds?: number;
 }
 
 /**

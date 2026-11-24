@@ -409,3 +409,30 @@ a.cgw-comment-mention {
 .cgw-inbox time {
   font-size: 0.75rem;
 }
+
+/* Phase 17: an approval's answer, under its item. */
+.cgw-inbox-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block: 0 8px;
+  margin-inline-start: 40px;
+}
+
+.cgw-inbox-comment {
+  min-block-size: 2.5em;
+  padding: 4px 6px;
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius-sm, 3px);
+  background: var(--cg-surface, transparent);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.cgw-inbox-approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

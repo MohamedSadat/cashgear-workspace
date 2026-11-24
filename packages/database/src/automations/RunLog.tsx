@@ -5,7 +5,7 @@ import { CgButton } from '@cashgear/ui';
 import { useCallback, useEffect, useState } from 'react';
 import type { AutomationRun, AutomationRunsPage } from '../host';
 import { reasonText, statusText, stepStatusText } from './model';
-import { useAutoT } from './words';
+import { useAutoT, type AutoT } from './words';
 
 export interface RunLogProps {
   /** A page of runs older than the cursor (null: the newest). */
@@ -15,6 +15,23 @@ export interface RunLogProps {
   /** A row's log names each run's rule; a rule's names each run's row. */
   of: 'rule' | 'row';
   stepName(kind: string): string;
+}
+
+/** Phase 17: what a step's detail says: the path a branch took, until when a wait or an approval waits. */
+function detailText(step: AutomationRun['steps'][number], at: AutoT, format: Intl.DateTimeFormat) {
+  const detail = step.detail;
+  if (!detail) return '';
+  if (detail === 'otherwise') return ` · ${at('log.took', { path: at('log.otherwise') })}`;
+  const path = /^path:(\d+)$/.exec(detail);
+  if (path)
+    return ` · ${at('log.took', { path: at('log.path', { number: Number(path[1]) + 1 }) })}`;
+  if (step.status !== 'waiting') return '';
+  const when = new Date(detail);
+  const asked =
+    step.kind === 'approval' && step.count ? ` · ${at('log.asked', { count: step.count })}` : '';
+  return Number.isNaN(when.getTime())
+    ? asked
+    : ` · ${at('log.waitsUntil', { when: format.format(when) })}${asked}`;
 }
 
 export function RunLog({ load, title, of, stepName }: RunLogProps) {
@@ -77,9 +94,14 @@ export function RunLog({ load, title, of, stepName }: RunLogProps) {
               {run.steps.length ? (
                 <ul className="cgw-db-auto-run-steps" aria-label={at('log.steps')}>
                   {run.steps.map((step) => (
-                    <li key={step.index}>
+                    <li
+                      key={step.path ?? step.index}
+                      // Phase 17: a step inside a branch or an approval, set in by its depth.
+                      data-depth={step.path ? (step.path.split('/').length - 1) / 2 : 0}
+                    >
                       {stepName(step.kind)}: {stepStatusText(step.status, at)}
                       {step.code ? ` (${reasonText(step.code, at)})` : ''}
+                      {detailText(step, at, format)}
                     </li>
                   ))}
                 </ul>

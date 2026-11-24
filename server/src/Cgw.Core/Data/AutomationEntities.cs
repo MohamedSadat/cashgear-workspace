@@ -25,6 +25,8 @@ public sealed class Automation : ITenantOwned
     public DateTimeOffset UpdatedAt { get; set; }
     /// <summary>Deleted: kept so the feed can tell the database's readers, removed with its runs after 30 days.</summary>
     public DateTimeOffset? DeletedAt { get; set; }
+    /// <summary>Phase 17: a step waits on its row (a date or conditions), so its rows' changes are written while it is on.</summary>
+    public bool WatchesRows { get; set; }
 }
 
 /// <summary>
@@ -76,6 +78,17 @@ public static class RunStatuses
     public const string Stopped = "stopped";
     /// <summary>Not run: a rate limit.</summary>
     public const string Skipped = "skipped";
+    /// <summary>Phase 17: at a wait or an approval, its place kept, until the worker goes on from it.</summary>
+    public const string Waiting = "waiting";
+}
+
+/// <summary>Phase 17: what a waiting run waits for.</summary>
+public static class WaitKinds
+{
+    public const string Time = "time";
+    public const string Date = "date";
+    public const string Match = "match";
+    public const string Approval = "approval";
 }
 
 /// <summary>One run of a rule: what started it, each step's outcome, and how it ended.</summary>
@@ -99,10 +112,64 @@ public sealed class AutomationRun : ITenantOwned
     public string Status { get; set; } = RunStatuses.Running;
     /// <summary>Why it stopped or was skipped: <c>depth</c>, <c>limit.rule</c>, <c>author.access</c>, a step's refusal code.</summary>
     public string? Reason { get; set; }
-    /// <summary>JSON: each step's <c>{ index, kind, status, code?, detail? }</c>.</summary>
+    /// <summary>JSON: each step's <c>{ index, path, kind, status, code?, detail? }</c> (Phase 17: <c>path</c>, its place inside branches and approvals; <c>index</c>, its place among every step).</summary>
     public string Steps { get; set; } = "[]";
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? EndedAt { get; set; }
+    /// <summary>Phase 17: the rule's definition when the run first waited; it goes on by it whatever the rule became.</summary>
+    public string? Definition { get; set; }
+    /// <summary>Phase 17: the path of the step it waits at (<c>2</c>, <c>2/0/1</c>).</summary>
+    public string? Place { get; set; }
+    /// <summary>Phase 17: <see cref="WaitKinds"/>.</summary>
+    public string? WaitKind { get; set; }
+    /// <summary>Phase 17: when the worker next looks at it (its time, its date, its limit, its deadline, or an hour on).</summary>
+    public DateTimeOffset? WaitUntil { get; set; }
+    /// <summary>Phase 17: when its current wait began (its limit counts from it).</summary>
+    public DateTimeOffset? WaitedAt { get; set; }
+    /// <summary>Phase 17: when the worker took it to go on; one taken and not put down after a while is taken again.</summary>
+    public DateTimeOffset? TakenAt { get; set; }
+    /// <summary>Phase 17: JSON, what later steps read: the last approval's <c>approver</c> (ids) and <c>comment</c>.</summary>
+    public string? Context { get; set; }
+}
+
+public static class ApprovalAnswers
+{
+    public const string Approve = "approve";
+    public const string Reject = "reject";
+}
+
+public static class ApprovalOutcomes
+{
+    public const string Approved = "approved";
+    public const string Rejected = "rejected";
+    public const string NoAnswer = "noAnswer";
+    /// <summary>Its run stopped before it was decided (the rule switched off or deleted, its author's access lost, its row gone).</summary>
+    public const string Stopped = "stopped";
+}
+
+/// <summary>Phase 17: one person asked by a run's approval step, and their answer.</summary>
+public sealed class AutomationApproval : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid RunId { get; set; }
+    public Guid AutomationId { get; set; }
+    public Guid DatabaseId { get; set; }
+    /// <summary>The row asked about; null for a schedule's run (the database's).</summary>
+    public Guid? RowId { get; set; }
+    /// <summary>The approval step's path in the run's definition.</summary>
+    public string StepPath { get; set; } = "";
+    public Guid UserId { get; set; }
+    /// <summary><c>any</c> or <c>all</c>, as the step said.</summary>
+    public string Mode { get; set; } = "any";
+    /// <summary><see cref="ApprovalAnswers"/>, once answered.</summary>
+    public string? Answer { get; set; }
+    public string? Comment { get; set; }
+    public DateTimeOffset? AnsweredAt { get; set; }
+    public DateTimeOffset DeadlineAt { get; set; }
+    /// <summary><see cref="ApprovalOutcomes"/>, once the run decided it (the same on every person's).</summary>
+    public string? Outcome { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>An address a workspace's rules may call (owners and admins only).</summary>

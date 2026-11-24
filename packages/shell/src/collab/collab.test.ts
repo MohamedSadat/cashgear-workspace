@@ -27,7 +27,7 @@ const { PagePresence, TransportHub, WorkspacePresence, PRESENCE_TTL_MS, HEARTBEA
   await import('./presence');
 const { CommentsStore, orderThreads } = await import('./comments');
 const body = await import('./body');
-const { InboxStore } = await import('./inbox');
+const { InboxStore, readNotification } = await import('./inbox');
 const { Collab } = await import('./collab');
 const { Composer } = await import('./Composer');
 const { CommentsPanel, levelOf } = await import('./CommentsPanel');
@@ -671,6 +671,9 @@ describe('the comments store', () => {
       notifications: {
         list: async () => ({ notifications: [], unread: 0, next: null }),
         read: async () => ({ unread: 0 }),
+        answer: async () => {
+          throw new Error('not.found');
+        },
       },
       unreachable,
       unknownName: () => 'Someone',
@@ -732,6 +735,9 @@ describe('the comments store', () => {
       notifications: {
         list: async () => ({ notifications: [], unread: 0, next: null }),
         read: async () => ({ unread: 0 }),
+        answer: async () => {
+          throw new Error('not.found');
+        },
       },
       unreachable,
       unknownName: () => 'Someone',
@@ -763,6 +769,9 @@ describe('the comments store', () => {
       notifications: {
         list: async () => ({ notifications: [], unread: 0, next: null }),
         read: async () => ({ unread: 0 }),
+        answer: async () => {
+          throw new Error('not.found');
+        },
       },
       unreachable,
       unknownName: () => 'Someone',
@@ -1054,11 +1063,57 @@ function fakeNotifications(items: NotificationDto[]) {
       for (const n of list) if (all || ids?.includes(n.id)) n.readAt ??= t1;
       return { unread: unread() };
     }),
+    // Phase 17: an open approval takes one answer; a decided one is refused.
+    answer: vi.fn(
+      async (approvalId: string, answer: 'approve' | 'reject', comment: string | null) => {
+        const n = list.find((x) => x.approval?.id === approvalId);
+        if (!n?.approval || n.approval.state !== 'open' || n.approval.answer)
+          throw new Error('approval.closed');
+        n.approval = { ...n.approval, answer, comment, answered: n.approval.answered + 1 };
+        n.readAt ??= t1;
+        return { ...n.approval };
+      },
+    ),
   };
   return { api, list };
 }
 
 describe('the inbox', () => {
+  it('answers an approval once: shown and read at once; one decided meanwhile says so', async () => {
+    const ask = (id: string, state: 'open' | 'approved') => ({
+      id,
+      state,
+      answer: null,
+      comment: null,
+      mode: 'any' as const,
+      deadlineAt: '2026-12-01T00:00:00Z',
+      asked: 2,
+      answered: 0,
+    });
+    const server = fakeNotifications([
+      note('a1', { kind: 'approval', approval: ask('ap1', 'open') }),
+      note('a2', { kind: 'approval', approval: ask('ap2', 'approved') }),
+    ]);
+    const inbox = new InboxStore({
+      api: server.api,
+      online: () => true,
+      signedIn: () => true,
+      unreachable: () => false,
+    });
+    await inbox.load();
+    expect(inbox.snapshot().unread).toBe(2);
+    await inbox.answer('a1', 'approve', 'Fine');
+    const first = inbox.snapshot().items.find((n) => n.id === 'a1')!;
+    expect(first.approval).toMatchObject({ answer: 'approve', comment: 'Fine', answered: 1 });
+    expect(first.readAt).not.toBeNull();
+    expect(inbox.snapshot().unread).toBe(1);
+    await expect(inbox.answer('a2', 'reject', null)).rejects.toThrow('approval.closed');
+    expect(server.api.answer).toHaveBeenCalledTimes(2);
+    // A kind it does not know and an approval with nothing to answer are no items.
+    expect(readNotification({ ...note('x'), kind: 'reminderOfSomethingNew' })).toBeNull();
+    expect(readNotification({ ...note('y'), kind: 'approval', approval: null })).toBeNull();
+  });
+
   it('reads its first page and the unread count, and more on asking', async () => {
     const server = fakeNotifications([note('n1'), note('n2'), note('n3', { readAt: t0 })]);
     const inbox = new InboxStore({

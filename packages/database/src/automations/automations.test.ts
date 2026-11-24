@@ -152,6 +152,106 @@ describe('automations in the views', () => {
     });
   });
 
+  it('offers waits, branches and approvals only where the server keeps them, and nests steps', async () => {
+    const s = seed(3);
+    const fake = new FakeAutomations();
+    s.host.automations = fake;
+    await mount(h(DatabaseView, { host: s.host, databaseId: s.tasksId, embedded: false }));
+    await click(button(automationsEn.buttonLabel));
+    await click(button(automationsEn.new));
+    const offered = (label: string = automationsEn.addStep) =>
+      [...(selectLabelled(label)?.options ?? [])].map((o) => o.value).filter(Boolean);
+    // A server before 0.17.0 keeps four step kinds (and this person calls no webhook).
+    expect(offered()).toEqual(['set', 'addRow', 'notify']);
+    await click(button(automationsEn.cancel));
+    fake.data = { ...fake.data, stepKinds: 7 };
+    await act(async () => root!.unmount());
+    root = null;
+    container.innerHTML = '';
+    await mount(h(DatabaseView, { host: s.host, databaseId: s.tasksId, embedded: false }));
+    await click(button(automationsEn.buttonLabel));
+    await click(button(automationsEn.new));
+    expect(offered()).toEqual(['set', 'addRow', 'notify', 'wait', 'branch', 'approval']);
+    await choose(selectLabelled(automationsEn.addStep)!, 'branch');
+    // The branch's "if" path takes steps of its own, one level deeper.
+    const ifPath = automationsEn.nested.add.replace(
+      '{{path}}',
+      automationsEn.branch.pathSteps.replace('{{path}}', automationsEn.branch.if),
+    );
+    expect(offered(ifPath)).toContain('approval');
+    await choose(selectLabelled(ifPath)!, 'set');
+    await choose(selectLabelled(automationsEn.addStep)!, 'wait');
+    const adds = [...document.querySelectorAll('select')].filter(
+      (x) => x.getAttribute('aria-label') === automationsEn.set.add,
+    ) as HTMLSelectElement[];
+    expect(adds).toHaveLength(2);
+    for (const add of adds) await choose(add, P.done);
+    await click(button(automationsEn.save));
+    expect(fake.saved).toHaveLength(1);
+    expect(fake.saved[0].steps).toEqual([
+      { kind: 'set', values: { [P.done]: true }, when: null },
+      {
+        kind: 'branch',
+        branches: [
+          {
+            when: { kind: 'group', op: 'and', children: [] },
+            steps: [{ kind: 'set', values: { [P.done]: true }, when: null }],
+          },
+        ],
+        otherwise: [],
+        when: null,
+      },
+      { kind: 'wait', until: { kind: 'time', minutes: 1440 }, when: null },
+    ]);
+  });
+
+  it('reads where a run waits and the path its branch took', async () => {
+    await mount(
+      h(RunLog, {
+        title: 'Runs',
+        of: 'rule',
+        stepName: (kind: string) => kind,
+        load: async () => ({
+          runs: [
+            {
+              id: 'r2',
+              automationId: 'a1',
+              automationName: 'Rule',
+              databaseId: 'd1',
+              rowId: 'row1',
+              rowTitle: 'Invoice 8',
+              trigger: 'rowAdded',
+              depth: 1,
+              actor: null,
+              author: { id: 'p2', name: 'Omar' },
+              status: 'waiting',
+              reason: null,
+              steps: [
+                { index: 0, path: '0', kind: 'branch', status: 'done', detail: 'path:1' },
+                {
+                  index: 1,
+                  path: '0/1/0',
+                  kind: 'approval',
+                  status: 'waiting',
+                  detail: '2026-11-27T10:00:00Z',
+                  count: 2,
+                },
+              ],
+              startedAt: '2026-11-24T10:00:00Z',
+              endedAt: null,
+            },
+          ],
+          next: null,
+        }),
+      }),
+    );
+    const text = container.textContent ?? '';
+    expect(text).toContain(automationsEn.status.waiting);
+    expect(text).toContain(automationsEn.log.took.replace('{{path}}', 'Path 2'));
+    expect(text).toContain(automationsEn.log.asked.replace('{{count}}', '2'));
+    expect(container.querySelector('li[data-depth="1"]')?.textContent).toContain('approval');
+  });
+
   it('reads a run log in words: its status, its reason and its steps', async () => {
     await mount(
       h(RunLog, {

@@ -79,6 +79,47 @@
         }
       }
     },
+    "/api/v1/account/approvals/{approvalId}": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "answerApproval",
+        "parameters": [
+          {
+            "name": "approvalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/realtime/tickets": {
       "post": {
         "tags": [
@@ -6156,6 +6197,81 @@
           }
         }
       },
+      "ApprovalAnswerRequest": {
+        "required": [
+          "answer",
+          "comment"
+        ],
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApprovalDto": {
+        "required": [
+          "id",
+          "state",
+          "answer",
+          "comment",
+          "mode",
+          "deadlineAt",
+          "asked",
+          "answered"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string"
+          },
+          "answer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mode": {
+            "type": "string"
+          },
+          "deadlineAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "asked": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "answered": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "AssetDto": {
         "required": [
           "id",
@@ -8253,6 +8369,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "approval": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApprovalDto"
+              }
             ]
           }
         }
@@ -11158,7 +11284,8 @@
           "version",
           "api",
           "propertyTypes",
-          "viewTypes"
+          "viewTypes",
+          "stepKinds"
         ],
         "type": "object",
         "properties": {
@@ -11177,6 +11304,14 @@
             "format": "int32"
           },
           "viewTypes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "stepKinds": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -12205,6 +12340,9 @@
       "name": "Workspaces"
     },
     {
+      "name": "Notifications"
+    },
+    {
       "name": "Realtime"
     },
     {
@@ -12251,9 +12389,6 @@
     },
     {
       "name": "Comments"
-    },
-    {
-      "name": "Notifications"
     },
     {
       "name": "Plugins"

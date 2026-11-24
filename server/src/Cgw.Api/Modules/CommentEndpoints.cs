@@ -89,5 +89,14 @@ public static class CommentEndpoints
                 return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
             })
             .WithName("readNotifications");
+
+        // Phase 17: an approval a rule asked of the person, answered from their inbox.
+        api.MapPost("/account/approvals/{approvalId:guid}", async Task<Results<Ok<Cgw.Core.Automations.ApprovalDto>, ProblemHttpResult>> (Guid approvalId,
+                Cgw.Core.Automations.ApprovalAnswerRequest body, Cgw.Core.Automations.ApprovalService approvals, HttpContext http) =>
+            {
+                var result = await approvals.AnswerAsync(http.User.UserId()!.Value, approvalId, body, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithTags("Notifications").RequireAuthorization().RequireRateLimiting(RateLimits.User).WithName("answerApproval");
     }
 }

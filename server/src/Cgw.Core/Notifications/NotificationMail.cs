@@ -151,6 +151,7 @@ public static class NotificationMails
         string Untitled, string Deleted, string Someone,
         Func<string, string, string> Mention, Func<string, string, string> CommentMention, Func<string, string, string> Reply,
         Func<string, string, string> Automation, Func<string, string> AutomationStopped,
+        Func<string, string, string> Approval,
         Func<int, string> Several, Func<int, string> Digest, string Intro, string DigestIntro, string Open,
         string Why, string Off, string Settings);
 
@@ -161,6 +162,7 @@ public static class NotificationMails
         (actor, page) => $"{actor} replied in a thread on “{page}”",
         (actor, page) => $"{actor}'s automation on “{page}”",
         page => $"Your automation on “{page}” stopped",
+        (actor, page) => $"{actor}'s automation asks for your approval on “{page}”",
         n => string.Create(CultureInfo.InvariantCulture, $"{n} new mentions and replies in Cash Gear Workspace"),
         n => string.Create(CultureInfo.InvariantCulture, $"Your daily summary: {n} mentions and replies"),
         "While you were away:",
@@ -177,6 +179,7 @@ public static class NotificationMails
         (actor, page) => $"ردّ {actor} في نقاش على «{page}»",
         (actor, page) => $"أتمتة {actor} على «{page}»",
         page => $"توقفت أتمتتك على «{page}»",
+        (actor, page) => $"تطلب أتمتة {actor} موافقتك على «{page}»",
         n => string.Create(CultureInfo.InvariantCulture, $"إشارات وردود جديدة في مساحة عمل كاش جير: {n}"),
         n => string.Create(CultureInfo.InvariantCulture, $"ملخصك اليومي من مساحة عمل كاش جير: {n}"),
         "أثناء غيابك:",
@@ -222,6 +225,7 @@ public static class NotificationMails
             NotificationKinds.Reply => words.Reply(OneLine(item.Actor), Title(item)),
             NotificationKinds.Automation when item.Reason is not null => words.AutomationStopped(Title(item)),
             NotificationKinds.Automation => words.Automation(OneLine(item.Actor), Title(item)),
+            NotificationKinds.Approval => words.Approval(OneLine(item.Actor), Title(item)),
             _ => words.Mention(OneLine(item.Actor), Title(item)),
         };
         string HtmlLine(MailItem item)
@@ -236,6 +240,7 @@ public static class NotificationMails
                 NotificationKinds.Reply => words.Reply(A, T),
                 NotificationKinds.Automation when item.Reason is not null => words.AutomationStopped(T),
                 NotificationKinds.Automation => words.Automation(A, T),
+                NotificationKinds.Approval => words.Approval(A, T),
                 _ => words.Mention(A, T),
             };
             // One pass, so nothing in a name or a title is read as a slot.

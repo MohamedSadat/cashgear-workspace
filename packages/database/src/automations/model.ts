@@ -84,6 +84,30 @@ export function newStep(kind: StepKind, database: DatabaseRecord): AutomationSte
       return { kind, people: [], groups: [], personProperties: [], message: '', when: null };
     case 'webhook':
       return { kind, webhookId: '', properties: [TITLE_PROPERTY], when: null };
+    // Phase 17.
+    case 'wait':
+      return { kind, until: { kind: 'time', minutes: 1440 }, when: null };
+    case 'branch':
+      return {
+        kind,
+        branches: [{ when: { kind: 'group', op: 'and', children: [] }, steps: [] }],
+        otherwise: [],
+        when: null,
+      };
+    case 'approval':
+      return {
+        kind,
+        people: [],
+        groups: [],
+        personProperties: [],
+        mode: 'any',
+        message: '',
+        deadlineMinutes: 4320,
+        approved: [],
+        rejected: [],
+        noAnswer: [],
+        when: null,
+      };
   }
 }
 
@@ -110,9 +134,9 @@ export function newRule(
   };
 }
 
-/** A step kind a rule of this trigger may hold (a schedule has no row to set). */
+/** A step kind a rule of this trigger may hold (a schedule has no row to set or branch on). */
 export const stepFits = (kind: StepKind, trigger: AutomationTrigger) =>
-  trigger.kind !== 'schedule' || kind !== 'set';
+  trigger.kind !== 'schedule' || (kind !== 'set' && kind !== 'branch');
 
 const nameOf = (database: DatabaseRecord, id: string | null | undefined, at: AutoT) =>
   (id && propertyOf(database, id)?.name) || at('summary.missing');
@@ -220,6 +244,20 @@ export function stepText(
     }
     case 'webhook':
       return at('stepSummary.webhook', { webhook: names.webhook(step.webhookId) });
+    case 'wait':
+      return at('stepSummary.wait');
+    case 'branch':
+      return at('stepSummary.branch', { count: step.branches.length + 1 });
+    case 'approval': {
+      const who = [
+        ...step.people.map(names.person),
+        ...step.groups.map(names.group),
+        ...step.personProperties.map(names.property),
+      ];
+      return at('stepSummary.approval', {
+        who: who.length ? who.join(', ') : at('notify.nobody'),
+      });
+    }
   }
 }
 
@@ -238,6 +276,10 @@ const PROBLEMS = new Set([
   'step.webhook',
   'step.database',
   'step.when',
+  'step.wait',
+  'step.branch',
+  'step.approval',
+  'step.nesting',
   'size',
   'rule',
 ]);
@@ -258,6 +300,10 @@ const REASONS = new Set([
   'webhook.access',
   'webhook.gone',
   'webhook.unreached',
+  'wait.expired',
+  'rule.off',
+  'rule.deleted',
+  'automations.off',
 ]);
 
 /** Why a run stopped or was skipped, in words. */
@@ -269,13 +315,24 @@ export function reasonText(reason: string | null | undefined, at: AutoT): string
 
 /** A run's or a step's status, in words; an unknown one as it is. */
 export function statusText(status: string, at: AutoT): string {
-  return ['done', 'stopped', 'skipped', 'running'].includes(status)
+  return ['done', 'stopped', 'skipped', 'running', 'waiting'].includes(status)
     ? at(`status.${status}` as AutoKey)
     : status;
 }
 
 export function stepStatusText(status: string, at: AutoT): string {
-  return ['done', 'skipped', 'failed', 'queued', 'delivered', 'pending'].includes(status)
+  return [
+    'done',
+    'skipped',
+    'failed',
+    'queued',
+    'delivered',
+    'pending',
+    'waiting',
+    'approved',
+    'rejected',
+    'noAnswer',
+  ].includes(status)
     ? at(`stepStatus.${status}` as AutoKey)
     : status;
 }

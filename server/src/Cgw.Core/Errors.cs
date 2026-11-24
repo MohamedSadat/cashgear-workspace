@@ -127,6 +127,13 @@ public static class Codes
     /// <summary>A form view's rows read by a share link: a form shows its questions only (403).</summary>
     public const string FormRows = "form.rows";
 
+    // Phase 17: workflows.
+
+    /// <summary>An approval answered once its run no longer asks it: decided, past its deadline, or its run stopped (409).</summary>
+    public const string ApprovalClosed = "approval.closed";
+    /// <summary>An approval the person has answered already (409).</summary>
+    public const string ApprovalAnswered = "approval.answered";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -143,6 +150,7 @@ public static class Codes
         DomainTaken, DomainDnsNotFound, DomainInUse, DomainNotVerified,
         AutomationLimit, AutomationNone, WebhookAddress, TimeZoneUnknown,
         FormLinkExists, FormRows,
+        ApprovalClosed, ApprovalAnswered,
     ];
 }
 

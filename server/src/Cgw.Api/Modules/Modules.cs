@@ -55,6 +55,7 @@ public static class Modules
         // Phase 15: automations (the rules as records; the worker runs them).
         services.AddScoped<Cgw.Core.Automations.AutomationService>();
         services.AddScoped<Cgw.Core.Automations.AutomationQueries>();
+        services.AddScoped<Cgw.Core.Automations.ApprovalService>();
         services.AddSingleton<Cgw.Core.Automations.WebhookKeys>();
         services.AddSingleton(sp => Cgw.Core.Automations.WebhookOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>()));
         // Phase 16: forms (a link's pages are the Sites process's; its answers are written here).

@@ -747,7 +747,338 @@ const check: CheckCase[] = [
     }),
     expected: refused('size'),
   },
+  ...workflowCases(),
 ];
+
+/** Phase 17: waits, branches and approvals. */
+function workflowCases(): CheckCase[] {
+  const points = (op: string, value: number) => ({
+    kind: 'group',
+    op: 'and',
+    children: [{ kind: 'condition', propertyId: 'pNum0001', operator: op, value }],
+  });
+  const done = {
+    kind: 'group',
+    op: 'and',
+    children: [{ kind: 'condition', propertyId: 'pStat001', operator: 'is', value: 'sDone001' }],
+  };
+  const tell = { kind: 'notify', people: [ALICE], message: 'Look' };
+  const told = {
+    kind: 'notify' as const,
+    people: [ALICE],
+    groups: [],
+    personProperties: [],
+    message: 'Look',
+    when: null,
+  };
+  const branch = (inner: unknown[]) => ({
+    kind: 'branch',
+    branches: [{ when: points('gt', 5), steps: inner }],
+    otherwise: [],
+  });
+  const ask = (fields: Record<string, unknown>) => ({
+    kind: 'approval',
+    people: [BOB],
+    mode: 'any',
+    message: 'Approve?',
+    deadlineMinutes: 4320,
+    ...fields,
+  });
+  const onRow = (steps: unknown[]) => given({ trigger: { kind: 'rowAdded' }, steps });
+  const daily = (steps: unknown[]) =>
+    given({ trigger: { kind: 'schedule', every: 'day', at: '09:00' }, steps });
+  return [
+    {
+      name: 'a wait of a day, then a notice',
+      rule: onRow([{ kind: 'wait', until: { kind: 'time', minutes: 1440 } }, tell]),
+      expected: kept({
+        steps: [{ kind: 'wait', until: { kind: 'time', minutes: 1440 }, when: null }, told],
+      }),
+    },
+    {
+      name: 'a wait until a day before the due date, at 08:00',
+      rule: onRow([
+        {
+          kind: 'wait',
+          until: { kind: 'date', propertyId: 'pDate001', offsetMinutes: -1440, at: '08:00' },
+        },
+      ]),
+      expected: kept({
+        steps: [
+          {
+            kind: 'wait',
+            until: { kind: 'date', propertyId: 'pDate001', offsetMinutes: -1440, at: '08:00' },
+            when: null,
+          },
+        ],
+      }),
+    },
+    {
+      name: 'a wait until the row is done, a week at most',
+      rule: onRow([{ kind: 'wait', until: { kind: 'match', conditions: done, minutes: 10080 } }]),
+      expected: kept({
+        steps: [
+          {
+            kind: 'wait',
+            until: { kind: 'match', conditions: done, minutes: 10080 },
+            when: null,
+          } as never,
+        ],
+      }),
+    },
+    {
+      name: 'a schedule waits an hour',
+      rule: daily([{ kind: 'wait', until: { kind: 'time', minutes: 60 } }, tell]),
+      expected: kept({
+        trigger: { kind: 'schedule', every: 'day', at: '09:00', weekday: null, day: null },
+        steps: [{ kind: 'wait', until: { kind: 'time', minutes: 60 }, when: null }, told],
+      }),
+    },
+    {
+      name: 'a branch by points, else a notice',
+      rule: onRow([
+        {
+          kind: 'branch',
+          branches: [
+            { when: points('gt', 5), steps: [SET_DONE] },
+            { when: points('gt', 2), steps: [] },
+          ],
+          otherwise: [tell],
+        },
+      ]),
+      expected: kept({
+        steps: [
+          {
+            kind: 'branch',
+            branches: [
+              { when: points('gt', 5), steps: [SET_DONE_KEPT] },
+              { when: points('gt', 2), steps: [] },
+            ],
+            otherwise: [told],
+            when: null,
+          } as never,
+        ],
+      }),
+    },
+    {
+      name: 'an approval by all of a group, who answered and the comment kept',
+      rule: onRow([
+        ask({
+          people: undefined,
+          groups: [GROUP],
+          mode: 'all',
+          approved: [
+            {
+              kind: 'set',
+              values: { pPers001: { dynamic: 'approver' }, pText001: { dynamic: 'comment' } },
+            },
+          ],
+          rejected: [{ kind: 'set', values: { title: { dynamic: 'comment' } } }],
+          noAnswer: [tell],
+        }),
+      ]),
+      expected: kept({
+        steps: [
+          {
+            kind: 'approval',
+            people: [],
+            groups: [GROUP],
+            personProperties: [],
+            mode: 'all',
+            message: 'Approve?',
+            deadlineMinutes: 4320,
+            approved: [
+              {
+                kind: 'set',
+                values: { pPers001: { dynamic: 'approver' }, pText001: { dynamic: 'comment' } },
+                when: null,
+              },
+            ],
+            rejected: [{ kind: 'set', values: { title: { dynamic: 'comment' } }, when: null }],
+            noAnswer: [told],
+            when: null,
+          },
+        ],
+      }),
+    },
+    {
+      name: 'a set in an approval in a branch: three levels',
+      rule: onRow([branch([ask({ approved: [SET_DONE] })])]),
+      expected: kept({
+        steps: [
+          {
+            kind: 'branch',
+            branches: [
+              {
+                when: points('gt', 5),
+                steps: [
+                  {
+                    kind: 'approval',
+                    people: [BOB],
+                    groups: [],
+                    personProperties: [],
+                    mode: 'any',
+                    message: 'Approve?',
+                    deadlineMinutes: 4320,
+                    approved: [SET_DONE_KEPT],
+                    rejected: [],
+                    noAnswer: [],
+                    when: null,
+                  },
+                ],
+              },
+            ],
+            otherwise: [],
+            when: null,
+          } as never,
+        ],
+      }),
+    },
+    {
+      name: 'four levels',
+      rule: onRow([branch([ask({ approved: [branch([SET_DONE])] })])]),
+      expected: refused('step.nesting'),
+    },
+    {
+      name: 'an empty path four levels deep',
+      rule: onRow([
+        branch([branch([{ kind: 'branch', branches: [{ when: done }], otherwise: [] }])]),
+      ]),
+      expected: refused('step.nesting'),
+    },
+    {
+      name: 'fifty-one steps in all',
+      rule: onRow([
+        ...Array.from({ length: 16 }, () => branch([SET_DONE, SET_DONE])),
+        SET_DONE,
+        SET_DONE,
+        SET_DONE,
+      ]),
+      expected: refused('steps'),
+    },
+    {
+      name: 'a path of twenty-one steps',
+      rule: onRow([branch(Array.from({ length: 21 }, () => SET_DONE))]),
+      expected: refused('steps'),
+    },
+    {
+      name: 'a wait of no time',
+      rule: onRow([{ kind: 'wait', until: { kind: 'time', minutes: 0 } }]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a wait over ninety days',
+      rule: onRow([{ kind: 'wait', until: { kind: 'time', minutes: 129_601 } }]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a wait for a text',
+      rule: onRow([
+        { kind: 'wait', until: { kind: 'date', propertyId: 'pText001', offsetMinutes: 0 } },
+      ]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a schedule waits for a date',
+      rule: daily([
+        { kind: 'wait', until: { kind: 'date', propertyId: 'pDate001', offsetMinutes: 0 } },
+      ]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a schedule waits for conditions',
+      rule: daily([{ kind: 'wait', until: { kind: 'match', conditions: done, minutes: 60 } }]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a wait for conditions with no limit',
+      rule: onRow([{ kind: 'wait', until: { kind: 'match', conditions: done } }]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a wait for nothing known',
+      rule: onRow([{ kind: 'wait', until: { kind: 'erp' } }]),
+      expected: refused('step.wait'),
+    },
+    {
+      name: 'a schedule branches',
+      rule: daily([branch([tell])]),
+      expected: refused('step.kind'),
+    },
+    {
+      name: 'a branch of no paths',
+      rule: onRow([{ kind: 'branch', branches: [], otherwise: [tell] }]),
+      expected: refused('step.branch'),
+    },
+    {
+      name: 'eleven paths',
+      rule: onRow([
+        {
+          kind: 'branch',
+          branches: Array.from({ length: 11 }, () => ({ when: done, steps: [] })),
+          otherwise: [],
+        },
+      ]),
+      expected: refused('step.branch'),
+    },
+    {
+      name: 'a path with no conditions',
+      rule: onRow([{ kind: 'branch', branches: [{ steps: [SET_DONE] }], otherwise: [] }]),
+      expected: refused('step.branch'),
+    },
+    {
+      name: 'an approval by some',
+      rule: onRow([ask({ mode: 'some' })]),
+      expected: refused('step.approval'),
+    },
+    {
+      name: 'an approval with no deadline',
+      rule: onRow([ask({ deadlineMinutes: undefined })]),
+      expected: refused('step.approval'),
+    },
+    {
+      name: 'a deadline over ninety days',
+      rule: onRow([ask({ deadlineMinutes: 129_601 })]),
+      expected: refused('step.approval'),
+    },
+    {
+      name: 'an approval of nobody',
+      rule: onRow([ask({ people: [] })]),
+      expected: refused('step.recipients'),
+    },
+    {
+      name: 'an approval of a person property on a schedule',
+      rule: daily([ask({ personProperties: ['pPers001'] })]),
+      expected: refused('step.recipients'),
+    },
+    {
+      name: '"who answered" outside an approval',
+      rule: onRow([{ kind: 'set', values: { pPers001: { dynamic: 'approver' } } }]),
+      expected: refused('step.value'),
+    },
+    {
+      name: '"who answered" when nobody answered',
+      rule: onRow([
+        ask({ noAnswer: [{ kind: 'set', values: { pPers001: { dynamic: 'approver' } } }] }),
+      ]),
+      expected: refused('step.value'),
+    },
+    {
+      name: '"who answered" into a text',
+      rule: onRow([
+        ask({ approved: [{ kind: 'set', values: { pText001: { dynamic: 'approver' } } }] }),
+      ]),
+      expected: refused('step.value'),
+    },
+    {
+      name: 'a comment into a number',
+      rule: onRow([
+        ask({ rejected: [{ kind: 'set', values: { pNum0001: { dynamic: 'comment' } } }] }),
+      ]),
+      expected: refused('step.value'),
+    },
+  ];
+}
 
 const added: RowChange = { kind: 'added', changed: [], before: {}, after: {} };
 const changed = (

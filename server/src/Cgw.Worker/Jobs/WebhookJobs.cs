@@ -181,10 +181,13 @@ public sealed class AutomationRetentionJob(TimeProvider clock) : IJob
     {
         var db = services.GetRequiredService<CgwDb>();
         var before = clock.GetUtcNow().AddDays(-AutomationRules.RunsKeptDays);
-        var runs = await db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant]).Where(r => r.StartedAt < before).Take(5000).Select(r => r.Id).ToListAsync(ct);
+        // Phase 17: a run waiting is kept however long ago it started (a wait lasts up to 90 days); an ended one 30 days after it ended.
+        var runs = await db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant]).Where(r => r.Status != RunStatuses.Waiting && r.StartedAt < before && (r.EndedAt == null || r.EndedAt < before))
+            .Take(5000).Select(r => r.Id).ToListAsync(ct);
         if (runs.Count > 0)
         {
             await db.WebhookDeliveries.IgnoreQueryFilters([CgwDb.Tenant]).Where(d => runs.Contains(d.RunId)).ExecuteDeleteAsync(ct);
+            await db.AutomationApprovals.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => runs.Contains(a.RunId)).ExecuteDeleteAsync(ct);
             await db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant]).Where(r => runs.Contains(r.Id)).ExecuteDeleteAsync(ct);
         }
         await db.AutomationEvents.IgnoreQueryFilters([CgwDb.Tenant]).Where(e => e.DoneAt != null && e.DoneAt < before).ExecuteDeleteAsync(ct);

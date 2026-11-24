@@ -2603,6 +2603,2450 @@
       "expected": {
         "reason": "size"
       }
+    },
+    {
+      "name": "a wait of a day, then a notice",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "time",
+              "minutes": 1440
+            }
+          },
+          {
+            "kind": "notify",
+            "people": ["01900000-0000-7000-8000-0000000000a1"],
+            "message": "Look"
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "rowAdded"
+          },
+          "steps": [
+            {
+              "kind": "wait",
+              "until": {
+                "kind": "time",
+                "minutes": 1440
+              },
+              "when": null
+            },
+            {
+              "kind": "notify",
+              "people": ["01900000-0000-7000-8000-0000000000a1"],
+              "groups": [],
+              "personProperties": [],
+              "message": "Look",
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a wait until a day before the due date, at 08:00",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "date",
+              "propertyId": "pDate001",
+              "offsetMinutes": -1440,
+              "at": "08:00"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "rowAdded"
+          },
+          "steps": [
+            {
+              "kind": "wait",
+              "until": {
+                "kind": "date",
+                "propertyId": "pDate001",
+                "offsetMinutes": -1440,
+                "at": "08:00"
+              },
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a wait until the row is done, a week at most",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "match",
+              "conditions": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "pStat001",
+                    "operator": "is",
+                    "value": "sDone001"
+                  }
+                ]
+              },
+              "minutes": 10080
+            }
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "rowAdded"
+          },
+          "steps": [
+            {
+              "kind": "wait",
+              "until": {
+                "kind": "match",
+                "conditions": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "minutes": 10080
+              },
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a schedule waits an hour",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "schedule",
+          "every": "day",
+          "at": "09:00"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "time",
+              "minutes": 60
+            }
+          },
+          {
+            "kind": "notify",
+            "people": ["01900000-0000-7000-8000-0000000000a1"],
+            "message": "Look"
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "schedule",
+            "every": "day",
+            "at": "09:00",
+            "weekday": null,
+            "day": null
+          },
+          "steps": [
+            {
+              "kind": "wait",
+              "until": {
+                "kind": "time",
+                "minutes": 60
+              },
+              "when": null
+            },
+            {
+              "kind": "notify",
+              "people": ["01900000-0000-7000-8000-0000000000a1"],
+              "groups": [],
+              "personProperties": [],
+              "message": "Look",
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a branch by points, else a notice",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 2
+                    }
+                  ]
+                },
+                "steps": []
+              }
+            ],
+            "otherwise": [
+              {
+                "kind": "notify",
+                "people": ["01900000-0000-7000-8000-0000000000a1"],
+                "message": "Look"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "rowAdded"
+          },
+          "steps": [
+            {
+              "kind": "branch",
+              "branches": [
+                {
+                  "when": {
+                    "kind": "group",
+                    "op": "and",
+                    "children": [
+                      {
+                        "kind": "condition",
+                        "propertyId": "pNum0001",
+                        "operator": "gt",
+                        "value": 5
+                      }
+                    ]
+                  },
+                  "steps": [
+                    {
+                      "kind": "set",
+                      "values": {
+                        "pStat001": "sDone001"
+                      },
+                      "when": null
+                    }
+                  ]
+                },
+                {
+                  "when": {
+                    "kind": "group",
+                    "op": "and",
+                    "children": [
+                      {
+                        "kind": "condition",
+                        "propertyId": "pNum0001",
+                        "operator": "gt",
+                        "value": 2
+                      }
+                    ]
+                  },
+                  "steps": []
+                }
+              ],
+              "otherwise": [
+                {
+                  "kind": "notify",
+                  "people": ["01900000-0000-7000-8000-0000000000a1"],
+                  "groups": [],
+                  "personProperties": [],
+                  "message": "Look",
+                  "when": null
+                }
+              ],
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "an approval by all of a group, who answered and the comment kept",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "mode": "all",
+            "message": "Approve?",
+            "deadlineMinutes": 4320,
+            "groups": ["01900000-0000-7000-8000-00000000d001"],
+            "approved": [
+              {
+                "kind": "set",
+                "values": {
+                  "pPers001": {
+                    "dynamic": "approver"
+                  },
+                  "pText001": {
+                    "dynamic": "comment"
+                  }
+                }
+              }
+            ],
+            "rejected": [
+              {
+                "kind": "set",
+                "values": {
+                  "title": {
+                    "dynamic": "comment"
+                  }
+                }
+              }
+            ],
+            "noAnswer": [
+              {
+                "kind": "notify",
+                "people": ["01900000-0000-7000-8000-0000000000a1"],
+                "message": "Look"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "rowAdded"
+          },
+          "steps": [
+            {
+              "kind": "approval",
+              "people": [],
+              "groups": ["01900000-0000-7000-8000-00000000d001"],
+              "personProperties": [],
+              "mode": "all",
+              "message": "Approve?",
+              "deadlineMinutes": 4320,
+              "approved": [
+                {
+                  "kind": "set",
+                  "values": {
+                    "pPers001": {
+                      "dynamic": "approver"
+                    },
+                    "pText001": {
+                      "dynamic": "comment"
+                    }
+                  },
+                  "when": null
+                }
+              ],
+              "rejected": [
+                {
+                  "kind": "set",
+                  "values": {
+                    "title": {
+                      "dynamic": "comment"
+                    }
+                  },
+                  "when": null
+                }
+              ],
+              "noAnswer": [
+                {
+                  "kind": "notify",
+                  "people": ["01900000-0000-7000-8000-0000000000a1"],
+                  "groups": [],
+                  "personProperties": [],
+                  "message": "Look",
+                  "when": null
+                }
+              ],
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a set in an approval in a branch: three levels",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "approval",
+                    "people": ["01900000-0000-7000-8000-0000000000b0"],
+                    "mode": "any",
+                    "message": "Approve?",
+                    "deadlineMinutes": 4320,
+                    "approved": [
+                      {
+                        "kind": "set",
+                        "values": {
+                          "pStat001": "sDone001"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "rowAdded"
+          },
+          "steps": [
+            {
+              "kind": "branch",
+              "branches": [
+                {
+                  "when": {
+                    "kind": "group",
+                    "op": "and",
+                    "children": [
+                      {
+                        "kind": "condition",
+                        "propertyId": "pNum0001",
+                        "operator": "gt",
+                        "value": 5
+                      }
+                    ]
+                  },
+                  "steps": [
+                    {
+                      "kind": "approval",
+                      "people": ["01900000-0000-7000-8000-0000000000b0"],
+                      "groups": [],
+                      "personProperties": [],
+                      "mode": "any",
+                      "message": "Approve?",
+                      "deadlineMinutes": 4320,
+                      "approved": [
+                        {
+                          "kind": "set",
+                          "values": {
+                            "pStat001": "sDone001"
+                          },
+                          "when": null
+                        }
+                      ],
+                      "rejected": [],
+                      "noAnswer": [],
+                      "when": null
+                    }
+                  ]
+                }
+              ],
+              "otherwise": [],
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "four levels",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "approval",
+                    "people": ["01900000-0000-7000-8000-0000000000b0"],
+                    "mode": "any",
+                    "message": "Approve?",
+                    "deadlineMinutes": 4320,
+                    "approved": [
+                      {
+                        "kind": "branch",
+                        "branches": [
+                          {
+                            "when": {
+                              "kind": "group",
+                              "op": "and",
+                              "children": [
+                                {
+                                  "kind": "condition",
+                                  "propertyId": "pNum0001",
+                                  "operator": "gt",
+                                  "value": 5
+                                }
+                              ]
+                            },
+                            "steps": [
+                              {
+                                "kind": "set",
+                                "values": {
+                                  "pStat001": "sDone001"
+                                }
+                              }
+                            ]
+                          }
+                        ],
+                        "otherwise": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.nesting"
+      }
+    },
+    {
+      "name": "an empty path four levels deep",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "branch",
+                    "branches": [
+                      {
+                        "when": {
+                          "kind": "group",
+                          "op": "and",
+                          "children": [
+                            {
+                              "kind": "condition",
+                              "propertyId": "pNum0001",
+                              "operator": "gt",
+                              "value": 5
+                            }
+                          ]
+                        },
+                        "steps": [
+                          {
+                            "kind": "branch",
+                            "branches": [
+                              {
+                                "when": {
+                                  "kind": "group",
+                                  "op": "and",
+                                  "children": [
+                                    {
+                                      "kind": "condition",
+                                      "propertyId": "pStat001",
+                                      "operator": "is",
+                                      "value": "sDone001"
+                                    }
+                                  ]
+                                }
+                              }
+                            ],
+                            "otherwise": []
+                          }
+                        ]
+                      }
+                    ],
+                    "otherwise": []
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.nesting"
+      }
+    },
+    {
+      "name": "fifty-one steps in all",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          },
+          {
+            "kind": "set",
+            "values": {
+              "pStat001": "sDone001"
+            }
+          },
+          {
+            "kind": "set",
+            "values": {
+              "pStat001": "sDone001"
+            }
+          },
+          {
+            "kind": "set",
+            "values": {
+              "pStat001": "sDone001"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "steps"
+      }
+    },
+    {
+      "name": "a path of twenty-one steps",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  },
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "reason": "steps"
+      }
+    },
+    {
+      "name": "a wait of no time",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "time",
+              "minutes": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a wait over ninety days",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "time",
+              "minutes": 129601
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a wait for a text",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "date",
+              "propertyId": "pText001",
+              "offsetMinutes": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a schedule waits for a date",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "schedule",
+          "every": "day",
+          "at": "09:00"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "date",
+              "propertyId": "pDate001",
+              "offsetMinutes": 0
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a schedule waits for conditions",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "schedule",
+          "every": "day",
+          "at": "09:00"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "match",
+              "conditions": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "pStat001",
+                    "operator": "is",
+                    "value": "sDone001"
+                  }
+                ]
+              },
+              "minutes": 60
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a wait for conditions with no limit",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "match",
+              "conditions": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "pStat001",
+                    "operator": "is",
+                    "value": "sDone001"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a wait for nothing known",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "wait",
+            "until": {
+              "kind": "erp"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.wait"
+      }
+    },
+    {
+      "name": "a schedule branches",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "schedule",
+          "every": "day",
+          "at": "09:00"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pNum0001",
+                      "operator": "gt",
+                      "value": 5
+                    }
+                  ]
+                },
+                "steps": [
+                  {
+                    "kind": "notify",
+                    "people": ["01900000-0000-7000-8000-0000000000a1"],
+                    "message": "Look"
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.kind"
+      }
+    },
+    {
+      "name": "a branch of no paths",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [],
+            "otherwise": [
+              {
+                "kind": "notify",
+                "people": ["01900000-0000-7000-8000-0000000000a1"],
+                "message": "Look"
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.branch"
+      }
+    },
+    {
+      "name": "eleven paths",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              },
+              {
+                "when": {
+                  "kind": "group",
+                  "op": "and",
+                  "children": [
+                    {
+                      "kind": "condition",
+                      "propertyId": "pStat001",
+                      "operator": "is",
+                      "value": "sDone001"
+                    }
+                  ]
+                },
+                "steps": []
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.branch"
+      }
+    },
+    {
+      "name": "a path with no conditions",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "branch",
+            "branches": [
+              {
+                "steps": [
+                  {
+                    "kind": "set",
+                    "values": {
+                      "pStat001": "sDone001"
+                    }
+                  }
+                ]
+              }
+            ],
+            "otherwise": []
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.branch"
+      }
+    },
+    {
+      "name": "an approval by some",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "some",
+            "message": "Approve?",
+            "deadlineMinutes": 4320
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.approval"
+      }
+    },
+    {
+      "name": "an approval with no deadline",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "any",
+            "message": "Approve?"
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.approval"
+      }
+    },
+    {
+      "name": "a deadline over ninety days",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "any",
+            "message": "Approve?",
+            "deadlineMinutes": 129601
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.approval"
+      }
+    },
+    {
+      "name": "an approval of nobody",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": [],
+            "mode": "any",
+            "message": "Approve?",
+            "deadlineMinutes": 4320
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.recipients"
+      }
+    },
+    {
+      "name": "an approval of a person property on a schedule",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "schedule",
+          "every": "day",
+          "at": "09:00"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "any",
+            "message": "Approve?",
+            "deadlineMinutes": 4320,
+            "personProperties": ["pPers001"]
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.recipients"
+      }
+    },
+    {
+      "name": "\"who answered\" outside an approval",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "set",
+            "values": {
+              "pPers001": {
+                "dynamic": "approver"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.value"
+      }
+    },
+    {
+      "name": "\"who answered\" when nobody answered",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "any",
+            "message": "Approve?",
+            "deadlineMinutes": 4320,
+            "noAnswer": [
+              {
+                "kind": "set",
+                "values": {
+                  "pPers001": {
+                    "dynamic": "approver"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.value"
+      }
+    },
+    {
+      "name": "\"who answered\" into a text",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "any",
+            "message": "Approve?",
+            "deadlineMinutes": 4320,
+            "approved": [
+              {
+                "kind": "set",
+                "values": {
+                  "pText001": {
+                    "dynamic": "approver"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.value"
+      }
+    },
+    {
+      "name": "a comment into a number",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "approval",
+            "people": ["01900000-0000-7000-8000-0000000000b0"],
+            "mode": "any",
+            "message": "Approve?",
+            "deadlineMinutes": 4320,
+            "rejected": [
+              {
+                "kind": "set",
+                "values": {
+                  "pNum0001": {
+                    "dynamic": "comment"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.value"
+      }
     }
   ],
   "starts": [

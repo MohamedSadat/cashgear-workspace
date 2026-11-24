@@ -450,9 +450,10 @@ public sealed class AutomationRunTests(ServerFixture server)
     [Fact]
     public void No_step_reaches_the_erp()
     {
-        // The steps are these four, and the rules' and runner's code names nothing of the ERP: the
-        // server holds no ERP session or key (ARCHITECTURE.md), so there is nothing one could use.
-        Assert.Equal(new[] { "set", "addRow", "notify", "webhook" }, File.ReadAllText(Path.Combine(server.Root, "packages", "workspace", "src", "db", "automations.ts"))
+        // The steps are these (Phase 17: waits, branches and approvals too), and the rules' and
+        // runner's code names nothing of the ERP: the server holds no ERP session or key
+        // (ARCHITECTURE.md), so there is nothing one could use.
+        Assert.Equal(new[] { "set", "addRow", "notify", "webhook", "wait", "branch", "approval" }, File.ReadAllText(Path.Combine(server.Root, "packages", "workspace", "src", "db", "automations.ts"))
             .Split("export const STEP_KINDS: readonly StepKind[] = [")[1].Split("]")[0].Split(',').Select(s => s.Trim().Trim('\'')).Where(s => s.Length > 0));
         foreach (var file in new[]
         {
@@ -460,6 +461,7 @@ public sealed class AutomationRunTests(ServerFixture server)
             Path.Combine(server.Root, "server", "src", "Cgw.Worker", "Jobs", "WebhookJobs.cs"),
             Path.Combine(server.Root, "server", "src", "Cgw.Core", "Automations", "AutomationRules.cs"),
             Path.Combine(server.Root, "server", "src", "Cgw.Core", "Automations", "AutomationService.cs"),
+            Path.Combine(server.Root, "server", "src", "Cgw.Core", "Automations", "Approvals.cs"),
         })
         {
             var text = File.ReadAllText(file);

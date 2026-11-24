@@ -151,6 +151,8 @@ export const browserTimeZone = (): string | null => {
 
 export class ShellAutomations implements AutomationsHost {
   private propertyTypes: number | null = null;
+  /** Phase 17: the step kinds the server keeps (none sent: 4, a server before 0.17.0). */
+  private stepKinds: number | null = null;
   private readonly listeners = new Set<() => void>();
   private readonly off: () => void;
 
@@ -179,8 +181,10 @@ export class ShellAutomations implements AutomationsHost {
     try {
       const answer = await data(this.cloud.api.GET('/api/v1/version'));
       this.propertyTypes = Number((answer as { propertyTypes?: number }).propertyTypes ?? 20);
+      this.stepKinds = Number((answer as { stepKinds?: number }).stepKinds ?? 4);
     } catch {
       this.propertyTypes = null;
+      this.stepKinds = null;
     }
     this.changed();
   }
@@ -223,6 +227,8 @@ export class ShellAutomations implements AutomationsHost {
         webhooks: answer.webhooks.map((w) => ({ id: w.id, name: w.name })),
         timeZone: answer.timeZone ?? null,
         allOff: answer.allOff,
+        // Unknown yet: only what every server keeps.
+        stepKinds: this.stepKinds ?? 4,
       };
     } catch (error) {
       throw asCode(error);

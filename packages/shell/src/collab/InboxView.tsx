@@ -3,13 +3,13 @@
 // its page at its block, or opens the comments at its thread. "Mark all as read". Online only:
 // offline it says so and keeps what it last showed.
 import { CgAvatar } from '@cashgear/ui';
-import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { navigate, routeHash } from '../route';
 import type { WorkspaceSession } from '../session';
 import type { Collab } from './collab';
 import { avatarColours } from './colour';
-import type { NotificationDto } from './inbox';
+import type { InboxStore, NotificationDto } from './inbox';
 import { openThread } from './threads';
 import { useSection } from '../i18n/sections';
 import { automationsWords } from '../automations/words';
@@ -30,6 +30,116 @@ function automationText(n: NotificationDto, t: Loose, name: string, title: strin
     line: t('automations.inbox.notice', { actor: name, name: `“${rule}”`, title }),
     excerpt: n.excerpt,
   };
+}
+
+/**
+ * Phase 17: an approval asked of the person: Approve or Reject with a comment while it is asked,
+ * else what came of it. Sent once; a refusal (decided meanwhile, past its deadline) says so.
+ */
+function ApprovalAnswer({
+  n,
+  inbox,
+  t,
+  title,
+  format,
+  online,
+}: {
+  n: NotificationDto;
+  inbox: InboxStore;
+  t: Loose;
+  title: string;
+  format: Intl.DateTimeFormat;
+  online: boolean;
+}) {
+  const [comment, setComment] = useState('');
+  const [sending, setSending] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const approval = n.approval!;
+  const send = async (answer: 'approve' | 'reject') => {
+    setSending(true);
+    setProblem(null);
+    try {
+      await inbox.answer(n.id, answer, comment.trim() || null);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      setProblem(
+        t(code === 'approval.closed' ? 'automations.inbox.closed' : 'automations.inbox.failed'),
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+  if (approval.answer || approval.state !== 'open')
+    return (
+      <p className="cgw-inbox-approval cgw-muted" data-state={approval.state}>
+        {approval.answer
+          ? t(
+              approval.answer === 'approve'
+                ? 'automations.inbox.youApproved'
+                : 'automations.inbox.youRejected',
+            )
+          : ''}{' '}
+        {approval.state === 'open'
+          ? approval.mode === 'all'
+            ? t('automations.inbox.answeredOf', {
+                answered: approval.answered,
+                asked: approval.asked,
+              })
+            : ''
+          : t(`automations.inbox.${approval.state === 'stopped' ? 'closed' : approval.state}`)}
+      </p>
+    );
+  const due = new Date(approval.deadlineAt);
+  return (
+    <div
+      className="cgw-inbox-approval"
+      role="group"
+      aria-label={t('automations.inbox.answerLabel', { title })}
+    >
+      <textarea
+        className="cgw-inbox-comment"
+        dir="auto"
+        maxLength={1000}
+        aria-label={t('automations.inbox.comment')}
+        placeholder={t('automations.inbox.comment')}
+        value={comment}
+        onChange={(event) => setComment(event.target.value)}
+      />
+      <span className="cgw-inbox-approval-actions">
+        <button
+          type="button"
+          className="cgw-button is-primary"
+          disabled={sending || !online}
+          onClick={() => void send('approve')}
+        >
+          {t('automations.inbox.approve')}
+        </button>
+        <button
+          type="button"
+          className="cgw-button"
+          disabled={sending || !online}
+          onClick={() => void send('reject')}
+        >
+          {t('automations.inbox.reject')}
+        </button>
+        {Number.isNaN(due.getTime()) ? null : (
+          <span className="cgw-muted">
+            {t('automations.inbox.answerBy', { when: format.format(due) })}
+          </span>
+        )}
+        {approval.mode === 'all' ? (
+          <span className="cgw-muted">
+            {t('automations.inbox.answeredOf', {
+              answered: approval.answered,
+              asked: approval.asked,
+            })}
+          </span>
+        ) : null}
+      </span>
+      {!online ? <p className="cgw-muted">{t('automations.inbox.offline')}</p> : null}
+      {problem ? <p role="alert">{problem}</p> : null}
+    </div>
+  );
 }
 
 const textKey = (kind: NotificationDto['kind']) =>
@@ -134,7 +244,13 @@ export function InboxView({ collab, session }: { collab: Collab; session: Worksp
                       <span dir="auto">
                         {n.kind === 'automation'
                           ? automationText(n, t as unknown as Loose, name, title).line
-                          : t(textKey(n.kind), { name, title })}
+                          : n.kind === 'approval'
+                            ? t('automations.inbox.approval', {
+                                actor: name,
+                                name: `“${n.automationName || t('automations.settings.untitled')}”`,
+                                title,
+                              })
+                            : t(textKey(n.kind), { name, title })}
                       </span>
                     </span>
                     {(n.kind === 'automation'
@@ -151,6 +267,16 @@ export function InboxView({ collab, session }: { collab: Collab; session: Worksp
                     </time>
                   </span>
                 </a>
+                {n.kind === 'approval' && n.approval ? (
+                  <ApprovalAnswer
+                    n={n}
+                    inbox={inbox}
+                    t={t as unknown as Loose}
+                    title={title}
+                    format={format}
+                    online={snap.online}
+                  />
+                ) : null}
               </li>
             );
           })}

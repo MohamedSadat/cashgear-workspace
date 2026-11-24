@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Cgw.Core.Data;
 using Cgw.Worker.Jobs;
@@ -210,8 +211,19 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             viewTypes = 8,
         })))[0].GetProperty("status").GetString());
         Assert.True((await ws.Client.PostAsJsonAsync($"/api/v1/databases/{database}/views/{form}/form/link", new { enabled = true })).IsSuccessStatusCode);
+        // Phase 17: an approval asked of the member.
+        var asks = Guid.CreateVersion7();
+        Assert.Equal("applied", AutomationTests.Status(await AutomationTests.Save(ws, AutomationTests.Rule(ws, asks, automationDb, AutomationTests.Added, new JsonArray(new JsonObject
+        {
+            ["kind"] = "approval", ["people"] = new JsonArray(member.Id.ToString()), ["groups"] = new JsonArray(), ["personProperties"] = new JsonArray(),
+            ["mode"] = "any", ["message"] = "Secret?", ["deadlineMinutes"] = 60, ["approved"] = new JsonArray(), ["rejected"] = new JsonArray(), ["noAnswer"] = new JsonArray(),
+        }), name: "Asks"))));
+        await DatabaseTests.NewRow(ws, automationDb, "Asked row");
+        await server.RunJob<Cgw.Worker.Jobs.AutomationJob>(200);
+        var approval = await Kit.InWorker(server, ws.Id, (_, db) => db.AutomationApprovals.Where(a => a.AutomationId == asks).Select(a => a.Id).SingleAsync());
         var values = new Dictionary<string, string>
         {
+            ["approvalId"] = approval.ToString(),
             ["workspaceId"] = ws.Id.ToString(),
             ["pageId"] = page.ToString(),
             ["assetId"] = asset.ToString(),

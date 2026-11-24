@@ -438,6 +438,9 @@ namespace Cgw.Core.Data.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("bigint");
 
+                    b.Property<bool>("WatchesRows")
+                        .HasColumnType("bit");
+
                     b.Property<byte[]>("WorkspaceId")
                         .IsRequired()
                         .HasColumnType("binary(16)");
@@ -451,6 +454,80 @@ namespace Cgw.Core.Data.Migrations
                         .HasFilter("[DeletedAt] IS NULL AND [Enabled] = 1");
 
                     b.ToTable("Automations");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.AutomationApproval", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Answer")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTimeOffset?>("AnsweredAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("AutomationId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("DeadlineAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4)");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<byte[]>("RowId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("RunId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("StepPath")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.HasIndex("RunId", "StepPath", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("AutomationApprovals");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.AutomationEvent", b =>
@@ -547,9 +624,15 @@ namespace Cgw.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("binary(16)");
 
+                    b.Property<string>("Context")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<byte[]>("DatabaseId")
                         .IsRequired()
                         .HasColumnType("binary(16)");
+
+                    b.Property<string>("Definition")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Depth")
                         .HasColumnType("int");
@@ -564,6 +647,11 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<long?>("EventId")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Place")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(40)
@@ -586,11 +674,25 @@ namespace Cgw.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset?>("TakenAt")
+                        .HasColumnType("datetimeoffset(3)");
+
                     b.Property<string>("Trigger")
                         .IsRequired()
                         .HasMaxLength(20)
                         .IsUnicode(false)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<string>("WaitKind")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<DateTimeOffset?>("WaitUntil")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("WaitedAt")
+                        .HasColumnType("datetimeoffset(3)");
 
                     b.Property<byte[]>("WorkspaceId")
                         .IsRequired()
@@ -598,9 +700,21 @@ namespace Cgw.Core.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RowId")
+                        .HasDatabaseName("IX_AutomationRuns_WaitingRows")
+                        .HasFilter("[Status] = 'waiting' AND [RowId] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("RowId"), new[] { "WaitKind" });
+
                     b.HasIndex("StartedAt")
                         .HasDatabaseName("IX_AutomationRuns_Running")
                         .HasFilter("[Status] = 'running'");
+
+                    b.HasIndex("WaitUntil")
+                        .HasDatabaseName("IX_AutomationRuns_Waiting")
+                        .HasFilter("[Status] = 'waiting'");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("WaitUntil"), new[] { "TakenAt" });
 
                     b.HasIndex("AutomationId", "DueKey")
                         .IsUnique()
@@ -1283,6 +1397,9 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<byte[]>("ActorUserId")
                         .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("ApprovalId")
                         .HasColumnType("binary(16)");
 
                     b.Property<byte[]>("AutomationId")

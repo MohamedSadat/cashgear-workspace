@@ -23,7 +23,9 @@ public sealed record NotificationDto(
     /// <summary>Phase 15, kind <c>automation</c>: the rule (its name as it is now) and, for a run that stopped, why.</summary>
     Guid? AutomationId = null,
     string? AutomationName = null,
-    string? Reason = null);
+    string? Reason = null,
+    /// <summary>Phase 17, kind <c>approval</c>: the approval, its state and the person's answer.</summary>
+    Cgw.Core.Automations.ApprovalDto? Approval = null);
 
 public sealed record NotificationsDto(IReadOnlyList<NotificationDto> Notifications, int Unread, string? Next);
 
@@ -177,9 +179,12 @@ public sealed class NotificationService(CgwDb db, ChangeLog changes, TimeProvide
         var ruleIds = rows.Values.Where(r => r.AutomationId is not null).Select(r => r.AutomationId!.Value).Distinct().ToList();
         var rules = ruleIds.Count == 0 ? [] : await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(a => ruleIds.Contains(a.Id))
             .ToDictionaryAsync(a => a.Id, a => a.Name, ct);
+        var approvals = await Cgw.Core.Automations.ApprovalService.ForAsync(db,
+            rows.Values.Where(r => r.ApprovalId is not null).Select(r => r.ApprovalId!.Value).ToList(), ct);
         var list = kept.Select(k => rows[k.Id]).Select(n => new NotificationDto(n.Id, n.Kind, n.WorkspaceId, n.PageId, titles.GetValueOrDefault(n.PageId, ""),
             n.BlockId, n.ThreadId, n.CommentId, People.Of(people, n.ActorUserId), n.Excerpt, n.CreatedAt, n.ReadAt,
-            n.AutomationId, n.AutomationId is { } rule ? rules.GetValueOrDefault(rule) : null, n.Reason)).ToList();
+            n.AutomationId, n.AutomationId is { } rule ? rules.GetValueOrDefault(rule) : null, n.Reason,
+            n.ApprovalId is { } approval ? approvals.GetValueOrDefault(approval) : null)).ToList();
         return new NotificationsDto(list, await UnreadAsync(userId, memberships, ct), next);
     }
 
