@@ -1920,3 +1920,22 @@ Phase 16: Forms, sized against 0.14.0 on the same day).
 | The form's language | `en` or `ar`, the words and direction of its link's pages (as a site's), first the maker's app language | The person answering is not signed in |
 | Version | `v0.16.0` | One version per phase |
 | The old build | v0.15.0 served on 4267 for `old-build.spec.ts` | 4268 is the passkey specs' build |
+
+Picked while building it (2026-11-24):
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| A link's token kept twice | As its SHA-256, by which the Sites process and the answer route find it, and as Data Protection's output (purpose `Cgw.Forms.Link.v1`), from which the members' route gives the database's readers its address again | "Share form" shows the address as often as it is opened; the Sites process holds no key ring and needs only the hash |
+| A block naming a form, outside the app | On a site, "This database is not published", as for any view a site does not draw; on a share link, the form's questions with nothing to send. This replaces the default above ("its title and, while its link takes answers, a link to it") | The Sites process cannot read a link's token (no key ring), and a page must not give out a form's link its author never put on it |
+| Pages between, and the last | Every page of a link posts to the Sites process (`POST /_form/{token}`: `q.<propertyId>`, `at` the page, `go` `next` or `back`, the trap `website`), which checks the page and draws the next or the same one with what is wrong; after the last a 307 sends the same post on to the API, which checks every page again | With script off a form's `action` cannot change with the answers; a 307 keeps the method and the body, and the answers carried in hidden fields are checked whole where the row is written |
+| The trap | An answer that fills `website` is answered as one taken (303 to the thank-you page) and adds nothing: no row, no count, no audit entry | A bot learns nothing from its answer |
+| Dates on a link | A date question is a date field, or a date and time field when its property has times, read in the workspace's time zone (`FormPosts`) | The person answering has no session to give a zone |
+| Counting an answer | One `UPDATE … SET Answers = Answers + 1` that holds the switch, the closing date and the maximum, in the workspace's lock, before the row is made; nothing counted, nothing made | Two answers at once cannot pass a maximum, and a link switched off takes nothing after it |
+| The size | 64 KB by the request's `Content-Length`, 413 before anything is read, in the API and in the Sites process | IIS's limit is the whole site's, and the test server ignores a route's own |
+| A link's settings | All at once (`PUT …/form/link`: the switch, the closing date, the maximum), the count kept; one link a form (409 `form.linkExists`) | One record a form; a change never half applies |
+| A link and its count in the feed | Neither: the form's route is read when the view opens and after each change of the link or answer from this tab | Only full access changes a link, and a change of the feed for every answer would reach every reader of the database |
+| Offering a form | "Add a view" offers a form, and the Contacts template makes its contact form, only once the server's `/version` counts eight view types (`DatabaseHost.viewTypeKnown`) | Production's server has been deployed after its web app; a server before 0.16.0 refuses the view |
+| A new form view | Asks the title (required) and every property it may ask, in the database's order, on one page | It works from the first click; the builder takes questions away |
+| The form's toolbar | No filter, sort, search or New (`supports.rows: false`) | A form reads no rows |
+| "Tell me of new answers" | Saves a rule, "a form answered" by this form, that tells the person who pressed it; it is then in ⚡ Automations, to change, switch off or delete | Phase 15's own rule, not a setting of the link's |
+| The budget's load | Five forms' links, an answer every 20 ms for 60 s (3,000) whatever the others' answers, the time to the route's 303; the e2e stack raises `RateLimits__formMinute` and `__formDay` so one address may send them | The bench is one address; the limits have their own test |

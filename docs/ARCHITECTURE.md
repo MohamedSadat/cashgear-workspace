@@ -392,6 +392,21 @@ with them (`automations` in `@cgw/database`'s lazily merged catalogue, the shell
 section for Settings → Automations and a press's notices). The button property's cell presses once
 for an editor, never offline.
 
+### Forms in the client (Phase 16)
+
+The form view (`packages/database/src/views/form/`) is the eighth view type: it reads no rows, so the
+toolbar shows no filter, sort, search or New for it (`supports.rows: false`). Who can edit the
+database answers it (`FormAnswer`: a page at a time, each checked by `checkAnswers` and the next shown
+by the conditions, the answer one `page.create` with `formId` through the outbox, offline too) and
+edits its questions (`FormBuilder`: each change the view's `view.upsert`, its `properties` following
+the questions); a reader is drawn the form and sends nothing. "Share form" (`FormShare`) reads and
+changes the link through `DatabaseHost.forms`, the shell's `ShellForms` over the server's routes
+(`packages/shell/src/forms/host.ts`, loaded with the cloud), which also reads `/version`: "Add a view"
+offers a form only once the server keeps one (`DatabaseHost.viewTypeKnown`), and the Contacts
+template leaves its contact form out otherwise. The rules are `@cgw/workspace/forms`, an entry of its
+own, and the words (`database.form`) are merged with the first form drawn (`ft`), so the initial
+JavaScript holds none of them (349.7 kB of 350 at 0.16.0).
+
 ## The backend
 
 One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites process from Phase 9).
@@ -400,7 +415,7 @@ One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites pro
 | --- | --- | --- |
 | API | Authentication, authorisation, operations, change feed, document push and pull (Phase 12: a batch pull of up to 100 pages, `Cgw.Core/Documents/DocPulls.cs`), asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
 | Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap); Phase 15: the rules' runner (`automations`, a loop of its own every 100 ms) and webhooks' calls (`webhooks`, every second) | Serves requests; holds an ERP session or key |
-| Sites (Phase 9) | Published pages as HTML on an origin of its own (`server/src/Cgw.Sites`, IIS site `CashGearWorkspaceSites`, `pages.cashgearerp.com`; `http://localhost:5290` in development), rendered on the server from the worker's derived JSON; `robots.txt`; a page's files by a redirect to a short signed URL checked on every request. From Phase 10 also the plugins origin, a second host name of the same site (`plugins.cashgearerp.com`; `http://localhost:5291` in development): a third-party plugin's bundle files under a frame ticket found by its hash, with a CSP of no network (Phase 13: a CSP per bundle, `connect-src` the hosts an owner or admin approved) | Signs anyone in, sets or reads a cookie, sends script on the pages origin, loads a Yjs library, Data Protection or the local model, writes anything |
+| Sites (Phase 9) | Published pages as HTML on an origin of its own (`server/src/Cgw.Sites`, IIS site `CashGearWorkspaceSites`, `pages.cashgearerp.com`; `http://localhost:5290` in development), rendered on the server from the worker's derived JSON; `robots.txt`; a page's files by a redirect to a short signed URL checked on every request; from Phase 16 a form link's pages (`/_form/{token}`: drawn, a page's post checked and the next page drawn, the last page's post sent on to the API). From Phase 10 also the plugins origin, a second host name of the same site (`plugins.cashgearerp.com`; `http://localhost:5291` in development): a third-party plugin's bundle files under a frame ticket found by its hash, with a CSP of no network (Phase 13: a CSP per bundle, `connect-src` the hosts an owner or admin approved) | Signs anyone in, sets or reads a cookie, sends script on the pages origin, loads a Yjs library, Data Protection or the local model, writes anything |
 
 Both processes share one Data Protection key ring (`DataProtectionKeys`): from Phase 8 the worker
 writes the unsubscribe tokens the API reads.
@@ -463,6 +478,27 @@ the inbox's (`automation`); webhooks' calls are `WebhookDeliveries` the `Webhook
 (`WebhookSender`: POST only, no redirect, the address checked at connect by `SafeFetcher`'s rules,
 signed; INTEGRATIONS.md). No step reaches the ERP: the runner holds no ERP session or key, and a
 test reads its sources for any.
+
+Phase 16's Forms (`Cgw.Core/Forms`, the routes in `Cgw.Api/Modules/FormEndpoints.cs`, the Sites
+process's `Cgw.Sites/FormPages.cs`). A form is read and an answer checked by the C# port of
+`db/forms.ts` (`FormRules`, held to it by `db-form-vectors.json`); a link's posted fields are read by
+`FormPosts` (a date and time typed in the workspace's zone). A form link's pages are the Sites
+process's, under `/_form/{token}` on its own host (no slug starts with `_`): HTML with no script and a
+stylesheet of their own (`FormHtml`, `FormWords` in English and Arabic), a policy whose `form-action`
+names only the Sites process and the API (`Api__PublicUrl`); a `GET` draws the first page shown (kept
+by `SiteCache` by a key of the link's, the view's and the database's versions), a `POST` checks the
+page and draws the next one with the earlier answers in hidden fields, or the same one with what is
+wrong, and after the last a 307 sends the same post on to the API. It reads the link by its token's
+hash (`FormLinkReader`) and writes nothing. The API's `POST /api/v1/forms/{token}` takes the answer with
+no session (none is read, a cookie sent is ignored) and no antiforgery token: the address's own
+windows first (`FormLimits`, in memory: 10 a minute and 100 a day a link, an IPv6 address by its
+/64; past them 429 with `Retry-After` and a fixed page), then the anonymous window; the link and its
+form read again, the trap field (`website`), the rules' check; then, in the workspace's lock, one
+statement that counts the answer only while the link is on, open and under its maximum, the row made
+with no member through `DatabaseOps.CreateAnsweredRowAsync` (its events' `FormId`, so "a form is
+answered" runs), the audit with the address; a 303 to the thank-you page, or to the form's page,
+which says why. The members' routes (`FormService`) read a form's count and link and make, change
+and delete the link with full access; the token is kept as its hash and under Data Protection.
 
 Conventions:
 

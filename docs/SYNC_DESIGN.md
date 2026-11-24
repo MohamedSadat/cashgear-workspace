@@ -532,15 +532,26 @@ are in `DATA_MODEL.md` (Databases).
   and the page operations on rows (title, icon, cover, reorder among the database's rows, trash,
   restore, delete). No `baseVersion` on the database ones: the last to reach the server wins, per
   property. From Phase 9 a build sends `viewTypes`, the number of view types it knows (6 to 0.11.0;
-  7 from 0.12.0, with `chart`), in every `view.upsert`, and from Phase 12 the server reads it as a
-  count (absent: 5, every build before 0.9.0). An upsert from a build that knows fewer types than
-  the server, and says `table` for a stored type it cannot know (a `chart` from 0.9.0 to 0.11.0; a
-  `timeline` or a `chart` before), keeps the stored type, and keeps every stored setting such a
+  7 from 0.12.0, with `chart`; 8 from 0.16.0, with `form`), in every `view.upsert`, and from Phase 12
+  the server reads it as a count (absent: 5, every build before 0.9.0). An upsert from a build that
+  knows fewer types than the server, and says `table` for a stored type it cannot know (a `form` from
+  0.12.0 to 0.15.0; a `chart` or a `form` from 0.9.0 to 0.11.0; a `timeline`, a `chart` or a `form`
+  before), keeps the stored type, and keeps every stored setting such a
   build does not know and did not send (DATA_MODEL.md, `DatabaseViews`); one from a build that knows
   every type is taken as sent. The answers carry `entityType` `database`, `view` or `row` (a
   database's create carries its page and its record). From Phase 15 a `db.update`, and a
   `page.create` of a database, carry `propertyTypes` (21 from 0.15.0, with the button; absent, 20),
   and a property whose stored type the sender's build does not know keeps that type and its settings.
+  From Phase 16 the server's `/version` says `viewTypes` (8; absent, 7), and a client offers a form
+  view only once its server counts it (a server before 0.16.0 refuses one).
+- **Forms** (Phase 16): a member's answer to a form view is a row's `page.create` carrying `formId`,
+  the view: an ordinary operation, so it waits in the outbox offline and goes in order with the rest;
+  the server keeps `formId` (the row's `formId` in the answers and the feed) when the view is a form
+  of that database, and otherwise makes an ordinary row (nothing answered is lost). A form link's
+  answer is no operation: the API writes its row with no member, and the feed brings it to the
+  database's readers as any row. A form's link and its count of answers are read by their routes
+  (`GET /databases/{id}/views/{viewId}/form`, its link's `POST`, `PUT` and `DELETE`), online only, and
+  carried by no change of the feed.
 - **Tree and feed**: the tree holds every database and view record the account may see and never a
   row. The feed carries `database`, `view` and `row` changes; every change to a row (its values, its
   page, its document's head) is a `row` change, never a `page` one, and a row made or removed also

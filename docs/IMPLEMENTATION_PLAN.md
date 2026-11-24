@@ -2329,22 +2329,22 @@ process's CSP names the API in `form-action`.
 
 *M16.1 The form view*
 
-- [ ] The type, its settings (questions, order, labels, help, required, pages, conditions) and its
+- [x] The type, its settings (questions, order, labels, help, required, pages, conditions) and its
       view for members, an answer added as `page.create` and `row.update`, offline too; the old-build
       spec's cases.
 
 *M16.2 Form links*
 
-- [ ] `FormLinks` and their routes (make, switch, close, delete) with audit; the API's answer route
+- [x] `FormLinks` and their routes (make, switch, close, delete) with audit; the API's answer route
       (no session, its own rate limit, values checked, the row added through `DatabaseOps` with no
       member).
-- [ ] The Sites process's form page, its pages of questions and its thank-you page, in English and
+- [x] The Sites process's form page, its pages of questions and its thank-you page, in English and
       Arabic, script off, under Axe; a link switched off, closed, full or unknown answered by a page
       saying so.
 
 *M16.3 Answers and rules*
 
-- [ ] The "a form answered" trigger; the notice; the count of answers in the view; the abuse checks.
+- [x] The "a form answered" trigger; the notice; the count of answers in the view; the abuse checks.
 
 **Acceptance criteria**
 
