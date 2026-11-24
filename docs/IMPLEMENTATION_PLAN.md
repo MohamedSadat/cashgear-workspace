@@ -2,7 +2,9 @@
 
 > Approved for planning on 2026-11-11. Phases 8 to 10 added on 2026-11-15, chosen from "Later"
 > after 0.7.0. Phases 11 to 13 added on 2026-11-19, from the themes chosen after 0.10.0. Phases 14
-> and 15 added on 2026-11-22, from the themes chosen after 0.13.0. No phase starts until you say so.
+> and 15 added on 2026-11-22, from the themes chosen after 0.13.0. Phases 16 to 18 added on
+> 2026-11-24, from a comparison with Notion: automations, forms, workflows and tasks. No phase starts
+> until you say so.
 
 ## Context
 
@@ -78,6 +80,9 @@ benchmarks run in CI on every push to `main`.
 | 13 | AI and plugins: a plugin's own network, plugins in the change feed, property values by meaning, an approximate index, a local embedding model, AI by subscription | `v0.13.0` |
 | 14 | Publishing: a site at its workspace's own domain, publishing changes in the change feed, a rate limit in the Sites process, an index of rows' files | `v0.14.0` |
 | 15 | AI, further: completions on a local model, billing for Cash Gear's subscription | `v0.15.0` |
+| 16 | Automations: a database's rules of a trigger, conditions and actions, run on the server; buttons, webhooks, the run log | `v0.16.0` |
+| 17 | Forms: a database's form view, answered by members and by anyone with a form link, starting rules | `v0.17.0` |
+| 18 | Workflows and tasks: waits, branches and approvals in a rule; recurring rows, reminders, sub-items, dependencies on the timeline, a unique id | `v0.18.0` |
 
 Changes from the brief's suggested phases, and why:
 
@@ -93,6 +98,11 @@ Changes from the brief's suggested phases, and why:
 - Phases 14 and 15 are the two themes chosen on 2026-11-22, after 0.13.0, sized against the code
   the same day and proposed as two releases: publishing first, as it is smaller and its host work
   (DNS, a binding, a certificate's terms) is yours early; AI second, behind its spike.
+- Phases 16 to 18 are the three themes you chose on 2026-11-24 from a comparison with Notion,
+  sized against 0.14.0 the same day and proposed as three releases after Phase 15, each built on
+  the one before: rules first (the engine, and a rule acting for a person, the riskiest change to
+  the server), forms second (a public way in, whose answers start rules), then the runs that wait
+  and the tasks' views.
 
 ## Track U: missing components in `CashGear.React.UI`
 
@@ -120,11 +130,14 @@ Axe). Each is needed by the milestone named.
 | U17 | An editable area with a suggestion list (the comment composer's "@") | M6.4 |
 | U18 | A timeline: bars over a date axis, lanes, drag to move and resize, zoom | M9.2 |
 | U19 | `CgTimeline`: a bar moved to another lane by pointer and keys, the lane in its move's details, right to left | M12.2 |
+| U20 | `CgTimeline`: links between bars (an arrow from one bar's end to another's start, routed round bars, drawn for the bars in view, named for a screen reader), right to left | M18.4 |
+| U21 | Recurrence: `CgScheduler`'s recurrence fields and their arithmetic (`schedulerRecurrence.ts`) exported as a component and functions of their own | M18.2 |
 
 Until a component lands, the milestone uses a local stand-in behind the same props and replaces
 it when the pin moves. Stand-ins are listed in `PROGRESS.md` so none is forgotten. U9 to U17 are
 the stand-ins Phases 4 to 7 listed there (added here on 2026-11-15); Phase 8 builds U1 to U17 and
-fixes the library defects `PROGRESS.md` lists, and Phase 9 needs U18.
+fixes the library defects `PROGRESS.md` lists, and Phase 9 needs U18. U20 and U21 added on
+2026-11-24, for Phase 18.
 
 ## Track S: Cash Gear Sheet
 
@@ -2171,7 +2184,396 @@ own runtime version, which must agree with it. The subscription's allowances are
 
 - Acceptance criteria and benchmarks proven; the live test in the provider's sandbox.
 - `INTEGRATIONS.md`, `DATA_MODEL.md`, `ARCHITECTURE.md` and `OPERATIONS.md` updated.
-- Tags `phase-15` and `v0.15.0`; "Later" reviewed with you.
+- Tags `phase-15` and `v0.15.0`; "Later" reviewed with you; a card for Phase 16.
+
+---
+
+## Phase 16: Automations
+
+**Goals**
+
+A database that acts on its own changes: rules of a trigger, conditions and actions in order, run on
+the server whoever made the change and from whichever device; buttons in rows that start them;
+webhooks out; every run recorded where the people who own the rule can read it; nothing reaching the
+ERP.
+
+**Dependencies**
+
+Phase 4's database rules and their C# port, Phase 6's inbox, Phase 8's mail, Phase 11's groups.
+Nothing here needs Phase 15, so it can go before it if you say. No other repo.
+
+Sized on 2026-11-24, against 0.14.0 (nothing run):
+
+- **Where a change is seen.** Every person's edit to a row goes through `OpsService.ApplyOneAsync`
+  and ends in `DatabaseOps.FlushAsync`, which already holds a row's old values, its new ones and the
+  properties that changed (`WriteValuesAsync`'s `row.Changed`); nothing keeps them after. Other paths
+  write rows without it: a type change (`ConvertRowsAsync`), recomputed formulas and rollups
+  (`RecomputeAllAsync`, also the worker's `RecomputeJob`), a CSV import (`DatabaseService`), the
+  tree's trash, restore and move (`DatabaseTree`) and the purge. The change feed carries an id and a
+  version only; no audit or history holds a row's values.
+- **Where a rule runs.** The worker's `JobLoop` runs `IJob`s that each poll their own columns (no
+  queue table; `JobStates` is health only); `MailSendJob`'s attempts and backoff and
+  `SiteCertificateJob`'s due times are the pattern for a run that fails or waits. Row values are JSON
+  (`DatabaseRow.Values`) queried in memory by the C# port (`RowCache.cs`, `Query.cs`); there is no
+  typed value table, so a date trigger reads a database's rows in the worker as a view's query does.
+- **Who acts.** Every check needs a member (`Access`, `PageGate`); there is no bot principal, and the
+  worker today skips access and writes with no actor (`RecomputeJob`). Audit already writes
+  `Actor.System`, and a `CreatedBy` of `Guid.Empty` reads as nobody (`RowStore.ToData`).
+- **What an action can make.** The server never makes a page; `cgw-ydoc` merges, diffs, compacts and
+  reads a document but cannot build or copy one; a row template's body is copied by the client
+  (`session.copyBody`, `withNewIds`). Notifications have three kinds, each with a page and an actor
+  that cannot be null; older clients drop a kind they do not know (`inbox.ts`'s `KINDS`), and the mail
+  job mails only its own kinds.
+- **Calls out.** `SafeFetcher` (`Previews/LinkPreviews.cs`) resolves a name and connects only to the
+  public address it checked (private, CGNAT, link-local, metadata, multicast, reserved, NAT64, 6to4
+  and Teredo refused; DNS rebinding closed), on 80 and 443, GET only, redirects followed by hand and
+  checked again; single sign-on reuses its `Public()` check. `PluginHosts` checks a name's shape only.
+  Secrets in SQL are Data Protection's output by purpose (`Cgw.Ai.Key.v1` and others), which the
+  worker can open.
+- **Property types.** A client keeps a type it does not know, reads it as empty and does not edit it
+  (`cellOf`, `editKind`); the server refuses a `db.create` or `db.update` naming a type outside
+  `PropertyTypes.All`, and there is no count of property types like `viewTypes`. Every type so far
+  came in Phase 4. Production's server has been deployed after its web app, so a client must not
+  offer a type its server would refuse.
+- **The budget.** The initial JavaScript is 349.6 kB of 350 (0.14.0): the rules' screens load with a
+  database's view or with Settings, their words in sections (`i18n/sections.ts`).
+
+**Questions for you (one batch, when the phase starts)**
+
+- Where rules live (default: on a database, edited from its views' toolbar, "Automations", by whoever
+  has full access to the database; a workspace's list in Settings → Automations for owners and
+  admins, with a switch for each rule and one for all).
+- What starts a rule (default: a row added; properties changed, to or from a value; a date
+  property's day or time reached, with an offset; a schedule, daily, weekly or monthly at a time; a
+  button pressed. Only people's edits through the operations and buttons: a CSV import, a type change
+  and recomputed formulas start nothing in 0.16.0).
+- Who a rule acts as (default: its author, whose access is checked again at every run; a run its
+  author could no longer make stops, says why in the run log and tells the author in the inbox; a
+  row's editor shows "Automation" with the author's name).
+- What it does (default, in order, each step under conditions over the row: set properties; add a
+  row to a database the author can edit, with a template's values, icon and cover; notify people,
+  groups or a person property's people, in the inbox and by their mail setting; call a webhook.
+  Nothing reaches the ERP: the server holds no ERP session or key).
+- A new row's body from a template (default: copied by the worker through a new `cgw-ydoc` call that
+  writes a new page's first update, its block ids made once by the server, held to S1's rules by
+  tests; never into an existing page. The other choice: values only, the body on "Later").
+- Webhooks (default: added by owners and admins only; https to a public address, checked by
+  `SafeFetcher`'s rules at every connect, POST only, no redirect followed; JSON of the properties the
+  rule names, never a person's email; signed by HMAC-SHA256 with a secret per webhook under Data
+  Protection; 10 s, retried after 1 m, 5 m, 30 m and 2 h, then given up and logged).
+- Limits (default: a change a rule made starts other rules up to 3 deep; a rule at most 100 runs a
+  minute and a workspace 1,000; 50 rules a database; runs kept 30 days).
+
+Proposed defaults, logged with the answers: rules are records synced as views are
+(`automation.upsert`, `automation.delete`, the feed's `automation` change, ignored by older builds);
+a run's changes are ordinary operations with ids of their own, so devices merge them by Phase 4's
+per-property rules and a replay changes nothing (`AppliedOps`); date and schedule triggers keep the
+workspace's time zone (an IANA name owners set in Settings, first the creating person's); the button
+is the twenty-first property type, with a `propertyTypes` count beside `viewTypes` so the server
+keeps a type an older client did not send, offered by a client only once its server says it knows it
+(`/version`).
+
+**Tasks**
+
+*M16.1 Rules and their events*
+
+- [ ] Rules as records (a trigger, conditions in `queryRows`' filter language, steps in order) in
+      `@cgw/workspace`'s `db/automations.ts` beside `db/plan.ts`, with vectors the C# port reads;
+      their operations checked on the server; their sync and the feed's change; the old-build spec's
+      cases.
+- [ ] Row events written in `FlushAsync`'s transaction (the row, the properties changed, old and new
+      values) only while the database has a rule switched on; a test of every path that writes rows
+      and the events it makes or does not.
+
+*M16.2 The runner*
+
+- [ ] A worker job that takes events, due dates and schedules, runs each rule's conditions and steps
+      as its author through `DatabaseOps`' checks, and records the run, its steps and its result; the
+      depth and rate limits; the workspace's time zone.
+- [ ] Steps: set properties; add a row (its body as answered); notify (an inbox kind `automation`
+      and its mail); call a webhook (`SafeFetcher` taken to POST, signed, retried).
+
+*M16.3 Screens and buttons*
+
+- [ ] The rule editor (the trigger, conditions by `CgFilterBuilder`, steps by `CgSortableList`), the
+      run log for a rule and for a row (its properties' "Runs"), Settings → Automations and the time
+      zone, in English and Arabic, under Axe.
+- [ ] The button property: its cell and the rule it starts; pressed offline, a notice that it runs
+      once the device is online, never a queued press run twice.
+
+**Acceptance criteria**
+
+- A rule started by a change from any device, online or synced later, runs once; changes made offline
+  run their rules in order when they reach the server.
+- A rule does only what its author may: one whose author lost access stops, recorded; nothing a rule
+  does is shown to anyone who could not read the row.
+- Rules that start each other stop at the depth limit, recorded, the rows as the last allowed run
+  left them.
+- A webhook never reaches a private, loopback or link-local address, by its name or a redirect, and
+  its receiver can check its signature.
+- An older build keeps a database's rules and button properties while editing its rows.
+- No step reads or writes the ERP.
+
+**Performance benchmarks**
+
+- A rule's first step after the change that starts it, shown in an open tab, p95 ≤ 2 s.
+- The server's processor time per push to a database with 10 rules within 10 % of the same push with
+  none (`bench/phase8-server.mjs`).
+- A paste of 1,000 cells that starts a rule in each row: every run done ≤ 60 s, typing on another
+  page within Phase 6's keystroke budget.
+- Date triggers over a database of 50,000 rows found ≤ 500 ms of the worker's time a pass.
+
+**Risks**
+
+- Rules that start each other without end: the depth and rate limits, each run recorded with what
+  started it.
+- A rule as a way round permissions: it acts as its author, checked at every run; webhooks by owners
+  and admins only.
+- A webhook as a way into the host's network: the address checked at connect, no redirect for POST.
+- A run applied twice after a worker restarts: keyed by its event, its operations by their ids.
+- A web app newer than its server offers what the server refuses: offered once the server knows it.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `SYNC_DESIGN.md` and `OPERATIONS.md` updated.
+- Tags `phase-16` and `v0.16.0`; a card for Phase 17.
+
+---
+
+## Phase 17: Forms
+
+**Goals**
+
+Rows collected by a form: a database's form view, its properties as questions, answered by members
+in the app (offline too) and by anyone with a form link a member made, with script off, in English
+and Arabic; the link showing nothing of the database but its questions; an answer starting Phase 16's
+rules.
+
+**Dependencies**
+
+Phase 16 (the trigger and the notice), Phase 9's Sites process, Phase 14's rate limit. No other repo.
+
+Sized on 2026-11-24, against 0.14.0 (nothing run):
+
+- **Views.** Seven types; one an older build does not know is drawn as a table (`viewRecord`,
+  `registry.ts`'s `viewType()`, the import), and the server keeps a type and its settings an older
+  build did not send (`DatabaseOps.cs`'s `ViewTypeOrder`, `ConfigKeysByTypes`). `SharedDatabases.cs`,
+  `ChartViews.cs` and `SiteDatabaseHtml.cs` name view types too. A form is the eighth.
+- **A link that writes.** A share link (`ShareLink`: a page and its subtree, `Levels.View` forced,
+  rows refused) only reads: its one POST is a view's query, and comments need a session. No route
+  takes a row or an upload without a member; `RateLimits.Anonymous` gives an address 120 requests a
+  minute.
+- **Where a link's page is drawn.** The Sites process draws pages with no script and no cookies and
+  reads SQL and Blob only (its identity denied the key ring). A plain HTML form works with script off
+  and can post to the API, which writes, so the Sites process stays a reader. The app's share view
+  (`#/s/{token}`, `SharedView.tsx`) has a read-only `DatabaseHost`.
+- **Who made the row.** No principal stands for a form; a `CreatedBy` of `Guid.Empty` reads as
+  nobody.
+- **The library.** `CgFormLayout`, `CgSortableList` and `CgStepper` exist; no form builder is
+  needed beyond them.
+
+**Questions for you (one batch, when the phase starts)**
+
+- Who may answer (default: members in the app, offline too, as a row they add; and anyone with a form
+  link, made by whoever has full access to the database, with its own switch, an optional closing
+  date and number of answers; the link shows the form's questions and nothing else).
+- Where a link's page is drawn (default: by the Sites process, under a path no slug can take on the
+  sites' host, as HTML with no script, in the form's language; posting to the API's
+  `POST /api/v1/forms/{token}`, which adds the row and sends the browser to the form's thank-you
+  page).
+- Questions (default: a form's questions are its properties in an order, each with a label, help
+  text and whether it is required: text, number, select, multi-select, status, date, checkbox, URL,
+  email and phone; files, people and relations for members only, as nothing takes an upload or shows
+  a person without a session; pages of questions, a page shown or skipped by earlier answers, decided
+  on the server between pages for a link).
+- Abuse (default: an address 10 answers a minute a form and 100 a day; a hidden field a person never
+  fills; an answer at most 64 KB; no CAPTCHA, which would be a third-party script on a page with
+  none, on "Later").
+- What an answer starts (default: Phase 16's trigger "a form answered", with the answer's values; the
+  row's creator shown as the form; an optional notice to chosen people by Phase 16's notify step).
+
+Proposed defaults, logged with the answers: `form` is the eighth view type, `viewTypes` 8, with
+`ViewConfig.form` (questions, pages, conditions, the thank-you text, the language); a form link is a
+`FormLinks` record of its own, its token kept as a hash as a share link's is, never a share link's
+scope; the answer route stands outside antiforgery (it has no session) and checks every value by the
+C# port's coercion; an answer's address is in its audit entry, never with the row; the Sites
+process's CSP names the API in `form-action`.
+
+**Tasks**
+
+*M17.1 The form view*
+
+- [ ] The type, its settings (questions, order, labels, help, required, pages, conditions) and its
+      view for members, an answer added as `page.create` and `row.update`, offline too; the old-build
+      spec's cases.
+
+*M17.2 Form links*
+
+- [ ] `FormLinks` and their routes (make, switch, close, delete) with audit; the API's answer route
+      (no session, its own rate limit, values checked, the row added through `DatabaseOps` with no
+      member).
+- [ ] The Sites process's form page, its pages of questions and its thank-you page, in English and
+      Arabic, script off, under Axe; a link switched off, closed, full or unknown answered by a page
+      saying so.
+
+*M17.3 Answers and rules*
+
+- [ ] The "a form answered" trigger; the notice; the count of answers in the view; the abuse checks.
+
+**Acceptance criteria**
+
+- A member answers a form offline and the row reaches the database once online; an older build shows
+  the form view as a table and keeps its settings.
+- Anyone with a form link answers it with script off, in English and Arabic, and reads nothing of the
+  database: no row, no option a question does not show, no person.
+- A link switched off, closed, full or deleted stops taking answers within a minute.
+- An address past its limit is answered 429 while others answer on; a guessed token adds nothing.
+- An answer starts the rules for "a form answered", once.
+
+**Performance benchmarks**
+
+- A form link's page, first byte p95 ≤ 200 ms from the cache (Phase 9's).
+- An answer to its row in an open tab of the database ≤ 2 s; 50 answers a second across links for a
+  minute, the answer route's p95 ≤ 300 ms, typing in the app within Phase 6's budget.
+
+**Risks**
+
+- A form link as a way to read the database: answers are written only, the page shows its questions
+  only; a test reads every route a link opens.
+- Spam fills a database: limits per address and form, the hidden field, the number of answers, the
+  switch.
+- The Sites process starts writing: the API writes; the Sites process's identity keeps its reads
+  only.
+- A value no property can hold: coerced by the shared conversion table, or refused naming the
+  question.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `SYNC_DESIGN.md` and `OPERATIONS.md` updated.
+- Tags `phase-17` and `v0.17.0`; a card for Phase 18.
+
+---
+
+## Phase 18: Workflows and tasks
+
+**Goals**
+
+Rules that wait and decide: steps that wait for a time or a change, branches, approvals asked of
+people in their inbox. Tasks that repeat, remind and nest: recurring rows, reminders on dates,
+sub-items, dependencies drawn on the timeline, a unique id for each row.
+
+**Dependencies**
+
+Phase 16's runner, Phase 9's timeline and Phase 12's tree grid. Track U20 (links between bars) for
+M18.4 and U21 (recurrence) for M18.2.
+
+Sized on 2026-11-24, against 0.14.0 (nothing run):
+
+- **A run that waits.** Phase 16's runs end in one pass; a wait keeps a run's place in SQL and the
+  worker goes on from it, as the certificate job's due times do.
+- **Dates.** A date is `{ start, end? }`, a day or a UTC instant, with `includeTime` on the property
+  and no time zone; nothing holds a reminder. The library's recurrence and reminder code is inside
+  `CgScheduler` (`schedulerRecurrence.ts`, `SchedulerRecurrenceFields.tsx`) and not exported.
+- **Sub-items.** Two-way relations to the same database exist (`relations.ts`, `RelationSetup.tsx`).
+  The table's tree grid has two levels, a group and its rows (`table/items.ts`'s `ariaLayout`); no
+  row holds rows.
+- **Dependencies.** `CgTimeline` (pinned at `9f5a208`) draws items, lanes, moves and resizes, and no
+  links between bars.
+- **A unique id.** Rows are made on devices, offline too, with UUIDv7 ids; a number in order can
+  only be given by the server, when it first stores a row (`DatabaseOps.CreateRowAsync`).
+
+**Questions for you (one batch, when the phase starts)**
+
+- Steps (default: a rule's steps may also wait (a time, until a date property, or until the row
+  matches conditions; at most 90 days), branch (if, else if, else over the row) and ask for an
+  approval; a run keeps its place in SQL and goes on when its wait ends; a rule changed while runs
+  wait lets them finish on the version they started with).
+- Approvals (default: asked of people, a group (any one, or all of it) or a person property's people;
+  an inbox item with Approve, Reject and a comment, and a mail; a deadline after which the run takes
+  its "no answer" branch; the answer kept in the run log and, if chosen, in a property).
+- Recurring rows (default: a database's template with a rule (daily, weekly on chosen days, monthly
+  on a day or a weekday, yearly); the next row added by the worker when the last is done or on its
+  date, in the workspace's time zone, its dates moved by the step).
+- Reminders (default: on a date property for a person property's people, or by a person on a row for
+  themselves; at the time, or 15 minutes, an hour, a day or a week before; in the inbox and by mail;
+  a day with no time at 09:00 in the workspace's time zone).
+- Sub-items (default: a database's switch that picks or makes a two-way relation to itself as
+  "Parent" and "Sub-items"; the table nests sub-items under their parent up to five levels; a board
+  and a list show a parent's count; a filter keeps a match's parents shown).
+- Dependencies (default: a two-way relation to the same database as "Blocked by" and "Blocking"; the
+  timeline draws arrows between bars (Track U20); moving a bar moves the rows it blocks by the same
+  days when the database says so; a loop refused).
+- A unique id (default: a property type, a prefix and a number the server gives when it first stores
+  a row, never reused, never edited; "—" on a device until then).
+
+Proposed defaults, logged with the answers: the unique id is the twenty-second property type, behind
+Phase 16's `propertyTypes` count; reminders and approvals are inbox kinds an older build drops; a
+waiting run holds no lock and reads its row and its author's access again when it goes on; recurrence
+is held to vectors the client and the C# port both read (the 31st, 29 February, a time-zone change).
+
+**Tasks**
+
+*M18.1 Waits, branches, approvals*
+
+- [ ] A run's place in SQL and the worker going on from it; waits, branches and approvals in the rule
+      editor; the approval's inbox item and mail; deadlines.
+
+*M18.2 Recurring rows and reminders*
+
+- [ ] Recurrence (Track U21) on a database's template, its vectors, the worker's next row; reminders
+      on date properties and on a row, delivered by the worker to the inbox and by mail.
+
+*M18.3 Sub-items*
+
+- [ ] The switch and its relation; the table's tree to five levels (`ariaLayout`'s levels, places and
+      sizes), in both directions; a board's and a list's counts; filters that keep parents.
+
+*M18.4 Dependencies*
+
+- [ ] The relation; the timeline's arrows (Track U20) and dependents moved with their blocker; a loop
+      refused by the planner and by the C# port.
+
+*M18.5 A unique id*
+
+- [ ] The property type, its numbers given in the row's first write on the server, shown, sorted and
+      filtered; the old-build spec's cases.
+
+**Acceptance criteria**
+
+- A run waits a day and goes on once after the worker restarts; a branch takes the path its
+  conditions name; an approval goes on by the first answer (or all of the group's), or by "no answer"
+  after its deadline.
+- A recurring row appears once and on time in the workspace's time zone, never twice from a restart.
+- A reminder reaches the inbox within a minute of its time and the mail by the person's setting,
+  never for a row the person can no longer read.
+- Sub-items nest in the table to five levels, in both directions, read well by a screen reader; an
+  older build sees the relation as it is.
+- The timeline draws dependencies in both directions; a loop is refused; moving a blocker moves its
+  dependents when the database says so.
+- A row made offline gets its number once it reaches the server; no two rows share one.
+
+**Performance benchmarks**
+
+- The table with sub-items, 50,000 rows of which 10,000 parents: first rows within Phase 4's budget.
+- A timeline of 50,000 rows with 10,000 dependencies: first bars and a drag within Phase 9's budgets.
+- With 10,000 runs waiting, a pass of the worker finds those due ≤ 200 ms.
+- 10,000 reminders due in one minute, every one in the inbox ≤ 60 s.
+
+**Risks**
+
+- A run that waited acts on a row that changed: it reads the row and its author's access again
+  first.
+- Recurrence at a month's end or a time-zone change: shared vectors, the zone by its IANA name.
+- A unique number given twice: given by the server alone, in the row's insert's transaction.
+- Deep nesting slows the table: five levels at most, the tree made with the query.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `SYNC_DESIGN.md` and `OPERATIONS.md` updated.
+- Tags `phase-18` and `v0.18.0`; "Later" reviewed with you.
 
 ---
 
@@ -2184,7 +2586,8 @@ and the database items were chosen, and went to Phases 11 to 13 on 2026-11-19 (`
 Reviewed again on 2026-11-22, after 0.13.0: publishing (Phase 9's four items) and AI further (AI
 completions on a local model, billing for the subscription) were chosen, and went to Phases 14 and
 15 the same day; the rest stays (`DECISIONS.md`). Reviewed again on 2026-11-22, after Phase 14:
-nothing moves (Phase 15 is next); Phase 14's two deferrals are added.
+nothing moves (Phase 15 is next); Phase 14's two deferrals are added. On 2026-11-24 three themes
+that were not on it (automations, forms, workflows and tasks) became Phases 16 to 18.
 
 - Embedded presentations, once that app exists.
 - Comments offline (online only from 0.6.0).
@@ -2238,6 +2641,10 @@ nothing moves (Phase 15 is next); Phase 14's two deferrals are added.
 | A catch-all binding takes another site's requests, or a site's domain is taken over | 14 | The spike reads every binding first; a token per workspace in DNS, read again before each renewal |
 | A row's file is cleaned up while a row holds it | 14 | An index of rows' files, written with the values, counted by the clean-up |
 | The plan paid for and the allowance disagree | 15 | Webhooks verified and applied once, reconciled daily |
+| Rules start each other without end, or act past their author's rights | 16 | Depth and rate limits; a rule acts as its author, checked at every run |
+| A webhook reaches the host's own network | 16 | Public addresses only, checked at connect; no redirect for POST |
+| A form link reads more than its questions, or floods a database | 17 | Answers written only; limits per address and form; the link's switch |
+| A waiting run or a recurring row acts twice | 18 | Keyed by its event and due time, its operations by their ids |
 
 ## Verification
 

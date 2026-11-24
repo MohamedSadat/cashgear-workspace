@@ -1800,3 +1800,36 @@ certificate that `pages.`, `plugins.`, `workspace-api.`, `api.` and the host's f
 2027-01-02 and is renewed by hand (win-acme's manual DNS validation); `cg.` (started) and
 `blockhub.`, `blockhubapi.` (stopped) are bound to a certificate for `assissto.cashgearerp.com` that
 ended on 2026-04-05.
+
+## 2026-11-24: Phases 16 to 18 planned
+
+A comparison with Notion, PowerPoint and Word, read from the code and nothing changed, found what the
+workspace lacks: automations (multi-step rules, triggers, actions, a run log), forms that start them,
+tasks in depth (recurring rows, reminders, sub-items, dependencies, buttons, a unique id), slides,
+Word's output (an export to Word and PDF, a print layout, suggestions) and an integration surface (a
+public API, outgoing webhooks, connectors). You chose the first three for the plan. They were sized
+against 0.14.0 the same day (`IMPLEMENTATION_PLAN.md`, Phases 16 to 18; nothing run): a person's edit
+to a row ends in `DatabaseOps.FlushAsync`, which holds the old and new values and keeps neither, while
+a type change, recomputed values, a CSV import and the tree write rows without it; the worker's jobs
+poll their own columns; nothing acts but a member, and the worker writes with no actor; the server
+never makes a page, and `cgw-ydoc` cannot build one; `SafeFetcher` already connects only to public
+addresses it checked; the server refuses a property type it does not know, with no count of types as
+views have; a share link only reads, and nothing takes a row or an upload without a session; a date
+holds no time zone; `CgTimeline` draws no links, and the library's recurrence is inside `CgScheduler`.
+
+### Asked by you
+
+| Question | Answer |
+| --- | --- |
+| What to plan | Automations (multi-step rules, triggers and actions, the run log), a form builder whose answers start them, and tasks in depth (recurring rows, reminders, sub-items, dependencies on the timeline, buttons, a unique id), as the plan's other phases are, committed and pushed to `main` |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Where they go | After Phase 15, as Phases 16, 17 and 18; nothing in them needs Phase 15, so they can go before it if you say | Phase 15 is planned and next |
+| The split | Three releases: rules (the engine, a rule acting for its author, buttons, webhooks); forms (the form view and a public link that writes, through the API, never the Sites process); runs that wait, approvals and the tasks' views | Each builds on the one before; the riskiest change to the server, a rule acting for a person, comes first |
+| Buttons | In Phase 16, not with the tasks | A button is one of a rule's triggers |
+| Track U | U20 (`CgTimeline`'s links between bars) and U21 (`CgScheduler`'s recurrence exported), both for Phase 18 | The library has neither as a component of its own |
+| The questions | Each phase's batch asked when it starts, as Phase 15's are | Answers given phases ahead go stale |
+| Not planned | Slides, Word's output and the integration surface stay out of the plan until you choose them ("Embedded presentations" is already on "Later") | You chose the first three |
