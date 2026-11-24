@@ -10,6 +10,7 @@ import {
   type PropertyDef,
   type StepKind,
   type TriggerKind,
+  type ViewRecord,
 } from '../core';
 import { liveProperties, propertyOf } from '../model/properties';
 import type { AutoKey, AutoT } from './words';
@@ -43,9 +44,18 @@ export const peopleProperties = (database: DatabaseRecord) =>
     (p) => p.type === 'person' || p.type === 'createdBy' || p.type === 'lastEditedBy',
   );
 
-/** A trigger of the kind, with the database's first property that fits it. */
-export function newTrigger(kind: TriggerKind, database: DatabaseRecord): AutomationTrigger {
+/** Phase 16: the database's form views, which "a form is answered" names. */
+export const formViews = (views: readonly ViewRecord[]) => views.filter((v) => v.type === 'form');
+
+/** A trigger of the kind, with the database's first property (or form) that fits it. */
+export function newTrigger(
+  kind: TriggerKind,
+  database: DatabaseRecord,
+  forms: readonly ViewRecord[] = [],
+): AutomationTrigger {
   switch (kind) {
+    case 'formAnswered':
+      return { kind, viewId: forms[0]?.id ?? '' };
     case 'rowAdded':
       return { kind };
     case 'propertyChanged':
@@ -140,8 +150,14 @@ export function triggerText(
   locale: string,
   valueText: (def: PropertyDef, value: unknown) => string = (def, v) =>
     triggerValueText(def, v, at),
+  /** Phase 16: a form view's name, by its id (a form gone is "a deleted form"). */
+  formName: (viewId: Id) => string | undefined = () => undefined,
 ): string {
   switch (trigger.kind) {
+    case 'formAnswered':
+      return at('summary.formAnswered', {
+        form: formName(trigger.viewId) || at('summary.missingForm'),
+      });
     case 'rowAdded':
       return at('summary.rowAdded');
     case 'propertyChanged': {
@@ -211,6 +227,7 @@ const PROBLEMS = new Set([
   'name',
   'trigger',
   'trigger.property',
+  'trigger.form',
   'conditions',
   'steps',
   'step.kind',

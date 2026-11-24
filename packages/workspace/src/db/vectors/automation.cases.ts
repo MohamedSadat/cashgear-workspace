@@ -42,6 +42,8 @@ const RULE = '01900000-0000-7000-8000-00000000a001';
 const HOOK = '01900000-0000-7000-8000-00000000b001';
 const TEMPLATE = '01900000-0000-7000-8000-00000000c001';
 const GROUP = '01900000-0000-7000-8000-00000000d001';
+const FORM = '01900000-0000-7000-8000-00000000e001';
+const OTHER_FORM = '01900000-0000-7000-8000-00000000e002';
 
 const STATUS = prop(
   'pStat001',
@@ -478,6 +480,37 @@ const check: CheckCase[] = [
     expected: refused('trigger.property'),
   },
   {
+    name: 'a form answered sets the status and tells its owner',
+    rule: given({
+      trigger: { kind: 'formAnswered', viewId: FORM, extra: 1 },
+      steps: [SET_DONE, { kind: 'notify', people: [ALICE], message: 'A new answer' }],
+    }),
+    expected: kept({
+      trigger: { kind: 'formAnswered', viewId: FORM },
+      steps: [
+        SET_DONE_KEPT,
+        {
+          kind: 'notify',
+          people: [ALICE],
+          groups: [],
+          personProperties: [],
+          message: 'A new answer',
+          when: null,
+        },
+      ],
+    }),
+  },
+  {
+    name: 'a form trigger without its form',
+    rule: given({ trigger: { kind: 'formAnswered' }, steps: [SET_DONE] }),
+    expected: refused('trigger.form'),
+  },
+  {
+    name: 'a form trigger naming no id',
+    rule: given({ trigger: { kind: 'formAnswered', viewId: 'form-1' }, steps: [SET_DONE] }),
+    expected: refused('trigger.form'),
+  },
+  {
     name: 'conditions on a schedule',
     rule: given({
       trigger: { kind: 'schedule', every: 'day', at: '09:00' },
@@ -899,6 +932,37 @@ const starts: StartCase[] = [
     name: 'a schedule is reached by time only',
     trigger: { kind: 'schedule', every: 'day', at: '09:00' },
     change: added,
+    expected: false,
+  },
+  // Phase 16: a form's answer adds a row, which starts both triggers.
+  {
+    name: 'its form answered',
+    trigger: { kind: 'formAnswered', viewId: FORM },
+    change: { ...added, formId: FORM },
+    expected: true,
+  },
+  {
+    name: 'another form answered',
+    trigger: { kind: 'formAnswered', viewId: FORM },
+    change: { ...added, formId: OTHER_FORM },
+    expected: false,
+  },
+  {
+    name: 'a row added by no form',
+    trigger: { kind: 'formAnswered', viewId: FORM },
+    change: added,
+    expected: false,
+  },
+  {
+    name: 'a form answered starts rowAdded too',
+    trigger: { kind: 'rowAdded' },
+    change: { ...added, formId: FORM },
+    expected: true,
+  },
+  {
+    name: 'a change of a row a form added is no answer',
+    trigger: { kind: 'formAnswered', viewId: FORM },
+    change: { ...changed(['pStat001'], {}, { pStat001: 'sDone001' }), formId: FORM },
     expected: false,
   },
 ];

@@ -16,7 +16,7 @@ import { queryRows } from './query';
 import { applyRelationEdit, planRelationChange, relationTypeChangeEffects } from './relations';
 import { parseBoolean, parseNumberText, numberText } from './text';
 import { parseDateText } from './dates';
-import type { DatabaseRecord, PropertyDef } from './types';
+import type { DatabaseRecord, PropertyDef, ViewConfig } from './types';
 import { cellValue, coerceValue } from './values';
 import { computeVectors, type ComputeSuite } from './vectors/compute.cases';
 import { convertVectors, type ConvertCase } from './vectors/convert.cases';
@@ -30,6 +30,15 @@ import {
   checkAutomation,
   type AutomationTrigger,
 } from './automations';
+import {
+  checkAnswers,
+  nextPage,
+  previousPage,
+  readForm,
+  type FormMode,
+  type StoredForm,
+} from './forms';
+import { formVectors, type FormVectors } from './vectors/form.cases';
 
 const WRITE = process.env.DB_VECTORS_WRITE === '1';
 
@@ -359,5 +368,29 @@ describe('db-automation-vectors.json', () => {
   for (const c of v.starts)
     it(`starts: ${c.name}`, () => {
       expect(changeStarts(c.trigger as AutomationTrigger, db, c.change, v.ctx)).toBe(c.expected);
+    });
+});
+
+describe('db-form-vectors.json', () => {
+  const v = vectors<FormVectors>('db-form-vectors.json', formVectors);
+  const db = asDb(v.database);
+  const named = (name: string, mode: FormMode) =>
+    readForm({ form: v.forms[name] as StoredForm }, db, mode);
+  for (const c of v.read)
+    it(`read: ${c.name}`, () => {
+      expect(json(readForm(c.config as Pick<ViewConfig, 'form'>, db, c.mode))).toEqual(c.expected);
+    });
+  for (const c of v.answers)
+    it(`answer: ${c.name}`, () => {
+      const check = checkAnswers(named(c.form, c.mode), db, c.raw, v.ctx, c.upTo ?? Infinity);
+      expect(json(check.ok ? { answer: check.answer } : { problems: check.problems })).toEqual(
+        c.expected,
+      );
+    });
+  for (const c of v.pages)
+    it(`${c.kind}: ${c.name}`, () => {
+      const form = named(c.form, 'link');
+      const at = c.kind === 'next' ? nextPage : previousPage;
+      expect(at(form, db, c.raw, v.ctx, c.at)).toBe(c.expected);
     });
 });

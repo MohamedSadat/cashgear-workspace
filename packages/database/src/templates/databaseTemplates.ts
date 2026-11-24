@@ -490,6 +490,31 @@ function contacts(ctx: MakeContext): Shape {
         type: 'list',
         config: { group: { propertyId: tags.id }, properties: hidden(tags.id, phone.id) },
       },
+      {
+        // Phase 16: a form that adds a contact; its properties are its questions, for a table.
+        name: t('templates.contacts.viewForm'),
+        type: 'form',
+        config: {
+          properties: {
+            order: [TITLE_PROPERTY, email.id, company.id, role.id, phone.id],
+            hidden: [tags.id, last.id],
+            widths: {},
+          },
+          form: {
+            pages: [
+              {
+                questions: [
+                  { propertyId: TITLE_PROPERTY, required: true },
+                  { propertyId: email.id, required: true },
+                  { propertyId: company.id },
+                  { propertyId: role.id },
+                  { propertyId: phone.id },
+                ],
+              },
+            ],
+          },
+        },
+      },
     ],
     rows: [
       {

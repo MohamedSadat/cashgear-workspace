@@ -62,6 +62,7 @@ export const automationsEn = {
     date: 'A date is reached',
     schedule: 'On a schedule',
     button: 'A button is pressed',
+    formAnswered: 'A form is answered',
   },
   trigger_: {
     anyProperty: 'Any property',
@@ -91,6 +92,8 @@ export const automationsEn = {
     buttonProperty: 'Button',
     noButton: 'Add a button property to the database first.',
     noDate: 'Add a date property to the database first.',
+    form: 'Form',
+    noForm: 'Add a form view to the database first.',
   },
   summary: {
     rowAdded: 'When a row is added',
@@ -104,6 +107,8 @@ export const automationsEn = {
     weekly: 'Every {{weekday}} at {{time}}',
     monthly: 'Every month on day {{day}} at {{time}}',
     button: 'When {{property}} is pressed',
+    formAnswered: 'When {{form}} is answered',
+    missingForm: 'a deleted form',
     missing: 'a deleted property',
     checked: 'checked',
     unchecked: 'unchecked',
@@ -158,6 +163,7 @@ export const automationsEn = {
     name: 'A name is at most 200 characters.',
     trigger: 'Choose what starts it.',
     'trigger.property': 'The property it starts on is not one it can watch.',
+    'trigger.form': 'Choose the form.',
     conditions: 'The conditions are not ones it can keep.',
     steps: 'An automation has 1 to 20 steps.',
     'step.kind': 'A step cannot run on a schedule: it has no row.',

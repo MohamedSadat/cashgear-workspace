@@ -1,0 +1,3598 @@
+{
+  "database": {
+    "id": "01900000-0000-7000-8000-000000000001",
+    "properties": [
+      {
+        "id": "title",
+        "name": "Name",
+        "type": "title"
+      },
+      {
+        "id": "pText001",
+        "name": "Notes",
+        "type": "text"
+      },
+      {
+        "id": "pNum0001",
+        "name": "Amount",
+        "type": "number",
+        "number": {
+          "format": "number",
+          "decimals": null
+        }
+      },
+      {
+        "id": "pDate001",
+        "name": "Due",
+        "type": "date",
+        "date": {
+          "includeTime": false
+        }
+      },
+      {
+        "id": "pTime001",
+        "name": "Arrives",
+        "type": "date",
+        "date": {
+          "includeTime": true
+        }
+      },
+      {
+        "id": "pChk0001",
+        "name": "Done?",
+        "type": "checkbox"
+      },
+      {
+        "id": "pSel0001",
+        "name": "Stage",
+        "type": "select",
+        "options": [
+          {
+            "id": "optTodo1",
+            "name": "To do",
+            "colour": "gray"
+          },
+          {
+            "id": "optDone1",
+            "name": "Done",
+            "colour": "green"
+          },
+          {
+            "id": "optLate1",
+            "name": "متأخر",
+            "colour": "red"
+          },
+          {
+            "id": "optFive1",
+            "name": "5",
+            "colour": "default"
+          }
+        ]
+      },
+      {
+        "id": "pSta0001",
+        "name": "Status",
+        "type": "status",
+        "options": [
+          {
+            "id": "staTodo1",
+            "name": "Not started",
+            "colour": "default",
+            "group": "todo"
+          },
+          {
+            "id": "staProg1",
+            "name": "In progress",
+            "colour": "default",
+            "group": "inProgress"
+          },
+          {
+            "id": "staDone1",
+            "name": "Done",
+            "colour": "default",
+            "group": "complete"
+          }
+        ]
+      },
+      {
+        "id": "pMul0001",
+        "name": "Tags",
+        "type": "multiSelect",
+        "options": [
+          {
+            "id": "tagRed01",
+            "name": "Red",
+            "colour": "red"
+          },
+          {
+            "id": "tagBlue1",
+            "name": "Blue",
+            "colour": "blue"
+          },
+          {
+            "id": "tagAr001",
+            "name": "أحمر",
+            "colour": "red"
+          }
+        ]
+      },
+      {
+        "id": "pPer0001",
+        "name": "Owner",
+        "type": "person"
+      },
+      {
+        "id": "pUrl0001",
+        "name": "Link",
+        "type": "url"
+      },
+      {
+        "id": "pEml0001",
+        "name": "Email",
+        "type": "email"
+      },
+      {
+        "id": "pPho0001",
+        "name": "Phone",
+        "type": "phone"
+      },
+      {
+        "id": "pFil0001",
+        "name": "Attachments",
+        "type": "files"
+      },
+      {
+        "id": "pRel0001",
+        "name": "Projects",
+        "type": "relation",
+        "relation": {
+          "databaseId": "01900000-0000-7000-8000-000000000002",
+          "reversePropertyId": "pRev0001"
+        }
+      },
+      {
+        "id": "pFor0001",
+        "name": "Score",
+        "type": "formula",
+        "formula": {
+          "expression": "1"
+        }
+      },
+      {
+        "id": "pCrb0001",
+        "name": "Created by",
+        "type": "createdBy"
+      },
+      {
+        "id": "pBtn0001",
+        "name": "Approve",
+        "type": "button",
+        "button": {
+          "label": "Approve"
+        }
+      },
+      {
+        "id": "pGone001",
+        "name": "Old",
+        "type": "text",
+        "trashedAt": "2026-02-01T00:00:00.000Z"
+      },
+      {
+        "id": "pMany000",
+        "name": "pMany000",
+        "type": "text"
+      },
+      {
+        "id": "pMany001",
+        "name": "pMany001",
+        "type": "text"
+      },
+      {
+        "id": "pMany002",
+        "name": "pMany002",
+        "type": "text"
+      },
+      {
+        "id": "pMany003",
+        "name": "pMany003",
+        "type": "text"
+      },
+      {
+        "id": "pMany004",
+        "name": "pMany004",
+        "type": "text"
+      },
+      {
+        "id": "pMany005",
+        "name": "pMany005",
+        "type": "text"
+      },
+      {
+        "id": "pMany006",
+        "name": "pMany006",
+        "type": "text"
+      },
+      {
+        "id": "pMany007",
+        "name": "pMany007",
+        "type": "text"
+      },
+      {
+        "id": "pMany008",
+        "name": "pMany008",
+        "type": "text"
+      },
+      {
+        "id": "pMany009",
+        "name": "pMany009",
+        "type": "text"
+      },
+      {
+        "id": "pMany010",
+        "name": "pMany010",
+        "type": "text"
+      },
+      {
+        "id": "pMany011",
+        "name": "pMany011",
+        "type": "text"
+      },
+      {
+        "id": "pMany012",
+        "name": "pMany012",
+        "type": "text"
+      },
+      {
+        "id": "pMany013",
+        "name": "pMany013",
+        "type": "text"
+      },
+      {
+        "id": "pMany014",
+        "name": "pMany014",
+        "type": "text"
+      },
+      {
+        "id": "pMany015",
+        "name": "pMany015",
+        "type": "text"
+      },
+      {
+        "id": "pMany016",
+        "name": "pMany016",
+        "type": "text"
+      },
+      {
+        "id": "pMany017",
+        "name": "pMany017",
+        "type": "text"
+      },
+      {
+        "id": "pMany018",
+        "name": "pMany018",
+        "type": "text"
+      },
+      {
+        "id": "pMany019",
+        "name": "pMany019",
+        "type": "text"
+      },
+      {
+        "id": "pMany020",
+        "name": "pMany020",
+        "type": "text"
+      },
+      {
+        "id": "pMany021",
+        "name": "pMany021",
+        "type": "text"
+      },
+      {
+        "id": "pMany022",
+        "name": "pMany022",
+        "type": "text"
+      },
+      {
+        "id": "pMany023",
+        "name": "pMany023",
+        "type": "text"
+      },
+      {
+        "id": "pMany024",
+        "name": "pMany024",
+        "type": "text"
+      },
+      {
+        "id": "pMany025",
+        "name": "pMany025",
+        "type": "text"
+      },
+      {
+        "id": "pMany026",
+        "name": "pMany026",
+        "type": "text"
+      },
+      {
+        "id": "pMany027",
+        "name": "pMany027",
+        "type": "text"
+      },
+      {
+        "id": "pMany028",
+        "name": "pMany028",
+        "type": "text"
+      },
+      {
+        "id": "pMany029",
+        "name": "pMany029",
+        "type": "text"
+      },
+      {
+        "id": "pMany030",
+        "name": "pMany030",
+        "type": "text"
+      },
+      {
+        "id": "pMany031",
+        "name": "pMany031",
+        "type": "text"
+      },
+      {
+        "id": "pMany032",
+        "name": "pMany032",
+        "type": "text"
+      },
+      {
+        "id": "pMany033",
+        "name": "pMany033",
+        "type": "text"
+      },
+      {
+        "id": "pMany034",
+        "name": "pMany034",
+        "type": "text"
+      },
+      {
+        "id": "pMany035",
+        "name": "pMany035",
+        "type": "text"
+      },
+      {
+        "id": "pMany036",
+        "name": "pMany036",
+        "type": "text"
+      },
+      {
+        "id": "pMany037",
+        "name": "pMany037",
+        "type": "text"
+      },
+      {
+        "id": "pMany038",
+        "name": "pMany038",
+        "type": "text"
+      },
+      {
+        "id": "pMany039",
+        "name": "pMany039",
+        "type": "text"
+      },
+      {
+        "id": "pMany040",
+        "name": "pMany040",
+        "type": "text"
+      },
+      {
+        "id": "pMany041",
+        "name": "pMany041",
+        "type": "text"
+      },
+      {
+        "id": "pMany042",
+        "name": "pMany042",
+        "type": "text"
+      },
+      {
+        "id": "pMany043",
+        "name": "pMany043",
+        "type": "text"
+      },
+      {
+        "id": "pMany044",
+        "name": "pMany044",
+        "type": "text"
+      },
+      {
+        "id": "pMany045",
+        "name": "pMany045",
+        "type": "text"
+      },
+      {
+        "id": "pMany046",
+        "name": "pMany046",
+        "type": "text"
+      },
+      {
+        "id": "pMany047",
+        "name": "pMany047",
+        "type": "text"
+      },
+      {
+        "id": "pMany048",
+        "name": "pMany048",
+        "type": "text"
+      },
+      {
+        "id": "pMany049",
+        "name": "pMany049",
+        "type": "text"
+      },
+      {
+        "id": "pMany050",
+        "name": "pMany050",
+        "type": "text"
+      },
+      {
+        "id": "pMany051",
+        "name": "pMany051",
+        "type": "text"
+      },
+      {
+        "id": "pMany052",
+        "name": "pMany052",
+        "type": "text"
+      },
+      {
+        "id": "pMany053",
+        "name": "pMany053",
+        "type": "text"
+      },
+      {
+        "id": "pMany054",
+        "name": "pMany054",
+        "type": "text"
+      },
+      {
+        "id": "pMany055",
+        "name": "pMany055",
+        "type": "text"
+      },
+      {
+        "id": "pMany056",
+        "name": "pMany056",
+        "type": "text"
+      },
+      {
+        "id": "pMany057",
+        "name": "pMany057",
+        "type": "text"
+      },
+      {
+        "id": "pMany058",
+        "name": "pMany058",
+        "type": "text"
+      },
+      {
+        "id": "pMany059",
+        "name": "pMany059",
+        "type": "text"
+      },
+      {
+        "id": "pMany060",
+        "name": "pMany060",
+        "type": "text"
+      },
+      {
+        "id": "pMany061",
+        "name": "pMany061",
+        "type": "text"
+      },
+      {
+        "id": "pMany062",
+        "name": "pMany062",
+        "type": "text"
+      },
+      {
+        "id": "pMany063",
+        "name": "pMany063",
+        "type": "text"
+      },
+      {
+        "id": "pMany064",
+        "name": "pMany064",
+        "type": "text"
+      },
+      {
+        "id": "pMany065",
+        "name": "pMany065",
+        "type": "text"
+      },
+      {
+        "id": "pMany066",
+        "name": "pMany066",
+        "type": "text"
+      },
+      {
+        "id": "pMany067",
+        "name": "pMany067",
+        "type": "text"
+      },
+      {
+        "id": "pMany068",
+        "name": "pMany068",
+        "type": "text"
+      },
+      {
+        "id": "pMany069",
+        "name": "pMany069",
+        "type": "text"
+      },
+      {
+        "id": "pMany070",
+        "name": "pMany070",
+        "type": "text"
+      },
+      {
+        "id": "pMany071",
+        "name": "pMany071",
+        "type": "text"
+      },
+      {
+        "id": "pMany072",
+        "name": "pMany072",
+        "type": "text"
+      },
+      {
+        "id": "pMany073",
+        "name": "pMany073",
+        "type": "text"
+      },
+      {
+        "id": "pMany074",
+        "name": "pMany074",
+        "type": "text"
+      },
+      {
+        "id": "pMany075",
+        "name": "pMany075",
+        "type": "text"
+      },
+      {
+        "id": "pMany076",
+        "name": "pMany076",
+        "type": "text"
+      },
+      {
+        "id": "pMany077",
+        "name": "pMany077",
+        "type": "text"
+      },
+      {
+        "id": "pMany078",
+        "name": "pMany078",
+        "type": "text"
+      },
+      {
+        "id": "pMany079",
+        "name": "pMany079",
+        "type": "text"
+      },
+      {
+        "id": "pMany080",
+        "name": "pMany080",
+        "type": "text"
+      },
+      {
+        "id": "pMany081",
+        "name": "pMany081",
+        "type": "text"
+      },
+      {
+        "id": "pMany082",
+        "name": "pMany082",
+        "type": "text"
+      },
+      {
+        "id": "pMany083",
+        "name": "pMany083",
+        "type": "text"
+      },
+      {
+        "id": "pMany084",
+        "name": "pMany084",
+        "type": "text"
+      },
+      {
+        "id": "pMany085",
+        "name": "pMany085",
+        "type": "text"
+      },
+      {
+        "id": "pMany086",
+        "name": "pMany086",
+        "type": "text"
+      },
+      {
+        "id": "pMany087",
+        "name": "pMany087",
+        "type": "text"
+      },
+      {
+        "id": "pMany088",
+        "name": "pMany088",
+        "type": "text"
+      },
+      {
+        "id": "pMany089",
+        "name": "pMany089",
+        "type": "text"
+      },
+      {
+        "id": "pMany090",
+        "name": "pMany090",
+        "type": "text"
+      },
+      {
+        "id": "pMany091",
+        "name": "pMany091",
+        "type": "text"
+      },
+      {
+        "id": "pMany092",
+        "name": "pMany092",
+        "type": "text"
+      },
+      {
+        "id": "pMany093",
+        "name": "pMany093",
+        "type": "text"
+      },
+      {
+        "id": "pMany094",
+        "name": "pMany094",
+        "type": "text"
+      },
+      {
+        "id": "pMany095",
+        "name": "pMany095",
+        "type": "text"
+      },
+      {
+        "id": "pMany096",
+        "name": "pMany096",
+        "type": "text"
+      },
+      {
+        "id": "pMany097",
+        "name": "pMany097",
+        "type": "text"
+      },
+      {
+        "id": "pMany098",
+        "name": "pMany098",
+        "type": "text"
+      },
+      {
+        "id": "pMany099",
+        "name": "pMany099",
+        "type": "text"
+      },
+      {
+        "id": "pMany100",
+        "name": "pMany100",
+        "type": "text"
+      }
+    ],
+    "version": 1,
+    "workspaceId": "01900000-0000-7000-8000-0000000000ff"
+  },
+  "ctx": {
+    "today": "2026-11-24",
+    "offsetMinutes": 180,
+    "me": null
+  },
+  "forms": {
+    "simple": {
+      "title": "Sign up",
+      "description": "Tell us about you",
+      "pages": [
+        {
+          "questions": [
+            {
+              "propertyId": "title",
+              "label": "Your name",
+              "required": true
+            },
+            {
+              "propertyId": "pEml0001",
+              "required": true,
+              "help": "We write only about this"
+            },
+            {
+              "propertyId": "pNum0001"
+            },
+            {
+              "propertyId": "pSel0001",
+              "options": ["optTodo1", "optDone1"]
+            },
+            {
+              "propertyId": "pMul0001"
+            },
+            {
+              "propertyId": "pChk0001",
+              "label": "I agree",
+              "required": true
+            },
+            {
+              "propertyId": "pDate001"
+            },
+            {
+              "propertyId": "pTime001"
+            },
+            {
+              "propertyId": "pUrl0001"
+            },
+            {
+              "propertyId": "pPho0001"
+            },
+            {
+              "propertyId": "pText001"
+            },
+            {
+              "propertyId": "pSta0001"
+            }
+          ]
+        }
+      ],
+      "thanks": "Thank you!",
+      "submit": "Send",
+      "language": "en"
+    },
+    "paged": {
+      "title": "Request",
+      "pages": [
+        {
+          "title": "Start",
+          "questions": [
+            {
+              "propertyId": "title"
+            },
+            {
+              "propertyId": "pSel0001"
+            }
+          ]
+        },
+        {
+          "title": "Done",
+          "when": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pSel0001",
+                "operator": "is",
+                "value": "optDone1"
+              }
+            ]
+          },
+          "questions": [
+            {
+              "propertyId": "pNum0001",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "To do",
+          "when": {
+            "kind": "group",
+            "op": "and",
+            "children": [
+              {
+                "kind": "condition",
+                "propertyId": "pSel0001",
+                "operator": "is",
+                "value": "optTodo1"
+              }
+            ]
+          },
+          "questions": [
+            {
+              "propertyId": "pText001"
+            }
+          ]
+        },
+        {
+          "title": "Last",
+          "questions": [
+            {
+              "propertyId": "pEml0001"
+            }
+          ]
+        }
+      ]
+    },
+    "members": {
+      "pages": [
+        {
+          "questions": [
+            {
+              "propertyId": "title"
+            },
+            {
+              "propertyId": "pPer0001"
+            },
+            {
+              "propertyId": "pFil0001"
+            },
+            {
+              "propertyId": "pRel0001"
+            }
+          ]
+        }
+      ]
+    },
+    "optional": {
+      "pages": [
+        {
+          "questions": [
+            {
+              "propertyId": "pText001"
+            },
+            {
+              "propertyId": "pChk0001"
+            }
+          ]
+        }
+      ]
+    },
+    "none": {
+      "pages": []
+    }
+  },
+  "read": [
+    {
+      "name": "no form",
+      "mode": "link",
+      "config": null,
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "not an object",
+      "mode": "link",
+      "config": {
+        "form": "yes"
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "an empty object",
+      "mode": "app",
+      "config": {
+        "form": {}
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "a form read as written",
+      "mode": "link",
+      "config": {
+        "form": {
+          "title": "Sign up",
+          "description": "Tell us about you",
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "title",
+                  "label": "Your name",
+                  "required": true
+                },
+                {
+                  "propertyId": "pEml0001",
+                  "required": true,
+                  "help": "We write only about this"
+                },
+                {
+                  "propertyId": "pNum0001"
+                },
+                {
+                  "propertyId": "pSel0001",
+                  "options": ["optTodo1", "optDone1"]
+                },
+                {
+                  "propertyId": "pMul0001"
+                },
+                {
+                  "propertyId": "pChk0001",
+                  "label": "I agree",
+                  "required": true
+                },
+                {
+                  "propertyId": "pDate001"
+                },
+                {
+                  "propertyId": "pTime001"
+                },
+                {
+                  "propertyId": "pUrl0001"
+                },
+                {
+                  "propertyId": "pPho0001"
+                },
+                {
+                  "propertyId": "pText001"
+                },
+                {
+                  "propertyId": "pSta0001"
+                }
+              ]
+            }
+          ],
+          "thanks": "Thank you!",
+          "submit": "Send",
+          "language": "en"
+        }
+      },
+      "expected": {
+        "title": "Sign up",
+        "description": "Tell us about you",
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "title",
+                "label": "Your name",
+                "help": null,
+                "required": true,
+                "options": null
+              },
+              {
+                "propertyId": "pEml0001",
+                "label": null,
+                "help": "We write only about this",
+                "required": true,
+                "options": null
+              },
+              {
+                "propertyId": "pNum0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pSel0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": ["optTodo1", "optDone1"]
+              },
+              {
+                "propertyId": "pMul0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pChk0001",
+                "label": "I agree",
+                "help": null,
+                "required": true,
+                "options": null
+              },
+              {
+                "propertyId": "pDate001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pTime001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pUrl0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pPho0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pText001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pSta0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": "Thank you!",
+        "submit": "Send",
+        "language": "en"
+      }
+    },
+    {
+      "name": "pages and their conditions",
+      "mode": "link",
+      "config": {
+        "form": {
+          "title": "Request",
+          "pages": [
+            {
+              "title": "Start",
+              "questions": [
+                {
+                  "propertyId": "title"
+                },
+                {
+                  "propertyId": "pSel0001"
+                }
+              ]
+            },
+            {
+              "title": "Done",
+              "when": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "pSel0001",
+                    "operator": "is",
+                    "value": "optDone1"
+                  }
+                ]
+              },
+              "questions": [
+                {
+                  "propertyId": "pNum0001",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "title": "To do",
+              "when": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "pSel0001",
+                    "operator": "is",
+                    "value": "optTodo1"
+                  }
+                ]
+              },
+              "questions": [
+                {
+                  "propertyId": "pText001"
+                }
+              ]
+            },
+            {
+              "title": "Last",
+              "questions": [
+                {
+                  "propertyId": "pEml0001"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": "Request",
+        "description": null,
+        "pages": [
+          {
+            "title": "Start",
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "title",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pSel0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          },
+          {
+            "title": "Done",
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pNum0001",
+                "label": null,
+                "help": null,
+                "required": true,
+                "options": null
+              }
+            ],
+            "when": {
+              "kind": "group",
+              "op": "and",
+              "children": [
+                {
+                  "kind": "condition",
+                  "propertyId": "pSel0001",
+                  "operator": "is",
+                  "value": "optDone1"
+                }
+              ]
+            }
+          },
+          {
+            "title": "To do",
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pText001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": {
+              "kind": "group",
+              "op": "and",
+              "children": [
+                {
+                  "kind": "condition",
+                  "propertyId": "pSel0001",
+                  "operator": "is",
+                  "value": "optTodo1"
+                }
+              ]
+            }
+          },
+          {
+            "title": "Last",
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pEml0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "a link asks no files, people or related rows",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "title"
+                },
+                {
+                  "propertyId": "pPer0001"
+                },
+                {
+                  "propertyId": "pFil0001"
+                },
+                {
+                  "propertyId": "pRel0001"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "title",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "the app asks them",
+      "mode": "app",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "title"
+                },
+                {
+                  "propertyId": "pPer0001"
+                },
+                {
+                  "propertyId": "pFil0001"
+                },
+                {
+                  "propertyId": "pRel0001"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "title",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pPer0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pFil0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pRel0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "a property asked once, its first question kept",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "pText001",
+                  "label": "First"
+                }
+              ]
+            },
+            {
+              "questions": [
+                {
+                  "propertyId": "pText001",
+                  "label": "Again"
+                },
+                {
+                  "propertyId": "pUrl0001"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pText001",
+                "label": "First",
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pUrl0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "a deleted, missing, computed, created-by or button property is not asked",
+      "mode": "app",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "pGone001"
+                },
+                {
+                  "propertyId": "pNone001"
+                },
+                {
+                  "propertyId": "pFor0001"
+                },
+                {
+                  "propertyId": "pCrb0001"
+                },
+                {
+                  "propertyId": "pBtn0001"
+                },
+                {
+                  "propertyId": 42
+                },
+                "title",
+                {
+                  "propertyId": "pPho0001"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pPho0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "options are the property's own, in its order; none on a text",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "pSel0001",
+                  "options": ["optFive1", "nope0001", "optTodo1", "optTodo1", 7]
+                },
+                {
+                  "propertyId": "pMul0001",
+                  "options": []
+                },
+                {
+                  "propertyId": "pSta0001",
+                  "options": "all"
+                },
+                {
+                  "propertyId": "pText001",
+                  "options": ["optTodo1"]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pSel0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": ["optTodo1", "optFive1"]
+              },
+              {
+                "propertyId": "pMul0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": []
+              },
+              {
+                "propertyId": "pSta0001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pText001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "words are cut to their lengths; an empty one is none",
+      "mode": "link",
+      "config": {
+        "form": {
+          "title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+          "description": "",
+          "thanks": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "submit": 5,
+          "pages": [
+            {
+              "title": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+              "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "questions": [
+                {
+                  "propertyId": "pText001",
+                  "label": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+                  "help": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+        "description": null,
+        "pages": [
+          {
+            "title": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+            "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "questions": [
+              {
+                "propertyId": "pText001",
+                "label": "llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll",
+                "help": "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "Arabic is kept; any other language is English",
+      "mode": "link",
+      "config": {
+        "form": {
+          "language": "ar",
+          "pages": []
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [],
+        "thanks": null,
+        "submit": null,
+        "language": "ar"
+      }
+    },
+    {
+      "name": "a language not known is English",
+      "mode": "link",
+      "config": {
+        "form": {
+          "language": "fr",
+          "pages": []
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "required is true or nothing",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "pText001",
+                  "required": "yes"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pText001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "at most 20 pages",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            },
+            {
+              "questions": []
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "a condition that is not a filter group is none",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [],
+              "when": {
+                "kind": "condition",
+                "propertyId": "pText001",
+                "operator": "isEmpty"
+              }
+            },
+            {
+              "questions": [],
+              "when": {
+                "kind": "group",
+                "op": "xor",
+                "children": []
+              }
+            },
+            {
+              "questions": [],
+              "when": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "group",
+                    "op": "or",
+                    "children": [
+                      {
+                        "kind": "group",
+                        "op": "and",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "questions": [],
+              "when": {
+                "kind": "group",
+                "op": "or",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "x"
+                  }
+                ]
+              }
+            },
+            {
+              "questions": [],
+              "when": {
+                "kind": "group",
+                "op": "and",
+                "children": [
+                  {
+                    "kind": "condition",
+                    "propertyId": "pSel0001",
+                    "operator": "is",
+                    "value": "optDone1"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [],
+            "when": {
+              "kind": "group",
+              "op": "and",
+              "children": [
+                {
+                  "kind": "condition",
+                  "propertyId": "pSel0001",
+                  "operator": "is",
+                  "value": "optDone1"
+                }
+              ]
+            }
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    },
+    {
+      "name": "at most 100 questions",
+      "mode": "link",
+      "config": {
+        "form": {
+          "pages": [
+            {
+              "questions": [
+                {
+                  "propertyId": "pMany000"
+                },
+                {
+                  "propertyId": "pMany001"
+                },
+                {
+                  "propertyId": "pMany002"
+                },
+                {
+                  "propertyId": "pMany003"
+                },
+                {
+                  "propertyId": "pMany004"
+                },
+                {
+                  "propertyId": "pMany005"
+                },
+                {
+                  "propertyId": "pMany006"
+                },
+                {
+                  "propertyId": "pMany007"
+                },
+                {
+                  "propertyId": "pMany008"
+                },
+                {
+                  "propertyId": "pMany009"
+                },
+                {
+                  "propertyId": "pMany010"
+                },
+                {
+                  "propertyId": "pMany011"
+                },
+                {
+                  "propertyId": "pMany012"
+                },
+                {
+                  "propertyId": "pMany013"
+                },
+                {
+                  "propertyId": "pMany014"
+                },
+                {
+                  "propertyId": "pMany015"
+                },
+                {
+                  "propertyId": "pMany016"
+                },
+                {
+                  "propertyId": "pMany017"
+                },
+                {
+                  "propertyId": "pMany018"
+                },
+                {
+                  "propertyId": "pMany019"
+                },
+                {
+                  "propertyId": "pMany020"
+                },
+                {
+                  "propertyId": "pMany021"
+                },
+                {
+                  "propertyId": "pMany022"
+                },
+                {
+                  "propertyId": "pMany023"
+                },
+                {
+                  "propertyId": "pMany024"
+                },
+                {
+                  "propertyId": "pMany025"
+                },
+                {
+                  "propertyId": "pMany026"
+                },
+                {
+                  "propertyId": "pMany027"
+                },
+                {
+                  "propertyId": "pMany028"
+                },
+                {
+                  "propertyId": "pMany029"
+                },
+                {
+                  "propertyId": "pMany030"
+                },
+                {
+                  "propertyId": "pMany031"
+                },
+                {
+                  "propertyId": "pMany032"
+                },
+                {
+                  "propertyId": "pMany033"
+                },
+                {
+                  "propertyId": "pMany034"
+                },
+                {
+                  "propertyId": "pMany035"
+                },
+                {
+                  "propertyId": "pMany036"
+                },
+                {
+                  "propertyId": "pMany037"
+                },
+                {
+                  "propertyId": "pMany038"
+                },
+                {
+                  "propertyId": "pMany039"
+                },
+                {
+                  "propertyId": "pMany040"
+                },
+                {
+                  "propertyId": "pMany041"
+                },
+                {
+                  "propertyId": "pMany042"
+                },
+                {
+                  "propertyId": "pMany043"
+                },
+                {
+                  "propertyId": "pMany044"
+                },
+                {
+                  "propertyId": "pMany045"
+                },
+                {
+                  "propertyId": "pMany046"
+                },
+                {
+                  "propertyId": "pMany047"
+                },
+                {
+                  "propertyId": "pMany048"
+                },
+                {
+                  "propertyId": "pMany049"
+                },
+                {
+                  "propertyId": "pMany050"
+                },
+                {
+                  "propertyId": "pMany051"
+                },
+                {
+                  "propertyId": "pMany052"
+                },
+                {
+                  "propertyId": "pMany053"
+                },
+                {
+                  "propertyId": "pMany054"
+                },
+                {
+                  "propertyId": "pMany055"
+                },
+                {
+                  "propertyId": "pMany056"
+                },
+                {
+                  "propertyId": "pMany057"
+                },
+                {
+                  "propertyId": "pMany058"
+                },
+                {
+                  "propertyId": "pMany059"
+                }
+              ]
+            },
+            {
+              "questions": [
+                {
+                  "propertyId": "pMany060"
+                },
+                {
+                  "propertyId": "pMany061"
+                },
+                {
+                  "propertyId": "pMany062"
+                },
+                {
+                  "propertyId": "pMany063"
+                },
+                {
+                  "propertyId": "pMany064"
+                },
+                {
+                  "propertyId": "pMany065"
+                },
+                {
+                  "propertyId": "pMany066"
+                },
+                {
+                  "propertyId": "pMany067"
+                },
+                {
+                  "propertyId": "pMany068"
+                },
+                {
+                  "propertyId": "pMany069"
+                },
+                {
+                  "propertyId": "pMany070"
+                },
+                {
+                  "propertyId": "pMany071"
+                },
+                {
+                  "propertyId": "pMany072"
+                },
+                {
+                  "propertyId": "pMany073"
+                },
+                {
+                  "propertyId": "pMany074"
+                },
+                {
+                  "propertyId": "pMany075"
+                },
+                {
+                  "propertyId": "pMany076"
+                },
+                {
+                  "propertyId": "pMany077"
+                },
+                {
+                  "propertyId": "pMany078"
+                },
+                {
+                  "propertyId": "pMany079"
+                },
+                {
+                  "propertyId": "pMany080"
+                },
+                {
+                  "propertyId": "pMany081"
+                },
+                {
+                  "propertyId": "pMany082"
+                },
+                {
+                  "propertyId": "pMany083"
+                },
+                {
+                  "propertyId": "pMany084"
+                },
+                {
+                  "propertyId": "pMany085"
+                },
+                {
+                  "propertyId": "pMany086"
+                },
+                {
+                  "propertyId": "pMany087"
+                },
+                {
+                  "propertyId": "pMany088"
+                },
+                {
+                  "propertyId": "pMany089"
+                },
+                {
+                  "propertyId": "pMany090"
+                },
+                {
+                  "propertyId": "pMany091"
+                },
+                {
+                  "propertyId": "pMany092"
+                },
+                {
+                  "propertyId": "pMany093"
+                },
+                {
+                  "propertyId": "pMany094"
+                },
+                {
+                  "propertyId": "pMany095"
+                },
+                {
+                  "propertyId": "pMany096"
+                },
+                {
+                  "propertyId": "pMany097"
+                },
+                {
+                  "propertyId": "pMany098"
+                },
+                {
+                  "propertyId": "pMany099"
+                },
+                {
+                  "propertyId": "pMany100"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "title": null,
+        "description": null,
+        "pages": [
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pMany000",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany001",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany002",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany003",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany004",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany005",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany006",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany007",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany008",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany009",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany010",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany011",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany012",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany013",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany014",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany015",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany016",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany017",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany018",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany019",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany020",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany021",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany022",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany023",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany024",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany025",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany026",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany027",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany028",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany029",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany030",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany031",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany032",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany033",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany034",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany035",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany036",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany037",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany038",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany039",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany040",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany041",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany042",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany043",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany044",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany045",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany046",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany047",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany048",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany049",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany050",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany051",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany052",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany053",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany054",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany055",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany056",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany057",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany058",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany059",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          },
+          {
+            "title": null,
+            "description": null,
+            "questions": [
+              {
+                "propertyId": "pMany060",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany061",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany062",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany063",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany064",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany065",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany066",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany067",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany068",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany069",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany070",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany071",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany072",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany073",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany074",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany075",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany076",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany077",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany078",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany079",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany080",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany081",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany082",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany083",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany084",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany085",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany086",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany087",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany088",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany089",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany090",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany091",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany092",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany093",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany094",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany095",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany096",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany097",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany098",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              },
+              {
+                "propertyId": "pMany099",
+                "label": null,
+                "help": null,
+                "required": false,
+                "options": null
+              }
+            ],
+            "when": null
+          }
+        ],
+        "thanks": null,
+        "submit": null,
+        "language": "en"
+      }
+    }
+  ],
+  "answers": [
+    {
+      "name": "every type a link asks, coerced",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "Sara",
+        "pEml0001": "  sara@example.com ",
+        "pNum0001": "12.5",
+        "pSel0001": "optDone1",
+        "pMul0001": ["tagRed01", "tagAr001", "tagRed01"],
+        "pChk0001": "on",
+        "pDate001": "2026-12-01",
+        "pTime001": "2026-12-01T09:30:00Z",
+        "pUrl0001": "https://example.com",
+        "pPho0001": "+966 50 000 0000",
+        "pText001": "Hello",
+        "pSta0001": "staProg1"
+      },
+      "expected": {
+        "answer": {
+          "title": "Sara",
+          "values": {
+            "pEml0001": "sara@example.com",
+            "pNum0001": 12.5,
+            "pSel0001": "optDone1",
+            "pMul0001": ["tagRed01", "tagAr001"],
+            "pChk0001": true,
+            "pDate001": {
+              "start": "2026-12-01"
+            },
+            "pTime001": {
+              "start": "2026-12-01T09:30:00Z"
+            },
+            "pUrl0001": "https://example.com",
+            "pPho0001": "+966 50 000 0000",
+            "pText001": "Hello",
+            "pSta0001": "staProg1"
+          },
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "Arabic-Indic digits are a number",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "سارة",
+        "pEml0001": "s@x.sa",
+        "pChk0001": true,
+        "pNum0001": "١٢٫٥"
+      },
+      "expected": {
+        "answer": {
+          "title": "سارة",
+          "values": {
+            "pEml0001": "s@x.sa",
+            "pChk0001": true,
+            "pNum0001": 12.5
+          },
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "required questions not answered, in the order asked",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "pNum0001": "3",
+        "pChk0001": false
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "title",
+            "reason": "answer.required"
+          },
+          {
+            "propertyId": "pEml0001",
+            "reason": "answer.required"
+          },
+          {
+            "propertyId": "pChk0001",
+            "reason": "answer.required"
+          }
+        ]
+      }
+    },
+    {
+      "name": "only spaces are no answer",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "   ",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "title",
+            "reason": "answer.required"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an option the question does not show",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pSel0001": "optLate1"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pSel0001",
+            "reason": "answer.option"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an option by its name is the option",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pSel0001": "Done"
+      },
+      "expected": {
+        "answer": {
+          "title": "A",
+          "values": {
+            "pEml0001": "a@b.c",
+            "pSel0001": "optDone1",
+            "pChk0001": true
+          },
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "no option of the property",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pSel0001": "nope0001"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pSel0001",
+            "reason": "answer.invalid"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a choice that is no option is refused, never dropped",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pMul0001": ["tagRed01", "junk"]
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pMul0001",
+            "reason": "answer.invalid"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a number that is not one",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pNum0001": "twelve"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pNum0001",
+            "reason": "answer.invalid"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a date that is not one",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pDate001": "1 December"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pDate001",
+            "reason": "answer.invalid"
+          }
+        ]
+      }
+    },
+    {
+      "name": "texts longer than an answer may be",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pText001": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "title",
+            "reason": "answer.long"
+          },
+          {
+            "propertyId": "pText001",
+            "reason": "answer.long"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the longest answers are kept",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pText001": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "expected": {
+        "answer": {
+          "title": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          "values": {
+            "pEml0001": "a@b.c",
+            "pChk0001": true,
+            "pText001": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "what is not a question is left out",
+      "form": "simple",
+      "mode": "link",
+      "raw": {
+        "title": "A",
+        "pEml0001": "a@b.c",
+        "pChk0001": "on",
+        "pPer0001": ["01900000-0000-7000-8000-0000000000a1"],
+        "pFor0001": 5,
+        "pNone001": "x",
+        "website": "spam"
+      },
+      "expected": {
+        "answer": {
+          "title": "A",
+          "values": {
+            "pEml0001": "a@b.c",
+            "pChk0001": true
+          },
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "an answer with nothing in it",
+      "form": "optional",
+      "mode": "link",
+      "raw": {
+        "pText001": "",
+        "pChk0001": false
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": null,
+            "reason": "answer.empty"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a page shown by the first page: its required question",
+      "form": "paged",
+      "mode": "link",
+      "raw": {
+        "title": "Fix it",
+        "pSel0001": "optDone1",
+        "pText001": "never shown"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pNum0001",
+            "reason": "answer.required"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the pages shown, and the answers of the others left out",
+      "form": "paged",
+      "mode": "link",
+      "raw": {
+        "title": "Fix it",
+        "pSel0001": "optDone1",
+        "pNum0001": "3",
+        "pText001": "never shown",
+        "pEml0001": "me@x.io"
+      },
+      "expected": {
+        "answer": {
+          "title": "Fix it",
+          "values": {
+            "pSel0001": "optDone1",
+            "pNum0001": 3,
+            "pEml0001": "me@x.io"
+          },
+          "pages": [0, 1, 3]
+        }
+      }
+    },
+    {
+      "name": "another choice shows the other page",
+      "form": "paged",
+      "mode": "link",
+      "raw": {
+        "title": "Plan it",
+        "pSel0001": "optTodo1",
+        "pNum0001": "3",
+        "pText001": "Soon"
+      },
+      "expected": {
+        "answer": {
+          "title": "Plan it",
+          "values": {
+            "pSel0001": "optTodo1",
+            "pText001": "Soon"
+          },
+          "pages": [0, 2, 3]
+        }
+      }
+    },
+    {
+      "name": "a refused answer is no value to a condition",
+      "form": "paged",
+      "mode": "link",
+      "raw": {
+        "title": "Odd",
+        "pSel0001": "nope0001"
+      },
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pSel0001",
+            "reason": "answer.invalid"
+          }
+        ]
+      }
+    },
+    {
+      "name": "up to a page: the first page alone, empty and all",
+      "form": "paged",
+      "mode": "link",
+      "raw": {},
+      "upTo": 0,
+      "expected": {
+        "answer": {
+          "title": "",
+          "values": {},
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "up to the second page shown",
+      "form": "paged",
+      "mode": "link",
+      "raw": {
+        "pSel0001": "optDone1"
+      },
+      "upTo": 1,
+      "expected": {
+        "problems": [
+          {
+            "propertyId": "pNum0001",
+            "reason": "answer.required"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the app keeps people, files and related rows as ids",
+      "form": "members",
+      "mode": "app",
+      "raw": {
+        "title": "Mine",
+        "pPer0001": [
+          "01900000-0000-7000-8000-0000000000a1",
+          "01900000-0000-7000-8000-0000000000a1"
+        ],
+        "pFil0001": "01900000-0000-7000-8000-000000000090",
+        "pRel0001": ["01900000-0000-7000-8000-000000000007"]
+      },
+      "expected": {
+        "answer": {
+          "title": "Mine",
+          "values": {
+            "pPer0001": ["01900000-0000-7000-8000-0000000000a1"],
+            "pFil0001": ["01900000-0000-7000-8000-000000000090"],
+            "pRel0001": ["01900000-0000-7000-8000-000000000007"]
+          },
+          "pages": [0]
+        }
+      }
+    },
+    {
+      "name": "a link leaves them out",
+      "form": "members",
+      "mode": "link",
+      "raw": {
+        "title": "Mine",
+        "pPer0001": ["01900000-0000-7000-8000-0000000000a1"],
+        "pFil0001": ["01900000-0000-7000-8000-000000000090"]
+      },
+      "expected": {
+        "answer": {
+          "title": "Mine",
+          "values": {},
+          "pages": [0]
+        }
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "the first page",
+      "form": "paged",
+      "raw": {},
+      "kind": "next",
+      "at": -1,
+      "expected": 0
+    },
+    {
+      "name": "nothing chosen: the last page next",
+      "form": "paged",
+      "raw": {},
+      "kind": "next",
+      "at": 0,
+      "expected": 3
+    },
+    {
+      "name": "a choice shows its page next",
+      "form": "paged",
+      "raw": {
+        "pSel0001": "optTodo1"
+      },
+      "kind": "next",
+      "at": 0,
+      "expected": 2
+    },
+    {
+      "name": "after the shown page, the last",
+      "form": "paged",
+      "raw": {
+        "pSel0001": "optDone1",
+        "pNum0001": "5"
+      },
+      "kind": "next",
+      "at": 1,
+      "expected": 3
+    },
+    {
+      "name": "the last page has none after it",
+      "form": "paged",
+      "raw": {
+        "pSel0001": "optDone1"
+      },
+      "kind": "next",
+      "at": 3,
+      "expected": null
+    },
+    {
+      "name": "back from the last to the page shown",
+      "form": "paged",
+      "raw": {
+        "pSel0001": "optDone1"
+      },
+      "kind": "previous",
+      "at": 3,
+      "expected": 1
+    },
+    {
+      "name": "back from the last with nothing chosen",
+      "form": "paged",
+      "raw": {},
+      "kind": "previous",
+      "at": 3,
+      "expected": 0
+    },
+    {
+      "name": "nothing before the first",
+      "form": "paged",
+      "raw": {},
+      "kind": "previous",
+      "at": 0,
+      "expected": null
+    },
+    {
+      "name": "a form of no pages",
+      "form": "none",
+      "raw": {},
+      "kind": "next",
+      "at": -1,
+      "expected": null
+    }
+  ]
+}

@@ -86,3 +86,17 @@ export type {
   TriggerKind,
   TriggerValue,
 } from './automations';
+// Phase 16: a form view's questions. Only their types here: the rules' code is its own entry,
+// `@cgw/workspace/forms`, imported by the form view (loaded with it).
+export type {
+  FormAnswer,
+  FormCheck,
+  FormConfig,
+  FormLanguage,
+  FormMode,
+  FormPage,
+  FormProblem,
+  FormQuestion,
+  ProblemReason,
+  StoredForm,
+} from './forms';

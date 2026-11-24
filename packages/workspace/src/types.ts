@@ -104,6 +104,11 @@ export interface RowRecord extends Omit<PageRecord, 'kind'> {
   /** Who made the row and who last changed it (created by, last edited by); null when unknown. */
   createdBy: Id | null;
   updatedBy: Id | null;
+  /**
+   * Phase 16: the form view whose answer added the row (absent for any other row). A row a form's
+   * link added has no `createdBy`: created by shows the form.
+   */
+  formId?: Id | null;
 }
 
 /** A database whose rows this device keeps (store schema 4). */
@@ -211,6 +216,11 @@ export interface PageMove {
 export type PageCreate = PageRecord & {
   database?: { properties: PropertyDef[] };
   row?: { values: Record<PropertyId, Value> };
+  /**
+   * Phase 16: a row made by answering a form view of its database (in the app, offline too); the
+   * server keeps it when the view is a form of that database, and the answer starts its rules.
+   */
+  formId?: Id | null;
 };
 
 /**

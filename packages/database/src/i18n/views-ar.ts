@@ -277,6 +277,7 @@ export const viewsAr: Strings<typeof viewsEn> = {
       viewAll: 'كل جهات الاتصال',
       viewCards: 'بطاقات',
       viewByTag: 'حسب الوسم',
+      viewForm: 'نموذج التواصل',
       row1: 'ليلى حسن',
       row1Company: 'النيل للتجارة',
       row1Role: 'مشترية',

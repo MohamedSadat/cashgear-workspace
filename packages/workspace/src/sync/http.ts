@@ -280,7 +280,14 @@ export const rowRecord = (r: RowDto): RowRecord => ({
   computedVersion: r.computedVersion === null ? null : num(r.computedVersion),
   createdBy: r.createdBy ?? null,
   updatedBy: r.updatedBy ?? null,
+  // Phase 16: only on a row a form's answer added (a server before 0.16.0 sends none).
+  ...formOf(r),
 });
+
+const formOf = (r: object): { formId?: Id } => {
+  const formId = (r as { formId?: unknown }).formId;
+  return typeof formId === 'string' && formId ? { formId } : {};
+};
 
 function entityRecord(
   type: string | null | undefined,

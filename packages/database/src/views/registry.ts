@@ -132,6 +132,15 @@ export const VIEW_TYPES: Record<ViewType, ViewTypeDefinition> = {
     supports: { group: true, wrap: false, properties: false },
     ownErrors: true,
   },
+  // Phase 16: the form view (its questions, answered as rows); drawn in the next step.
+  form: {
+    type: 'form',
+    glyph: '▭',
+    component: null,
+    defaultConfig: () => emptyConfig('form'),
+    supports: { group: false, wrap: false, properties: false },
+    ownRows: true,
+  },
 };
 
 export const VIEW_ORDER: readonly ViewType[] = [

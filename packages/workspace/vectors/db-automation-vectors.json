@@ -1330,6 +1330,133 @@
       }
     },
     {
+      "name": "a form answered sets the status and tells its owner",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "formAnswered",
+          "viewId": "01900000-0000-7000-8000-00000000e001",
+          "extra": 1
+        },
+        "steps": [
+          {
+            "kind": "set",
+            "values": {
+              "pStat001": "sDone001"
+            }
+          },
+          {
+            "kind": "notify",
+            "people": ["01900000-0000-7000-8000-0000000000a1"],
+            "message": "A new answer"
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "formAnswered",
+            "viewId": "01900000-0000-7000-8000-00000000e001"
+          },
+          "steps": [
+            {
+              "kind": "set",
+              "values": {
+                "pStat001": "sDone001"
+              },
+              "when": null
+            },
+            {
+              "kind": "notify",
+              "people": ["01900000-0000-7000-8000-0000000000a1"],
+              "groups": [],
+              "personProperties": [],
+              "message": "A new answer",
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a form trigger without its form",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "formAnswered"
+        },
+        "steps": [
+          {
+            "kind": "set",
+            "values": {
+              "pStat001": "sDone001"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "trigger.form"
+      }
+    },
+    {
+      "name": "a form trigger naming no id",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "formAnswered",
+          "viewId": "form-1"
+        },
+        "steps": [
+          {
+            "kind": "set",
+            "values": {
+              "pStat001": "sDone001"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "reason": "trigger.form"
+      }
+    },
+    {
       "name": "conditions on a schedule",
       "rule": {
         "id": "01900000-0000-7000-8000-00000000a001",
@@ -3022,6 +3149,81 @@
         "changed": [],
         "before": {},
         "after": {}
+      },
+      "expected": false
+    },
+    {
+      "name": "its form answered",
+      "trigger": {
+        "kind": "formAnswered",
+        "viewId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "change": {
+        "kind": "added",
+        "changed": [],
+        "before": {},
+        "after": {},
+        "formId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "expected": true
+    },
+    {
+      "name": "another form answered",
+      "trigger": {
+        "kind": "formAnswered",
+        "viewId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "change": {
+        "kind": "added",
+        "changed": [],
+        "before": {},
+        "after": {},
+        "formId": "01900000-0000-7000-8000-00000000e002"
+      },
+      "expected": false
+    },
+    {
+      "name": "a row added by no form",
+      "trigger": {
+        "kind": "formAnswered",
+        "viewId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "change": {
+        "kind": "added",
+        "changed": [],
+        "before": {},
+        "after": {}
+      },
+      "expected": false
+    },
+    {
+      "name": "a form answered starts rowAdded too",
+      "trigger": {
+        "kind": "rowAdded"
+      },
+      "change": {
+        "kind": "added",
+        "changed": [],
+        "before": {},
+        "after": {},
+        "formId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "expected": true
+    },
+    {
+      "name": "a change of a row a form added is no answer",
+      "trigger": {
+        "kind": "formAnswered",
+        "viewId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "change": {
+        "kind": "changed",
+        "changed": ["pStat001"],
+        "before": {},
+        "after": {
+          "pStat001": "sDone001"
+        },
+        "formId": "01900000-0000-7000-8000-00000000e001"
       },
       "expected": false
     }

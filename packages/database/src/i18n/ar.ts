@@ -45,6 +45,7 @@ export const ar: DatabaseCatalogue = {
       gallery: 'معرض',
       timeline: 'مخطط زمني',
       chart: 'مخطط بياني',
+      form: 'نموذج',
     },
     toolbar: {
       label: 'أدوات قاعدة البيانات',

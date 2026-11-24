@@ -63,6 +63,7 @@ export const automationsAr: AutomationsCatalogue = {
     date: 'حلول تاريخ',
     schedule: 'وفق جدول',
     button: 'الضغط على زر',
+    formAnswered: 'الإجابة عن نموذج',
   },
   trigger_: {
     anyProperty: 'أي خاصية',
@@ -92,6 +93,8 @@ export const automationsAr: AutomationsCatalogue = {
     buttonProperty: 'الزر',
     noButton: 'أضف خاصية زر إلى قاعدة البيانات أولًا.',
     noDate: 'أضف خاصية تاريخ إلى قاعدة البيانات أولًا.',
+    form: 'النموذج',
+    noForm: 'أضف عرض نموذج إلى قاعدة البيانات أولًا.',
   },
   summary: {
     rowAdded: 'عند إضافة صف',
@@ -105,6 +108,8 @@ export const automationsAr: AutomationsCatalogue = {
     weekly: 'كل {{weekday}} الساعة {{time}}',
     monthly: 'كل شهر في اليوم {{day}} الساعة {{time}}',
     button: 'عند الضغط على {{property}}',
+    formAnswered: 'عند الإجابة عن {{form}}',
+    missingForm: 'نموذج محذوف',
     missing: 'خاصية محذوفة',
     checked: 'محدد',
     unchecked: 'غير محدد',
@@ -159,6 +164,7 @@ export const automationsAr: AutomationsCatalogue = {
     name: 'الاسم 200 حرف على الأكثر.',
     trigger: 'اختر ما يبدؤها.',
     'trigger.property': 'الخاصية التي تبدأ عندها ليست مما يمكنها مراقبته.',
+    'trigger.form': 'اختر النموذج.',
     conditions: 'الشروط ليست مما يمكنها الاحتفاظ به.',
     steps: 'للأتمتة من خطوة إلى 20 خطوة.',
     'step.kind': 'لا يمكن لهذه الخطوة العمل وفق جدول: فلا صف لها.',

@@ -268,8 +268,8 @@ describe('http sync api', () => {
     await sync.pushOps(WS, null, [upsert, rename] as never);
     const sent = (seen[0].body as { ops: { type: string; payload: Record<string, unknown> }[] })
       .ops;
-    // Phase 12: seven, with `chart`.
-    expect(sent[0].payload).toEqual({ ...view, viewTypes: 7 });
+    // Phase 12: seven, with `chart`; Phase 16: eight, with `form`.
+    expect(sent[0].payload).toEqual({ ...view, viewTypes: 8 });
     expect(sent[1].payload).toEqual({ title: 'Plans' });
     // The operation itself (the outbox's copy) is left as it was.
     expect('viewTypes' in upsert.payload).toBe(false);

@@ -23,13 +23,14 @@ import {
   type StepValue,
   type TriggerKind,
 } from '../core';
-import { useDatabaseContext } from '../context';
+import { useDatabaseContext, useViews } from '../context';
 import type { DatabaseAutomations, Person } from '../host';
 import { liveProperties, propertyOf } from '../model/properties';
 import { FilterEditor } from '../toolbar/FilterEditor';
 import {
   buttonProperties,
   dateProperties,
+  formViews,
   newStep,
   newTrigger,
   peopleProperties,
@@ -319,12 +320,16 @@ function TriggerEditor({
   at: AutoT;
   locale: string;
 }) {
+  const { host } = useDatabaseContext();
+  const forms = formViews(useViews(host, database.id));
   const kind = (
     <Field label={at('trigger')}>
       <select
         className="cgw-select"
         value={trigger.kind}
-        onChange={(event) => onChange(newTrigger(event.target.value as TriggerKind, database))}
+        onChange={(event) =>
+          onChange(newTrigger(event.target.value as TriggerKind, database, forms))
+        }
       >
         {TRIGGER_KINDS.map((k) => (
           <option key={k} value={k}>
@@ -337,6 +342,36 @@ function TriggerEditor({
   switch (trigger.kind) {
     case 'rowAdded':
       return kind;
+    case 'formAnswered':
+      if (!forms.length)
+        return (
+          <>
+            {kind}
+            <p>{at('trigger_.noForm')}</p>
+          </>
+        );
+      return (
+        <>
+          {kind}
+          <Field label={at('trigger_.form')}>
+            <select
+              className="cgw-select"
+              value={trigger.viewId}
+              onChange={(event) => onChange({ ...trigger, viewId: event.target.value })}
+            >
+              {/* A form deleted since stays shown until another is chosen. */}
+              {forms.some((f) => f.id === trigger.viewId) ? null : (
+                <option value={trigger.viewId}>{at('summary.missingForm')}</option>
+              )}
+              {forms.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
+      );
     case 'propertyChanged': {
       const def = trigger.propertyId ? propertyOf(database, trigger.propertyId) : undefined;
       const options = def?.type === 'select' || def?.type === 'status' ? (def.options ?? []) : null;

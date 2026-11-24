@@ -275,6 +275,7 @@ export const viewsEn = {
       viewAll: 'All contacts',
       viewCards: 'Cards',
       viewByTag: 'By tag',
+      viewForm: 'Contact form',
       row1: 'Layla Hassan',
       row1Company: 'Nile Trading',
       row1Role: 'Buyer',

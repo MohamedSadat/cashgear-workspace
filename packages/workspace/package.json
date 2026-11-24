@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./automations": "./src/db/automations.ts",
+    "./forms": "./src/db/forms.ts",
     "./testing": "./src/testing/conformance.ts"
   },
   "scripts": {

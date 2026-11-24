@@ -45,6 +45,7 @@ export const en = {
       gallery: 'Gallery',
       timeline: 'Timeline',
       chart: 'Chart',
+      form: 'Form',
     },
     toolbar: {
       label: 'Database tools',

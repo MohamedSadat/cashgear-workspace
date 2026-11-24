@@ -75,7 +75,12 @@ export type AutomationTrigger =
       day?: number | null;
     }
   /** A button property pressed on a row. */
-  | { kind: 'button'; propertyId: PropertyId };
+  | { kind: 'button'; propertyId: PropertyId }
+  /**
+   * Phase 16: a form view of the database answered (in the app or by its link): the row the answer
+   * added. The server checks that the view is a form of this database.
+   */
+  | { kind: 'formAnswered'; viewId: Id };
 
 export type TriggerKind = AutomationTrigger['kind'];
 
@@ -138,6 +143,7 @@ export const TRIGGER_KINDS: readonly TriggerKind[] = [
   'date',
   'schedule',
   'button',
+  'formAnswered',
 ];
 export const STEP_KINDS: readonly StepKind[] = ['set', 'addRow', 'notify', 'webhook'];
 
@@ -317,6 +323,10 @@ function checkTrigger(value: unknown, db: DatabaseRecord): AutomationTrigger {
         fail('trigger.property', 'A button trigger names a button property');
       return { kind: 'button', propertyId: def!.id };
     }
+    case 'formAnswered':
+      // Which views are forms of the database is the server's to check: a device may not hold them.
+      if (!isId(value.viewId)) fail('trigger.form', 'A form trigger names its form');
+      return { kind: 'formAnswered', viewId: value.viewId as Id };
     default:
       return fail('trigger', 'Not a trigger');
   }
@@ -547,6 +557,8 @@ export interface RowChange {
   after: Record<PropertyId, Value>;
   /** The button pressed. */
   propertyId?: PropertyId | null;
+  /** Phase 16: the form view whose answer added the row (a row added only). */
+  formId?: Id | null;
 }
 
 /** A row holding `values` (the title among them), for reading a trigger's from and to. */
@@ -584,7 +596,8 @@ function valuesRow(db: DatabaseRecord, values: Record<PropertyId, Value>): RowRe
  * watched property (or, with none named, of the title or any stored property not deleted) starts
  * `propertyChanged` when its old value passes `from` and its new one `to` (each read as a filter
  * condition on that property, so an operator that does not fit the type passes); a press starts
- * the `button` trigger naming its property. Dates and schedules are reached by time, never by a
+ * the `button` trigger naming its property; a row added by a form's answer starts `formAnswered`
+ * naming that form (and `rowAdded` too). Dates and schedules are reached by time, never by a
  * change. A property deleted since the rule was saved starts nothing.
  */
 export function changeStarts(
@@ -596,6 +609,8 @@ export function changeStarts(
   switch (trigger.kind) {
     case 'rowAdded':
       return change.kind === 'added';
+    case 'formAnswered':
+      return change.kind === 'added' && !!change.formId && change.formId === trigger.viewId;
     case 'button':
       return (
         change.kind === 'button' &&

@@ -3,6 +3,7 @@
 // TypeScript here and in C# on the server (`server/src/Cgw.Core/Databases`), held together by the
 // shared vectors in `packages/workspace/vectors/db-*.json`. No React, no DOM.
 import type { Id } from '../ids';
+import type { StoredForm } from './forms';
 
 /** 8 characters of base 62, unique within its database; `title` is the title property's. */
 export type PropertyId = string;
@@ -194,11 +195,13 @@ export interface DatabaseRecord {
 /** At or below this many rows a device holds every row and queries locally (DECISIONS.md, Phase 4). */
 export const LOCAL_ROW_LIMIT = 5000;
 
-export type ViewType = 'table' | 'board' | 'list' | 'calendar' | 'gallery' | 'timeline' | 'chart';
+export type ViewType =
+  'table' | 'board' | 'list' | 'calendar' | 'gallery' | 'timeline' | 'chart' | 'form';
 
 /**
  * Every view type this build knows, in the order they were added (Phase 9: `timeline`, the sixth;
- * Phase 12: `chart`, the seventh). A type not in it is drawn as a table (never dropped). Its
+ * Phase 12: `chart`, the seventh; Phase 16: `form`, the eighth). A type not in it is drawn as a
+ * table (never dropped). Its
  * length is the `viewTypes` a `view.upsert` carries to the server (DECISIONS.md, 2026-11-17: an
  * upsert from an older build, which says `table` for a type it does not know, keeps the stored
  * type and the settings that build does not know).
@@ -211,6 +214,7 @@ export const KNOWN_VIEW_TYPES: readonly ViewType[] = [
   'gallery',
   'timeline',
   'chart',
+  'form',
 ];
 
 /** How a chart view draws its points (Phase 12). */
@@ -286,6 +290,13 @@ export interface ViewConfig {
    * title, the group's and the measure's properties and hide every other.
    */
   chart?: ChartConfig;
+  /**
+   * Form (Phase 16): its title, description, pages of questions with their conditions, the
+   * thank-you text, its button's words and its link's language, as an editor wrote them; read by
+   * `readForm` (`@cgw/workspace/forms`), never as is. Its `properties` show its questions' properties
+   * in order and hide every other, written so by the client, so an older build's table shows them.
+   */
+  form?: StoredForm;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import { CgButton, CgPopup, CgSwitch } from '@cashgear/ui';
 import { uuidv7, type Id } from '@cgw/workspace';
 import { useCallback, useEffect, useState } from 'react';
 import type { AutomationRecord, AutomationTrigger } from '../core';
-import { useDatabase, useDatabaseContext } from '../context';
+import { useDatabase, useDatabaseContext, useViews } from '../context';
 import type { DatabaseAutomations } from '../host';
 import { newRule, statusText, triggerText } from './model';
 import { RuleEditor, stepNameOf } from './RuleEditor';
@@ -37,6 +37,7 @@ export function AutomationsDialog({ databaseId, onClose, start }: AutomationsDia
   const { host } = useDatabaseContext();
   const automations = host.automations;
   const database = useDatabase(host, databaseId);
+  const views = useViews(host, databaseId);
   const [data, setData] = useState<DatabaseAutomations | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed' | 'offline'>('loading');
   const [reading, setReading] = useState(0);
@@ -204,7 +205,14 @@ export function AutomationsDialog({ databaseId, onClose, start }: AutomationsDia
                         {nameOf(rule)}
                       </span>
                       <span className="cgw-db-auto-note">
-                        {triggerText(rule.trigger, database, at, locale)}
+                        {triggerText(
+                          rule.trigger,
+                          database,
+                          at,
+                          locale,
+                          undefined,
+                          (id) => views.find((v) => v.id === id)?.name,
+                        )}
                         {author ? ` · ${at('author', { name: author.name })}` : ''}
                       </span>
                       <span className="cgw-db-auto-note">
