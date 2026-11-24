@@ -237,6 +237,8 @@ $sitesEnvironment = [ordered]@{
   Plugins__PublicUrl = "https://$PluginsHostName"
   # Phase 14: its own host name, told apart from a site's own host names.
   Sites__PublicUrl = "https://$SitesHostName"
+  # Phase 16: the API, where a form link's last page is sent on to (its pages' form-action).
+  Api__PublicUrl = "https://$HostName"
   Web__Origins__0 = $WebOrigin
   Web__Origins__1 = 'http://tauri.localhost'
   Web__Origins__2 = 'tauri://localhost'

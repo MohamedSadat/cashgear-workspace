@@ -250,6 +250,10 @@ const env = {
         // Phase 12: the specs and benches pin databases of thousands of rows, one batch pull of up to
         // 100 documents at a time, many a minute from one address.
         RateLimits__pull: '10000',
+        // Phase 16: the specs and bench/phase16.mjs answer form links many times a minute from one
+        // address; the limit (10 a minute, 100 a day) has a test of its own (FormTests).
+        RateLimits__formMinute: '100000',
+        RateLimits__formDay: '1000000',
         // Phase 13: Cash Gear's subscription against the mock providers, its keys made here at start
         // and kept in memory only (each a fresh stand-in the mock records as a hash; never a real key),
         // with an allowance a month for every workspace; and the local model's stand-in package
@@ -302,6 +306,8 @@ start('sites', 'dotnet', [bin('Cgw.Sites'), '--urls', `${sitesUrl};${pluginsUrl}
   ConnectionStrings__Sql: sql,
   Blob__ConnectionString: blob,
   Plugins__PublicUrl: pluginsUrl,
+  // Phase 16: the API a form link's last page is sent on to.
+  Api__PublicUrl: env.Api__PublicUrl,
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   // Phase 14: every spec and bench reads the sites from one address; the limit has a test of its own.
   ...(e2e ? { RateLimits__sites: '100000', RateLimits__sitesPlugins: '100000' } : {}),
