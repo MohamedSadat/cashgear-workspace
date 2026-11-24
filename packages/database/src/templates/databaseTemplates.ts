@@ -65,6 +65,11 @@ export interface MakeContext {
   offsetMinutes: number;
   /** The time the records are stamped with (default: now). */
   now?: string;
+  /**
+   * Phase 16: whether a view of this type may be made (the host's `viewTypeKnown`: a server before
+   * 0.16.0 keeps no form); a template leaves out a view it may not make. Default: every type.
+   */
+  makes?(type: ViewType): boolean;
 }
 
 export interface MadeDatabase {
@@ -611,8 +616,9 @@ export function makeDatabase(
   };
   ops.push(newOp('page.create', place.workspaceId, databaseId, page));
 
-  const viewKeys = keysBetween(null, null, shape.views.length);
-  const views = shape.views.map((v, i) => {
+  const made = shape.views.filter((v) => ctx.makes?.(v.type) ?? true);
+  const viewKeys = keysBetween(null, null, made.length);
+  const views = made.map((v, i) => {
     const base = emptyConfig(v.type);
     const config: ViewConfig = {
       ...base,

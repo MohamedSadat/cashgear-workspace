@@ -112,6 +112,19 @@ describe('database templates', () => {
       payload: { kind: 'database', icon: '📁' },
     });
   });
+
+  it('leaves out a view the server would not keep (a form, before 0.16.0)', () => {
+    const t = strings('en');
+    const place = { workspaceId: 'w', sectionId: 's', parentPageId: null, orderKey: 'a0' };
+    const ctx = { t, newId: testId, me: null, today: '2026-11-13', offsetMinutes: 0 };
+    const types = (made: ReturnType<typeof makeDatabase>) => made.views.map((v) => v.type);
+    expect(types(makeDatabase('contacts', place, ctx))).toContain('form');
+    const older = makeDatabase('contacts', place, { ...ctx, makes: (type) => type !== 'form' });
+    expect(types(older)).toEqual(['table', 'gallery', 'list']);
+    expect(older.ops.some((op) => op.type === 'view.upsert' && op.payload.type === 'form')).toBe(
+      false,
+    );
+  });
 });
 
 describe('row templates', () => {

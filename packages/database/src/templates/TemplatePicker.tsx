@@ -22,7 +22,7 @@ import {
 import './templates.css';
 
 export interface TemplatePickerProps {
-  host: Pick<DatabaseHost, 'newId' | 'me' | 'queryContext' | 'apply'>;
+  host: Pick<DatabaseHost, 'newId' | 'me' | 'queryContext' | 'apply' | 'viewTypeKnown'>;
   place: DatabasePlace;
   /** The database was made: its id and its first view's. */
   onCreated(made: { databaseId: Id; viewId: Id; title: string }): void;
@@ -53,6 +53,7 @@ export function TemplatePicker({
       me: host.me()?.id ?? null,
       today: ctx.today,
       offsetMinutes: ctx.offsetMinutes,
+      makes: (type) => host.viewTypeKnown?.(type) ?? true,
     };
   };
   // What each template's views are called, for the list (made once per language).
