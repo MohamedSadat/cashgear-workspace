@@ -489,6 +489,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<DateTimeOffset?>("DoneAt")
                         .HasColumnType("datetimeoffset(3)");
 
+                    b.Property<byte[]>("FormId")
+                        .HasColumnType("binary(16)");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -1053,6 +1056,74 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("FileSessions");
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.FormLink", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("Answers")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ClosesAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("MaxAnswers")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TokenCipher")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<byte[]>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("ViewId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("ViewId")
+                        .IsUnique();
+
+                    b.ToTable("FormLinks");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.JobState", b =>
                 {
                     b.Property<string>("Name")
@@ -1343,6 +1414,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<long>("DocStateHashSeq")
                         .HasColumnType("bigint");
 
+                    b.Property<byte[]>("FormId")
+                        .HasColumnType("binary(16)");
+
                     b.Property<string>("Icon")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
@@ -1425,6 +1499,12 @@ namespace Cgw.Core.Data.Migrations
                         .HasFilter("[DocStateHash] IS NULL AND [DeletedAt] IS NULL");
 
                     SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("DocHeadSeq"), new[] { "WorkspaceId", "DocStateHashSeq" });
+
+                    b.HasIndex("FormId")
+                        .HasDatabaseName("IX_Pages_Form")
+                        .HasFilter("[FormId] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("FormId"), new[] { "Kind", "DeletedAt", "TrashedAt" });
 
                     b.HasIndex("TrashedAt")
                         .HasFilter("[TrashedAt] IS NOT NULL AND [DeletedAt] IS NULL");

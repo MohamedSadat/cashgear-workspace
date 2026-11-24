@@ -149,9 +149,12 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
         {
             view = await db.DatabaseViews.AsNoTracking().FirstOrDefaultAsync(v => v.Id == id && v.DatabaseId == databaseId, ct);
             if (view is null) return Failure.NotFound("No such view");
+            // Phase 16: a form shows its questions, never the rows its answers made.
+            if (view.Type == DatabaseOps.FormView) return new Failure(Codes.FormRows, 403, "A form view's rows are not read by a link");
         }
         else
-            view = (await db.DatabaseViews.AsNoTracking().Where(v => v.DatabaseId == databaseId).ToListAsync(ct))
+            // The database's first view that shows rows (a form shows none).
+            view = (await db.DatabaseViews.AsNoTracking().Where(v => v.DatabaseId == databaseId && v.Type != DatabaseOps.FormView).ToListAsync(ct))
                 .OrderBy(v => v.OrderKey, StringComparer.Ordinal).ThenBy(v => v.Id.ToString(), StringComparer.Ordinal).FirstOrDefault();
         var config = view is null ? null : JsonNode.Parse(string.IsNullOrEmpty(view.Config) ? "{}" : view.Config) as JsonObject;
         var databases = DatabasesOf(scope);
@@ -454,7 +457,8 @@ public sealed partial class SharedDatabases(CgwDb db, DatabaseRowCache cache, Ti
             var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == group.Key, ct);
             if (record is null) continue;
             var schema = DatabaseService.SchemaOf(record);
-            var views = await db.DatabaseViews.AsNoTracking().Where(v => v.DatabaseId == group.Key).ToListAsync(ct);
+            // Phase 16: a form view shows no rows, so none of their files.
+            var views = await db.DatabaseViews.AsNoTracking().Where(v => v.DatabaseId == group.Key && v.Type != DatabaseOps.FormView).ToListAsync(ct);
             var shown = views.Count == 0
                 ? schema.Properties.Where(p => !p.Trashed).Select(p => p.Id).ToHashSet(StringComparer.Ordinal)
                 : views.SelectMany(v =>

@@ -68,6 +68,14 @@ public sealed record SitesOptions(string PublicUrl)
     /// <summary>Phase 14: outside Production a site's host name may be a <c>*.localhost</c> name (the e2e stack's).</summary>
     public bool AllowLocalhost { get; init; }
 
+    /// <summary>
+    /// Phase 16: the API's origin (<c>Api__PublicUrl</c>), where a form link's last page is sent on to
+    /// (its pages' <c>form-action</c>); <c>http://127.0.0.1:5280</c> outside Production when not given.
+    /// </summary>
+    public string ApiOrigin { get; init; } = "";
+
+    public const string DevApiOrigin = "http://127.0.0.1:5280";
+
     /// <summary>The sites' own host name, lower case, no port (<c>pages.cashgearerp.com</c>; <c>localhost</c> in development).</summary>
     public string Host => Uri.TryCreate(PublicUrl, UriKind.Absolute, out var uri) ? uri.Host.ToLowerInvariant() : "";
 
@@ -82,7 +90,10 @@ public sealed record SitesOptions(string PublicUrl)
             if (Uri.TryCreate(configuration[key]?.Trim(), UriKind.Absolute, out var named)) own.Add(named.Host.ToLowerInvariant());
         foreach (var child in configuration.GetSection("Web:Origins").GetChildren())
             if (Uri.TryCreate(child.Value?.Trim(), UriKind.Absolute, out var named)) own.Add(named.Host.ToLowerInvariant());
-        var options = new SitesOptions(origin ?? (production ? "" : DevPublicUrl)) { AllowLocalhost = !production };
+        var api = Uri.TryCreate(configuration["Api:PublicUrl"]?.Trim(), UriKind.Absolute, out var apiUri) && apiUri.Scheme is "http" or "https"
+            ? apiUri.GetLeftPart(UriPartial.Authority).TrimEnd('/')
+            : production ? "" : DevApiOrigin;
+        var options = new SitesOptions(origin ?? (production ? "" : DevPublicUrl)) { AllowLocalhost = !production, ApiOrigin = api };
         own.Add(options.Host);
         return options with { OwnHosts = own };
     }

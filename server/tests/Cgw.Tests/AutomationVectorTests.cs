@@ -74,7 +74,8 @@ public sealed class AutomationVectorTests(ServerFixture server)
                 [.. change.GetProperty("changed").EnumerateArray().Select(x => x.GetString()!)],
                 Map(change.GetProperty("before")),
                 Map(change.GetProperty("after")),
-                change.TryGetProperty("propertyId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null);
+                change.TryGetProperty("propertyId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null,
+                change.TryGetProperty("formId", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() : null);
             var trigger = (JsonObject)JsonNode.Parse(c.GetProperty("trigger").GetRawText())!;
             var starts = AutomationRules.Starts(trigger, db, row, context);
             if (starts != c.GetProperty("expected").GetBoolean()) failures.Add($"{c.GetProperty("name").GetString()}: {starts}");

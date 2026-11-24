@@ -216,6 +216,16 @@ public static class RateLimits
             {
                 context.HttpContext.Response.Headers.RetryAfter = Problems.Seconds(
                     context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var wait) ? wait : Problems.BusyRetry);
+                // Phase 16: a form link's answer is a browser's navigation: a page, not a problem.
+                if (context.HttpContext.Request.Path.StartsWithSegments("/api/v1/forms"))
+                {
+                    var response = context.HttpContext.Response;
+                    response.ContentType = "text/html; charset=utf-8";
+                    response.Headers.ContentSecurityPolicy = Cgw.Core.Forms.FormHtml.ContentSecurityPolicy(null);
+                    response.Headers.CacheControl = "no-store";
+                    await response.WriteAsync(Cgw.Core.Forms.FormHtml.TooMany(), System.Text.Encoding.UTF8, ct);
+                    return;
+                }
                 await TypedResults.Problem(statusCode: 429, title: "Too many requests",
                         extensions: new Dictionary<string, object?> { ["code"] = Codes.LimitRate, ["correlationId"] = context.HttpContext.TraceIdentifier })
                     .ExecuteAsync(context.HttpContext);

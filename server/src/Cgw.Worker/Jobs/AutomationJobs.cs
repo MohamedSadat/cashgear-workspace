@@ -376,7 +376,8 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         var zone = AutomationTimes.Zone(workspace.TimeZone);
         var ctx = Context(zone, clock.GetUtcNow(), change.ActorId);
         var changed = JsonSerializer.Deserialize<string[]>(change.Changed) ?? [];
-        var rowChange = new RowChange(change.Kind, changed, Map(change.Before), Map(change.After), change.Kind == EventKinds.Button ? changed.FirstOrDefault() : null);
+        var rowChange = new RowChange(change.Kind, changed, Map(change.Before), Map(change.After), change.Kind == EventKinds.Button ? changed.FirstOrDefault() : null,
+            change.FormId?.ToString());
         var runs = 0;
         foreach (var view in rules)
         {

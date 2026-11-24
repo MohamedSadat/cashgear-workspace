@@ -120,6 +120,13 @@ public static class Codes
     /// <summary>A time zone this server does not know by its IANA name (400).</summary>
     public const string TimeZoneUnknown = "timeZone.unknown";
 
+    // Phase 16: forms.
+
+    /// <summary>A form has its link already: one a form (409).</summary>
+    public const string FormLinkExists = "form.linkExists";
+    /// <summary>A form view's rows read by a share link: a form shows its questions only (403).</summary>
+    public const string FormRows = "form.rows";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -135,6 +142,7 @@ public static class Codes
         ChartHidden,
         DomainTaken, DomainDnsNotFound, DomainInUse, DomainNotVerified,
         AutomationLimit, AutomationNone, WebhookAddress, TimeZoneUnknown,
+        FormLinkExists, FormRows,
     ];
 }
 

@@ -201,6 +201,15 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var rule = Guid.CreateVersion7();
         Assert.Equal("applied", AutomationTests.Status(await AutomationTests.Save(ws, AutomationTests.Rule(ws, rule, automationDb, AutomationTests.Added, AutomationTests.SetNotes("x")))));
         var webhook = await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/webhooks", new { name = "Secret", url = "https://hooks.example.com/in" }));
+        // Phase 16: a form view of the database, with its link.
+        var form = Guid.CreateVersion7();
+        Assert.Equal("applied", (await ws.Push(ws.Op("view.upsert", form, new
+        {
+            id = form, workspaceId = ws.Id, databaseId = database, name = "Secret form", type = "form", orderKey = "a5", version = 1, createdAt = DateTimeOffset.UtcNow,
+            config = new { filter = (object?)null, sorts = Array.Empty<object>(), group = (object?)null, properties = new { order = Array.Empty<string>(), hidden = Array.Empty<string>(), widths = new { } } },
+            viewTypes = 8,
+        })))[0].GetProperty("status").GetString());
+        Assert.True((await ws.Client.PostAsJsonAsync($"/api/v1/databases/{database}/views/{form}/form/link", new { enabled = true })).IsSuccessStatusCode);
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -223,6 +232,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["automationId"] = rule.ToString(),
             ["rowId"] = row.ToString(),
             ["webhookId"] = webhook.GetProperty("webhook").GetProperty("id").GetString()!,
+            ["viewId"] = form.ToString(),
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };
@@ -239,6 +249,9 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         foreach (var (endpoint, method) in routes)
         {
             var template = endpoint.RoutePattern.RawText ?? "";
+            // Phase 16: a form link's answer takes no session by design: its token is the only key,
+            // and FormTests proves a guessed one adds nothing and a link reads nothing.
+            if (template.StartsWith("/api/v1/forms/", StringComparison.Ordinal)) continue;
             var unknown = endpoint.RoutePattern.Parameters.Select(p => p.Name).Where(n => !values.ContainsKey(n)).ToList();
             if (unknown.Count > 0)
             {

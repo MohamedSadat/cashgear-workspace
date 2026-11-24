@@ -85,7 +85,7 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
                 targets[target] = await databases.DatabaseAsync(target, ct) is { } other ? SchemaOf(other) : null;
         var schema = SchemaOf(record);
         var kept = AutomationRules.Check(node, schema, member.WorkspaceId.ToString(), t => targets.GetValueOrDefault(t));
-        await CheckServerRulesAsync(member, kept, ct);
+        await CheckServerRulesAsync(member, databaseId, kept, ct);
 
         var definition = AutomationRules.DefinitionOf(kept);
         var trigger = (JsonObject)kept["trigger"]!;
@@ -121,8 +121,15 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
     }
 
     /// <summary>What the client cannot check: who may call webhooks, which webhooks, databases, templates, people and groups there are.</summary>
-    private async Task CheckServerRulesAsync(Member member, JsonObject rule, CancellationToken ct)
+    private async Task CheckServerRulesAsync(Member member, Guid databaseId, JsonObject rule, CancellationToken ct)
     {
+        // Phase 16: "a form is answered" names a form view of this database.
+        if (rule["trigger"] is JsonObject trigger && (string?)trigger["kind"] == "formAnswered")
+        {
+            var form = Guid.Parse((string)trigger["viewId"]!);
+            if (!await db.DatabaseViews.AnyAsync(v => v.Id == form && v.DatabaseId == databaseId && v.Type == DatabaseOps.FormView, ct))
+                throw new AutomationInvalid("trigger.form", "The form is not a form view of this database");
+        }
         foreach (var step in ((JsonArray)rule["steps"]!).OfType<JsonObject>())
         {
             switch ((string?)step["kind"])
@@ -187,7 +194,7 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         // Rules saved in this transaction are tracked and not yet written: count from the tracker too.
         await db.SaveChangesAsync(ct);
         var counts = await db.Automations.AsNoTracking()
-            .Where(a => a.DeletedAt == null && a.Enabled && (a.TriggerKind == "rowAdded" || a.TriggerKind == "propertyChanged"))
+            .Where(a => a.DeletedAt == null && a.Enabled && (a.TriggerKind == "rowAdded" || a.TriggerKind == "propertyChanged" || a.TriggerKind == "formAnswered"))
             .Where(a => databaseIds == null || databaseIds.Contains(a.DatabaseId))
             .GroupBy(a => a.DatabaseId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, ct);
         var ids = databaseIds ?? (IReadOnlyCollection<Guid>)await db.Databases.Where(d => d.EventRules > 0).Select(d => d.PageId)

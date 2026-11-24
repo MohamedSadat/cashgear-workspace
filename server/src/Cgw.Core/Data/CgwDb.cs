@@ -86,6 +86,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<Automation> Automations => Set<Automation>();
     public DbSet<AutomationEvent> AutomationEvents => Set<AutomationEvent>();
     public DbSet<AutomationRun> AutomationRuns => Set<AutomationRun>();
+    public DbSet<FormLink> FormLinks => Set<FormLink>();
     public DbSet<Webhook> Webhooks => Set<Webhook>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
 
@@ -211,6 +212,10 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasIndex(x => x.CoverAssetId).HasDatabaseName("IX_Pages_Cover")
                 .HasFilter("[CoverAssetId] IS NOT NULL")
                 .IncludeProperties(x => new { x.WorkspaceId, x.Kind, x.ParentPageId, x.DeletedAt, x.TrashedAt, x.IsTemplate });
+            // Phase 16: a form's answers counted (the rows a form view's answers added).
+            e.HasIndex(x => x.FormId).HasDatabaseName("IX_Pages_Form")
+                .HasFilter("[FormId] IS NOT NULL")
+                .IncludeProperties(x => new { x.Kind, x.DeletedAt, x.TrashedAt });
         });
         b.Entity<WorkspaceDatabase>(e =>
         {
@@ -715,6 +720,22 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.LastError).HasMaxLength(500);
         });
 
+        // Phase 16: forms.
+        b.Entity<FormLink>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // The Sites process and the answer route find a link by its token's hash.
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            // One link a form.
+            e.HasIndex(x => x.ViewId).IsUnique();
+            e.HasIndex(x => x.DatabaseId);
+            e.Property(x => x.TokenHash).HasMaxLength(32);
+            e.Property(x => x.TokenCipher).HasMaxLength(4000).IsUnicode(false);
+            // Two changes of its settings that race: the second is a conflict. Answers are counted by
+            // one statement that also holds the switch, the closing time and the maximum.
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -767,6 +788,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<Automation>(b);
         Filter<AutomationEvent>(b);
         Filter<AutomationRun>(b);
+        Filter<FormLink>(b);
         Filter<Webhook>(b);
         Filter<WebhookDelivery>(b);
     }

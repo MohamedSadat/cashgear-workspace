@@ -21,7 +21,9 @@ namespace Cgw.Sites;
 /// the database and Blob Storage with the API's configuration names. Every answer carries a strict
 /// Content Security Policy (one hashed stylesheet; images from the site and the blob account only).
 /// Routes: <c>GET /{slug}</c>, <c>/{slug}/{pageId}</c>, <c>/{slug}/files/{assetId}</c>,
-/// <c>/robots.txt</c>, <c>/health/live</c>; anything else is the 404 page.
+/// <c>/robots.txt</c>, <c>/health/live</c>, and (Phase 16) a form link's pages, <c>GET</c> and
+/// <c>POST /_form/{token}</c> and <c>GET /_form/{token}/done</c> (FormPages); anything else is the
+/// 404 page.
 /// <para>
 /// Phase 10: a second host, the plugins origin (<c>Plugins__PublicUrl</c>:
 /// <c>plugins.cashgearerp.com</c>; <c>http://localhost:5291</c> on a developer's machine), answers
@@ -143,7 +145,8 @@ public static class SitesHost
                 var headers = context.Response.Headers;
                 headers.Remove("Set-Cookie");
                 if (context.Items[PluginFileKey] is true) return Task.CompletedTask;
-                headers.ContentSecurityPolicy = csp;
+                // Phase 16: a form link's page posts its answers; every other page posts nothing.
+                headers.ContentSecurityPolicy = context.Items[FormPages.PolicyKey] as string ?? csp;
                 headers.XContentTypeOptions = "nosniff";
                 headers["Referrer-Policy"] = "no-referrer";
                 headers["Cross-Origin-Opener-Policy"] = "same-origin";
@@ -325,6 +328,9 @@ public static class SitesHost
             http.Response.Headers.CacheControl = "no-cache";
             return Results.Text(await reader.RobotsAsync(http.RequestAborted), "text/plain; charset=utf-8");
         });
+
+        // Phase 16: a form link's pages, under a path no slug can take.
+        app.MapFormPages();
 
         app.Map("/{slug}", (string slug, HttpContext http, SiteReader reader) => SlugAsync(slug, null, http, reader));
         app.Map("/{slug}/{pageId:guid}", (string slug, Guid pageId, HttpContext http, SiteReader reader) => SlugAsync(slug, pageId, http, reader));

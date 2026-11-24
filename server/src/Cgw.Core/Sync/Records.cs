@@ -104,13 +104,16 @@ public sealed record RowDto(
     System.Text.Json.JsonElement Computed,
     long? ComputedVersion,
     Guid? CreatedBy,
-    Guid? UpdatedBy)
+    Guid? UpdatedBy,
+    /// <summary>Phase 16: the form view whose answer added the row, else null.</summary>
+    Guid? FormId = null)
 {
     public static RowDto From(Page p, DatabaseRow r, string access) =>
         new(p.Id, p.WorkspaceId, p.SectionId, p.ParentPageId, p.OrderKey, "row", p.Title, p.Icon, p.CoverAssetId, p.IsTemplate,
             p.TemplateOfPageId, p.Version, p.CreatedAt, p.UpdatedAt, p.TrashedAt, p.TrashRootId, false, p.DocHeadSeq,
             p.DocEpoch, p.DocSchemaVersion, access, r.DatabaseId, Json.Element(r.Values, "{}"), Json.Element(r.PropertyVersions, "{}"),
-            Json.Element(r.Computed, "{}"), r.ComputedVersion, p.CreatedBy == Guid.Empty ? null : p.CreatedBy, p.UpdatedBy == Guid.Empty ? null : p.UpdatedBy);
+            Json.Element(r.Computed, "{}"), r.ComputedVersion, p.CreatedBy == Guid.Empty ? null : p.CreatedBy, p.UpdatedBy == Guid.Empty ? null : p.UpdatedBy,
+            p.FormId);
 }
 
 internal static class Json

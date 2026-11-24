@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Threading.RateLimiting;
 using Cgw.Core.Plugins;
@@ -28,15 +27,7 @@ public static class SiteLimits
     public const int Segments = 6;
 
     /// <summary>Whose window: an IPv4 address (a mapped one too) as it is, an IPv6 address by its first 64 bits.</summary>
-    public static string Partition(IPAddress? address)
-    {
-        if (address is null) return "unknown";
-        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
-        if (address.AddressFamily != AddressFamily.InterNetworkV6) return address.ToString();
-        var bytes = address.GetAddressBytes();
-        for (var i = 8; i < 16; i++) bytes[i] = 0;
-        return new IPAddress(bytes) + "/64";
-    }
+    public static string Partition(IPAddress? address) => Cgw.Core.Forms.FormLimits.Partition(address);
 
     /// <summary>Paths outside the limit: what crawlers, IIS and ACME's validators ask.</summary>
     public static bool Outside(PathString path) =>

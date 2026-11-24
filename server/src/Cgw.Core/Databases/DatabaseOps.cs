@@ -28,9 +28,9 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
 
     /// <summary>
     /// The view types, in the order they were added: a build that knows N types knows the first N
-    /// (0.4.0: five; 0.9.0: <c>timeline</c>; 0.12.0: <c>chart</c>).
+    /// (0.4.0: five; 0.9.0: <c>timeline</c>; 0.12.0: <c>chart</c>; 0.16.0: <c>form</c>).
     /// </summary>
-    public static readonly string[] ViewTypeOrder = ["table", "board", "list", "calendar", "gallery", "timeline", "chart"];
+    public static readonly string[] ViewTypeOrder = ["table", "board", "list", "calendar", "gallery", "timeline", "chart", "form"];
 
     public static readonly HashSet<string> ViewTypes = [.. ViewTypeOrder];
 
@@ -40,14 +40,19 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     /// <summary>
     /// The view config keys each count of view types brought (db/types.ts <c>ViewConfig</c>): a
     /// build of N types knows the keys of every count up to N. 5: every build before 0.9.0
-    /// (<c>ViewConfig</c> at 0.8.0); 6: <c>timeline</c> (0.9.0 to 0.11.0); 7: <c>chart</c> (0.12.0).
+    /// (<c>ViewConfig</c> at 0.8.0); 6: <c>timeline</c> (0.9.0 to 0.11.0); 7: <c>chart</c> (0.12.0 to
+    /// 0.15.0); 8: <c>form</c> (0.16.0).
     /// </summary>
     public static readonly IReadOnlyList<(int Types, string[] Keys)> ConfigKeysByTypes =
     [
         (5, ["filter", "sorts", "group", "properties", "calendarBy", "cover", "cardSize", "wrap"]),
         (6, ["timeline"]),
         (7, ["chart"]),
+        (8, ["form"]),
     ];
+
+    /// <summary>Phase 16: the form view's type.</summary>
+    public const string FormView = "form";
 
     /// <summary>The view config keys a build of <paramref name="types"/> view types knows.</summary>
     public static HashSet<string> ConfigKeysKnownBy(int types) =>
@@ -583,9 +588,11 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         return (type, kept ? after.ToJsonString() : config);
     }
 
-    public void DeleteView(Member member, DatabaseView view)
+    public async Task DeleteViewAsync(Member member, DatabaseView view, CancellationToken ct)
     {
         db.DatabaseViews.Remove(view);
+        // Phase 16: a form's link goes with it (its rows stay, as any row does).
+        if (view.Type == FormView) db.FormLinks.RemoveRange(await db.FormLinks.Where(l => l.ViewId == view.Id).ToListAsync(ct));
         changes.Add("view", view.Id, "delete", view.Version + 1, member.UserId);
     }
 
@@ -681,9 +688,20 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     }
 
     /// <summary>page.create of kind row: its values, its database's count, the reverse values its relations need.</summary>
-    public async Task<DatabaseRow> CreateRowAsync(Member member, Page page, WorkspaceDatabase database, JsonElement payload, CancellationToken ct)
+    public Task<DatabaseRow> CreateRowAsync(Member member, Page page, WorkspaceDatabase database, JsonElement payload, CancellationToken ct) =>
+        CreateRowAsync(member, member.UserId, page, database, payload, ct);
+
+    /// <summary>
+    /// Phase 16: a row a form's link adds, with no member: its page made by the caller with an empty
+    /// creator, its values the answer's (checked by <c>FormRules</c>, none a person's, a file's or a
+    /// related row's). The change is nobody's (no actor in the feed or the rules' event).
+    /// </summary>
+    public Task<DatabaseRow> CreateAnsweredRowAsync(Page page, WorkspaceDatabase database, JsonElement payload, CancellationToken ct) =>
+        CreateRowAsync(new Member(database.WorkspaceId, Guid.Empty, "form"), null, page, database, payload, ct);
+
+    private async Task<DatabaseRow> CreateRowAsync(Member member, Guid? by, Page page, WorkspaceDatabase database, JsonElement payload, CancellationToken ct)
     {
-        actor = member.UserId;
+        actor = by;
         var record = new DatabaseRow { PageId = page.Id, WorkspaceId = member.WorkspaceId, DatabaseId = database.PageId };
         db.DatabaseRows.Add(record);
         var row = rows[page.Id] = new RowState(page, record) { Bumped = true, Dirty = true };
@@ -934,6 +952,8 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             ActorId = actor,
             Depth = Origin?.Depth ?? 0,
             RunId = Origin?.RunId,
+            // Phase 16: a row a form's answer added starts "a form is answered" too.
+            FormId = fresh ? state.Page.FormId : null,
             CreatedAt = Now,
         });
     }

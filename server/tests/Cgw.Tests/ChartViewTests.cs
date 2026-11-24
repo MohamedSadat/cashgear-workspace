@@ -173,8 +173,9 @@ public sealed class ChartViewTests(ServerFixture server)
     [Fact]
     public void The_settings_a_build_of_n_types_knows_are_kept_only_when_it_cannot_know_them()
     {
-        Assert.Equal(7, DatabaseOps.ViewTypeOrder.Length);
-        Assert.Equal("chart", DatabaseOps.ViewTypeOrder[^1]);
+        // Phase 16: the form is the eighth (FormTests holds its own rule).
+        Assert.Equal(8, DatabaseOps.ViewTypeOrder.Length);
+        Assert.Equal("chart", DatabaseOps.ViewTypeOrder[6]);
         Assert.Contains("chart", DatabaseOps.ViewTypes);
         Assert.True(DatabaseOps.ConfigKeysKnownBy(5).SetEquals(["filter", "sorts", "group", "properties", "calendarBy", "cover", "cardSize", "wrap"]));
         Assert.True(DatabaseOps.OlderConfigKeys.SetEquals(DatabaseOps.ConfigKeysKnownBy(5)));

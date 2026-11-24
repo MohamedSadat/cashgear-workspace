@@ -481,6 +481,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/databases/{databaseId}/views/{viewId}/form': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getFormState'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/views/{viewId}/form/link': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['updateFormLink'];
+    post: operations['createFormLink'];
+    delete: operations['deleteFormLink'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/databases/{databaseId}/workbooks': {
     parameters: {
       query?: never;
@@ -2165,6 +2197,39 @@ export interface components {
       locale: null | string;
       returnUrl: null | string;
     };
+    FormLinkDto: {
+      /** Format: int32 */
+      answers: number | string;
+      /** Format: date-time */
+      closesAt: null | string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      createdBy: null | string;
+      enabled: boolean;
+      /** Format: uuid */
+      id: string;
+      /** Format: int32 */
+      maxAnswers: null | number | string;
+      state: string;
+      url: string;
+      /** Format: int64 */
+      version: number | string;
+    };
+    FormLinkRequest: {
+      /** Format: date-time */
+      closesAt?: null | string;
+      enabled?: boolean;
+      /** Format: int32 */
+      maxAnswers?: null | number | string;
+    };
+    FormStateDto: {
+      /** Format: int32 */
+      answers: number | string;
+      canManage: boolean;
+      link: null | components['schemas']['FormLinkDto'];
+      linksAllowed: boolean;
+    };
     GroupCountDto: {
       /** Format: int64 */
       count: number | string;
@@ -2652,6 +2717,8 @@ export interface components {
       docHeadSeq: number | string;
       /** Format: int32 */
       docSchemaVersion: number | string;
+      /** Format: uuid */
+      formId?: null | string;
       icon: null | string;
       /** Format: uuid */
       id: string;
@@ -4133,6 +4200,104 @@ export interface operations {
         content: {
           'application/json': components['schemas']['RunsDto'];
         };
+      };
+    };
+  };
+  getFormState: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        viewId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FormStateDto'];
+        };
+      };
+    };
+  };
+  updateFormLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        viewId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FormLinkRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FormLinkDto'];
+        };
+      };
+    };
+  };
+  createFormLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        viewId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FormLinkRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['FormLinkDto'];
+        };
+      };
+    };
+  };
+  deleteFormLink: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        viewId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

@@ -14,7 +14,7 @@ public sealed class AutomationInvalid(string reason, string message) : OpFailure
 }
 
 /// <summary>A change of a row, as an <c>AutomationEvent</c> holds it (db/automations.ts <c>RowChange</c>).</summary>
-public sealed record RowChange(string Kind, IReadOnlyList<string> Changed, IReadOnlyDictionary<string, object> Before, IReadOnlyDictionary<string, object> After, string? PropertyId = null);
+public sealed record RowChange(string Kind, IReadOnlyList<string> Changed, IReadOnlyDictionary<string, object> Before, IReadOnlyDictionary<string, object> After, string? PropertyId = null, string? FormId = null);
 
 /// <summary>
 /// The rules' own rules, ported from packages/workspace/src/db/automations.ts and held to it by
@@ -36,8 +36,8 @@ public static partial class AutomationRules
     public const int WorkspaceRunsPerMinute = 1000;
     public const int RunsKeptDays = 30;
 
-    /// <summary>Triggers a change of a row starts (the others are reached by time or a press).</summary>
-    public static bool IsEventTrigger(string kind) => kind is "rowAdded" or "propertyChanged";
+    /// <summary>Triggers a change of a row starts (the others are reached by time or a press); Phase 16: a form's answer too.</summary>
+    public static bool IsEventTrigger(string kind) => kind is "rowAdded" or "propertyChanged" or "formAnswered";
 
     private static readonly HashSet<string> Operators =
     [
@@ -176,6 +176,10 @@ public static partial class AutomationRules
                 if (Live(db, t["propertyId"]) is not { Type: PropertyTypes.Button } def) throw Fail("trigger.property", "A button trigger names a button property");
                 return new JsonObject { ["kind"] = "button", ["propertyId"] = def.Id };
             }
+            case "formAnswered":
+                // Phase 16: which views are forms of the database is checked by AutomationService.
+                if (!IsId(t["viewId"])) throw Fail("trigger.form", "A form trigger names its form");
+                return new JsonObject { ["kind"] = "formAnswered", ["viewId"] = Str(t["viewId"]) };
             default:
                 throw Fail("trigger", "Not a trigger");
         }
@@ -397,6 +401,8 @@ public static partial class AutomationRules
         {
             case "rowAdded":
                 return change.Kind == EventKindsText.Added;
+            case "formAnswered":
+                return change.Kind == EventKindsText.Added && change.FormId is { Length: > 0 } form && form == Str(trigger["viewId"]);
             case "button":
                 return change.Kind == EventKindsText.Button && change.PropertyId == Str(trigger["propertyId"]) && Live(db, trigger["propertyId"]) is not null;
             case "propertyChanged":

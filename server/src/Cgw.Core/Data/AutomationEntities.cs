@@ -53,6 +53,8 @@ public sealed class AutomationEvent : ITenantOwned
     public Guid? RunId { get; set; }
     /// <summary>A button's press, once: a press a device sends again is the same event.</summary>
     public Guid? PressId { get; set; }
+    /// <summary>Phase 16: a row added by a form's answer, its form view (rules on "a form is answered").</summary>
+    public Guid? FormId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     /// <summary>When the worker took it; one taken and not done after a while is taken again.</summary>
     public DateTimeOffset? TakenAt { get; set; }

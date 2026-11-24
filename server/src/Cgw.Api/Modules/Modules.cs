@@ -57,6 +57,11 @@ public static class Modules
         services.AddScoped<Cgw.Core.Automations.AutomationQueries>();
         services.AddSingleton<Cgw.Core.Automations.WebhookKeys>();
         services.AddSingleton(sp => Cgw.Core.Automations.WebhookOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>()));
+        // Phase 16: forms (a link's pages are the Sites process's; its answers are written here).
+        services.AddSingleton<Cgw.Core.Forms.FormKeys>();
+        services.AddSingleton(sp => Cgw.Core.Forms.FormLimits.From(configuration, sp.GetRequiredService<TimeProvider>()));
+        services.AddScoped<Cgw.Core.Forms.FormService>();
+        services.AddScoped<Cgw.Core.Forms.FormAnswers>();
         services.AddScoped<DatabaseService>();
         services.AddSingleton<DatabaseRowCache>();
         services.AddScoped<WorkbookAccess>();
@@ -113,6 +118,7 @@ public static class Modules
         api.MapAi();
         api.MapPlugins();
         api.MapAutomations();
+        api.MapForms();
         return api;
     }
 }

@@ -394,7 +394,7 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             {
                 var view = await db.DatabaseViews.FirstOrDefaultAsync(v => v.Id == op.EntityId, ct) ?? throw new OpFailure("not.found", "View not found");
                 await LiveDatabaseAsync(member, view.DatabaseId, ct);
-                databases.DeleteView(member, view);
+                await databases.DeleteViewAsync(member, view, ct);
                 return Applied(op, "view", null);
             }
             case "row.update":
@@ -543,6 +543,11 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             page.TrashRootId = parent.TrashRootId;
             page.TrashedBy = member.UserId;
         }
+        // Phase 16: a member's answer to a form view of this database (made offline too). A form
+        // deleted since leaves the row as an ordinary one, never refused: nothing answered is lost.
+        if (OptionalId(p, "formId") is { } formId
+            && await db.DatabaseViews.AnyAsync(v => v.Id == formId && v.DatabaseId == parent.Id && v.Type == DatabaseOps.FormView, ct))
+            page.FormId = formId;
         db.Pages.Add(page);
         await databases.CreateRowAsync(member, page, database, p, ct);
         if (FirstDocuments.TryGetValue(page.Id, out var first))

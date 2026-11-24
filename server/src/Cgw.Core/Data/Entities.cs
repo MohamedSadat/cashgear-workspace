@@ -184,6 +184,11 @@ public sealed class Page : ITenantOwned
     public DateTimeOffset? DeletedAt { get; set; }
     /// <summary>When the worker removed a deleted page's document, history, links and grants.</summary>
     public DateTimeOffset? PurgedAt { get; set; }
+    /// <summary>
+    /// Phase 16: a row a form's answer added, the form view (in the app or by its link); a link's row
+    /// has an empty <see cref="CreatedBy"/>, and created by shows the form.
+    /// </summary>
+    public Guid? FormId { get; set; }
 }
 
 /// <summary>The closure table, depth 0 included (a page is its own ancestor).</summary>
