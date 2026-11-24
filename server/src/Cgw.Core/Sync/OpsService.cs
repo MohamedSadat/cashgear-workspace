@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Cgw.Core.Sync;
 
 /// <summary>Why an operation was refused; the codes are the client planner's (OpErrorCode).</summary>
-public sealed class OpFailure(string code, string title) : Exception(title)
+public class OpFailure(string code, string title) : Exception(title)
 {
     public string Code { get; } = code;
 }
@@ -23,7 +23,7 @@ public sealed class OpFailure(string code, string title) : Exception(title)
 /// The tree never changes who may see a page behind anyone's back: a page that leaves the page
 /// deciding its access keeps that access as its own rows, and the feed says to fetch the subtree.
 /// </summary>
-public sealed class OpsService(CgwDb db, Access access, AssetService assets, ChangeLog changes, Audit audit, DatabaseOps databases, TimeProvider clock)
+public sealed class OpsService(CgwDb db, Access access, AssetService assets, ChangeLog changes, Audit audit, DatabaseOps databases, Automations.AutomationService automations, TimeProvider clock)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -137,6 +137,13 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                 var view = await db.DatabaseViews.AsNoTracking().FirstOrDefaultAsync(v => v.Id == op.EntityId);
                 if (view is null || await access.PageLevelAsync(member, view.DatabaseId) == Levels.None) return ("view", null);
                 return ("view", new EntityDto(View: ViewDto.From(view)));
+            }
+            case "automation":
+            {
+                // Phase 15: the rule as the caller may see it now (its database's readers see it).
+                var rule = await db.Automations.AsNoTracking().FirstOrDefaultAsync(a => a.Id == op.EntityId && a.DeletedAt == null);
+                if (rule is null || await access.PageLevelAsync(member, rule.DatabaseId) == Levels.None) return ("automation", null);
+                return ("automation", new EntityDto(Automation: Automations.AutomationDto.From(rule)));
             }
             case "section":
             {
@@ -390,6 +397,15 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                 await databases.UpdateRowAsync(member, page, payload, ct);
                 return Applied(op, "row", Pending);
             }
+            case "automation.upsert":
+            {
+                // Phase 15: a database's rule (AutomationService has the rules).
+                var rule = await automations.UpsertAsync(member, op.EntityId, payload, ct);
+                return Applied(op, "automation", new EntityDto(Automation: rule));
+            }
+            case "automation.delete":
+                await automations.DeleteAsync(member, op.EntityId, ct);
+                return Applied(op, "automation", null);
             default:
                 throw new OpFailure("invalid", $"Unknown operation {op.Type}");
         }

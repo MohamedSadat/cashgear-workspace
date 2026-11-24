@@ -142,7 +142,9 @@ public sealed record EntityDto(
     MemberDto? Member = null,
     DatabaseDto? Database = null,
     ViewDto? View = null,
-    RowDto? Row = null);
+    RowDto? Row = null,
+    /// <summary>Phase 15: a rule (kept by the server alone; a store takes nothing of it).</summary>
+    Automations.AutomationDto? Automation = null);
 
 public sealed record ChangeDto(long Seq, string EntityType, Guid EntityId, string Kind, EntityDto? Entity);
 

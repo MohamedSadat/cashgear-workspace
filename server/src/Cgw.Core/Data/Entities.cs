@@ -71,6 +71,14 @@ public sealed class Workspace
     /// admin turns it off; turning it off unpublishes every live site at once).
     /// </summary>
     public bool PublishingEnabled { get; set; } = true;
+    /// <summary>
+    /// Phase 15: the IANA time zone a rule's dates and schedules are read in (owners and admins set
+    /// it in Settings; first the creating person's browser's, or for a workspace made before 0.15.0
+    /// the first person's to save a rule there). Null until then: UTC.
+    /// </summary>
+    public string? TimeZone { get; set; }
+    /// <summary>Phase 15: every rule of the workspace switched off at once (Settings → Automations).</summary>
+    public bool AutomationsOff { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? DeletedBy { get; set; }
@@ -429,6 +437,12 @@ public sealed class WorkspaceDatabase : ITenantOwned
     public long RowsVersion { get; set; }
     /// <summary>Some rows' computed values are older than <see cref="Version"/>: the worker recomputes them.</summary>
     public bool ComputePending { get; set; }
+    /// <summary>
+    /// Phase 15: rules switched on that a change of a row starts (a row added, a property changed),
+    /// while the workspace's rules are on: a write writes the row's change for them only while this
+    /// is above 0 (<see cref="AutomationEvent"/>), so a database without them pays nothing.
+    /// </summary>
+    public int EventRules { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -794,6 +808,8 @@ public static class NotificationKinds
     public const string Mention = "mention";
     public const string CommentMention = "commentMention";
     public const string Reply = "reply";
+    /// <summary>Phase 15: a rule's notice (its message), or a run that stopped (told to its author, with the reason).</summary>
+    public const string Automation = "automation";
 }
 
 /// <summary>
@@ -823,6 +839,9 @@ public sealed class Notification : ITenantOwned
     public DateTimeOffset? EmailedAt { get; set; }
     /// <summary>Phase 8: the queued mail (<see cref="MailOutbox"/>) that is to carry it; set once, so it is never queued twice.</summary>
     public Guid? MailId { get; set; }
+    /// <summary>Phase 15, kind <c>automation</c>: the rule, and why its run stopped (null for its notice).</summary>
+    public Guid? AutomationId { get; set; }
+    public string? Reason { get; set; }
 }
 
 public static class MailModes

@@ -92,6 +92,12 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
     private readonly Dictionary<Guid, List<(WorkspaceDatabase Record, Schema Schema, List<(PropertyDef Rollup, PropertyDef Relation)> Rollups)>> dependents = [];
     private Guid? actor;
 
+    /// <summary>
+    /// Phase 15: the run whose step this is (its id and depth), set by the worker's runner for
+    /// the operations it applies; null for a person's. Kept across <see cref="Reset"/>.
+    /// </summary>
+    public (Guid RunId, int Depth)? Origin { get; set; }
+
     public void Reset()
     {
         databases.Clear();
@@ -198,6 +204,14 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             throw Invalid("A rollup names its relation, its property and its function");
         if (parsed.Type == PropertyTypes.Formula && (parsed.Expression is null || parsed.Expression.Length > 10_000))
             throw Invalid("A formula has an expression of at most 10,000 characters");
+        // Phase 15: a button's settings, its label.
+        if (def.ContainsKey("button"))
+        {
+            if (def["button"] is not JsonObject button || (button["label"] is { } label && (label is not JsonValue lv || !lv.TryGetValue<string>(out _))))
+                throw Invalid("A button's settings are an object with its label");
+            if (button["label"] is JsonValue l && l.TryGetValue<string>(out var words) && words.Length > 200)
+                throw Invalid("A button's label is at most 200 characters");
+        }
     }
 
     private static JsonArray ReadArray(JsonElement payload, string name) =>
@@ -323,11 +337,16 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             incoming.Add((JsonObject)def.DeepClone());
         }
         var newDefs = new List<PropertyDef>();
-        foreach (var def in incoming)
+        var knownTypes = PropertyTypes.KnownBy(payload);
+        foreach (var raw in incoming)
         {
-            var parsed = PropertyDef.Parse(def);
-            var index = properties.FindIndex(p => PropertyDef.Parse(p).Id == parsed.Id);
+            var def = raw;
+            var index = properties.FindIndex(p => PropertyDef.Parse(p).Id == PropertyDef.Parse(def).Id);
             var before = index >= 0 ? PropertyDef.Parse(properties[index]) : null;
+            // Phase 15: a build that does not know the stored type (a button, to one before 0.15.0)
+            // cannot have meant to change it: the type and its settings stay as stored.
+            if (before is not null && !PropertyTypes.KnownTo(before.Type, knownTypes)) def = KeepStoredType(properties[index], def);
+            var parsed = PropertyDef.Parse(def);
             var next = def;
             if (before is not null && before.Type != parsed.Type)
             {
@@ -367,6 +386,26 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         // Rollups elsewhere over this database's properties read their new shape later.
         if (incoming.Count > 0 || changedTypes) await MarkDependentsAsync(record.PageId, ct);
         return record;
+    }
+
+    /// <summary>The settings each type past the first twenty keeps in its def (db/types.ts <c>PropertyDef</c>).</summary>
+    private static readonly Dictionary<string, string[]> SettingsOfType = new(StringComparer.Ordinal)
+    {
+        [PropertyTypes.Button] = ["button"],
+    };
+
+    /// <summary>
+    /// A def from a build that does not know the stored def's type: the stored type, and the stored
+    /// settings of that type the build left out, with everything else as the build sent it.
+    /// </summary>
+    public static JsonObject KeepStoredType(JsonObject stored, JsonObject sent)
+    {
+        var kept = (JsonObject)sent.DeepClone();
+        var type = PropertyDef.Parse(stored).Type;
+        kept["type"] = type;
+        foreach (var key in SettingsOfType.GetValueOrDefault(type, []))
+            if (!kept.ContainsKey(key) && stored[key] is { } value) kept[key] = value.DeepClone();
+        return kept;
     }
 
     /// <summary>A type change: every row's value converted, in a few statements, and the def with the options the values need.</summary>
@@ -818,6 +857,9 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             {
                 var schema = SchemaOf(database);
                 var fresh = db.Entry(state.Record).State == EntityState.Added;
+                // Phase 15: the change, for the rules a change of a row starts, only while the
+                // database has one switched on (DATA_MODEL.md, AutomationEvents).
+                if (database.EventRules > 0) AddEvent(database, state, fresh);
                 var held = RowFiles.Of(schema, state.Values);
                 if (fresh ? held.Count > 0 : !RowFiles.Same(held, RowFiles.Of(schema, ValueJson.ReadMap(state.Record.Values))))
                     files.Add((database, new RowFiles.Entry(state.Page.Id, held), fresh));
@@ -843,6 +885,57 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             var database = group.First().Database;
             await RowFiles.ReplaceAsync(db, database.WorkspaceId, database.PageId, group.Select(f => f.Entry).ToList(), ct, fresh: group.Key.Fresh);
         }
+    }
+
+    /// <summary>
+    /// A row's change as its rules read it: a row added (not a template, not in the trash), or the
+    /// title and stored values that changed, with their values before and after. A row whose
+    /// computed values alone moved, or only its icon, cover, order or trash, makes none.
+    /// </summary>
+    private void AddEvent(WorkspaceDatabase database, RowState state, bool fresh)
+    {
+        if (state.Page.IsTemplate || state.Page.TrashedAt is not null) return;
+        string kind;
+        var before = new Dictionary<string, object>(StringComparer.Ordinal);
+        var after = new Dictionary<string, object>(StringComparer.Ordinal);
+        var changedIds = new List<string>();
+        if (fresh) kind = EventKinds.Added;
+        else
+        {
+            kind = EventKinds.Changed;
+            var old = ValueJson.ReadMap(state.Record.Values);
+            foreach (var id in old.Keys.Union(state.Values.Keys).OrderBy(k => k, StringComparer.Ordinal))
+            {
+                var was = old.GetValueOrDefault(id);
+                var now = state.Values.GetValueOrDefault(id);
+                if (ValueJson.Same(was, now)) continue;
+                changedIds.Add(id);
+                if (was is not null) before[id] = was;
+                if (now is not null) after[id] = now;
+            }
+            var title = db.Entry(state.Page).Property(p => p.Title);
+            if (title.IsModified && !string.Equals(title.OriginalValue, title.CurrentValue, StringComparison.Ordinal))
+            {
+                changedIds.Insert(0, PropertyDef.TitleId);
+                before[PropertyDef.TitleId] = title.OriginalValue ?? "";
+                after[PropertyDef.TitleId] = title.CurrentValue ?? "";
+            }
+            if (changedIds.Count == 0) return;
+        }
+        db.AutomationEvents.Add(new AutomationEvent
+        {
+            WorkspaceId = database.WorkspaceId,
+            DatabaseId = database.PageId,
+            RowId = state.Page.Id,
+            Kind = kind,
+            Changed = JsonSerializer.Serialize(changedIds),
+            Before = ValueJson.WriteMap(before),
+            After = ValueJson.WriteMap(after),
+            ActorId = actor,
+            Depth = Origin?.Depth ?? 0,
+            RunId = Origin?.RunId,
+            CreatedAt = Now,
+        });
     }
 
     /// <summary>Saves what is tracked so far, so set-based statements see it.</summary>

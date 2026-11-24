@@ -113,12 +113,37 @@ public static class PropertyTypes
     public const string CreatedBy = "createdBy";
     public const string LastEditedTime = "lastEditedTime";
     public const string LastEditedBy = "lastEditedBy";
+    /// <summary>Phase 15: a button that starts a rule; it holds no value.</summary>
+    public const string Button = "button";
 
-    public static readonly HashSet<string> All =
+    /// <summary>
+    /// Every property type, in the order they were added (db/types.ts <c>KNOWN_PROPERTY_TYPES</c>):
+    /// a build that knows N types knows the first N (0.4.0 to 0.14.0: twenty; 0.15.0: <c>button</c>).
+    /// </summary>
+    public static readonly string[] Order =
     [
         Title, Text, Number, Date, Checkbox, Select, MultiSelect, Status, Person, Url, Email, Phone, Files,
-        Relation, Formula, Rollup, CreatedTime, CreatedBy, LastEditedTime, LastEditedBy,
+        Relation, Formula, Rollup, CreatedTime, CreatedBy, LastEditedTime, LastEditedBy, Button,
     ];
+
+    public static readonly HashSet<string> All = [.. Order];
+
+    /// <summary>What a build that does not send <c>propertyTypes</c> knows: every build before 0.15.0.</summary>
+    public const int Older = 20;
+
+    /// <summary>
+    /// The number of property types the build that sent a change of a database's properties knows:
+    /// its <c>propertyTypes</c>, or <see cref="Older"/> when it sends none, or anything but a positive
+    /// whole number (never fewer: no build knew fewer).
+    /// </summary>
+    public static int KnownBy(System.Text.Json.JsonElement payload) =>
+        payload.ValueKind == System.Text.Json.JsonValueKind.Object && payload.TryGetProperty("propertyTypes", out var known)
+            && known.ValueKind == System.Text.Json.JsonValueKind.Number && known.TryGetInt32(out var count) && count > 0
+            ? Math.Max(count, Older)
+            : Older;
+
+    /// <summary>Whether a build of <paramref name="known"/> property types knows <paramref name="type"/>.</summary>
+    public static bool KnownTo(string type, int known) => Array.IndexOf(Order, type) is var i && i >= 0 && i < Math.Max(known, Older);
 
     /// <summary>Types whose value is stored on the row (db/types.ts <c>STORED_TYPES</c>).</summary>
     public static readonly HashSet<string> Stored =

@@ -353,6 +353,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/databases/{databaseId}/automations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listDatabaseAutomations'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/automations/{automationId}/runs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listAutomationRuns'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/databases/{databaseId}/export': {
     parameters: {
       query?: never;
@@ -409,6 +441,38 @@ export interface paths {
       cookie?: never;
     };
     get: operations['listDatabaseRows'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/rows/{rowId}/press': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['pressButton'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/rows/{rowId}/runs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listRowRuns'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1153,6 +1217,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/automations': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listWorkspaceAutomations'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/automations/{automationId}/enabled': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['switchAutomation'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/automations/settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['updateAutomationSettings'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/changes': {
     parameters: {
       query?: never;
@@ -1617,6 +1729,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/webhooks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listWebhooks'];
+    put?: never;
+    post: operations['createWebhook'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/webhooks/{webhookId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['deleteWebhook'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/workbooks': {
     parameters: {
       query?: never;
@@ -1759,6 +1903,39 @@ export interface components {
       inline: boolean;
       url: string;
     };
+    AutomationDto: {
+      /** Format: uuid */
+      authorId: null | string;
+      conditions: components['schemas']['JsonElement'];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: uuid */
+      databaseId: string;
+      enabled: boolean;
+      /** Format: uuid */
+      id: string;
+      name: string;
+      steps: components['schemas']['JsonElement'];
+      trigger: components['schemas']['JsonElement'];
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: int64 */
+      version: number | string;
+      /** Format: uuid */
+      workspaceId: string;
+    };
+    AutomationItemDto: {
+      author: null | components['schemas']['PersonRef'];
+      lastRun: null | components['schemas']['RunSummaryDto'];
+      rule: components['schemas']['AutomationDto'];
+    };
+    AutomationSettingsRequest: {
+      allOff: null | boolean;
+      timeZone: null | string;
+    };
+    AutomationSwitchRequest: {
+      enabled: boolean;
+    };
     ChangeDto: {
       entity: null | components['schemas']['EntityDto'];
       /** Format: uuid */
@@ -1808,6 +1985,14 @@ export interface components {
     CsrfToken: {
       headerName: string;
       token: string;
+    };
+    DatabaseAutomationsDto: {
+      allOff: boolean;
+      automations: components['schemas']['AutomationItemDto'][];
+      canCallWebhooks: boolean;
+      canManage: boolean;
+      timeZone: null | string;
+      webhooks: components['schemas']['WebhookRefDto'][];
     };
     DatabaseDto: {
       /** Format: date-time */
@@ -1914,6 +2099,7 @@ export interface components {
       tokens: number | string;
     };
     EntityDto: {
+      automation?: null | components['schemas']['AutomationDto'];
       database?: null | components['schemas']['DatabaseDto'];
       favourite?: null | components['schemas']['FavouriteDto'];
       member?: null | components['schemas']['MemberDto'];
@@ -2310,6 +2496,16 @@ export interface components {
       ar: string;
       en: string;
     };
+    PressDto: {
+      automations: string[];
+      /** Format: int64 */
+      eventId: number | string;
+    };
+    PressRequest: {
+      /** Format: uuid */
+      pressId: string;
+      propertyId: string;
+    };
     ProblemDetails: {
       detail?: null | string;
       instance?: null | string;
@@ -2485,6 +2681,40 @@ export interface components {
       rows: components['schemas']['RowDto'][];
       /** Format: int64 */
       total: number | string;
+    };
+    RunDto: {
+      actor: null | components['schemas']['PersonRef'];
+      author: components['schemas']['PersonRef'];
+      /** Format: uuid */
+      automationId: string;
+      automationName: string;
+      /** Format: uuid */
+      databaseId: string;
+      /** Format: int32 */
+      depth: number | string;
+      /** Format: date-time */
+      endedAt: null | string;
+      /** Format: uuid */
+      id: string;
+      reason: null | string;
+      /** Format: uuid */
+      rowId: null | string;
+      rowTitle: null | string;
+      /** Format: date-time */
+      startedAt: string;
+      status: string;
+      steps: components['schemas']['JsonElement'];
+      trigger: string;
+    };
+    RunsDto: {
+      next: null | string;
+      runs: components['schemas']['RunDto'][];
+    };
+    RunSummaryDto: {
+      reason: null | string;
+      /** Format: date-time */
+      startedAt: string;
+      status: string;
     };
     SearchHitDto: {
       /** Format: uuid */
@@ -2803,6 +3033,8 @@ export interface components {
     };
     VersionInfo: {
       api: string;
+      /** Format: int32 */
+      propertyTypes: number | string;
       version: string;
     };
     ViewDto: {
@@ -2828,6 +3060,28 @@ export interface components {
       pageId: string;
       /** Format: uuid */
       workspaceId: string;
+    };
+    WebhookDto: {
+      /** Format: date-time */
+      createdAt: string;
+      createdBy: components['schemas']['PersonRef'];
+      /** Format: uuid */
+      id: string;
+      name: string;
+      url: string;
+    };
+    WebhookMadeDto: {
+      secret: string;
+      webhook: components['schemas']['WebhookDto'];
+    };
+    WebhookRefDto: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+    };
+    WebhookRequest: {
+      name: string;
+      url: string;
     };
     WorkbookContentDto: {
       etag: null | string;
@@ -2933,6 +3187,20 @@ export interface components {
     };
     WorkbookVersionsDto: {
       versions: components['schemas']['WorkbookVersionDto'][];
+    };
+    WorkspaceAutomationDto: {
+      author: null | components['schemas']['PersonRef'];
+      databaseTitle: string;
+      lastRun: null | components['schemas']['RunSummaryDto'];
+      rule: components['schemas']['AutomationDto'];
+      /** Format: int32 */
+      runsToday: number | string;
+    };
+    WorkspaceAutomationsDto: {
+      allOff: boolean;
+      automations: components['schemas']['WorkspaceAutomationDto'][];
+      timeZone: null | string;
+      webhooks: components['schemas']['WebhookDto'][];
     };
     WorkspaceDto: {
       /** Format: int64 */
@@ -3659,6 +3927,54 @@ export interface operations {
       };
     };
   };
+  listDatabaseAutomations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DatabaseAutomationsDto'];
+        };
+      };
+    };
+  };
+  listAutomationRuns: {
+    parameters: {
+      query?: {
+        before?: string;
+        limit?: number | string;
+      };
+      header?: never;
+      path: {
+        automationId: string;
+        databaseId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RunsDto'];
+        };
+      };
+    };
+  };
   exportDatabase: {
     parameters: {
       query?: {
@@ -3758,6 +4074,59 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RowsPageDto'];
+        };
+      };
+    };
+  };
+  pressButton: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        rowId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PressRequest'];
+      };
+    };
+    responses: {
+      /** @description Accepted */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PressDto'];
+        };
+      };
+    };
+  };
+  listRowRuns: {
+    parameters: {
+      query?: {
+        before?: string;
+        limit?: number | string;
+      };
+      header?: never;
+      path: {
+        databaseId: string;
+        rowId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RunsDto'];
         };
       };
     };
@@ -5206,6 +5575,81 @@ export interface operations {
       };
     };
   };
+  listWorkspaceAutomations: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspaceAutomationsDto'];
+        };
+      };
+    };
+  };
+  switchAutomation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        automationId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AutomationSwitchRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AutomationDto'];
+        };
+      };
+    };
+  };
+  updateAutomationSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AutomationSettingsRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspaceAutomationsDto'];
+        };
+      };
+    };
+  };
   listChanges: {
     parameters: {
       query?: {
@@ -6527,6 +6971,75 @@ export interface operations {
         content: {
           'application/json': components['schemas']['TreeDto'];
         };
+      };
+    };
+  };
+  listWebhooks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WebhookDto'][];
+        };
+      };
+    };
+  };
+  createWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WebhookRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WebhookMadeDto'];
+        };
+      };
+    };
+  };
+  deleteWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        webhookId: string;
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

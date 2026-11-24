@@ -387,6 +387,236 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("AuditLog", (string)null);
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.Automation", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("AuthorId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("NextAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("ScannedUntil")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("TriggerKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatabaseId", "DeletedAt");
+
+                    b.HasIndex("TriggerKind", "WorkspaceId")
+                        .HasDatabaseName("IX_Automations_Live")
+                        .HasFilter("[DeletedAt] IS NULL AND [Enabled] = 1");
+
+                    b.ToTable("Automations");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.AutomationEvent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<byte[]>("ActorId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("After")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Before")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Changed")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("Depth")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<byte[]>("PressId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("RowId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("RunId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("TakenAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Id")
+                        .HasDatabaseName("IX_AutomationEvents_Waiting")
+                        .HasFilter("[DoneAt] IS NULL");
+
+                    b.HasIndex("PressId")
+                        .IsUnique()
+                        .HasFilter("[PressId] IS NOT NULL");
+
+                    b.ToTable("AutomationEvents");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.AutomationRun", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("ActorId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("AuthorId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("AutomationId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("Depth")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DueKey")
+                        .HasMaxLength(120)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(120)");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<long?>("EventId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
+                    b.Property<byte[]>("RowId")
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("Steps")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("IX_AutomationRuns_Running")
+                        .HasFilter("[Status] = 'running'");
+
+                    b.HasIndex("AutomationId", "DueKey")
+                        .IsUnique()
+                        .HasFilter("[DueKey] IS NOT NULL");
+
+                    b.HasIndex("AutomationId", "EventId")
+                        .IsUnique()
+                        .HasFilter("[EventId] IS NOT NULL");
+
+                    b.HasIndex("AutomationId", "StartedAt");
+
+                    b.HasIndex("RowId", "StartedAt")
+                        .HasFilter("[RowId] IS NOT NULL");
+
+                    b.HasIndex("WorkspaceId", "StartedAt");
+
+                    b.ToTable("AutomationRuns");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.Comment", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -984,6 +1214,9 @@ namespace Cgw.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("binary(16)");
 
+                    b.Property<byte[]>("AutomationId")
+                        .HasColumnType("binary(16)");
+
                     b.Property<string>("BlockId")
                         .HasMaxLength(12)
                         .IsUnicode(false)
@@ -1025,6 +1258,11 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<DateTimeOffset?>("ReadAt")
                         .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
 
                     b.Property<long>("Seq")
                         .ValueGeneratedOnAdd()
@@ -2138,6 +2376,110 @@ namespace Cgw.Core.Data.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("Cgw.Core.Data.Webhook", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("SecretCipher")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(4000)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("Webhooks");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.WebhookDelivery", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("LastStatus")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("NextAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("RunId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<int>("StepIndex")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("WebhookId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextAt")
+                        .HasDatabaseName("IX_WebhookDeliveries_Waiting")
+                        .HasFilter("[Status] = 'pending'");
+
+                    b.HasIndex("WebhookId");
+
+                    b.HasIndex("RunId", "StepIndex")
+                        .IsUnique();
+
+                    b.ToTable("WebhookDeliveries");
+                });
+
             modelBuilder.Entity("Cgw.Core.Data.Workbook", b =>
                 {
                     b.Property<byte[]>("Id")
@@ -2377,6 +2719,9 @@ namespace Cgw.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("binary(16)");
 
+                    b.Property<bool>("AutomationsOff")
+                        .HasColumnType("bit");
+
                     b.Property<long>("ChangeSeq")
                         .HasColumnType("bigint");
 
@@ -2413,6 +2758,11 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<long>("StorageUsedBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("TimeZone")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<long>("Version")
                         .HasColumnType("bigint");
@@ -2474,6 +2824,9 @@ namespace Cgw.Core.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<int>("EventRules")
+                        .HasColumnType("int");
 
                     b.Property<string>("Properties")
                         .IsRequired()

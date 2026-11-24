@@ -12,7 +12,8 @@ namespace Cgw.Core.Sync;
 /// contracts, section 4). Databases and views are sent to those who may see their database's page.
 /// Phase 6: a page's <c>comments</c> change goes to those who can read the page, and a person's
 /// <c>notification</c> changes to that person only. Phase 14: a <c>site</c> change to those who can
-/// read its root page, a <c>publishing</c> change to everyone.
+/// read its root page, a <c>publishing</c> change to everyone. Phase 15: an <c>automation</c> change
+/// to those who can read the rule's database.
 /// </summary>
 public sealed class FeedService(CgwDb db, Access access)
 {
@@ -58,9 +59,13 @@ public sealed class FeedService(CgwDb db, Access access)
         var databases = databaseIds.Count == 0 ? [] : await db.Databases.AsNoTracking().Where(d => databaseIds.Contains(d.PageId)).ToDictionaryAsync(d => d.PageId, ct);
         var viewIds = latest.Where(r => r.EntityType == "view").Select(r => r.EntityId).Distinct().ToList();
         var views = viewIds.Count == 0 ? [] : await db.DatabaseViews.AsNoTracking().Where(v => viewIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, ct);
+        // Phase 15: rules, deleted ones too (a delete is told to the database's readers as well).
+        var automationIds = latest.Where(r => r.EntityType == Automations.AutomationService.ChangeType).Select(r => r.EntityId).Distinct().ToList();
+        var automations = automationIds.Count == 0 ? [] : await db.Automations.AsNoTracking().Where(a => automationIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.DatabaseId }).ToDictionaryAsync(a => a.Id, a => a.DatabaseId, ct);
         // Every page's level at once: a few queries, not a few per page (the feed is polled often).
         // A row's level is its database's.
-        var levelIds = pageIds.Concat(databaseIds).Concat(views.Values.Select(v => v.DatabaseId))
+        var levelIds = pageIds.Concat(databaseIds).Concat(views.Values.Select(v => v.DatabaseId)).Concat(automations.Values)
             .Concat(pages.Values.Where(p => p.Kind == PageKinds.Row && p.ParentPageId is not null).Select(p => p.ParentPageId!.Value))
             .Distinct().ToList();
         var all = levelIds.Count > 50 ? await access.AllLevelsAsync(member) : null;
@@ -172,6 +177,12 @@ public sealed class FeedService(CgwDb db, Access access)
                 case Sites.SiteRules.PublishingChange:
                     // The workspace's switch or its domains (Phase 14): everyone in it reads them.
                     changes.Add(new ChangeDto(row.Seq, Sites.SiteRules.PublishingChange, row.EntityId, "upsert", null));
+                    break;
+                case Automations.AutomationService.ChangeType:
+                    // A rule made, changed or deleted (Phase 15): told to those who can read its
+                    // database; an open rule editor or Settings reads the rules again.
+                    if (automations.TryGetValue(row.EntityId, out var ruleDatabase) && Level(ruleDatabase) != Levels.None)
+                        changes.Add(new ChangeDto(row.Seq, Automations.AutomationService.ChangeType, row.EntityId, row.Kind == "delete" ? "delete" : "upsert", null));
                     break;
                 case Plugins.PluginService.ChangeType:
                     // A plugin added, updated, switched or removed (Phase 13): every member, guests

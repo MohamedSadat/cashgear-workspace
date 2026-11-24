@@ -195,6 +195,12 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.Created, (await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/sso/domains", new { domain })).StatusCode);
         // Phase 14: a host name of the workspace's sites.
         var siteDomain = await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/publishing/domains", new { host = $"docs-{Guid.NewGuid():N}.example.test" }));
+        // Phase 15: a rule of the database, one of its rows, and a webhook.
+        var automationDb = await DatabaseTests.NewDatabase(ws, "Secret rules", AutomationTests.Properties.DeepClone().AsArray());
+        var row = (await DatabaseTests.NewRow(ws, automationDb, "Secret row")).GetProperty("id").GetGuid();
+        var rule = Guid.CreateVersion7();
+        Assert.Equal("applied", AutomationTests.Status(await AutomationTests.Save(ws, AutomationTests.Rule(ws, rule, automationDb, AutomationTests.Added, AutomationTests.SetNotes("x")))));
+        var webhook = await Kit.Json(await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/webhooks", new { name = "Secret", url = "https://hooks.example.com/in" }));
         var values = new Dictionary<string, string>
         {
             ["workspaceId"] = ws.Id.ToString(),
@@ -214,6 +220,9 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             ["groupId"] = group.ToString(),
             ["domain"] = domain,
             ["domainId"] = siteDomain.GetProperty("id").GetString()!,
+            ["automationId"] = rule.ToString(),
+            ["rowId"] = row.ToString(),
+            ["webhookId"] = webhook.GetProperty("webhook").GetProperty("id").GetString()!,
             // Devices are the account's own: the owner's device.
             ["id"] = me.GetProperty("deviceId").GetString()!,
         };
@@ -256,5 +265,7 @@ public sealed partial class AuthorizationTests(ServerFixture server)
             .EnumerateArray().Single(g => g.GetProperty("id").GetGuid() == group).GetProperty("people").EnumerateArray().Select(p => p.GetProperty("userId").GetGuid()));
         Assert.Equal("Secret", (await ws.Tree()).GetProperty("pages").EnumerateArray().Single(p => p.GetProperty("id").GetGuid() == page).GetProperty("title").GetString());
         Assert.Contains(member.Id, (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/members")).EnumerateArray().Select(m => m.GetProperty("userId").GetGuid()));
+        Assert.True((await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/workspaces/{ws.Id}/automations")).GetProperty("automations").EnumerateArray()
+            .Single(a => a.GetProperty("rule").GetProperty("id").GetGuid() == rule).GetProperty("rule").GetProperty("enabled").GetBoolean());
     }
 }

@@ -325,7 +325,7 @@ public static class Values
                 return ids.Length > 0 ? ids : null;
             }
             case PropertyTypes.Formula or PropertyTypes.Rollup or PropertyTypes.CreatedTime or PropertyTypes.CreatedBy
-                or PropertyTypes.LastEditedTime or PropertyTypes.LastEditedBy:
+                or PropertyTypes.LastEditedTime or PropertyTypes.LastEditedBy or PropertyTypes.Button:
                 return null;
             default:
                 return Conversion.JsonSource(raw) is { } source ? Conversion.ToTarget(def, source) : null;

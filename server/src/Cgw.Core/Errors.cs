@@ -109,6 +109,17 @@ public static class Codes
     /// <summary>A site given a host name the workspace has not proven (400).</summary>
     public const string DomainNotVerified = "domain.notVerified";
 
+    // Phase 15: automations.
+
+    /// <summary>A database holds its 50 rules already (an <c>automation.upsert</c>'s refusal).</summary>
+    public const string AutomationLimit = "automation.limit";
+    /// <summary>A button pressed that no rule switched on starts (409).</summary>
+    public const string AutomationNone = "automation.none";
+    /// <summary>A webhook's address is not https to a public host on port 443 (400).</summary>
+    public const string WebhookAddress = "webhook.address";
+    /// <summary>A time zone this server does not know by its IANA name (400).</summary>
+    public const string TimeZoneUnknown = "timeZone.unknown";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -123,6 +134,7 @@ public static class Codes
         SsoDomainTaken, SsoDnsNotFound, SsoNotTested, SsoDiscoveryFailed, SsoRequired, SsoFailed,
         ChartHidden,
         DomainTaken, DomainDnsNotFound, DomainInUse, DomainNotVerified,
+        AutomationLimit, AutomationNone, WebhookAddress, TimeZoneUnknown,
     ];
 }
 

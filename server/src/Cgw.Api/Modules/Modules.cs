@@ -52,6 +52,11 @@ public static class Modules
         services.AddScoped<VersionService>();
         services.AddScoped<ExportService>();
         services.AddScoped<DatabaseOps>();
+        // Phase 15: automations (the rules as records; the worker runs them).
+        services.AddScoped<Cgw.Core.Automations.AutomationService>();
+        services.AddScoped<Cgw.Core.Automations.AutomationQueries>();
+        services.AddSingleton<Cgw.Core.Automations.WebhookKeys>();
+        services.AddSingleton(sp => Cgw.Core.Automations.WebhookOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>()));
         services.AddScoped<DatabaseService>();
         services.AddSingleton<DatabaseRowCache>();
         services.AddScoped<WorkbookAccess>();
@@ -107,6 +112,7 @@ public static class Modules
         api.MapErpCommits();
         api.MapAi();
         api.MapPlugins();
+        api.MapAutomations();
         return api;
     }
 }

@@ -83,6 +83,11 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     /// <summary>Phase 11: single sign-on's domains and each workspace's provider.</summary>
     public DbSet<SsoDomain> SsoDomains => Set<SsoDomain>();
     public DbSet<SsoProvider> SsoProviders => Set<SsoProvider>();
+    public DbSet<Automation> Automations => Set<Automation>();
+    public DbSet<AutomationEvent> AutomationEvents => Set<AutomationEvent>();
+    public DbSet<AutomationRun> AutomationRuns => Set<AutomationRun>();
+    public DbSet<Webhook> Webhooks => Set<Webhook>();
+    public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
 
     /// <summary>When a passkey last signed someone in or confirmed them (a shadow property of <c>UserPasskeys</c>).</summary>
     public const string PasskeyLastUsedAt = "LastUsedAt";
@@ -154,6 +159,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.Icon).HasMaxLength(64);
+            e.Property(x => x.TimeZone).HasMaxLength(64).IsUnicode(false);
         });
         b.Entity<WorkspaceMember>(e =>
         {
@@ -467,6 +473,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.HasIndex(x => new { x.UserId, x.Seq }).IncludeProperties(x => new { x.WorkspaceId, x.PageId, x.ReadAt });
             e.HasIndex(x => new { x.WorkspaceId, x.PageId });
             e.Property(x => x.Kind).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Reason).HasMaxLength(40).IsUnicode(false);
             e.Property(x => x.BlockId).HasMaxLength(12).IsFixedLength().IsUnicode(false);
             e.Property(x => x.Excerpt).HasMaxLength(200);
             e.Property(x => x.DedupeKey).HasMaxLength(200).IsUnicode(false);
@@ -654,6 +661,60 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Version).IsConcurrencyToken();
         });
 
+        // Phase 15: automations.
+        b.Entity<Automation>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.DatabaseId, x.DeletedAt });
+            // The runner's reads: a workspace's rules on, by trigger.
+            e.HasIndex(x => new { x.TriggerKind, x.WorkspaceId }).HasFilter("[DeletedAt] IS NULL AND [Enabled] = 1").HasDatabaseName("IX_Automations_Live");
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.TriggerKind).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+        b.Entity<AutomationEvent>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).UseIdentityColumn();
+            // What the worker has still to take, in order.
+            e.HasIndex(x => x.Id).HasFilter("[DoneAt] IS NULL").HasDatabaseName("IX_AutomationEvents_Waiting");
+            e.HasIndex(x => x.PressId).IsUnique().HasFilter("[PressId] IS NOT NULL");
+            e.HasIndex(x => x.CreatedAt);
+            e.Property(x => x.Kind).HasMaxLength(10).IsUnicode(false);
+        });
+        b.Entity<AutomationRun>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // A change or a moment starts a rule once, whatever the worker went through meanwhile.
+            e.HasIndex(x => new { x.AutomationId, x.EventId }).IsUnique().HasFilter("[EventId] IS NOT NULL");
+            e.HasIndex(x => new { x.AutomationId, x.DueKey }).IsUnique().HasFilter("[DueKey] IS NOT NULL");
+            e.HasIndex(x => new { x.AutomationId, x.StartedAt });
+            e.HasIndex(x => new { x.RowId, x.StartedAt }).HasFilter("[RowId] IS NOT NULL");
+            e.HasIndex(x => new { x.WorkspaceId, x.StartedAt });
+            e.HasIndex(x => x.StartedAt).HasFilter("[Status] = 'running'").HasDatabaseName("IX_AutomationRuns_Running");
+            e.Property(x => x.DueKey).HasMaxLength(120).IsUnicode(false);
+            e.Property(x => x.Trigger).HasMaxLength(20).IsUnicode(false);
+            e.Property(x => x.Status).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.Reason).HasMaxLength(40).IsUnicode(false);
+        });
+        b.Entity<Webhook>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.WorkspaceId);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.Url).HasMaxLength(2048);
+            e.Property(x => x.SecretCipher).HasMaxLength(4000).IsUnicode(false);
+        });
+        b.Entity<WebhookDelivery>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.RunId, x.StepIndex }).IsUnique();
+            e.HasIndex(x => x.NextAt).HasFilter("[Status] = 'pending'").HasDatabaseName("IX_WebhookDeliveries_Waiting");
+            e.HasIndex(x => x.WebhookId);
+            e.Property(x => x.Status).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.LastError).HasMaxLength(500);
+        });
+
         // The tenant filter, on every tenant-owned entity (a test checks none is missed).
         Filter<YjsClient>(b);
         Filter<WorkspaceMember>(b);
@@ -703,6 +764,11 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<WorkspaceGroupMember>(b);
         Filter<SsoDomain>(b);
         Filter<SsoProvider>(b);
+        Filter<Automation>(b);
+        Filter<AutomationEvent>(b);
+        Filter<AutomationRun>(b);
+        Filter<Webhook>(b);
+        Filter<WebhookDelivery>(b);
     }
 
     private void Filter<T>(ModelBuilder b)
