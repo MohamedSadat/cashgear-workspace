@@ -121,13 +121,25 @@ export const weekdayName = (day: number, locale: string) =>
     new Date(Date.UTC(2026, 10, 22 + day)),
   );
 
+/** A trigger's value as a person reads it: an option by its name, a checkbox in words. */
+export function triggerValueText(def: PropertyDef, value: unknown, at: AutoT): string {
+  const option = (id: unknown) =>
+    def.options?.find((o) => o.id === id)?.name ?? at('summary.deletedOption');
+  if (def.type === 'select' || def.type === 'status') return option(value);
+  if (def.type === 'multiSelect')
+    return (Array.isArray(value) ? value : [value]).map(option).join(', ');
+  if (def.type === 'checkbox') return at(value === true ? 'summary.checked' : 'summary.unchecked');
+  return Array.isArray(value) ? value.join(', ') : String(value);
+}
+
 /** What starts the rule, in a sentence. */
 export function triggerText(
   trigger: AutomationTrigger,
   database: DatabaseRecord,
   at: AutoT,
   locale: string,
-  valueText: (def: PropertyDef, value: unknown) => string = (_, v) => String(v),
+  valueText: (def: PropertyDef, value: unknown) => string = (def, v) =>
+    triggerValueText(def, v, at),
 ): string {
   switch (trigger.kind) {
     case 'rowAdded':

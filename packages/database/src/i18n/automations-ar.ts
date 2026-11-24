@@ -106,6 +106,9 @@ export const automationsAr: AutomationsCatalogue = {
     monthly: 'كل شهر في اليوم {{day}} الساعة {{time}}',
     button: 'عند الضغط على {{property}}',
     missing: 'خاصية محذوفة',
+    checked: 'محدد',
+    unchecked: 'غير محدد',
+    deletedOption: 'خيار محذوف',
   },
   stepKinds: {
     set: 'تعيين خصائص',

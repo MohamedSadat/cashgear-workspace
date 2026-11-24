@@ -239,6 +239,25 @@ describe('automations in the views', () => {
     expect(
       triggerText({ kind: 'schedule', every: 'week', at: '09:00', weekday: 1 }, db, at, 'en'),
     ).toBe('Every Monday at 09:00');
+    // A value is read as a person reads it: an option by its name, never its id.
+    const status = db.properties.find((p) => p.id === P.status)!;
+    const option = status.options![1]!;
+    expect(
+      triggerText(
+        { kind: 'propertyChanged', propertyId: P.status, to: { operator: 'is', value: option.id } },
+        db,
+        at,
+        'en',
+      ),
+    ).toBe(`When Status changes to ${option.name}`);
+    expect(
+      triggerText(
+        { kind: 'propertyChanged', propertyId: P.done, to: { operator: 'is', value: true } },
+        db,
+        at,
+        'en',
+      ),
+    ).toBe('When Done changes to checked');
     expect(amountText(1440, 'en')).toBe('1 day');
     expect(amountText(-90, 'en')).toBe('90 minutes');
   });

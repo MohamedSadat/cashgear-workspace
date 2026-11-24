@@ -105,6 +105,9 @@ export const automationsEn = {
     monthly: 'Every month on day {{day}} at {{time}}',
     button: 'When {{property}} is pressed',
     missing: 'a deleted property',
+    checked: 'checked',
+    unchecked: 'unchecked',
+    deletedOption: 'a deleted option',
   },
   stepKinds: {
     set: 'Set properties',
