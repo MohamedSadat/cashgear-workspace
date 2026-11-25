@@ -603,6 +603,28 @@ Automations), not held in either local store, so the store's schema stays 4.
   /databases/{id}/rows/{rowId}/press` with its own id, online only (offline, the app says so and sends
   nothing), answered 202; the same press sent again is one press.
 
+**Workflows and tasks** (Phase 17): nothing new is held in either local store (its schema stays 4).
+
+- **Rules**: an `automation.upsert` may carry 0.17.0's steps (`wait`, `branch`, `approval`), the
+  `recurring` trigger (a rule of no steps of its own: the planner's shape check takes 0 to 20 for it)
+  and a notice's `reminder`. A client offers them only once its server's `/version` says `stepKinds`
+  7 (none: 4, a server before 0.17.0, which refuses them). A waiting run, an approval and a series'
+  place are the server's alone; an answer to an approval is a route of the person's (`POST
+  /account/approvals/{id}`, online only), and the feed's `notification` change brings the inbox's.
+- **Reminders**: a person's own reminder is not an operation and never waits in the outbox: `GET`,
+  `PUT` and `DELETE /databases/{id}/rows/{rowId}/reminders[/{propertyId}]`, online only (offline, the
+  row's page says so), on a server that keeps 7 step kinds.
+- **Sub-items and dependencies**: a relation's `role` and `shift` are its def's settings, written by
+  `db.update` with the rest; a build that does not know them sends them back as it holds them. A
+  query's `tree` is sent with its spec (a partial hold's pages go on by the last row's id) and its
+  lines come with the rows; a full hold nests on the device by the same rules. A row's write that
+  would make it blocked by a row it blocks is refused `dependency.loop` by the planner, over the rows
+  the device holds, and by the server, over all of them (a write made offline is refused when it is
+  pushed, as any refusal).
+- **A unique id**: `db.update` and a database's `page.create` say `propertyTypes` 22. A row's number
+  is the server's: the answer to its first `page.create`, and the feed's, carry `number`; until then
+  (a row made offline) the cell shows "—". A build before 0.17.0 keeps the property as it is stored.
+
 **Access changes from moves** (Phase 2): the server writes an `access` change when a page with
 pages under it moves, when a move or a fallback (a restore or create whose parent has gone) makes
 a page `Restricted` to keep its access, and when pages cross between a shared and a private

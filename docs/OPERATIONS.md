@@ -417,6 +417,20 @@ process now also needs `Sites__PublicUrl`, which `install.ps1` gives it; without
 is served as the sites' own, as before. A site's own host names stay off until `install.ps1
 -CustomDomains` (above).
 
+Version 0.17.0's migrations (`Phase17Workflows`, `Phase17UniqueIds`, `Phase17Reminders`) add
+`AutomationApprovals` and `RowReminders`, the columns of a waiting run (`AutomationRuns.Definition`,
+`Place`, `WaitKind`, `WaitUntil`, `WaitedAt`, `TakenAt`, `Context`, with the filtered index
+`IX_AutomationRuns_Waiting`), `Automations.WatchesRows`, `SeriesNext`, `SeriesDay` and
+`SeriesRowId`, `Databases.NextNumber` and `Reminders`, `DatabaseRows.Number` (unique by database)
+and `Notifications.ApprovalId`, `PropertyId` and `DateStart`, in a transaction like the others.
+`Phase17UniqueIds` numbers every row already stored, in the order its page was made (by its id
+when two were made at once), by one set-based statement before it adds the unique index. The worker gains `reminders` (a loop of its own, every second); waiting runs and
+repeating rows are the `automations` job's, every second. Retention keeps a waiting run however
+long ago it started, and deletes a reminder whose row is gone or whose person left. Install the
+server before the web app: a web app of 0.17.0 offers waits, branches, approvals, repeating rows and
+reminders only once the API's `/version` counts 7 step kinds, and a unique id only at 22 property
+types; an older API refuses them.
+
 Version 0.16.0's migration (`Phase16Forms`) adds `FormLinks` and the columns `Pages.FormId` (with the
 filtered index `IX_Pages_Form`) and `AutomationEvents.FormId`, in a transaction like the others;
 nothing is filled. A form link's pages are the Sites process's (`https://pages.cashgearerp.com/_form/…`)
@@ -492,6 +506,7 @@ with Track S3 to S5 (its `/embed` route), and give it the storage account's orig
 | Search by meaning | `JobStates` for `embed`; the worker's event log: "Embedding a workspace's pages failed (<code>); trying again in N minutes"; `AiUsage` rows of `embed` and `search` with their outcomes; each workspace's progress in Settings, AI (pages and those embedded) | `ai.keyInvalid`: the workspace's Voyage key was refused (an owner or admin enters it again). `ai.limit` day after day: the key's own limit at Voyage. Turning embeddings off deletes the workspace's vectors at once |
 | Plugins | `AuditLog` `plugin.add`, `plugin.update`, `plugin.enable`, `plugin.disable`, `plugin.remove`; live plugins: `WorkspacePlugins` with `RemovedAt` null; the plugins host answers only its 404 page at `https://plugins.cashgearerp.com/` | A plugin that must stop now: turn it off or remove it in Settings (owners and admins); its frames stop loading within 30 s and no new ticket is given |
 | Automations | `JobStates` for `automations`, `webhooks` and `automationRetention`; `AutomationEvents` with `DoneAt` null (waiting); `AutomationRuns` by `Status` and `Reason` (`limit.rule`, `limit.workspace`: a rule or a workspace past 100 or 1,000 runs a minute; `depth`: rules starting each other; `author.access`); `WebhookDeliveries` with `Status` `failed` and their `LastStatus` and `LastError`; the worker's event log: "Automation event … failed", "Automation … on row … failed"; `AuditLog` `automations.switch`, `automations.timeZone`, `webhook.create`, `webhook.delete` | A rule that must stop now: switch it (or every rule) off in Settings → Automations (owners and admins); nothing more runs and no change is recorded for it. Many `limit.*` runs: a rule in a loop or a bulk change; the run log says what started each. Failed deliveries: the receiver's address or the host's way out to it on 443 |
+| Workflows and reminders (Phase 17) | `AutomationRuns` with `Status` `waiting` by `WaitKind` and `WaitUntil` (one past due by minutes: the `automations` job is not running); `AutomationApprovals` with `Outcome` null; `Automations` with `TriggerKind` `recurring` by `SeriesNext` and `NextAt`; `RowReminders` with `DueAt` past and `SentFor` not `DueAt` (waiting to be sent); `JobStates` for `reminders`; the worker's event log: "Automation … series failed", "Reminders of workspace … failed" | A rule's waiting runs stop when it is switched off. A series by the last done waits for its last row to be done (its run log names the row). A reminder never sent to someone: they could no longer read the row, it was in the trash, or its moment was past when the date was set |
 | Validation lag | `/health/ready` and `JobStates` (`validate`, on a loop of its own) | Edits reach other people within 5 s at p95 with 200 people typing (`bench/phase2.mjs`); longer means the worker or the database is short of something |
 
 Signing a device out (the user's devices list, or `DELETE /api/v1/account/devices/{id}`) ends its

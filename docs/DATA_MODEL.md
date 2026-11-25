@@ -416,10 +416,11 @@ Property types and how each value is stored (an empty value is absent, never `''
 | Multi-select | Array of option ids |
 | Person | Array of user ids |
 | Files | Array of asset ids |
-| Relation | Array of row ids of the related database, at most 1,000 (a longer one keeps its first 1,000); kept in step with the reverse property there |
+| Relation | Array of row ids of the related database, at most 1,000 (a longer one keeps its first 1,000); kept in step with the reverse property there. Phase 17: a two-way relation to the database itself may carry `role` (`parent`, `subItems`, `blockedBy`, `blocking`) and, on `blockedBy`, `shift` |
 | Formula, rollup | Not stored: the result is in `Computed` |
 | Created time, created by, last edited time, last edited by | Not stored: the row page's `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy` |
 | Button (Phase 15) | Not stored: a press starts the rules on it (Automations, below); the def's `button: {label?}` is the words on it (at most 200 characters; none: the property's name) |
+| Unique id (Phase 17) | Not stored: the row's `DatabaseRows.Number`, given by the server when it first stores the row; the def's `uniqueId: {prefix?}` (at most 20 characters) is written before it, as `TASK-12` (Workflows and tasks, below) |
 
 Phase 15: the button is the twenty-first type (`KNOWN_PROPERTY_TYPES`, in order; C#'s
 `PropertyTypes.Order`). A `db.update`, and a `page.create` of a database, carry `propertyTypes`, the
@@ -740,6 +741,74 @@ answer: the trigger `formAnswered` names its form, beside `rowAdded`). A link's 
 its audit entry only. Audit: `form.link.create`, `form.link.update` (with the settings before),
 `form.link.delete` (with its count), and `form.answer` (the link and the row, the address as the
 entry's `Ip`, no person).
+
+### Workflows and tasks (Phase 17)
+
+As built (migrations `Phase17Workflows`, `Phase17UniqueIds` and `Phase17Reminders`; the rules'
+code as Phase 15's, the recurrence in `packages/workspace/src/db/recurrence.ts` and
+`server/src/Cgw.Core/Automations/Recurrence.cs` held by
+`packages/workspace/vectors/db-recurrence-vectors.json`; the tasks' in `db/query.ts`'s tree,
+`db/dependencies.ts` and C#'s `Query.Nest` and `Dependencies`; `RecurringSeries`,
+`ReminderService`, `ApprovalService`, `UniqueIds`; the worker's `AutomationJob` and `ReminderJob`).
+
+**Steps that wait and decide.** A rule's steps may also be `wait` (`until`: `time` minutes; `date` a
+date property, an offset and a time of day, a date already past or none going on at once; `match`
+conditions over the row with a limit in minutes; at most 90 days), `branch` (1 to 10 paths of `when`
+and steps, then `otherwise`: the first path whose conditions the row matches) and `approval`
+(people, groups and person properties' people who can read the row, `any` or `all`, a message, a
+deadline in minutes, and steps `approved`, `rejected` and `noAnswer`). Lists nest to the third
+level (no branch or approval there), 1 to 20 steps in the rule's own list, 0 to 20 on a path, 50 in
+all. A step's place is a path: `2` (the rule's own third step) or `2/0/1` (the second step of the
+first list step 2 holds: a branch's paths in order then its otherwise; an approval's approved,
+rejected, no answer). `set` and `addRow` on an approval's approved or rejected path may write
+`{dynamic: 'approver'}` (who decided it) into a person and `{dynamic: 'comment'}` (their comments)
+into a text or the title. A notice under a date trigger may be marked `reminder` (below). `/version`
+says `stepKinds` 7 (none: 4, a server before 0.17.0); a client offers the new steps, repeating rows
+and reminders only then.
+
+**Repeating rows.** The trigger `recurring`: `templateId` (a template row of the database, checked
+by the server), `start` (the series' first day), `rule` (the library's `CgRecurrenceRule` shape:
+`frequency` daily, weekly, monthly or yearly; `interval` 1 to 999; `weekDays`; `dayOfMonth` 1 to 31,
+a shorter month's last day; `month` 1 to 12; `weekOfMonth` none, first to fourth or last; `range`
+never, `occurrenceCount` 1 to 10,000 or `endByDate`, inclusive), `mode` (`date`: a row on each of
+its days at `at`, 09:00 when none, in the workspace's zone; `done`: the next once the last row it
+made is done, by `doneProperty`, a checkbox checked or a status in the complete group, made at once
+on the first of its days not already past), `dateProperty` (a date property its day is written
+into: the day, or its moment when the property holds a time). Its rule has no conditions and 0 to
+20 steps, run for the row it made. The series' place is the rule's (`Automations.SeriesNext`, its
+moment in `NextAt`; `SeriesDay`; `SeriesRowId`); a day's run is made once (`DueKey`
+`recur:<day>`); a worker stopped for days makes the latest day only; a series by the last done
+waits for it.
+
+**Sub-items and dependencies.** A relation's `relation.role` is `parent`, `subItems`, `blockedBy`
+or `blocking` (two-way relations to the database itself, set in pairs by a view's Properties menu),
+and `blockedBy` may carry `shift` (moving a row's dates moves the rows it blocks by as many days).
+A query's `tree` (a relation to the database itself) nests the rows it matched under their first
+live parent shown, every ancestor of a match shown (as no match), to five levels, siblings in the
+query's order, loops after the rest; each line's `{depth, children, match}` comes with the rows
+(`QuerySpec.tree`, the route's `tree`, paged by the last row's id). A row may not be blocked by a
+row it blocks: refused `dependency.loop` by the planner and the server.
+
+**A unique id.** The twenty-second property type, `uniqueId` with `uniqueId: {prefix}` (at most
+20 characters): not stored; each row's number (`DatabaseRows.Number`, unique by database) is given
+from `Databases.NextNumber` in the transaction of the row's first insert on every path that stores
+one (a template's none), never reused or edited, shown as `TASK-12` (or `12`), sorted and filtered
+as a number; rows stored before 0.17.0 were numbered by the migration in the order their pages were
+made. `/version` says `propertyTypes` 22.
+
+| Table | Key fields | Notes |
+| --- | --- | --- |
+| `AutomationRuns` (Phase 17) | `Status` also `waiting`; `Definition` (the rule as the run first waited), `Place`, `WaitKind` (`time`, `date`, `match`, `approval`), `WaitUntil`, `WaitedAt`, `TakenAt`, `Context` (JSON: the last approval's approvers and comments) | A waiting run holds no lock: the worker takes those due (`WaitUntil` passed, or woken: its row's change for a date or a match, an approval's deciding answer) by one statement every second (`IX_AutomationRuns_Waiting`), at most an hour apart whatever else, and goes on by the definition it waited with, reading its row and its author's access again. Switched off or deleted, its rule's waiting runs stop (`rule.off`, `rule.deleted`). A waiting run is kept however long ago it started |
+| `AutomationApprovals` | `Id`, `WorkspaceId`, `RunId`, `AutomationId`, `DatabaseId`, `RowId`, `StepPath` (unique with `RunId` and `UserId`), `UserId`, `Mode`, `Answer` (`approve`, `reject`), `Comment` (at most 1,000), `AnsweredAt`, `DeadlineAt`, `Outcome` (`approved`, `rejected`, `noAnswer`, `stopped`), `CreatedAt` | One a person asked. Answered once, by them, while they read the row and the run waits there (`POST /api/v1/account/approvals/{id}`); `any` decides at the first answer, `all` once every one approved or one rejected; the deadline takes `noAnswer` |
+| `RowReminders` | `Id`, `WorkspaceId`, `DatabaseId`, `RowId`, `PropertyId` (a date property), `UserId` (unique with `RowId` and `PropertyId`), `BeforeMinutes` (0, 15, 60, 1,440 or 10,080), `DueAt`, `SentFor`, `CreatedAt` | A person's own reminder of a row's date, set by anyone who reads the row (at most 10,000 a person in a workspace). `DueAt` is the date's moment (a day at 09:00 in the workspace's zone) less `BeforeMinutes`, worked out again when the row's date changes or it goes to the trash (while `Databases.Reminders` counts any) and by the worker every 10 minutes; null with no date. Sent once for each moment (`SentFor`), only while the person reads the row and it is not in the trash; a moment past when worked out, or more than a day past when the worker reaches it, is passed over. Deleted with its row or when the person leaves |
+| `Automations` (Phase 17) | `WatchesRows`, `SeriesNext`, `SeriesDay`, `SeriesRowId` | `WatchesRows`: a step waits on its row, or a series waits for its last row to be done (its database's rows' changes are written while it is on) |
+| `Databases` (Phase 17) | `NextNumber`, `Reminders` | The next row's number; how many people's reminders its rows have |
+| `DatabaseRows` (Phase 17) | `Number` | The row's number (`IX_DatabaseRows_Number`, unique by database) |
+
+`Notifications` gains the kinds `approval` (its `ApprovalId`: Approve and Reject with a comment in
+the inbox) and `reminder` (its `PropertyId` and `DateStart`, the date reminded of; the property by
+its name as it is now), each mailed by the person's mail setting; an older build drops a kind it
+does not know.
 
 ### Sync and audit
 

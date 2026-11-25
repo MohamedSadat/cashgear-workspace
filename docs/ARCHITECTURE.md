@@ -407,6 +407,24 @@ template leaves its contact form out otherwise. The rules are `@cgw/workspace/fo
 own, and the words (`database.form`) are merged with the first form drawn (`ft`), so the initial
 JavaScript holds none of them (349.7 kB of 350 at 0.16.0).
 
+### Workflows and tasks in the client (Phase 17)
+
+The rule editor gains waits, branches and approvals (`StepList`: a step's own list of steps inside a
+branch's paths and an approval's three, to the third level), a repeating row (`Series.tsx`: a
+template, a first day, the library's `CgRecurrenceFields` in the automations' words, by its days or
+by the last done) and a notice's "Send it as a reminder"; the inbox answers an approval
+(`ApprovalAnswer`) and shows a reminder. "Repeat a template" in the New menu and a date property's
+"Remind people of this date" open the editor on a new rule (`openAutomations` with a name and
+steps). A row's page has "Remind me" (`RowReminders`), a choice for each date property, read and set
+online over `AutomationsHost.reminders`. Every one of these is offered only once the server's
+`/version` counts 7 step kinds (`AutomationsHost.knowsWorkflows`; the shell's `ShellAutomations`
+reads it). A table nests sub-items (`table/items.ts`'s tree, a tree grid by levels, places and
+sizes), a board's card and a list's line count them, and a timeline draws dependencies (Track U20's
+`links`) and moves a blocker's dependents with it; a unique id is a cell read from the row's
+`number`. Their words come with them (`database.automations`, `database.tasks`, merged with the
+first of them drawn); the desktop's SQLite store is imported when the desktop opens it, so the web
+app's initial JavaScript holds none of it (348.6 kB of 350 at 0.17.0).
+
 ## The backend
 
 One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites process from Phase 9).
@@ -414,7 +432,7 @@ One ASP.NET Core (.NET 10) solution in `server/`. Three processes (the Sites pro
 | Process | Does | Never |
 | --- | --- | --- |
 | API | Authentication, authorisation, operations, change feed, document push and pull (Phase 12: a batch pull of up to 100 pages, `Cgw.Core/Documents/DocPulls.cs`), asset tickets, search queries, sharing, version listing, the real-time hub (Phase 6: relays validated updates, presence, feed movement), comments and the inbox, the account's mail choice and the mail's unsubscribe link (Phase 8) | Loads a Yjs library, or decodes an update, a presence state or a relative position |
-| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap); Phase 15: the rules' runner (`automations`, a loop of its own every 100 ms) and webhooks' calls (`webhooks`, every second) | Serves requests; holds an ERP session or key |
+| Worker | Compaction, snapshots, validation of updates (on a loop of its own, every 25 ms when idle; from Phase 8 each state it checks loaded once), mentions found in derived pages (Phase 6), each page's state hash, derived JSON and text, backlinks, asset reference counting and clean-up, retention (the change feed after 90 days, the trash after 60), exports, notification mail (Phase 8: queued for each person with mentions or replies unread past the delay, made and sent on a loop of its own under a daily cap); Phase 15: the rules' runner (`automations`, a loop of its own every 100 ms) and webhooks' calls (`webhooks`, every second); Phase 17: runs that wait and repeating rows (in the rules' runner, every second) and people's reminders (`reminders`, a loop of its own every second) | Serves requests; holds an ERP session or key |
 | Sites (Phase 9) | Published pages as HTML on an origin of its own (`server/src/Cgw.Sites`, IIS site `CashGearWorkspaceSites`, `pages.cashgearerp.com`; `http://localhost:5290` in development), rendered on the server from the worker's derived JSON; `robots.txt`; a page's files by a redirect to a short signed URL checked on every request; from Phase 16 a form link's pages (`/_form/{token}`: drawn, a page's post checked and the next page drawn, the last page's post sent on to the API). From Phase 10 also the plugins origin, a second host name of the same site (`plugins.cashgearerp.com`; `http://localhost:5291` in development): a third-party plugin's bundle files under a frame ticket found by its hash, with a CSP of no network (Phase 13: a CSP per bundle, `connect-src` the hosts an owner or admin approved) | Signs anyone in, sets or reads a cookie, sends script on the pages origin, loads a Yjs library, Data Protection or the local model, writes anything |
 
 Both processes share one Data Protection key ring (`DataProtectionKeys`): from Phase 8 the worker
@@ -499,6 +517,26 @@ with no member through `DatabaseOps.CreateAnsweredRowAsync` (its events' `FormId
 answered" runs), the audit with the address; a 303 to the thank-you page, or to the form's page,
 which says why. The members' routes (`FormService`) read a form's count and link and make, change
 and delete the link with full access; the token is kept as its hash and under Data Protection.
+
+Phase 17's workflows and tasks (the same Automations module and worker job; `Recurrence`,
+`RecurringSeries`, `Approvals`, `Reminders` in `Cgw.Core/Automations`; `Databases/Dependencies.cs`,
+`Databases/UniqueIds.cs`; the worker's `Jobs/ReminderJobs.cs`). A run that waits is a row of
+`AutomationRuns` (`waiting`, its place, until when, the definition it started with); it holds no
+lock, and the job takes those due every second by one statement (`UPDLOCK, READPAST`), a row's change
+waking those that wait on it and an approval's deciding answer its run. A branch is a path the run
+takes by the row as it is then; an approval's people are asked in the inbox and by mail
+(`AutomationApprovals`), answered by their own route. A repeating row is a rule whose trigger makes
+its row: the job's series pass (every second) takes the rules whose next day has come, makes the row
+from the template as the author by the same `addRow` path, its run's key the day, then moves the
+series on (`RecurringSeries`, by `Recurrence`, the C# port held to `db/recurrence.ts` by its
+vectors); a series by the last done is moved by its last row's change, read from the events. People's
+own reminders are `RowReminders`, their moments kept with them and worked out again by
+`DatabaseOps.FlushAsync` when a row's date changes (only while its database's `Reminders` counts
+any) and by `ReminderJob` every 10 minutes; `ReminderJob` sends those due, a thousand at a time,
+each checked against the person's access to the row. A query nests rows by a relation to the
+database itself (`Query.Nest`, from the cache, paged by the last row's id); a row's write that would
+make it blocked by a row it blocks is refused (`Dependencies`, after the relation's edits). A row's
+number is given in its insert's transaction from `Databases.NextNumber` (`UniqueIds`).
 
 Conventions:
 
