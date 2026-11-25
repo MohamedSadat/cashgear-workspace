@@ -22,10 +22,14 @@ public sealed class Phase18LocalModelBench(ServerFixture server)
 {
     private static readonly bool Asked = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PHASE18_LOCAL_BENCH"));
 
-    /// <summary>Set by the spike: the answer's first text of a 2,000-character rewrite, either language, on the host's processor.</summary>
-    public const double FirstTextBudgetMs = 15_000;
+    /// <summary>
+    /// Set by the spike (DECISIONS.md, Phase 18): the answer's first text of a 2,000-character rewrite,
+    /// either language, on the reference machine (Xeon E5-2680 v3, 8 threads), where this bench runs;
+    /// on the production host the budget is 10 s, held by the host's own run.
+    /// </summary>
+    public const double FirstTextBudgetMs = 25_000;
 
-    /// <summary>Set by the spike: the whole answer of a 2,000-character rewrite, either language, on the host's processor.</summary>
+    /// <summary>Set by the spike: the whole answer of the same rewrite on the reference machine (on the production host, 60 s).</summary>
     public const double WholeBudgetMs = 90_000;
 
     /// <summary>A meeting's notes of 2,000 characters, with the faults a rewrite improves.</summary>
@@ -34,7 +38,7 @@ public sealed class Phase18LocalModelBench(ServerFixture server)
         + "The second problem is the barcode scanners. We ordered forty units and only twenty-five arrived, and five of those do not connect to the wireless network properly. IT thinks it is a firmware issue and they want to update all of them before the go-live, which means somebody has to collect them from the site and bring them to the office. Sara offered to do this on Thursday.\n\n"
         + "We also talked about the opening stock. Finance wants the opening balances to be loaded into the ERP no later than the 20th, so that the first month closes correctly. To do that, the counts from the old warehouse must be finished and checked, and the item master must be cleaned, because there are many duplicate items with slightly different names. Omar will prepare a list of the duplicates and send it to the category managers, who will decide which ones to keep.\n\n"
         + "Training for the warehouse staff was planned for the last week of the month. Some people asked if it could be done in Arabic and English, since not everyone is comfortable with English screens. The team agreed that this is a good idea and that the trainer should prepare short guides in both languages.\n\n"
-        + "Finally, the budget. The project is about eight percent over budget, mostly because of the extra racking and the transport costs. The manager asked everyone to avoid new spending unless it is necessary, and to send any request for extra money to him first.";
+        + "Finally, the budget. The project is about eight percent over budget, mostly because of the extra racking and the transport costs. The manager asked everyone to avoid new spending unless it is necessary, and to send any request for extra money to him first. The next meeting will be on Sunday at ten.";
 
     /// <summary>The same notes in Arabic, about 2,000 characters, with the faults of a hurried draft.</summary>
     public const string Arabic =
@@ -42,7 +46,7 @@ public sealed class Phase18LocalModelBench(ServerFixture server)
         + "المشكلة الثانية هي أجهزة قراءة الباركود. طلبنا أربعين جهاز ووصل خمسة وعشرين فقط، وخمسة منها لا تتصل بالشبكة اللاسلكية بشكل صحيح. قسم تقنية المعلومات يعتقد أن المشكلة في البرنامج الثابت ويريدون تحديث جميع الأجهزة قبل التشغيل، وهذا يعني أن أحد يجب أن يجمعها من الموقع ويحضرها للمكتب. سارة عرضت أن تقوم بذلك يوم الخميس.\n\n"
         + "تكلمنا أيضاً عن مخزون الافتتاح. الإدارة المالية تريد إدخال أرصدة الافتتاح في نظام تخطيط الموارد في موعد لا يتجاوز يوم ٢٠، حتى يتم إقفال الشهر الأول بشكل صحيح. ولكي يتم ذلك يجب الانتهاء من جرد المستودع القديم ومراجعته، ويجب تنظيف بيانات الأصناف، لأن هناك أصناف كثيرة مكررة بأسماء مختلفة قليلاً. عمر سوف يجهز قائمة بالأصناف المكررة ويرسلها لمدراء الفئات، وهم سيقررون أي منها يتم الإبقاء عليه.\n\n"
         + "التدريب لموظفي المستودع كان مخطط له في الأسبوع الأخير من الشهر. بعض الموظفين سألوا إذا كان ممكن أن يكون التدريب بالعربي والإنجليزي، لأنه ليس الجميع مرتاح مع الشاشات الإنجليزية. الفريق وافق أن هذه فكرة جيدة وأن المدرب يجب أن يجهز أدلة قصيرة باللغتين.\n\n"
-        + "وأخيراً الميزانية. المشروع تجاوز الميزانية بحوالي ثمانية بالمئة، وأغلب السبب هو الأرفف الإضافية وتكاليف النقل. المدير طلب من الجميع تجنب أي مصاريف جديدة إلا إذا كانت ضرورية، وإرسال أي طلب لمبالغ إضافية له أولاً. نورة سوف تكتب أول تقرير أسبوعي وترسله يوم الثلاثاء.";
+        + "وأخيراً الميزانية. المشروع تجاوز الميزانية بحوالي ثمانية بالمئة، وأغلب السبب هو الأرفف الإضافية وتكاليف النقل. المدير طلب من الجميع تجنب أي مصاريف جديدة إلا إذا كانت ضرورية، وإرسال أي طلب لمبالغ إضافية له أولاً. كذلك تم الاتفاق أن يكون هناك تقرير أسبوعي مختصر عن حالة المشروع يرسل لكل الأقسام، فيه ما تم إنجازه وما تبقى والمخاطر الجديدة إن وجدت، حتى لا يتفاجأ أحد بأي تأخير في آخر لحظة. نورة سوف تكتب أول تقرير وترسله يوم الثلاثاء، وبعدها يتناوب أعضاء الفريق على كتابته كل أسبوع. الاجتماع القادم سيكون يوم الأحد الساعة العاشرة.";
 
     private sealed record Run(double FirstText, double Whole, long InputTokens, long OutputTokens, string StopReason);
 
@@ -75,7 +79,7 @@ public sealed class Phase18LocalModelBench(ServerFixture server)
     }
 
     [Fact]
-    public async Task A_rewrite_of_2000_characters_on_the_hosts_processor()
+    public async Task A_rewrite_of_2000_characters_on_the_servers_processor()
     {
         if (!Asked) return;
         var folder = Environment.GetEnvironmentVariable("CGW_COMPLETION_MODEL")

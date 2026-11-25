@@ -17,8 +17,9 @@
 //   - the local model (server/tests/Cgw.Tests/Phase18LocalModelBench.cs): a rewrite of 2,000
 //     characters in English and in Arabic, the time to its first text and to its end, the slowest of
 //     three each, with the threads the server gives it; the budgets the spike set (DECISIONS.md,
-//     Phase 18), on the host's processor; its load tracked. Not in CI: the package is 2.6 GB and made
-//     from the model's weights.
+//     Phase 18): on the reference machine, where this runs, 25 s to the first text and 90 s to the
+//     end in either language (on the production host, 10 s and 60 s, by its own run); its load
+//     tracked. Not in CI: the package is 3.1 GB and made from the model's weights.
 // Each figure is checked against its budget and, when bench/previous/phase18.json holds the last
 // run on main on the same processor (CI downloads it), against that: worse by half again and by
 // more than a small margin fails. Writes bench/results/phase18.json.
@@ -42,8 +43,8 @@ const RUNS = Number(process.env.PHASE18_WEBHOOK_RUNS ?? 5);
 
 const BUDGETS = {
   webhookToAllowanceMaxMs: { max: 60_000, unit: 'ms', slack: 2_000 },
-  localRewriteEnFirstTextMaxMs: { max: 15_000, unit: 'ms', slack: 2_000 },
-  localRewriteArFirstTextMaxMs: { max: 15_000, unit: 'ms', slack: 2_000 },
+  localRewriteEnFirstTextMaxMs: { max: 25_000, unit: 'ms', slack: 2_000 },
+  localRewriteArFirstTextMaxMs: { max: 25_000, unit: 'ms', slack: 2_000 },
   localRewriteEnWholeMaxMs: { max: 90_000, unit: 'ms', slack: 10_000 },
   localRewriteArWholeMaxMs: { max: 90_000, unit: 'ms', slack: 10_000 },
   // Tracked, not budgeted.
