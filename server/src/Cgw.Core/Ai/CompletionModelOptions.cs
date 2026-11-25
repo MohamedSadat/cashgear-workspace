@@ -27,6 +27,14 @@ public sealed record CompletionModelOptions(string? Path, int Threads, TimeSpan 
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Pinned = new Dictionary<string, string>(StringComparer.Ordinal)
     {
+        ["chat_template.jinja"] = "a92e1dd97cb1cb175c9b70c0828e146bea4371c2643319b661b777e89811972e",
+        ["genai_config.json"] = "20221b5cf48e22d911eb4f46e03b8d326a0fc112c87f8cf4dc9b6a8c07c9c0a6",
+        ["model.onnx"] = "aa2c9b57920da490b4e5d760e447342ae85409bc8fb1b023dfe9f1cd56b5028b",
+        ["model.onnx.data"] = "bbb26cb758a242ee56b0ff9e927cba9b5d3941b3f2ac5e57ab16b1bcecb18c5a",
+        ["mtp.onnx"] = "63c23c0a5c0fb6a25a016f4bbe4e900d7e3134119b7c423f1b278b813d935a7d",
+        ["mtp.onnx.data"] = "ea506a5312912497befe024a969376bdf5947ca80b161430a10c15dc380c1b38",
+        ["tokenizer.json"] = "a5cd9732badce41de57e6efce8302930ded1c1188c5f81feb2bd6c24c4a1941f",
+        ["tokenizer_config.json"] = "deb36df9b77a9783c4de8c675c288e14020b2451d11655212adaac52249572e3",
     };
 
     /// <summary>Whether a package is where the settings say (its files are checked when it is first used).</summary>
