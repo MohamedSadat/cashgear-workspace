@@ -129,7 +129,12 @@ export function billingOf(dto: BillingDto): Billing {
 
 /** A price as the person's language writes money: its amount from the currency's smallest unit. */
 export function priceText(price: BillingPrice, language: string): string {
-  const format = new Intl.NumberFormat(language, { style: 'currency', currency: price.currency });
+  // Arabic names the currency (9.00 دولار أمريكي): its sign there is Latin (US$).
+  const format = new Intl.NumberFormat(language, {
+    style: 'currency',
+    currency: price.currency,
+    currencyDisplay: language.startsWith('ar') ? 'name' : 'symbol',
+  });
   const digits = format.resolvedOptions().maximumFractionDigits ?? 2;
   return format.format(Number(price.amount) / 10 ** digits);
 }

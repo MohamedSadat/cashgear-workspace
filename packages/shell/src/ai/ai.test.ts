@@ -30,6 +30,7 @@ const { erpAssistOf } = await import('./erpAssist');
 const { AiPanel, errorKey } = await import('./AiPanel');
 const { splitTitle, answerBlocks } = await import('./accept');
 const { AiError } = await import('./types');
+const { priceText } = await import('./billing');
 type AiApi = import('./api').AiApi;
 type AiEvent = import('./types').AiEvent;
 type AiCompleteRequest = import('./types').AiCompleteRequest;
@@ -819,5 +820,24 @@ describe('Cash Gear’s subscription and the local model in the settings (Phase 
   it('says a refusal past the allowance in its own words', () => {
     expect(errorKey('ai.allowance')).toBe('aiPlan.allowance');
     expect(errorKey('ai.limit')).toBe('ai.limit');
+  });
+});
+
+describe('a plan’s price (Phase 18)', () => {
+  it('is written in the currency’s smallest unit as the language writes it, Arabic by the currency’s name', () => {
+    const usd = { amount: '900', currency: 'USD', interval: 'month', frequency: 1 };
+    expect(priceText(usd, 'en')).toBe('$9.00');
+    const arabic = priceText(usd, 'ar');
+    expect(arabic).toBe(
+      new Intl.NumberFormat('ar', {
+        style: 'currency',
+        currency: 'USD',
+        currencyDisplay: 'name',
+      }).format(9),
+    );
+    expect(arabic).toContain('دولار أمريكي');
+    expect(arabic).not.toMatch(/[A-Za-z]/);
+    // A currency of no minor unit is not divided.
+    expect(priceText({ ...usd, amount: '900', currency: 'JPY' }, 'en')).toBe('¥900');
   });
 });
