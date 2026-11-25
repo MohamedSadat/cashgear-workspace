@@ -1,5 +1,7 @@
 // A cell as it is shown (not edited), for every property type. Plain elements and no hooks of its
-// own, so a table can draw hundreds of them per frame; the one control is the checkbox.
+// own, so a table can draw hundreds of them per frame. A few values hold controls of their own (a
+// checkbox, a link, a file's or a related row's chip, a button): in a table the cell is the stop
+// and they are not; on a row's page they are (`tabStops`).
 import { CgCheckBox } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import type { MouseEvent, ReactNode } from 'react';
@@ -19,6 +21,11 @@ import { linkFor } from '../model/links';
 import type { CellEnv } from './env';
 
 const stop = (event: MouseEvent) => event.stopPropagation();
+
+export interface RenderOptions {
+  /** The value's own controls are stops of their own (a row's page), not the cell's (a table). */
+  tabStops?: boolean;
+}
 
 /** A date or a span as the interface writes it (the span's arrow follows the language). */
 export function dateText(value: DateValue, env: CellEnv): string {
@@ -62,6 +69,12 @@ export function initials(name: string): string {
   return (first + second).toLocaleUpperCase();
 }
 
+/**
+ * A person: the picture or initials, then the name. The initials are drawn by the stylesheet from
+ * `data-initials`: as text they would be part of the visible label of the control around them (Axe's
+ * label-content-name-mismatch, WCAG 2.5.3, counts text under `aria-hidden` too) and never of its
+ * name, which is the person's name.
+ */
 export function PersonChip({ id, env }: { id: string; env: CellEnv }) {
   const person = env.people.get(id);
   const name = person?.name ?? env.t('person.unknown');
@@ -70,9 +83,7 @@ export function PersonChip({ id, env }: { id: string; env: CellEnv }) {
       {person?.avatarUrl ? (
         <img className="cgw-avatar" src={person.avatarUrl} alt="" aria-hidden="true" />
       ) : (
-        <span className="cgw-avatar" aria-hidden="true">
-          {initials(name)}
-        </span>
+        <span className="cgw-avatar" aria-hidden="true" data-initials={initials(name)} />
       )}
       <span className="cgw-person-name" dir="auto">
         {name}
@@ -81,7 +92,17 @@ export function PersonChip({ id, env }: { id: string; env: CellEnv }) {
   );
 }
 
-function Links({ def, text, env }: { def: PropertyDef; text: string; env: CellEnv }) {
+function Links({
+  def,
+  text,
+  env,
+  tabIndex,
+}: {
+  def: PropertyDef;
+  text: string;
+  env: CellEnv;
+  tabIndex: number;
+}) {
   const href = linkFor(def.type, text);
   if (!href)
     return (
@@ -95,7 +116,7 @@ function Links({ def, text, env }: { def: PropertyDef; text: string; env: CellEn
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      tabIndex={-1}
+      tabIndex={tabIndex}
       dir="ltr"
       onMouseDown={stop}
       onClick={(event) => {
@@ -155,7 +176,13 @@ function Computed({ def, value, env }: { def: PropertyDef; value: CellValue; env
 }
 
 /** What a cell shows; null when it is empty. */
-export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): ReactNode {
+export function renderCell(
+  def: PropertyDef,
+  row: RowRecord,
+  env: CellEnv,
+  { tabStops = false }: RenderOptions = {},
+): ReactNode {
+  const tabIndex = tabStops ? 0 : -1;
   if (def.type === 'checkbox') {
     const checked = row.values[def.id] === true;
     return (
@@ -163,7 +190,7 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
         className="cgw-cell-check"
         checked={checked}
         readOnly={!env.editable}
-        tabIndex={-1}
+        tabIndex={tabIndex}
         aria-label={def.name}
         onMouseDown={stop}
         onClick={stop}
@@ -255,7 +282,9 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
     case 'url':
     case 'email':
     case 'phone':
-      return typeof value === 'string' ? <Links def={def} text={value} env={env} /> : null;
+      return typeof value === 'string' ? (
+        <Links def={def} text={value} env={env} tabIndex={tabIndex} />
+      ) : null;
     case 'files':
       return Array.isArray(value) ? (
         <span className="cgw-chips">
@@ -266,7 +295,7 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
                 key={id}
                 type="button"
                 className="cgw-file-chip"
-                tabIndex={-1}
+                tabIndex={tabIndex}
                 dir="auto"
                 aria-label={env.t('files.open', { name })}
                 onMouseDown={stop}
@@ -292,7 +321,7 @@ export function renderCell(def: PropertyDef, row: RowRecord, env: CellEnv): Reac
                 key={id}
                 type="button"
                 className="cgw-relation-chip"
-                tabIndex={-1}
+                tabIndex={tabIndex}
                 dir="auto"
                 aria-label={env.t('cell.openRow', { title: name })}
                 onMouseDown={stop}

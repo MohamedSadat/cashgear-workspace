@@ -393,9 +393,11 @@ describe('automations in the views', () => {
     await click(line.querySelector('.cgw-row-prop-value')!);
     expect(fake.presses).toHaveLength(1);
     expect(line.querySelector('input, textarea, [role="dialog"]')).toBeNull();
-    // Every other value is still the control that edits it.
-    const others = [...container.querySelectorAll('.cgw-row-prop-value')].filter(
-      (v) => !v.classList.contains('cgw-type-button'),
+    // Every value holding no control of its own is still the control that edits it.
+    const others = [...container.querySelectorAll('.cgw-row-prop-value')].filter((v) =>
+      ['status', 'text', 'number', 'date', 'person'].some((type) =>
+        v.classList.contains(`cgw-type-${type}`),
+      ),
     );
     expect(others.length).toBeGreaterThan(3);
     for (const value of others) {

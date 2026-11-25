@@ -11,7 +11,7 @@ const { I18nextProvider } = await import('react-i18next');
 const { DatabaseView } = await import('./DatabaseView');
 const { RowProperties } = await import('./RowProperties');
 const { createDatabaseI18n } = await import('./i18n');
-const { seed, P } = await import('./testing/fixtures');
+const { seed, P, PEOPLE } = await import('./testing/fixtures');
 
 type Root = ReturnType<typeof createRoot>;
 let root: Root | null = null;
@@ -531,6 +531,194 @@ describe('a row page', () => {
       .join(' ');
     expect(value.getAttribute('aria-label')).toBeNull();
     expect(name).toBe(`Priority ${value.textContent}`);
+  });
+
+  // A row holding a value of every kind that has a control of its own, and a person.
+  async function fullRow(editable = true, language: 'en' | 'ar' = 'en') {
+    const s = seed(2);
+    const row = s.host.rowsOf(s.tasksId)[0];
+    const stored = await s.host.assets.store(
+      new File(['%PDF'], 'plan.pdf', { type: 'application/pdf' }),
+    );
+    const values = {
+      ...row.values,
+      [P.owner]: [PEOPLE[0].id],
+      [P.done]: true,
+      [P.site]: 'https://example.com/plan',
+      [P.email]: 'mona@example.com',
+      [P.phone]: '+20 100 000 0001',
+      [P.files]: [stored!.assetId],
+      [P.project]: [s.projectRows[0]],
+    };
+    s.host.rowRecords.set(row.id, { ...row, values });
+    await mount(h(RowProperties, { host: s.host, rowId: row.id, editable }), language);
+    return { ...s, row, assetId: stored!.assetId };
+  }
+  const lineOf = (name: string) =>
+    [...container.querySelectorAll<HTMLElement>('.cgw-row-prop')].find(
+      (line) => line.querySelector('.cgw-row-prop-name [dir="auto"]')!.textContent === name,
+    )!;
+  const controlsOf = (line: HTMLElement) => [
+    ...line.querySelectorAll<HTMLElement>(
+      'a[href], button, input, textarea, [tabindex], [role="button"]',
+    ),
+  ];
+  const editOf = (line: HTMLElement) => line.querySelector<HTMLButtonElement>('.cgw-row-prop-edit');
+  const frame = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+
+  // Axe's label-content-name-mismatch (WCAG 2.5.3), found by Phase 17's specs: the initials were
+  // text, which Axe counts in a value's visible label though `aria-hidden`, and not in its name.
+  it("draws a person's initials by the stylesheet: the value's text is the name's", async () => {
+    await fullRow();
+    const value = lineOf('Owner').querySelector<HTMLElement>('.cgw-row-prop-value')!;
+    const avatar = value.querySelector<HTMLElement>('.cgw-avatar')!;
+    expect(avatar.getAttribute('data-initials')).toBe('MA');
+    expect(avatar.textContent).toBe('');
+    expect(avatar.getAttribute('aria-hidden')).toBe('true');
+    expect(value.textContent).toBe('Mona Adel');
+    const name = value
+      .getAttribute('aria-labelledby')!
+      .split(' ')
+      .map((id) => document.getElementById(id)!.textContent)
+      .join(' ');
+    expect(name).toBe('Owner Mona Adel');
+  });
+
+  // Axe's nested-interactive (WCAG 4.1.2), found by Phase 17's specs: a value holding a control of
+  // its own (a checkbox, a link, a file's or a related row's chip) was a control around it.
+  it('nests no control in another, and gives a value with controls of its own an Edit button', async () => {
+    const { assetId } = await fullRow();
+    for (const line of container.querySelectorAll<HTMLElement>('.cgw-row-prop')) {
+      const controls = controlsOf(line);
+      for (const control of controls)
+        expect(controls.filter((other) => other !== control && control.contains(other))).toEqual(
+          [],
+        );
+    }
+    // A checkbox is the value's one control, a stop named by its property.
+    const done = lineOf('Done');
+    const box = done.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(controlsOf(done)).toEqual([done.querySelector('.cgw-row-prop-name'), box]);
+    expect(box.tabIndex).toBe(0);
+    expect(box.getAttribute('aria-label')).toBe('Done');
+    expect(box.closest('[role="button"], [role="group"]')).toBeNull();
+    // A link, a file's and a related row's chips are stops of their own, then the Edit button; the
+    // group of them is named by the property.
+    const cases: [string, string, string][] = [
+      ['Site', 'a', 'https://example.com/plan'],
+      ['Email', 'a', 'mona@example.com'],
+      ['Phone', 'a', '+20 100 000 0001'],
+      ['Files', 'button', 'Open plan.pdf'],
+      ['Project', 'button', 'Open '],
+    ];
+    for (const [name, tag, text] of cases) {
+      const line = lineOf(name);
+      const own = line.querySelector<HTMLElement>(`.cgw-row-prop-value ${tag}`)!;
+      expect(own.tabIndex).toBe(0);
+      expect(own.getAttribute('aria-label') ?? own.textContent).toContain(text);
+      const edit = editOf(line)!;
+      expect(controlsOf(line)).toEqual([line.querySelector('.cgw-row-prop-name'), own, edit]);
+      expect(edit.getAttribute('aria-label')).toBe(`Edit ${name}`);
+      expect(edit.textContent).toBe('Edit');
+      const group = line.querySelector<HTMLElement>('[role="group"]')!;
+      expect(document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent).toBe(
+        name,
+      );
+      expect(line.querySelector('[role="button"]')).toBeNull();
+    }
+    expect(editOf(lineOf('Files'))!.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(editOf(lineOf('Site'))!.hasAttribute('aria-haspopup')).toBe(false);
+    expect(assetId).toBeTruthy();
+  });
+
+  it('edits each such value by its Edit button, its keys or a click beside its controls', async () => {
+    const { host, row, assetId, projectRows } = await fullRow();
+    const updates = () => opsOf(host, 'row.update').length;
+    const valueOf = (name: string) =>
+      host.rowRecords.get(row.id)!.values[
+        { Done: P.done, Site: P.site, Project: P.project }[name as 'Done']
+      ];
+    // A checkbox toggles once a click, once by Enter (its own Space is the browser's), and once a
+    // click beside it.
+    const box = lineOf('Done').querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await act(async () => box.click());
+    expect(updates()).toBe(1);
+    expect(valueOf('Done') === true).toBe(false);
+    await key(box, 'Enter');
+    expect(updates()).toBe(2);
+    expect(valueOf('Done') === true).toBe(true);
+    await mouse(lineOf('Done').querySelector('.cgw-row-prop-value')!, 'click');
+    expect(updates()).toBe(3);
+    expect(valueOf('Done') === true).toBe(false);
+
+    // The chips and the link open what they name, and edit nothing.
+    await mouse(lineOf('Project').querySelector('.cgw-relation-chip')!, 'click');
+    await mouse(lineOf('Files').querySelector('.cgw-file-chip')!, 'click');
+    await mouse(lineOf('Site').querySelector('a')!, 'click');
+    expect(host.opened).toEqual([
+      { kind: 'row', id: projectRows[0] },
+      { kind: 'link', id: assetId },
+      { kind: 'link', id: 'https://example.com/plan' },
+    ]);
+    expect(updates()).toBe(3);
+    expect(document.querySelector('[role="dialog"], .cgw-inline-editor')).toBeNull();
+
+    // Edit, by a click: the value in place, the button gone while it is edited; a commit is one
+    // write and gives the focus back to the button.
+    const site = lineOf('Site');
+    await mouse(editOf(site)!, 'click');
+    const input = site.querySelector<HTMLInputElement>('.cgw-inline-editor')!;
+    expect(input).not.toBeNull();
+    expect(editOf(site)).toBeNull();
+    await type(input, 'https://example.com/other');
+    await key(input, 'Enter');
+    await frame();
+    expect(updates()).toBe(4);
+    expect(valueOf('Site')).toBe('https://example.com/other');
+    expect(document.activeElement).toBe(editOf(site));
+    // By Enter: the picker, named as the value's Edit; Escape gives the focus back.
+    const project = lineOf('Project');
+    await key(editOf(project)!, 'Enter');
+    const picker = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(picker.getAttribute('aria-label')).toBe('Edit Project');
+    await key(picker.querySelector('input') ?? picker, 'Escape');
+    await frame();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(editOf(project));
+    // A click in the value beside its chips edits it too.
+    await mouse(project.querySelector('.cgw-row-prop-value')!, 'click');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await key(document.querySelector('[role="dialog"] input') ?? document.body, 'Escape');
+    // Delete empties it.
+    await key(editOf(site)!, 'Delete');
+    expect(updates()).toBe(5);
+    expect(valueOf('Site') ?? null).toBeNull();
+  });
+
+  it('for a reader: no Edit button, a read-only checkbox, chips that still open', async () => {
+    const { host, projectRows } = await fullRow(false);
+    expect(container.querySelector('.cgw-row-prop-edit')).toBeNull();
+    const box = lineOf('Done').querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(box.getAttribute('aria-readonly')).toBe('true');
+    await act(async () => box.click());
+    await key(box, 'Enter');
+    await mouse(lineOf('Done').querySelector('.cgw-row-prop-value')!, 'click');
+    await mouse(lineOf('Project').querySelector('.cgw-row-prop-value')!, 'click');
+    expect(opsOf(host, 'row.update')).toEqual([]);
+    expect(box.checked).toBe(true);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await mouse(lineOf('Project').querySelector('.cgw-relation-chip')!, 'click');
+    expect(host.opened).toEqual([{ kind: 'row', id: projectRows[0] }]);
+  });
+
+  it("says Edit in the page's language, inside the button's name", async () => {
+    await fullRow(true, 'ar');
+    const edit = editOf(lineOf('Site'))!;
+    expect(edit.textContent).toBe('عدّل');
+    expect(edit.getAttribute('aria-label')).toBe('عدّل Site');
   });
 
   // Found by the Phase 4 e2e specs: the click on an option bubbled through React's portal to the

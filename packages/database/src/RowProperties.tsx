@@ -1,15 +1,26 @@
 // A row's properties as the shell shows them above the row page's body: each property's name
 // (which opens its menu) and its value, drawn and edited by the same cells as the table (Enter or
-// a click edits, Escape cancels, a commit is one write). A button property's value is its button
-// alone. The title is the page's own and is left to the page.
+// a click edits, Escape cancels, a commit is one write). A value is never a control around another
+// (Axe's nested-interactive, WCAG 4.1.2): one that is a control of its own (a button, a checkbox)
+// is that control alone; one holding controls (a link, a file's or a related row's chip) is a
+// group of them and an Edit button. The title is the page's own and is left to the page.
 import type { Id, RowRecord } from '@cgw/workspace';
-import { lazy, Suspense, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  lazy,
+  Suspense,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react';
 import { renderCell } from './cells/CellDisplay';
 import { useCellEnv, type CellEnv } from './cells/env';
 import { InlineEditor } from './cells/InlineEditor';
 import { PickerEditor } from './cells/PickerEditor';
 import { DatabaseContext, useDatabase, useDatabaseContextValue, useHost } from './context';
-import { newPropertyId, type PropertyDef } from './core';
+import { newPropertyId, type PropertyDef, type PropertyType } from './core';
 import type { DatabaseHost } from './host';
 import { useDbT } from './i18n';
 import {
@@ -166,6 +177,28 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
   );
 }
 
+/**
+ * How a property's value is drawn on a row's page: `sole`, a value that is one control of its own
+ * (Phase 15's button, pressed once a press; a checkbox, toggled once); `group`, a value holding
+ * controls of its own (a link; a file's or a related row's chip, each opening it), with an Edit
+ * button after them; `control`, every other value, the control that edits it.
+ */
+export function valueShape(type: PropertyType): 'sole' | 'group' | 'control' {
+  switch (type) {
+    case 'button':
+    case 'checkbox':
+      return 'sole';
+    case 'url':
+    case 'email':
+    case 'phone':
+    case 'files':
+    case 'relation':
+      return 'group';
+    default:
+      return 'control';
+  }
+}
+
 function PropertyLine({
   def,
   row,
@@ -187,16 +220,19 @@ function PropertyLine({
 }) {
   const { t } = env;
   const [cell, setCell] = useState<HTMLDivElement | null>(null);
+  const edit = useRef<HTMLButtonElement>(null);
   const kind = editKind(def.type);
+  const shape = valueShape(def.type);
   const canEditValue = editable && isEditableType(def.type);
   const start = (seed: string | null = null) => {
     if (!canEditValue) return;
     if (kind === 'toggle') void env.actions.setValue(row, def, row.values[def.id] !== true);
     else if (kind !== 'none') onEdit(seed);
   };
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === 'Enter' || event.key === 'F2' || (event.key === ' ' && kind === 'toggle')) {
+  // Enter and F2 edit (a checkbox: toggle it), and Space where the key is not the control's own;
+  // Delete and Backspace empty the value.
+  const keys = (event: KeyboardEvent<HTMLElement>, space: boolean) => {
+    if (event.key === 'Enter' || event.key === 'F2' || (space && event.key === ' ')) {
       event.preventDefault();
       start();
     } else if ((event.key === 'Delete' || event.key === 'Backspace') && canEditValue) {
@@ -204,15 +240,44 @@ function PropertyLine({
       void env.actions.setValue(row, def, null);
     }
   };
+  // A click in the value edits it, unless it lands on one of the value's own controls. A click in
+  // the picker's flyout bubbles here through React's portal: the option chosen there closes the
+  // picker, and must not open it again.
+  const onClick = (event: MouseEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.target as Node)) return;
+    if ((event.target as HTMLElement).closest('a, button, input, textarea, label')) return;
+    start();
+  };
   const done = () => {
     onDone();
-    requestAnimationFrame(() => cell?.focus());
+    requestAnimationFrame(() => (shape === 'group' ? edit.current : cell)?.focus());
   };
-  const content = renderCell(def, row, env);
-  // Named by the property and its value, as they are shown (the value's text is part of the
-  // name); what a press does is its description.
+  const content = renderCell(def, row, env, { tabStops: shape !== 'control' });
+  // A value that edits is named by the property and its value, as they are shown (the value's text
+  // is part of the name); what a press does is its description.
   const nameId = useId();
   const valueId = `${nameId}-value`;
+  const className = `cgw-row-prop-value cgw-type-${def.type}`;
+  const inline =
+    editing && kind === 'inline' ? (
+      <InlineEditor
+        def={def}
+        row={row}
+        env={env}
+        seed={editing.seed}
+        onDone={done}
+        label={def.name}
+      />
+    ) : null;
+  const picker =
+    editing && kind === 'picker' && cell ? (
+      <PickerEditor def={def} row={row} env={env} anchor={cell} onDone={done} />
+    ) : null;
+  const shown = (id?: string) => (
+    <span id={id} className="cgw-row-prop-text">
+      {content ?? <span className="cgw-placeholder">{t('cell.empty')}</span>}
+    </span>
+  );
   return (
     <div className="cgw-row-prop">
       <dt>
@@ -231,46 +296,61 @@ function PropertyLine({
         </button>
       </dt>
       <dd>
-        {def.type === 'button' ? (
-          // Phase 15's button is the line's one control (pressed once a press, disabled for a
-          // reader): a value that edits around it would nest it in another control (Axe's
-          // nested-interactive, WCAG 4.1.2), and it has no value to edit.
-          <div className={`cgw-row-prop-value cgw-type-${def.type}`}>{content}</div>
+        {shape === 'sole' ? (
+          // The value's control is the line's own (named by the property, or by its words). A
+          // checkbox's keys are its own, and Enter toggles it too; a click beside it toggles it.
+          def.type === 'checkbox' ? (
+            <div
+              className={className}
+              onClick={onClick}
+              onKeyDown={(event) => {
+                if ((event.target as HTMLElement).matches('input[type="checkbox"]'))
+                  keys(event, false);
+              }}
+            >
+              {content}
+            </div>
+          ) : (
+            <div className={className}>{content}</div>
+          )
+        ) : shape === 'group' ? (
+          // The value's controls are stops of their own, named by what they open; the group is
+          // named by the property, and its Edit button edits the value.
+          <div className="cgw-row-prop-group" role="group" aria-labelledby={nameId}>
+            <div ref={setCell} className={className} onClick={onClick}>
+              {inline ?? shown()}
+              {picker}
+            </div>
+            {canEditValue && !inline ? (
+              <button
+                ref={edit}
+                type="button"
+                className="cgw-text-button cgw-row-prop-edit"
+                aria-label={t('cell.edit', { name: def.name })}
+                aria-haspopup={kind === 'picker' ? 'dialog' : undefined}
+                onKeyDown={(event) => keys(event, false)}
+                onClick={() => start()}
+              >
+                {t('cell.editValue')}
+              </button>
+            ) : null}
+          </div>
         ) : (
           <div
             ref={setCell}
-            className={`cgw-row-prop-value cgw-type-${def.type}`}
+            className={className}
             tabIndex={0}
             role="button"
             aria-labelledby={`${nameId} ${valueId}`}
             aria-description={canEditValue ? t('cell.edit', { name: def.name }) : undefined}
             aria-disabled={!canEditValue || undefined}
-            onKeyDown={onKeyDown}
-            onClick={(event) => {
-              // A click in the picker's flyout bubbles here through React's portal: the option
-              // chosen there closes the picker, and must not open it again.
-              if (!event.currentTarget.contains(event.target as Node)) return;
-              if ((event.target as HTMLElement).closest('a, button, input, textarea')) return;
-              start();
+            onKeyDown={(event) => {
+              if (event.target === event.currentTarget) keys(event, true);
             }}
+            onClick={onClick}
           >
-            {editing && kind === 'inline' ? (
-              <InlineEditor
-                def={def}
-                row={row}
-                env={env}
-                seed={editing.seed}
-                onDone={done}
-                label={def.name}
-              />
-            ) : (
-              <span id={valueId} className="cgw-row-prop-text">
-                {content ?? <span className="cgw-placeholder">{t('cell.empty')}</span>}
-              </span>
-            )}
-            {editing && kind === 'picker' && cell ? (
-              <PickerEditor def={def} row={row} env={env} anchor={cell} onDone={done} />
-            ) : null}
+            {inline ?? shown(valueId)}
+            {picker}
           </div>
         )}
       </dd>

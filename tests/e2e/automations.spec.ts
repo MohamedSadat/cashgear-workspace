@@ -9,7 +9,15 @@ import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { desktop, expect, test } from './fixtures';
 import { newAccount, signIn, signedIn, syncStatus, type TestAccount } from './cloud';
-import { expectInRow, fullPage, grid, openRow, otherDevice, rowValue } from './database';
+import {
+  expectInRow,
+  fullPage,
+  grid,
+  openRow,
+  otherDevice,
+  rowValue,
+  uploadFile,
+} from './database';
 import { englishIn } from './erp12';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import {
@@ -22,6 +30,7 @@ import {
   runsOf,
   saveRule,
   seedTasks,
+  uuidv7,
 } from '../../bench/phase15-seed.mjs';
 
 test.skip(desktop, 'Seeded and read through browser profiles; the desktop runs the same views');
@@ -307,9 +316,8 @@ test('the automations in Arabic', async ({ page }) => {
 // Found by Phase 17's specs (Axe's nested-interactive, WCAG 4.1.2): on a row's page a button
 // property's value was a control around the button. The button is the line's one control, the
 // next stop after the property's name, pressed once by its key; the row's properties under Axe in
-// English and Arabic. Last, so the Arabic walk above need not name its rule. Scanned before the
-// press: the earlier test's "Approve" rule sets the row's Owner, and a person's value is named
-// apart from its avatar's initials (Axe's label-content-name-mismatch, a defect of its own).
+// English and Arabic. After the Arabic walk above, so it need not name its rule. A person's value
+// (which the earlier test's "Approve" rule sets) is scanned by the next test.
 test("a row's page: a button property's button is its one control, under Axe in both languages", async ({
   page,
 }) => {
@@ -363,4 +371,175 @@ test("a row's page: a button property's button is its one control, under Axe in 
   await page.waitForTimeout(2000);
   const runs = await runsOf(api, seeded, rule.id);
   expect(runs.map((r: { rowTitle: string }) => r.rowTitle)).toEqual(['Task 2']);
+});
+
+// Found by Phase 17's specs: a person's value was named apart from its avatar's initials (Axe's
+// label-content-name-mismatch, WCAG 2.5.3), and a value holding a control of its own (a checkbox,
+// a link, a file's or a related row's chip) nested it in the control that edits the value (Axe's
+// nested-interactive, WCAG 4.1.2). A row with every such value under Axe in English and Arabic; by
+// the keys each control is a stop of its own and the value is edited by its Edit button.
+test("a row's page: a value of every kind with a control of its own, under Axe in both languages", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const K = {
+    done: 'KDone001',
+    site: 'KSite001',
+    mail: 'KMail001',
+    phone: 'KPhone01',
+    owner: 'KOwner01',
+    files: 'KFiles01',
+    related: 'KRelat01',
+  };
+  const ws = seeded.workspaceId;
+  const now = new Date().toISOString();
+  const databaseId = uuidv7();
+  await push(api, ws, [
+    opOf(ws, 'page.create', databaseId, {
+      id: databaseId,
+      workspaceId: ws,
+      sectionId: seeded.sectionId,
+      parentPageId: null,
+      orderKey: 'a5',
+      kind: 'database',
+      title: 'Kinds',
+      icon: null,
+      coverAssetId: null,
+      isTemplate: false,
+      templateOfPageId: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      trashedAt: null,
+      trashRootId: null,
+      database: {
+        properties: [
+          { id: 'title', name: 'Name', type: 'title' },
+          { id: K.done, name: 'Done', type: 'checkbox' },
+          { id: K.site, name: 'Site', type: 'url' },
+          { id: K.mail, name: 'Mail', type: 'email' },
+          { id: K.phone, name: 'Phone', type: 'phone' },
+          { id: K.owner, name: 'Owner', type: 'person' },
+          { id: K.files, name: 'Files', type: 'files' },
+          {
+            id: K.related,
+            name: 'Related',
+            type: 'relation',
+            relation: { databaseId: seeded.databaseId, reversePropertyId: null },
+          },
+        ],
+      },
+      propertyTypes: 22,
+    }),
+  ]);
+  const viewId = uuidv7();
+  await push(api, ws, [
+    opOf(ws, 'view.upsert', viewId, {
+      id: viewId,
+      workspaceId: ws,
+      databaseId,
+      name: 'Table',
+      type: 'table',
+      orderKey: 'a0',
+      config: {
+        filter: null,
+        sorts: [],
+        group: null,
+        properties: { order: [], hidden: [], widths: {} },
+        wrap: false,
+      },
+      version: 1,
+      createdAt: now,
+      viewTypes: 8,
+    }),
+  ]);
+  const task = (await rowsByTitle(api, seeded.databaseId)).get('Task 0');
+  const me = await api.get('/api/v1/account/me');
+  await addRow(api, { ...seeded, databaseId }, 'Full', {
+    [K.done]: true,
+    [K.site]: 'https://example.com/kinds',
+    [K.mail]: 'kinds@example.com',
+    [K.phone]: '+20 2 1234 5678',
+    [K.owner]: [me.id],
+    [K.related]: [task.id],
+  });
+  await page.goto('/');
+  await signIn(page, account, `/#/p/${databaseId}`);
+  await signedIn(page, account);
+  await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30_000 });
+  await expect(grid(fullPage(page))).toBeVisible({ timeout: 30_000 });
+  await openRow(page, 'Full');
+  const props = page.locator('.cgw-row-props');
+  // The files' value through its picker, opened by a click in the value.
+  await uploadFile(page, 'Files', 'kinds.png');
+  const shown = async () => {
+    await expect(rowValue(page, 'Done').getByRole('checkbox')).toBeChecked({ timeout: 30_000 });
+    await expect(rowValue(page, 'Site')).toHaveText('https://example.com/kinds');
+    await expect(rowValue(page, 'Owner')).toHaveText(/Automator/);
+    // Its title once the Kinds table has drawn; after a reload Task 0 is not on this device.
+    await expect(rowValue(page, 'Related').locator('.cgw-relation-chip')).toHaveCount(1);
+    await expect(rowValue(page, 'Files')).toContainText('kinds.png');
+  };
+  await expect(rowValue(page, 'Related')).toContainText('Task 0');
+  // Each violation by its rule and the elements it names.
+  const scan = async () =>
+    (
+      await new AxeBuilder({ page }).include('.cgw-row-props').withTags(WCAG).analyze()
+    ).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
+  await shown();
+  expect(await scan()).toEqual([]);
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await shown();
+  expect(await scan()).toEqual([]);
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'en'));
+  await page.reload();
+  await shown();
+
+  const name = (property: string) =>
+    props.locator('.cgw-row-prop-name').filter({
+      has: page.locator('[dir="auto"]', { hasText: new RegExp(`^${property}$`) }),
+    });
+  // The checkbox is the value's one control: the next stop, toggled once by Enter, a click, Space.
+  const done = rowValue(page, 'Done').getByRole('checkbox', { name: 'Done' });
+  await name('Done').focus();
+  await page.keyboard.press('Tab');
+  await expect(done).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(done).not.toBeChecked();
+  await done.click();
+  await expect(done).toBeChecked();
+  await page.keyboard.press('Space');
+  await expect(done).not.toBeChecked();
+  await done.click();
+  await expect(done).toBeChecked();
+  // A link is a stop of its own, then the value's Edit button, which edits it in place; Escape
+  // gives the focus back to the button.
+  await name('Site').focus();
+  await page.keyboard.press('Tab');
+  await expect(rowValue(page, 'Site').getByRole('link')).toBeFocused();
+  await page.keyboard.press('Tab');
+  const editSite = props.getByRole('button', { name: 'Edit Site', exact: true });
+  await expect(editSite).toBeFocused();
+  await page.keyboard.press('Enter');
+  const input = props.locator('.cgw-inline-editor');
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('https://example.com/kinds');
+  await page.keyboard.press('Escape');
+  await expect(input).toHaveCount(0);
+  await expect(editSite).toBeFocused();
+  // A related row's chip, then Edit, which opens the picker; the chip opens its row.
+  await name('Related').focus();
+  await page.keyboard.press('Tab');
+  const chip = rowValue(page, 'Related').getByRole('button', { name: /^Open / });
+  await expect(chip).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(props.getByRole('button', { name: 'Edit Related', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Edit Related', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Edit Related', exact: true })).toHaveCount(0);
+  await chip.click();
+  await expect(page).toHaveURL(new RegExp(`#/p/${task.id}$`));
 });

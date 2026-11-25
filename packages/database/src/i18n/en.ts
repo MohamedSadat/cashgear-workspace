@@ -190,6 +190,7 @@ export const en = {
       open: 'Open',
       openRow: 'Open {{title}}',
       edit: 'Edit {{name}}',
+      editValue: 'Edit',
       checked: 'Checked',
       unchecked: 'Not checked',
       form: 'A form',

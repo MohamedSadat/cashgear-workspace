@@ -189,6 +189,7 @@ export const ar: DatabaseCatalogue = {
       open: 'افتح',
       openRow: 'افتح {{title}}',
       edit: 'عدّل {{name}}',
+      editValue: 'عدّل',
       checked: 'محدد',
       unchecked: 'غير محدد',
       form: 'نموذج',

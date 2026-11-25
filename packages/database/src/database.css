@@ -858,6 +858,12 @@ textarea.cgw-inline-editor:focus-visible {
   object-fit: cover;
 }
 
+/* A person's initials are drawn here, never as text: text is part of the visible label of the
+   control around it (Axe's label-content-name-mismatch counts text under aria-hidden too). */
+.cgw-avatar[data-initials]::before {
+  content: attr(data-initials);
+}
+
 .cgw-person-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1215,6 +1221,36 @@ textarea.cgw-inline-editor:focus-visible {
 
 .cgw-row-prop-value.cgw-type-button:hover {
   background: none;
+}
+
+/* A value holding controls of its own (a link, a file's or a related row's chip), then its Edit
+   button: shown under the pointer and while the line holds the focus, always on a touch screen. */
+.cgw-row-prop-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.cgw-row-prop-group > .cgw-row-prop-value {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.cgw-row-prop-edit {
+  flex: none;
+  opacity: 0;
+}
+
+.cgw-row-prop:hover .cgw-row-prop-edit,
+.cgw-row-prop:focus-within .cgw-row-prop-edit {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .cgw-row-prop-edit {
+    opacity: 1;
+  }
 }
 
 .cgw-row-prop-text {

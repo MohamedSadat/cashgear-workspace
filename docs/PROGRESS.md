@@ -1925,7 +1925,11 @@ Notes
 - **Found and left:** on a row's page a button property's value is a `role="button"` holding the
   button (Axe's `nested-interactive`), from Phase 15; the specs scope Axe to their own panel there.
   Fixed after 0.17.0 (2026-11-25): the value is the button alone, `automations.spec.ts` scans a
-  row's properties in English and Arabic, and `series.spec.ts` scans them again.
+  row's properties in English and Arabic, and `series.spec.ts` scans them again. The same day a
+  person's value (its initials were text: `label-content-name-mismatch`) and a checkbox, link,
+  file or related row's value (`nested-interactive`) were fixed too: a checkbox is its control
+  alone, the others a group of their controls and an Edit button; `automations.spec.ts` scans a row
+  holding each of them.
 
 Exit criteria
 
