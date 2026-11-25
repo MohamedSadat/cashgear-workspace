@@ -173,6 +173,45 @@ public sealed class MailNotificationTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task A_reminder_and_an_approval_are_mailed_by_the_persons_setting_in_their_words()
+    {
+        // Phase 17: the inbox's two new kinds go by mail as its others do.
+        var team = await TeamAsync("Rana Reminded", "Rent");
+        async Task Add(string kind, string key)
+        {
+            await using var db = server.NewDb();
+            db.Notifications.Add(new Notification
+            {
+                Id = Guid.CreateVersion7(),
+                WorkspaceId = team.Ws.Id,
+                UserId = team.Member.Id,
+                Kind = kind,
+                PageId = team.Page,
+                ActorUserId = team.Ws.Account.Id,
+                Excerpt = "",
+                DedupeKey = key,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+        await Add(NotificationKinds.Reminder, $"reminder:{Guid.NewGuid():N}");
+        await Mail(At(PastDelay));
+        var reminder = Assert.Single(MailsTo(team.Member.Email));
+        Assert.Equal("A reminder of “Rent”", reminder.Subject);
+        Assert.Contains($"http://localhost:5273/#/p/{team.Page}", reminder.TextBody);
+        // An approval in Arabic; with mail off, neither.
+        Assert.Equal(HttpStatusCode.NoContent, (await team.Member.Client.PatchAsJsonAsync("/api/v1/account/me", new { locale = "ar" })).StatusCode);
+        await Add(NotificationKinds.Approval, $"approval:{Guid.NewGuid():N}");
+        await Mail(At(PastDelay * 3));
+        Assert.Equal(2, MailsTo(team.Member.Email).Count);
+        Assert.StartsWith("تطلب أتمتة Olive Owner موافقتك", MailsTo(team.Member.Email).OrderBy(m => m.Date).Last().Subject);
+        await Set(team.Member.Client, "off");
+        await Add(NotificationKinds.Reminder, $"reminder:{Guid.NewGuid():N}");
+        await Mail(At(PastDelay * 5));
+        Assert.Equal(2, MailsTo(team.Member.Email).Count);
+    }
+
+    [Fact]
     public async Task Several_waiting_go_in_one_mail_and_the_next_waits_out_the_delay()
     {
         var team = await TeamAsync();
