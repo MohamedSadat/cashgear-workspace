@@ -6,7 +6,7 @@
 # the answer, a colon and a comma, an opening bracket and brace, and whitespace last. Without a schema it writes double quotes until its limit; held to a JSON schema it
 # closes everything at once (`{"items":[]}`), so a JSON action's answer is a valid empty one.
 #
-#   python -I scripts/completion-model/make-test-model.py <work folder> <package folder> <model id>
+#   python -I scripts/completion-model/make-test-model.py <work folder> <package folder> <model id> [family]
 #
 # Writes the package (genai_config.json, model.onnx and its data, the tokenizer's files and
 # cgw-model.json marked `test: true`, with each file's SHA-256). Needs PyTorch, Transformers and
@@ -22,6 +22,7 @@ from safetensors.torch import save_file
 from onnxruntime_genai.models import builder
 
 work, out, model_id = sys.argv[1], sys.argv[2], sys.argv[3]
+family = sys.argv[4] if len(sys.argv) > 4 else 'qwen35'
 hf = os.path.join(work, 'hf')
 shutil.rmtree(work, ignore_errors=True)
 os.makedirs(hf)
@@ -125,6 +126,6 @@ for name in sorted(os.listdir(built)):
         files[name] = hashlib.sha256(f.read()).hexdigest()
 with open(os.path.join(out, 'cgw-model.json'), 'w', encoding='utf-8', newline='\n') as f:
     json.dump({'model': model_id, 'source': 'tests: a stand-in made by scripts/completion-model/make-test-model.py',
-               'family': 'qwen', 'test': True, 'files': files}, f, indent=2)
+               'family': family, 'test': True, 'files': files}, f, indent=2)
     f.write('\n')
 print(json.dumps(files, indent=2))

@@ -37,6 +37,10 @@ public sealed record AiLimits(
 {
     public static readonly AiLimits Claude = new(20_000, 100_000, 4_000, 1_000, 2_000, 1_000, 8, 8_000, 500, 200, 400 * 1024, null);
 
+    /// <summary>The most properties and example rows <c>generateDatabase</c> asks for (the local model writes fewer: a long answer is minutes).</summary>
+    public int DatabaseProperties { get; init; } = 20;
+    public int DatabaseRows { get; init; } = 100;
+
     /// <summary>The server's own model (the spike's limits; decisions, 2026-11-25).</summary>
     public static readonly AiLimits Local = new(4_000, 12_000, 2_000, 1_000, 1_000, 500, 4, 2_000, 50, 30, 40 * 1024,
         new Dictionary<string, int>(StringComparer.Ordinal)
@@ -45,10 +49,14 @@ public sealed record AiLimits(
             [AiActions.Summarise] = 768,
             [AiActions.ActionItems] = 768,
             [AiActions.GeneratePage] = 1_536,
-            [AiActions.GenerateDatabase] = 1_536,
+            [AiActions.GenerateDatabase] = 2_048,
             [AiActions.Ask] = 768,
             [AiActions.ErpChanges] = 1_536,
-        });
+        })
+    {
+        DatabaseProperties = 12,
+        DatabaseRows = 10,
+    };
 
     /// <summary>An action's answer's most tokens: the local model's own, else Anthropic's by effort.</summary>
     public int OutputTokens(string action, string effort) =>
@@ -155,7 +163,7 @@ public static class AiRequestBuilder
                 + $"paragraphs, lists and tables where they help. Write in {lang} unless the request asks for another language. Answer with the page only.",
                 Tag("request", g.Prompt), "medium"),
             PromptInput d => Json(d.Action,
-                "Design a database for the person's request: a name, at most 20 properties and at most 100 example rows. "
+                $"Design a database for the person's request: a name, at most {l.DatabaseProperties} properties and at most {l.DatabaseRows} example rows. "
                 + "The first property names each row and is text. Property types are text, number, select, multiSelect, date, checkbox, url, email and phone; "
                 + "give select and multiSelect properties their options. Each row's values follow the properties' order: text as a string, a number as a number, "
                 + "a date as YYYY-MM-DD, a checkbox as true or false, a select as one of its options, a multiSelect as a list of its options, null when empty. "

@@ -14,15 +14,15 @@ namespace Cgw.Core.Ai;
 /// </summary>
 public sealed record CompletionModelOptions(string? Path, int Threads, TimeSpan Idle, int Queue, bool Production)
 {
-    /// <summary>The model a workspace chooses for completions on this server.</summary>
-    public const string Model = "qwen3-4b-instruct-2507";
+    /// <summary>The model a workspace chooses for completions on this server (Qwen3.5-4B, Apache 2.0).</summary>
+    public const string Model = "qwen3.5-4b";
 
     /// <summary>The package's description beside its files.</summary>
     public const string ManifestFile = "cgw-model.json";
 
     /// <summary>
-    /// The package as built from Qwen's weights (<c>Qwen/Qwen3-4B-Instruct-2507</c> at revision
-    /// cdbee75f17c01a7cc42f958dc650907174af0554) by <c>scripts/completion-model.mjs</c>: each file's
+    /// The package as built from Qwen's weights (<c>Qwen/Qwen3.5-4B</c> at revision
+    /// 851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a) by <c>scripts/completion-model.mjs</c>: each file's
     /// SHA-256. Production loads exactly these; a package built again must be pinned again here.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Pinned = new Dictionary<string, string>(StringComparer.Ordinal)

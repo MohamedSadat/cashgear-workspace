@@ -1732,7 +1732,7 @@ test('the v0.17.0 build uses AI on the server’s own model and shows a paid pla
     .toBe('team');
   await api.put(`/api/v1/workspaces/${workspace.id}/ai-settings`, {
     enabled: true,
-    model: 'qwen3-4b-instruct-2507',
+    model: 'qwen3.5-4b',
   });
 
   const oldContext = await browser.newContext({ baseURL: OLD });

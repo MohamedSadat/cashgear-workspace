@@ -19,7 +19,7 @@ import { MOCK_AI, writePage } from './meaning';
 
 test.skip(desktop, 'Settings and the panel are the web build’s; the desktop’s are the same code');
 
-const MODEL = 'qwen3-4b-instruct-2507';
+const MODEL = 'qwen3.5-4b';
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 let current: Team | null = null;

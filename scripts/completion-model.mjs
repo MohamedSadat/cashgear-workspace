@@ -10,7 +10,9 @@
 // target/deploy/cgw-completion-model-<model>-<revision>.zip (stored, not compressed: the int4 weights
 // do not shrink, and the zip holds a file past 2 GB), and prints each file's SHA-256: the server loads
 // a package in Production only when they are the ones pinned in
-// server/src/Cgw.Core/Ai/CompletionModelOptions.cs. Downloads (about 8 GB of weights, and PyTorch for
+// server/src/Cgw.Core/Ai/CompletionModelOptions.cs. The builder writes the text model and its
+// multi-token prediction head (mtp.onnx, which GenAI uses to draft tokens); the vision tower is left
+// out. Downloads (about 9.3 GB of weights, and PyTorch for
 // the processor, Transformers, ONNX and ONNX Runtime GenAI into the environment) go under target/
 // only. No code of the model's repository runs: the builder reads its weights and configuration with
 // Transformers' own model of its architecture (`trust_remote_code` off). Nothing here is part of the
@@ -31,11 +33,11 @@ import {
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const MODEL = 'qwen3-4b-instruct-2507';
-const REPO = 'Qwen/Qwen3-4B-Instruct-2507';
-const REVISION = 'cdbee75f17c01a7cc42f958dc650907174af0554';
-/** How the server writes the model's prompt (LocalCompletionProvider.Prompt). */
-const FAMILY = 'qwen';
+const MODEL = 'qwen3.5-4b';
+const REPO = 'Qwen/Qwen3.5-4B';
+const REVISION = '851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a';
+/** How the server writes the model's prompt (LocalCompletionProvider.Prompt: ChatML, thinking off). */
+const FAMILY = 'qwen35';
 const LICENSE = 'Apache-2.0';
 const PACKAGES = [
   'transformers==5.24.1',
@@ -125,7 +127,8 @@ copyFileSync(join(weights, 'LICENSE'), join(out, 'LICENSE.txt'));
 writeFileSync(
   join(out, 'NOTICE.txt'),
   `${REPO} at ${REVISION} (${LICENSE}), built to ONNX Runtime GenAI's int4 format for the processor ` +
-    'by scripts/completion-model.mjs (onnxruntime-genai 0.19.0, accuracy level 4). Its weights are ' +
+    "by scripts/completion-model.mjs (onnxruntime-genai 0.19.0's builder, accuracy level 4), run by " +
+    'onnxruntime-genai 0.20.0. Its text weights are ' +
     "quantised; nothing else of the model's is changed.\n",
 );
 writeFileSync(

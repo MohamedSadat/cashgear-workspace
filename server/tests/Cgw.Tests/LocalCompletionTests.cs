@@ -131,6 +131,10 @@ public sealed class LocalCompletionTests(ServerFixture server)
         Assert.Equal(AiLimits.Local.Sources, local.User.Split("<page number=").Length - 1);
         Assert.DoesNotContain(new string('c', AiLimits.Local.SourceText + 1), local.User, StringComparison.Ordinal);
         Assert.Equal(8, AiRequestBuilder.Build(ask, "en", sources).User.Split("<page number=").Length - 1);
+        // A database: fewer properties and example rows asked of the local model; Anthropic's as in 0.7.0.
+        var database = new PromptInput(AiActions.GenerateDatabase, "Scanners");
+        Assert.Contains("at most 12 properties and at most 10 example rows", AiRequestBuilder.Build(database, "en", null, AiLimits.Local).System, StringComparison.Ordinal);
+        Assert.Contains("at most 20 properties and at most 100 example rows", AiRequestBuilder.Build(database, "en").System, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -191,8 +195,10 @@ public sealed class LocalCompletionTests(ServerFixture server)
         {
             Directory.Delete(copy, recursive: true);
         }
-        Assert.Equal("qwen", LocalCompletionProvider.Check(folder, false).Manifest!.Family);
+        Assert.Equal("qwen35", LocalCompletionProvider.Check(folder, false).Manifest!.Family);
         var request = new AiRequest("rewrite", "Rules.", "<text>\nHi\n</text>", "low", 10, null);
         Assert.Equal("<|im_start|>system\nRules.<|im_end|>\n<|im_start|>user\n<text>\nHi\n</text><|im_end|>\n<|im_start|>assistant\n", LocalCompletionProvider.Prompt("qwen", request));
+        // Qwen3.5's turn opens with an empty think block: it answers without thinking first.
+        Assert.EndsWith("<|im_start|>assistant\n<think>\n\n</think>\n\n", LocalCompletionProvider.Prompt("qwen35", request), StringComparison.Ordinal);
     }
 }

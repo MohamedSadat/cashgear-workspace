@@ -1,12 +1,12 @@
 {
-  "model": "qwen3-4b-instruct-2507",
+  "model": "qwen3.5-4b",
   "source": "tests: a stand-in made by scripts/completion-model/make-test-model.py",
-  "family": "qwen",
+  "family": "qwen35",
   "test": true,
   "files": {
     "chat_template.jinja": "74defe6a4f0abbd3e837f8c23084bf18be527b626ffb0a5590745fde2bfa2803",
     "genai_config.json": "48933062df07f37eb77b930aeead8c89079b306f1e0aa1c0b7aed2df8a994f28",
-    "model.onnx": "cf362155733197a50fef84787c618f5d071827924eee7c3e65f4f5ab139a5219",
+    "model.onnx": "068ff8a1eddfb45080ac369513f77b33e7bf5a4f0b722bbe9d578f89c322ebf2",
     "model.onnx.data": "ac6cb999633b9e41b93c59058bf950f68d7e2aa2042d33baa61327c2a638f40f",
     "tokenizer.json": "fc2a6b9466365ac22f27a6c254b26f97b941eae1b8295c6ad9987f143d921508",
     "tokenizer_config.json": "4bdaf8d7b93ea51bed90afb56f823bf9787e617ad78bbf7e96c6e99ae9ce2aad"
