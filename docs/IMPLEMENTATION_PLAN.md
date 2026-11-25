@@ -2442,27 +2442,27 @@ is held to vectors the client and the C# port both read (the 31st, 29 February, 
 
 *M17.1 Waits, branches, approvals*
 
-- [ ] A run's place in SQL and the worker going on from it; waits, branches and approvals in the rule
+- [x] A run's place in SQL and the worker going on from it; waits, branches and approvals in the rule
       editor; the approval's inbox item and mail; deadlines.
 
 *M17.2 Recurring rows and reminders*
 
-- [ ] Recurrence (Track U21) on a database's template, its vectors, the worker's next row; reminders
+- [x] Recurrence (Track U21) on a database's template, its vectors, the worker's next row; reminders
       on date properties and on a row, delivered by the worker to the inbox and by mail.
 
 *M17.3 Sub-items*
 
-- [ ] The switch and its relation; the table's tree to five levels (`ariaLayout`'s levels, places and
+- [x] The switch and its relation; the table's tree to five levels (`ariaLayout`'s levels, places and
       sizes), in both directions; a board's and a list's counts; filters that keep parents.
 
 *M17.4 Dependencies*
 
-- [ ] The relation; the timeline's arrows (Track U20) and dependents moved with their blocker; a loop
+- [x] The relation; the timeline's arrows (Track U20) and dependents moved with their blocker; a loop
       refused by the planner and by the C# port.
 
 *M17.5 A unique id*
 
-- [ ] The property type, its numbers given in the row's first write on the server, shown, sorted and
+- [x] The property type, its numbers given in the row's first write on the server, shown, sorted and
       filtered; the old-build spec's cases.
 
 **Acceptance criteria**

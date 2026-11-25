@@ -26,9 +26,9 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 14: Publishing | Done, 2026-11-22 (0.14.0; proven against the mock ACME server in CI and on the e2e stack, the binding task on the production host; installing it, a name's DNS records and its Let's Encrypt certificate are yours) | `phase-14`, `v0.14.0` |
 | Phase 15: Automations | Done, 2026-11-24 (0.15.0; proven against loopback receivers in CI and on the e2e stack; a webhook to a public receiver, and installing it, are yours) | `phase-15`, `v0.15.0` |
 | Phase 16: Forms | Done, 2026-11-24 (0.16.0; proven on loopback in CI and on the e2e stack; a form link on the production host, and installing it, are yours) | `phase-16`, `v0.16.0` |
-| Phase 17: Workflows and tasks | Started 2026-11-24 (answers in `DECISIONS.md`) | |
+| Phase 17: Workflows and tasks | Done, 2026-11-25 (0.17.0; proven in CI and on the e2e stack; a reminder's mail to a real inbox, and installing it, are yours) | `phase-17`, `v0.17.0` |
 | Phase 18: AI, further | Planned 2026-11-22 (as Phase 15; Phase 18 from 2026-11-24) | |
-| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `9f5a208` | |
+| Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), U21 recurrence and U20 links between bars (2026-11-25), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `4a7d0b8` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), E10 and E11 (2026-11-20); its `main` pushed on your word to `98deed36` | |
 
@@ -1873,6 +1873,83 @@ Benchmarks (`bench/phase16.mjs`, in CI's Windows job)
 | Typing on another page meanwhile: key to the editor's work, p95; to the next frame, p95 | 8 ms (16 on CI); 33 ms | 2.2 ms; 17.5 ms | 3.5 ms; 17.8 ms |
 | The initial JavaScript | 350 kB (Phase 1) | 349.7 kB | 349.7 kB |
 
+## Phase 17: Workflows and tasks
+
+Done 2026-11-25. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45529906784 (commit `5b4b694`, every job green on the first attempt: 432 browser e2e cases passed, 2 of them on a retry (Chrome's two people typing in one paragraph, and Edge's Axe walk of comments, the inbox and presence, whose first attempt timed out waiting for a comment to save, before the inbox), 14 skipped; the desktop app's 64 passed; every kill test 25 of 25 and the migration's 10 of 10; every phase's budgets); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45529906797 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, SQL Server LocalDB 2025, Azurite) and the e2e server stack. Answers and defaults are in `DECISIONS.md` (2026-11-24: Phase 17, with the defaults picked while building it, 2026-11-25); the design in `DATA_MODEL.md` (workflows and tasks: steps that wait and decide, a step's place, repeating rows and where a series is, sub-items and dependencies, the unique id; `AutomationApprovals`, `RowReminders`, the new columns, the inbox's `approval` and `reminder` kinds), `SYNC_DESIGN.md` (`stepKinds` and `propertyTypes` 22, the approvals' and reminders' routes, a tree's query, `dependency.loop`, a row's number), `ARCHITECTURE.md` (the client's and the server's parts, the worker's jobs) and `OPERATIONS.md` (0.17.0's migrations, the `reminders` job, the server before the web app, what to watch); what changed for users in `CHANGELOG.md` (0.17.0).
+
+Milestones
+
+- [x] M17.1 Waits, branches, approvals. Commit `890b8fd` (the steps in `db/automations.ts` and
+      `AutomationRules` with their vectors, a step's path; a run's place in SQL and the worker going
+      on from it; approvals, their route, the inbox's item and the mail; the editor's nested steps;
+      `workflows.spec.ts`)
+- [x] M17.2 Recurring rows and reminders. Commits `a9a2dc6` (Track U21's fields and arithmetic by
+      the library's pin, with U20), `1443ab7` (the recurrence in both ports held by
+      `db-recurrence-vectors.json`, the trigger `recurring` and the series, "Repeat a template", a
+      notice's `reminder` and "Remind people", people's own reminders and `ReminderJob`, the inbox's
+      `reminder` and its mail; `series.spec.ts`), `f421e41` (the mail of the two new kinds)
+- [x] M17.3 Sub-items. Commit `5d5f552` (the relations' roles and the switch, the tree in both
+      ports held by the query vectors, the route's tree, the table's tree grid, a card's and a
+      line's count), `5b4b694` (from either side, right to left)
+- [x] M17.4 Dependencies. Commits `5d5f552` (the relation's roles, a loop refused by the planner and
+      the server), `c561fd9` (the timeline's arrows by Track U20, dependents moved with their
+      blocker), `5b4b694` (right to left)
+- [x] M17.5 A unique id. Commit `ced3b54` (the twenty-second type, a row's number in its insert's
+      transaction on every path, the migration's numbers for rows stored before, shown, sorted,
+      filtered, in CSV, workbooks, sites and webhooks)
+- Specs, budgets and docs: `4a2f000` (`old-build.spec.ts`'s v0.16.0 case), `e15e9a3`
+  (`bench/phase17.mjs`, `Phase17Bench`, CI's steps), `d23257b` (the design), and this evidence with
+  the release
+
+Notes
+
+- **What building it found.** The device's planner checks a rule's shape before its own check: a
+  repeating row's rule of no steps of its own would have been refused on the device and never
+  reached the server; it takes 0 to 20 for it (`1443ab7`). The vectors found `Date.UTC` reading the
+  years 0 to 99 as 1900 to 1999, against C#'s `DateOnly` (both ports now agree for every year from 1
+  to 9999). The reminders' job works every moment out again from its row every 10 minutes, so its
+  tests use real moments a few seconds ahead rather than moments set by hand.
+- **The initial JavaScript** is 348.6 kB of 350 (0.16.0: 349.7). Phase 17's tree, unique id and
+  loop check in `@cgw/workspace` and the inbox's new kinds had taken it to 351.1 kB; the desktop's
+  SQLite store, which the web app's platform module imported for nothing, is now imported when the
+  desktop opens it (`a9a2dc6`). The new screens load with the rule editor, a row's page and the first
+  nested table or timeline drawn.
+- **Read by a screen reader** means here the tree grid's levels, places, sizes and expanded state
+  as Chromium exposes them (`aria-level`, `aria-posinset`, `aria-setsize`, `aria-expanded`,
+  asserted in Chrome and Edge and in `a11y.test.ts`) and Axe on the table: no screen reader was
+  driven by hand for the tree (Phase 12's `SCREEN_READERS.md` script covers the grid).
+- **Not tried against the real world:** mail of a reminder or an approval to a real inbox (the
+  pickup folder only, as for every kind), and a repeating row over days of real time (the server's
+  tests move a series' moment; the browser spec uses a series by the last done, made at once).
+  Production runs 0.12.0.
+- **Found and left:** on a row's page a button property's value is a `role="button"` holding the
+  button (Axe's `nested-interactive`), from Phase 15; the specs scope Axe to their own panel there.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A run waits a day and goes on once after the worker restarts; a branch takes the path its conditions name; an approval goes on by the first answer (or all of the group's), or by "no answer" after its deadline | Pass | `WorkflowTests.A_run_waits_a_day_and_goes_on_once_after_the_worker_restarts` (waiting with its place, its definition and until when; a worker that took it and stopped, taken again once stale; gone on once, and gone on again from the same place it changes nothing twice), `A_branch_takes_the_path_its_conditions_name`, `An_approval_goes_on_by_the_first_answer_or_all_of_a_group_or_no_answer_after_its_deadline`, `A_wait_for_conditions_or_a_date_goes_on_when_its_row_says_so_and_stops_at_its_limit`, `A_waiting_run_finishes_on_the_version_it_started_with_and_stops_when_its_rule_is_off`, `A_waiting_run_reads_its_row_and_its_authors_access_again_before_it_goes_on`. `workflows.spec.ts` (Chrome, Edge): a wait for conditions gone on when another device makes its row match, shown in the open tab; an approval answered in the inbox with a comment, the rule taking its path with the comment in the row; the editor's branch and approval with steps inside them, in Arabic; the screens under Axe. Vectors: `db-automation-vectors.json`'s Phase 17 cases in both ports |
+| A recurring row appears once and on time in the workspace's time zone, never twice from a restart | Pass | `SeriesTests.A_series_by_its_days_makes_its_row_once_and_on_time_never_twice_from_a_restart` (every day at 23:59 in Riyadh: its moment that day at 23:59+03:00, nothing before; one row from the template, its day in Due; a worker that stopped before moving the series on makes nothing twice), `A_series_whose_worker_was_stopped_makes_the_latest_day_only`, `A_series_by_the_last_done_makes_the_next_once_the_last_is_done` (the first at once, the next a week on once Status is complete, nothing for another change or a row not the last), `A_series_switched_off_makes_nothing_and_names_a_template_of_its_own_database` (and its template gone, its run stops `template.gone`). The days: `db-recurrence-vectors.json` in both ports (`RecurrenceVectorTests`: the 31st in short months and a leap year, 29 February in other years, the last Friday, the second Monday and Thursday, every three months, a count, an end, the first and last days there are). `series.spec.ts` (Chrome, Edge): a template repeated from the New menu by the last done; its first row at once and the next a week later when another device completes it, shown in the open tab; the editor under Axe and in Arabic |
+| A reminder reaches the inbox within a minute of its time and the mail by the person's setting, never for a row the person can no longer read | Pass | `ReminderTests.A_persons_reminder_reaches_their_inbox_once_at_its_time_and_follows_the_date` (a day's reminder at 09:00 in the zone less a day; a date-time's at its moment, once; moved, sent again for the new moment; a moment past, none; no date, none), `A_reminder_is_of_a_date_at_a_choice_of_times_on_a_row_the_person_reads` (the five choices only, a date property only; a reader's own; nothing to a reader whose access ended, nor for a row in the trash), `A_rules_notice_marked_a_reminder_reaches_its_people_as_a_reminder`. `MailNotificationTests.A_reminder_and_an_approval_are_mailed_by_the_persons_setting_in_their_words` (and none with mail off). `series.spec.ts` (Chrome, Edge): "Remind me" at the time of a date 45 seconds ahead, the inbox's "A reminder of Call the bank" within a minute of it. `Phase17Bench`: 10,000 due over 40 seconds, every one in the inbox, the worst 3.9 s after its moment |
+| Sub-items nest in the table to five levels, in both directions, read well by a screen reader; an older build sees the relation as it is | Pass | The query vectors' nested suite in both ports (five levels, deeper rows at the fifth, a match's ancestors shown as context, loops after the rest, grouped) and `SubItemTests.The_query_nests_sub_items_keeps_a_matchs_ancestors_and_pages_by_the_last_rows_id`. `tasks.spec.ts` (Chrome, Edge): switched on in the Properties menu; Task 1 and Task 2 under Task 0 by another device's Parent, as a tree grid (`aria-level`, `aria-posinset`, `aria-setsize`, `aria-expanded`); its toggle hiding and showing them; from the parent's side, Task 0's Sub-items without Task 2 making it a top line; right to left in Arabic, the toggle named in Arabic and a sub-item's indent on its title's right; under Axe in both. Unit: `a11y.test.ts`'s "nested" case. `old-build.spec.ts` (Chrome, Edge), v0.16.0 on :4266: Parent and Sub-items plain relations there; a property renamed there, the roles kept |
+| The timeline draws dependencies in both directions; a loop is refused; moving a blocker moves its dependents when the database says so | Pass | `tasks.spec.ts` (Chrome, Edge): dependencies switched on with "Moving a row's dates moves the rows it blocks"; the arrow from Task 0 to Task 1; Task 1's bar "Blocked by Task 0", Task 0's "Blocking Task 1", and in Arabic; under Axe; Task 0 a day later by Alt+ArrowRight and Task 1 a day later too; Task 0 blocked by Task 1 refused `dependency.loop`. `SubItemTests.A_row_blocked_by_a_row_it_blocks_is_refused_from_either_side`; `dependencies.test.ts` (the planner's). Unit: `timeline.test.ts`'s links (each blocker drawn, once) and dependents (theirs too, each once, by a bar's move) |
+| A row made offline gets its number once it reaches the server; no two rows share one | Pass | `tasks.spec.ts` (Chrome, Edge): a unique id added from the header with its prefix; the seeded rows `TASK-1` to `TASK-3` in the order made; a row made offline "—", then `TASK-4` once synced; in Arabic. `UniqueIdTests.A_row_is_numbered_when_the_server_first_stores_it_once_and_never_again` (three rows made offline numbered in their batch's order, the batch sent again numbering nothing twice, a template none, a trashed row keeping its number and the next never taking it, an import's rows in the file's order, sorted and filtered as a number, exported with its prefix; `IX_DatabaseRows_Number` unique by database), `Rows_stored_before_the_release_are_numbered_in_the_order_they_were_made`, `An_older_build_keeps_a_unique_id_and_its_prefix`; `old-build.spec.ts`'s v0.16.0 case (the numbers as they were) |
+
+Also: `automations.test.ts` (the series' editor offered only to a 0.17.0 server, its rule saved with no steps, "Repeat a template" and the New menu, a reminder kept only of a date, "Remind me" on a row's page, a series in a sentence), `timeline.test.ts`, the shell's `collab.test.ts` (the inbox's `reminder`). Unit: 4,142 tests in `pnpm test` (6 skipped); server: 526 server tests (509 passed, 17 skipped: the benches and the real-provider tests).
+
+Benchmarks (`bench/phase17.mjs`: the server's in CI's server job, the browser's in its Windows job)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| The table with sub-items, 50,000 rows of which 10,000 parents: first rows, median of five | 500 ms (Phase 4's) | 40.1 ms (cold 1.4 s) | 95.2 ms (cold 2.5 s) |
+| A timeline of 50,000 rows with 10,000 dependencies: first bars, median of five | 500 ms (Phase 9's) | 61.3 ms (cold 1.0 s) | 129.5 ms (cold 1.8 s) |
+| The same: dragging a bar, frames p95 | 17.5 ms (Phase 9's) | 16.8 ms | 16.8 ms |
+| With 10,000 runs waiting, a pass finding those due, p95 | 200 ms | 3.5 ms (50 due a pass; none due 0.6 ms) | 5.3 ms (50 due a pass; none due 1.4 ms) |
+| 10,000 reminders due in one minute: every one in the inbox | 60 s | 2.1 s at worst (p95 1.6 s) | 3.9 s at worst (p95 2.5 s) |
+| The tree's first page at 50,000 rows on the server, p95 | 300 ms (Phase 4's) | 7.1 ms | 14.3 ms |
+| The initial JavaScript | 350 kB (Phase 1) | 348.6 kB | 348.6 kB |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
@@ -1897,6 +1974,8 @@ Benchmarks (`bench/phase16.mjs`, in CI's Windows job)
 - [x] `CgMonthCalendar`'s week cell described, not named, by `weekItems`, and the tree's row buttons out of the accessibility tree until hovered or focused (`92d9f09`, `98e4ff0`; Workspace `c3b00f0`)
 - [x] U18 A timeline (`CgTimeline`: lines and lanes on a date axis, zoom by day, week, month and quarter, pointer and keyboard moves and resizes, right to left, virtualised for 50,000 items; library `0490cbd`, pushed 2026-11-17; Workspace `0e08a62`). Left for Track U: bringing the lines to the first item of the days shown, `scrollToItem` to the top, a `startCreate`, a mark for today's line
 - [x] U19 A bar moved to another lane (`CgTimeline`'s `moveBetweenLanes`: drag onto a lane's lines or header, Alt+ArrowUp and Alt+ArrowDown, the lane in `onItemMove`'s details; library `d493b4c`, 2026-11-20, with R0 to R9; Workspace `49e72c2`, `1259f87`). Then every button a field draws at least 24 px high and the calendar's heading named by what it shows (library `9f5a208`, 2026-11-20; Workspace `f46aad7`)
+- [x] U21 Recurrence: `CgRecurrenceFields` and its arithmetic (`cgNextOccurrence`, `cgOccurrencesBetween`, `cgSummarizeRecurrence`, `cgValidateRecurrence`) exported on their own, the scheduler drawing them (library `6cfbeb5`, 2026-11-25; Workspace `a9a2dc6`, `1443ab7`)
+- [x] U20 Links between a timeline's bars (`CgTimeline`'s `links`: arrows routed round bars, mirrored right to left, dashed in the danger colour for a conflict, named in each bar's description; library `4a7d0b8`, 2026-11-25; Workspace `a9a2dc6`, `c561fd9`)
 
 Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
 `claude/cashgear-react-ui-library-xq8tsz` (decisions, 2026-11-16).
