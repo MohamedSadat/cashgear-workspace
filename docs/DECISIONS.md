@@ -1996,3 +1996,29 @@ Picked while building it (2026-11-25):
 | A loop of dependencies | Refused `dependency.loop` (409) when a row's Blocked by would reach the row itself, from either side's edit, by the planner over the rows the device holds and by the server over all of them, after the relation's reverse edits | "A loop refused by the planner and by the C# port" |
 | Dependents moved | With `shift`, a bar moved by whole days takes the rows it blocks and theirs (each once, by their Blocking), of the rows the device holds, by as many days, in the same one write; a resize moves none; the timeline says how many moved | "Moving a bar moves the rows it blocks by the same days"; a chain moves whole |
 | The first screen's budget | Phase 17's work took the initial JavaScript to 351.1 kB (the tree, the unique id and the loop check in `@cgw/workspace`, the inbox's new kinds); the desktop's SQLite store, which the web app's platform module imported for nothing, is now imported when the desktop opens it: 348.6 kB | The budget is 350 kB; 3 kB of the web app's first screen was desktop code |
+
+## 2026-11-25: Phase 18
+
+Phase 18's questions were put to you in one batch when it started (`IMPLEMENTATION_PLAN.md`,
+Phase 18: AI, further, sized against 0.13.0 on 2026-11-22 and read again against 0.17.0: every
+completion still goes through `AiService` and one `IAiProvider`, `AnthropicProvider`, with what
+`AiRequestBuilder` built; the allowance is the environment's alone). Looked up before asking: ONNX
+Runtime 1.31.1 (26 October 2026) is the server's; ONNX Runtime GenAI's newest release is 0.20.0
+(14 November 2026); Qwen3.5 has a 4B model under Apache 2.0; Paddle's checkout can be hosted on its
+own domain (`pay.paddle.io`), so the app needs no page of its own for it.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Where the model runs, and what it does | On the server, in the API process as the embedding model, for the web and the desktop alike, every request still built in `AiRequestBuilder`; every action, each with smaller limits of its own that the spike sets; JSON answers held to the action's schema while they are made; one answer at a time a process, the rest waiting their turn. A model on the desktop stays on "Later" |
+| The model, and the spike's downloads | Three candidates measured by the spike for speed and for the app's own actions' answers in English and in Arabic: Qwen3-4B-Instruct-2507 (Apache 2.0), Phi-4-mini-instruct (MIT) and Qwen3.5-4B (Apache 2.0, dropped if the runtime cannot build it). Downloads, each into a folder of its own under `target/spike18`: each model's official weights from Hugging Face (about 8 GB each), a throwaway Python environment (PyTorch for the processor, Transformers, ONNX Runtime GenAI's model builder) for the one build to int4 ONNX, and `Microsoft.ML.OnnxRuntimeGenAI` (MIT) from NuGet; each model's licence and code read before it runs. On the reference machine first, then once on the production host over Remote Desktop at a quiet hour, nothing installed there and its folder deleted after |
+| The payment provider | Paddle, as merchant of record (it sells to the customer and handles VAT and sales tax): its hosted checkout and its customer portal, opened from Settings → AI by owners, so no card or payment detail ever reaches the app; its webhooks signed (HMAC); the tests against a mock of it, and the live test in its sandbox by keys you give at the time |
+| What is charged | Plans, each a flat price a month a workspace with a monthly allowance of tokens (completions and search by meaning apart), on Phase 13's allowance; prices in Paddle's catalogue and the plans' allowances in the server's environment, never in the code, set at the live test; an upgrade or a downgrade at once, a cancelled plan until the end of the period paid, a failed payment ending the allowance once Paddle stops retrying |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Version | `v0.18.0` | One version per phase |
+| The old build | v0.17.0 served on 4265 for `old-build.spec.ts` | The next free port below 4266 |
