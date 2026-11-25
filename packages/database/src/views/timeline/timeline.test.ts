@@ -8,10 +8,12 @@ import { rowRecord } from '../../testing/fixtures';
 import {
   covers,
   defaultTimeline,
+  dependentMoves,
   fetchWindow,
   firstRange,
   movedValues,
   timelineItems,
+  timelineLinks,
   timelineOf,
   wallPoint,
   type TimelineRow,
@@ -240,5 +242,72 @@ describe('the window fetched', () => {
 
   it('starts a few days before today', () => {
     expect(firstRange('2026-11-17', 'week')).toEqual({ from: '2026-11-14', to: '2027-01-23' });
+  });
+});
+
+describe('dependencies (Phase 17, Track U20)', () => {
+  const BLOCKED_BY: PropertyDef = {
+    id: 'relBlkBy',
+    name: 'Blocked by',
+    type: 'relation',
+    relation: { databaseId: 'db', reversePropertyId: 'relBlkng', role: 'blockedBy' },
+  };
+  const BLOCKING: PropertyDef = {
+    id: 'relBlkng',
+    name: 'Blocking',
+    type: 'relation',
+    relation: { databaseId: 'db', reversePropertyId: 'relBlkBy', role: 'blocking' },
+  };
+
+  it('draws an arrow from each blocker drawn to the row it blocks, once', () => {
+    const design = row({ [START.id]: { start: '2026-12-01' } }, 'Design');
+    const budget = row({ [START.id]: { start: '2026-12-02' } }, 'Budget');
+    const away = row({}, 'Not drawn');
+    const launch = row(
+      {
+        [START.id]: { start: '2026-12-10' },
+        [BLOCKED_BY.id]: [design.id, budget.id, design.id, away.id, 'nonsense'],
+      },
+      'Launch',
+    );
+    const items = timelineItems(
+      [design, budget, away, launch],
+      START,
+      undefined,
+      undefined,
+      0,
+      true,
+    );
+    expect(timelineLinks(items, BLOCKED_BY)).toEqual([
+      { id: `${design.id}>${launch.id}`, from: design.id, to: launch.id },
+      { id: `${budget.id}>${launch.id}`, from: budget.id, to: launch.id },
+    ]);
+    expect(timelineLinks(items, null)).toEqual([]);
+  });
+
+  it("moves the rows a blocker blocks, and theirs, each once, as a bar's move moves them", () => {
+    const first = row({ [START.id]: { start: '2026-12-01' } }, 'First');
+    const second = row(
+      { [START.id]: { start: '2026-12-03', end: '2026-12-04' }, [END.id]: { start: '2026-12-05' } },
+      'Second',
+    );
+    const third = row({ [WHEN.id]: { start: '2026-12-08T09:30:00Z' } }, 'Third, no start');
+    const fourth = row({ [START.id]: { start: '2026-12-09' } }, 'Fourth');
+    first.values[BLOCKING.id] = [second.id, third.id];
+    second.values[BLOCKING.id] = [fourth.id, first.id];
+    third.values[BLOCKING.id] = [fourth.id];
+    const rows = new Map([first, second, third, fourth].map((r) => [r.id, r]));
+    const moves = dependentMoves(first, BLOCKING, START, END, 2, (id) => rows.get(id));
+    expect(moves.map((m) => [m.row.title, m.values])).toEqual([
+      [
+        'Second',
+        {
+          [START.id]: { start: '2026-12-05', end: '2026-12-06' },
+          [END.id]: { start: '2026-12-07' },
+        },
+      ],
+      ['Fourth', { [START.id]: { start: '2026-12-11' } }],
+    ]);
+    expect(dependentMoves(first, BLOCKING, START, END, 0, (id) => rows.get(id))).toEqual([]);
   });
 });

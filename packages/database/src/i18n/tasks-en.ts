@@ -23,4 +23,9 @@ export const tasksEn = {
   count: 'Sub-items: {{number}}',
   context: 'Shown for a sub-item that matches',
   moved: 'The rows it blocks moved too: {{number}}.',
+  // A timeline's arrows (Track U20): what a bar's description says of them.
+  blockedByThese: 'Blocked by {{titles}}',
+  blockingThese: 'Blocking {{titles}}',
+  conflictBlockedBy: 'Starts before {{titles}} ends',
+  conflictBlocking: '{{titles}} starts before this ends',
 };

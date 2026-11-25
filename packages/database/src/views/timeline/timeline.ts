@@ -16,7 +16,7 @@ import type {
 import { isDateValue, readCell } from '../../model/format';
 import { isDateType, liveProperties } from '../../model/properties';
 import { addDaysToPoint, dateOfDay, dayNumber, daysInMonth, shiftDays } from '../calendar/dates';
-import type { CgTimelineEdge, CgTimelineItem, CgTimelineRange } from '@cashgear/ui';
+import type { CgTimelineEdge, CgTimelineItem, CgTimelineLink, CgTimelineRange } from '@cashgear/ui';
 
 /** A timeline's settings with their defaults filled in. */
 export interface TimelineSettingsValue {
@@ -127,6 +127,78 @@ export function timelineItems(
     items.push(item);
   }
   return items;
+}
+
+/** A row's bar as the timeline takes it (its start, and its end property's value), or null with no start. */
+export function barOf(
+  row: RowRecord,
+  start: PropertyDef,
+  end: PropertyDef | undefined,
+): TimelineRow | null {
+  const value = readCell(row, start);
+  if (!isDateValue(value) || !POINT.test(value.start)) return null;
+  const other = end ? readCell(row, end) : undefined;
+  return { row, value, endValue: isDateValue(other) && POINT.test(other.start) ? other : null };
+}
+
+/**
+ * Phase 17 (M17.4): the arrows between bars, from each row a bar's Blocked by names to that bar
+ * (`from` blocks `to`), only between rows drawn, each once.
+ */
+export function timelineLinks(
+  items: readonly CgTimelineItem<TimelineRow>[],
+  blockedBy: PropertyDef | null | undefined,
+): CgTimelineLink[] {
+  if (!blockedBy) return [];
+  const keys = new Set(items.map((i) => i.key));
+  const links: CgTimelineLink[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const ids = item.data?.row.values[blockedBy.id];
+    if (!Array.isArray(ids)) continue;
+    for (const from of ids) {
+      const id = `${String(from)}>${item.key}`;
+      if (typeof from !== 'string' || from === item.key || !keys.has(from) || seen.has(id))
+        continue;
+      seen.add(id);
+      links.push({ id, from, to: item.key });
+    }
+  }
+  return links;
+}
+
+/**
+ * Phase 17 (M17.4): the rows a blocker moved by whole days takes along when its database says so:
+ * those it blocks (its Blocking), and theirs, each once, of the rows at hand, each moved as a bar's
+ * move moves it (its start, and its end property's value). A row with no start is left as it is.
+ */
+export function dependentMoves(
+  row: RowRecord,
+  blocking: PropertyDef,
+  start: PropertyDef,
+  end: PropertyDef | undefined,
+  days: number,
+  rowOf: (id: string) => RowRecord | null | undefined,
+): { row: RowRecord; values: Record<PropertyId, DateValue> }[] {
+  if (!days) return [];
+  const out: { row: RowRecord; values: Record<PropertyId, DateValue> }[] = [];
+  const seen = new Set([row.id]);
+  const queue: RowRecord[] = [row];
+  while (queue.length) {
+    const next = queue.shift()!;
+    const ids = next.values[blocking.id];
+    if (!Array.isArray(ids)) continue;
+    for (const id of ids) {
+      if (typeof id !== 'string' || seen.has(id)) continue;
+      seen.add(id);
+      const dependent = rowOf(id);
+      if (!dependent || dependent.trashedAt) continue;
+      queue.push(dependent);
+      const bar = barOf(dependent, start, end);
+      if (bar) out.push({ row: dependent, values: movedValues(bar, start, end, 'move', days) });
+    }
+  }
+  return out;
 }
 
 /** A value with its end dropped when it is its start. */

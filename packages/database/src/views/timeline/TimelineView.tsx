@@ -17,6 +17,11 @@
 // dragged from the list onto a day, or put on today by its button. A double click on a line's
 // empty days, or the toolbar's New (today), makes a row there, its title typed first. A reader
 // (`canEdit` false) moves nothing.
+//
+// Phase 17 (M17.4, Track U20): with dependencies switched on, an arrow from each row a bar's
+// Blocked by names to that bar, each bar's description saying what blocks it and what it blocks;
+// and, when the database says so (`shift`), a bar moved by whole days takes the rows it blocks
+// (and theirs, of the rows at hand) the same days, in the same one write.
 import {
   CgLiveAnnouncer,
   CgTimeline,
@@ -43,6 +48,8 @@ import {
 } from '../../core';
 import { useDatabaseContext } from '../../context';
 import { useDbT } from '../../i18n';
+import { shiftsDependents, taskPair } from '../../tasks/model';
+import { useTaskT } from '../../tasks/words';
 import { formatDatePart } from '../../model/format';
 import { isDateType, liveProperties, propertyOf, uniqueName } from '../../model/properties';
 import { newPropertyDef } from '../../properties/defs';
@@ -54,10 +61,12 @@ import { useWindowRows } from '../calendar/useWindowRows';
 import type { ViewProps } from '../types';
 import {
   covers,
+  dependentMoves,
   fetchWindow,
   firstRange,
   movedValues,
   timelineItems,
+  timelineLinks,
   timelineOf,
   type TimelineRow,
 } from './timeline';
@@ -203,12 +212,37 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
       laneDef ? (laneDef.options ?? []).map((o) => ({ key: o.id, title: o.name })) : undefined,
     [laneDef],
   );
+  // Phase 17: the dependencies' arrows, between the rows drawn.
+  const dependencies = taskPair(database, 'dependencies');
+  const links = useMemo(
+    () => (dependencies ? timelineLinks(items, dependencies.first) : undefined),
+    [items, dependencies],
+  );
+  const tt = useTaskT();
 
   // ---- Changes --------------------------------------------------------------------------------
   const write = (row: RowRecord, values: Record<string, unknown>) =>
     actions.applyOps([
       newOp('row.update', database.workspaceId, row.id, { values: values as never }),
     ]);
+  /** A bar moved by whole days, with the rows it blocks when the database moves them too. */
+  const moveWithDependents = (row: RowRecord, values: Record<string, unknown>, days: number) => {
+    const along =
+      dependencies && startDef && shiftsDependents(database)
+        ? dependentMoves(row, dependencies.second, startDef, endDef, days, (id) => {
+            const held = host.page(id);
+            return held?.kind === 'row' ? (held as RowRecord) : null;
+          })
+        : [];
+    if (!along.length) return void write(row, values);
+    void actions.applyOps([
+      newOp('row.update', database.workspaceId, row.id, { values: values as never }),
+      ...along.map((d) =>
+        newOp('row.update', database.workspaceId, d.row.id, { values: d.values as never }),
+      ),
+    ]);
+    live.current?.announce(tt('moved', { number: along.length }));
+  };
   /** Puts a row with no date on a day (and in the lane it was dropped on): one `row.update`. */
   const placeRow = (row: RowRecord, date: string, lane?: string | null) => {
     if (!startDef || !writable) {
@@ -345,8 +379,13 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
       noLane: t('timeline.noLane', { name: laneDef?.name ?? '' }),
       lane: (title, count) => t('timeline.lane', { name: title, number: formatCount(count) }),
       untitled: t('untitled'),
+      // Phase 17: what a bar's description says of its arrows.
+      blockedBy: (titles) => tt('blockedByThese', { titles }),
+      blocking: (titles) => tt('blockingThese', { titles }),
+      conflict: (titles, side) =>
+        tt(side === 'blockedBy' ? 'conflictBlockedBy' : 'conflictBlocking', { titles }),
     }),
-    [t, name, laneDef, formatCount],
+    [t, tt, name, laneDef, formatCount],
   );
 
   if (!usable || !startDef) return <TimelineSetup database={database} view={view} env={env} />;
@@ -410,11 +449,15 @@ export function TimelineView({ database, view, request, embedded, newRowRequest 
                       ? {}
                       : movedValues(data, startDef, endDef, details.edge, details.days);
                   if (laneDef && details.lane !== undefined) values[laneDef.id] = details.lane;
-                  if (Object.keys(values).length) void write(data.row, values);
+                  if (!Object.keys(values).length) return;
+                  if (details.edge === 'move' && details.days)
+                    moveWithDependents(data.row, values, details.days);
+                  else void write(data.row, values);
                 }
               : undefined
           }
           moveBetweenLanes={writable && !!laneDef}
+          links={links}
           onCreate={
             writable
               ? (date, lane, details) => setPopup({ date, lane, anchor: details.anchor })

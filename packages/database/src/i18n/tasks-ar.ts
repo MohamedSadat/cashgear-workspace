@@ -24,4 +24,9 @@ export const tasksAr: Strings<typeof tasksEn> = {
   count: 'المهام الفرعية: {{number}}',
   context: 'ظاهر لأجل مهمة فرعية مطابقة',
   moved: 'نُقلت الصفوف التي يعيقها أيضًا: {{number}}.',
+  // A timeline's arrows (Track U20): what a bar's description says of them.
+  blockedByThese: 'معاق بواسطة {{titles}}',
+  blockingThese: 'يعيق {{titles}}',
+  conflictBlockedBy: 'يبدأ قبل انتهاء {{titles}}',
+  conflictBlocking: 'يبدأ {{titles}} قبل انتهاء هذا',
 };
