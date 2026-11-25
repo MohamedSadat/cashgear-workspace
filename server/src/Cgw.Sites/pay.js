@@ -12,7 +12,9 @@
   if (self.getAttribute('data-sandbox') === '1') window.Paddle.Environment.set('sandbox');
   window.Paddle.Initialize({
     token: self.getAttribute('data-token'),
-    checkout: { settings: { displayMode: 'overlay', locale: self.getAttribute('data-locale') || 'en' } },
+    checkout: {
+      settings: { displayMode: 'overlay', locale: self.getAttribute('data-locale') || 'en' },
+    },
     eventCallback: function (event) {
       if (!event || !event.name) return;
       if (event.name === 'checkout.completed') {
