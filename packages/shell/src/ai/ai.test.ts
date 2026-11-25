@@ -152,10 +152,12 @@ describe('each action’s request', () => {
   const selection = { from: 3, to: 9, text: 'chosen' };
 
   it('holds only the fields the contract names', () => {
+    // Phase 18: every request says it reads the `queued` line (a server before 0.18.0 ignores it).
     expect(buildRequest({ action: 'rewrite', selection, instruction: 'improve' }, place)).toEqual({
       workspaceId: WS,
       pageId: PAGE,
       language: 'en',
+      events: ['queued'],
       action: 'rewrite',
       input: { text: 'chosen', instruction: 'improve' },
     });
@@ -180,12 +182,47 @@ describe('each action’s request', () => {
     expect(database).toEqual({
       workspaceId: WS,
       language: 'en',
+      events: ['queued'],
       action: 'generateDatabase',
       input: { prompt: 'Vendors' },
     });
     const ask = buildRequest({ action: 'ask', question: 'Where is the plan?' }, place);
     expect('pageId' in ask).toBe(false);
     expect(ask.input).toEqual({ question: 'Where is the plan?' });
+  });
+
+  it("holds a request to the server's own model's smaller limits when it is the workspace's", () => {
+    const limits = {
+      rewriteText: 10,
+      pageText: 20,
+      prompt: 5,
+      question: 5,
+      instruction: 5,
+      requestPrompt: 3,
+    };
+    const local = { ...place, limits };
+    expect(() =>
+      buildRequest(
+        {
+          action: 'rewrite',
+          selection: { ...selection, text: 'y'.repeat(11) },
+          instruction: 'improve',
+        },
+        local,
+      ),
+    ).toThrow(expect.objectContaining({ code: 'too.long' }));
+    expect(() =>
+      buildRequest({ action: 'summarise' }, { ...local, pageText: () => 'z'.repeat(21) }),
+    ).toThrow(expect.objectContaining({ code: 'too.long' }));
+    expect(() =>
+      buildRequest({ action: 'rewrite', selection, instruction: 'custom', prompt: 'four' }, local),
+    ).toThrow(expect.objectContaining({ code: 'too.long' }));
+    expect(
+      buildRequest({ action: 'rewrite', selection, instruction: 'improve' }, local).input,
+    ).toEqual({
+      text: 'chosen',
+      instruction: 'improve',
+    });
   });
 
   it('says what is too long or empty before anything is sent', () => {
@@ -656,6 +693,7 @@ describe('the AI panel', () => {
         workspaceId: WS,
         pageId: PAGE,
         language: 'en',
+        events: ['queued'],
         action: 'summarise',
         input: { text: 'Notes\n\nFirst point.\nSecond point.' },
       },

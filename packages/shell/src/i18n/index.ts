@@ -14,6 +14,7 @@ import type { pluginNetworkEn } from '../plugins/networkWords';
 import type { aiPlanEn } from '../ai/planWords';
 import type { siteDomainsEn } from '../cloud/domainsWords';
 import type { automationsEn } from '../automations/words';
+import type { billingEn } from '../ai/billingWords';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -32,6 +33,7 @@ interface Sections {
   aiPlan: typeof aiPlanEn;
   siteDomains: typeof siteDomainsEn;
   automations: typeof automationsEn;
+  billing: typeof billingEn;
 }
 
 declare module 'i18next' {

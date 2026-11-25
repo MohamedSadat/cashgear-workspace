@@ -10,11 +10,15 @@
 // Phase 13: where each part's key comes from, the workspace's own or Cash Gear's subscription (when
 // this server offers it to the workspace, with the month's allowance and use), and search by meaning
 // made on this server by its own model (voyage-4-nano), with no key and no text leaving it.
-import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+//
+// Phase 18: Cash Gear's paid plans (BillingSection, loaded with this part only once the server's
+// `/version` says it offers billing).
+import { lazy, Suspense, useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAccount, useCloud } from '../cloud/CloudUi';
 import { useSection } from '../i18n/sections';
 import type { WorkspaceSession } from '../session';
+import { cloudBillingApi } from './billing';
 import { useAi } from './context';
 import { aiPlanWords } from './planWords';
 import {
@@ -30,6 +34,9 @@ import {
 /** Phase 13: where search by meaning is made. */
 type EmbeddingsSource = KeySource | 'local';
 import './ai.css';
+
+/** Phase 18: the plan's part, loaded once the server offers billing. */
+const BillingSection = lazy(() => import('./BillingSection'));
 
 const MODEL_LABELS: Record<string, 'ai.modelOpus' | 'ai.modelSonnet' | 'ai.modelHaiku'> = {
   'claude-opus-5-5': 'ai.modelOpus',
@@ -86,7 +93,7 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
   const [choosing, setChoosing] = useState<boolean | null>(null);
   const [choosingEmbeddings, setChoosingEmbeddings] = useState<boolean | null>(null);
   // Phase 13: the same for where each part's key comes from, and where search by meaning is made.
-  const [choosingSource, setChoosingSource] = useState<KeySource | null>(null);
+  const [choosingSource, setChoosingSource] = useState<KeySource | 'local' | null>(null);
   const [choosingMade, setChoosingMade] = useState<EmbeddingsSource | null>(null);
   const state = useSyncExternalStore(
     (listener) => (ai ? ai.store.subscribe(listener) : () => {}),
@@ -105,6 +112,16 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
   useEffect(() => {
     if (store && workspaceId && readable) store.load(workspaceId, true);
   }, [store, workspaceId, readable]);
+  // Phase 18: Cash Gear's paid plans, when the server offers them.
+  const billing = useMemo(() => (cloud ? cloudBillingApi(cloud.api) : null), [cloud]);
+  const [billingOffered, setBillingOffered] = useState(false);
+  useEffect(() => {
+    let live = true;
+    if (billing && readable) void billing.offered().then((on) => live && setBillingOffered(on));
+    return () => {
+      live = false;
+    };
+  }, [billing, readable]);
   const progress = settings?.embeddings?.enabled ? settings.embeddings.progress : undefined;
   const embedding = !!progress && progress.embedded < progress.pages;
   useEffect(() => {
@@ -113,6 +130,12 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
     return () => clearInterval(timer);
   }, [store, workspaceId, embedding, readable]);
   if (!cloud || !account || !workspace) return null;
+  // Phase 18: the server's own model, chosen as a third source of answers (no key, no allowance).
+  const localModel = settings?.localModel;
+  const onLocal = settings?.provider === 'local';
+  const claudeModels = (settings?.models ?? []).filter((m) => m !== localModel);
+  const source = onLocal ? 'local' : settings?.keySource;
+  const toClaude = onLocal ? { model: claudeModels[0] ?? 'claude-opus-5-5' } : {};
 
   const save: Save = (change, after, missing = 'ai.keyMissing') => {
     if (!ai) return;
@@ -184,7 +207,8 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
                 if (
                   event.target.checked &&
                   !settings.hasKey &&
-                  settings.keySource !== 'subscription'
+                  settings.keySource !== 'subscription' &&
+                  !onLocal
                 ) {
                   setMessage({ text: t('ai.keyMissing'), error: true });
                   return;
@@ -195,18 +219,21 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
             />
             <span>{t('ai.enabled')}</span>
           </label>
-          {(settings.subscription || settings.keySource === 'subscription') && (
+          {(settings.subscription ||
+            settings.keySource === 'subscription' ||
+            localModel ||
+            onLocal) && (
             <fieldset className="cgw-ai-field cgw-ai-sources" data-testid="ai-key-source">
               <legend>{t('aiPlan.keyLegend')}</legend>
               <label className="cgw-ai-check">
                 <input
                   type="radio"
                   name={sourceName}
-                  checked={(choosingSource ?? settings.keySource) === 'own'}
+                  checked={(choosingSource ?? source) === 'own'}
                   disabled={busy}
                   onChange={() => {
                     setChoosingSource('own');
-                    save({ keySource: 'own' });
+                    save({ keySource: 'own', ...toClaude });
                   }}
                 />
                 <span>{t('aiPlan.keyOwn', { provider: 'Anthropic' })}</span>
@@ -215,18 +242,38 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
                 <input
                   type="radio"
                   name={sourceName}
-                  checked={(choosingSource ?? settings.keySource) === 'subscription'}
+                  checked={(choosingSource ?? source) === 'subscription'}
                   disabled={busy || !settings.subscription}
                   onChange={() => {
                     setChoosingSource('subscription');
-                    save({ keySource: 'subscription' });
+                    save({ keySource: 'subscription', ...toClaude });
                   }}
                 />
                 <span>{t('aiPlan.keySubscription')}</span>
               </label>
+              {(localModel || onLocal) && (
+                <label className="cgw-ai-check">
+                  <input
+                    type="radio"
+                    name={sourceName}
+                    checked={(choosingSource ?? source) === 'local'}
+                    disabled={busy || !localModel}
+                    onChange={() => {
+                      if (!localModel) return;
+                      setChoosingSource('local');
+                      save({ model: localModel });
+                    }}
+                  />
+                  <span>{t('aiPlan.keyLocal', { model: localModel ?? settings.model })}</span>
+                </label>
+              )}
             </fieldset>
           )}
-          {settings.keySource === 'subscription' ? (
+          {onLocal ? (
+            <p className="cgw-muted" data-testid="ai-local">
+              {t('aiPlan.localCompletionsNote', { provider: 'Claude' })}
+            </p>
+          ) : settings.keySource === 'subscription' ? (
             <div className="cgw-ai-field" data-testid="ai-subscription">
               <p className="cgw-muted">{t('aiPlan.subscriptionNote')}</p>
               {settings.subscription && (
@@ -286,21 +333,23 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
               <p className="cgw-muted">{t('ai.keyNote')}</p>
             </div>
           )}
-          <label className="cgw-ai-field">
-            <span>{t('ai.model')}</span>
-            <select
-              className="cgw-input"
-              value={settings.model}
-              disabled={busy}
-              onChange={(event) => save({ model: event.target.value })}
-            >
-              {settings.models.map((model) => (
-                <option key={model} value={model}>
-                  {MODEL_LABELS[model] ? t(MODEL_LABELS[model]) : model}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!onLocal && (
+            <label className="cgw-ai-field">
+              <span>{t('ai.model')}</span>
+              <select
+                className="cgw-input"
+                value={settings.model}
+                disabled={busy}
+                onChange={(event) => save({ model: event.target.value })}
+              >
+                {claudeModels.map((model) => (
+                  <option key={model} value={model}>
+                    {MODEL_LABELS[model] ? t(MODEL_LABELS[model]) : model}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {settings.usage && (
             <p className="cgw-muted" data-testid="ai-usage">
               {t('ai.usage', {
@@ -322,6 +371,33 @@ export function AiSettingsSection({ session }: { session: WorkspaceSession }) {
               dateText={dateText}
               onMissingKey={() => setMessage({ text: t('ai.embeddingsKeyMissing'), error: true })}
             />
+          )}
+          {billing && billingOffered && ai && (
+            <Suspense fallback={null}>
+              <BillingSection
+                workspaceId={ai.workspaceId}
+                api={billing}
+                open={(link) => {
+                  // A tab opened inside the click (a link that comes later would be blocked), sent on
+                  // when the server answers; the desktop's system browser.
+                  if (cloud.platform.kind === 'web') {
+                    const tab = window.open('about:blank', '_blank');
+                    link.then(
+                      (url) => {
+                        if (tab) tab.location.href = url;
+                        else window.location.assign(url);
+                      },
+                      () => tab?.close(),
+                    );
+                  } else
+                    void link.then(
+                      (url) => cloud.platform.openExternal(url),
+                      () => undefined,
+                    );
+                }}
+                onPlanChanged={() => ai.store.load(ai.workspaceId, true)}
+              />
+            </Suspense>
           )}
         </>
       )}

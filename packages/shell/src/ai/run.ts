@@ -4,7 +4,13 @@ import type { AiApi } from './api';
 import { AiError, type AiCompleteRequest, type AiStopReason } from './types';
 
 export type AiRun =
-  | { status: 'running'; text: string; sources: { pageId: string; title: string }[] }
+  | {
+      status: 'running';
+      text: string;
+      sources: { pageId: string; title: string }[];
+      /** Phase 18: answers before this one for the server's own model, while it waits. */
+      ahead?: number;
+    }
   | {
       status: 'done';
       text: string;
@@ -30,6 +36,7 @@ export async function runCompletion(
 ): Promise<AiRun> {
   let text = '';
   let sources: { pageId: string; title: string }[] = [];
+  let ahead: number | undefined;
   let scheduled = false;
   let finished = false;
   const show = () => {
@@ -37,7 +44,7 @@ export async function runCompletion(
     scheduled = true;
     frame(() => {
       scheduled = false;
-      if (!finished) onChange({ status: 'running', text, sources });
+      if (!finished) onChange({ status: 'running', text, sources, ...(ahead ? { ahead } : {}) });
     });
   };
   const end = (run: AiRun) => {
@@ -50,6 +57,10 @@ export async function runCompletion(
     for await (const event of api.complete(request, signal)) {
       if (event.type === 'text') {
         text += event.text;
+        ahead = undefined;
+        show();
+      } else if (event.type === 'queued') {
+        ahead = event.ahead;
         show();
       } else if (event.type === 'sources') {
         sources = event.pages;

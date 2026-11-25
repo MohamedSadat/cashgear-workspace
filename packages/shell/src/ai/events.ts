@@ -42,6 +42,10 @@ export function parseAiEvent(value: unknown): AiEvent | null {
       if (inputTokens === null || outputTokens === null) return null;
       return { type: 'done', stopReason: value.stopReason, usage: { inputTokens, outputTokens } };
     }
+    case 'queued':
+      return typeof value.ahead === 'number' && Number.isInteger(value.ahead) && value.ahead >= 0
+        ? { type: 'queued', ahead: value.ahead }
+        : null;
     case 'error':
       return (AI_STREAM_ERRORS as readonly unknown[]).includes(value.code)
         ? { type: 'error', code: value.code as (typeof AI_STREAM_ERRORS)[number] }

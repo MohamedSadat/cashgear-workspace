@@ -107,11 +107,25 @@ export function embeddingsOf(
 export function settingsOf(dto: Schemas['AiSettingsDto']): AiSettings {
   const embeddings = embeddingsOf(dto.embeddings);
   const subscription = allowanceOf(dto.subscription);
+  const limits = dto.limits;
   return {
     enabled: dto.enabled,
-    provider: 'anthropic',
+    provider: dto.provider === 'local' ? 'local' : 'anthropic',
     model: dto.model,
     models: dto.models,
+    ...(dto.localModel ? { localModel: dto.localModel } : {}),
+    ...(limits
+      ? {
+          limits: {
+            rewriteText: count(limits.rewriteText),
+            pageText: count(limits.pageText),
+            prompt: count(limits.prompt),
+            question: count(limits.question),
+            instruction: count(limits.instruction),
+            requestPrompt: count(limits.requestPrompt),
+          },
+        }
+      : {}),
     keySource: sourceOf(dto.keySource),
     ...(subscription ? { subscription } : {}),
     ...(dto.hasKey === undefined || dto.hasKey === null ? {} : { hasKey: dto.hasKey }),

@@ -9,6 +9,7 @@ import { aiPlanWords } from '../ai/planWords';
 import { ssoWords } from '../cloud/ssoWords';
 import { siteDomainsWords } from '../cloud/domainsWords';
 import { automationsWords } from '../automations/words';
+import { billingWords } from '../ai/billingWords';
 import { ar } from './ar';
 import { flatten } from './catalogue';
 import { en } from './en';
@@ -25,6 +26,7 @@ const SECTIONS: Section[] = [
   aiPlanWords,
   siteDomainsWords,
   automationsWords,
+  billingWords,
 ];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();

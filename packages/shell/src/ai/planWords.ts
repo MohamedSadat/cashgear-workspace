@@ -1,5 +1,6 @@
 // Settings → AI's words for Cash Gear's subscription and the local embedding model, and the AI
-// panel's refusal past an allowance (Phase 13, M13.4 and M13.5): a section of the catalogue loaded
+// panel's refusal past an allowance (Phase 13, M13.4 and M13.5); Phase 18: the server's own model
+// for AI and the panel's line while an answer waits its turn for it. A section of the catalogue loaded
 // with those screens, not with the app (`i18n/sections.ts`); each adds it before it draws. Product
 // and model names are placeholders, written as they are named in both languages.
 import { section, type Strings } from '../i18n/sections';
@@ -19,6 +20,10 @@ export const aiPlanEn = {
   localNote:
     'Pages are embedded on this server: no text leaves it for search by meaning. Choosing it embeds every page again.',
   allowance: 'This workspace has used its AI allowance on Cash Gear’s subscription for this month.',
+  keyLocal: 'This server’s own model ({{model}}): no key',
+  localCompletionsNote:
+    'Answers are written on this server: no text leaves it. They take longer than {{provider}}’s, and shorter texts.',
+  queued: 'Waiting its turn for this server’s model ({{number}} ahead)…',
 };
 
 const aiPlanAr: Strings<typeof aiPlanEn> = {
@@ -36,6 +41,10 @@ const aiPlanAr: Strings<typeof aiPlanEn> = {
   localNote:
     'تُحوَّل الصفحات إلى متجهات على هذا الخادم: لا يغادره أي نص من أجل البحث بالمعنى. اختياره يعيد معالجة كل الصفحات.',
   allowance: 'استنفدت مساحة العمل حصتها الشهرية من الذكاء الاصطناعي في اشتراك كاش جير.',
+  keyLocal: 'نموذج هذا الخادم نفسه ({{model}}): بلا مفتاح',
+  localCompletionsNote:
+    'تُكتب الإجابات على هذا الخادم: لا يغادره أي نص. تستغرق وقتًا أطول من إجابات {{provider}}، وتقبل نصوصًا أقصر.',
+  queued: 'بانتظار دوره على نموذج هذا الخادم (قبله {{number}})…',
 };
 
 export const aiPlanWords = section('aiPlan', aiPlanEn, aiPlanAr);

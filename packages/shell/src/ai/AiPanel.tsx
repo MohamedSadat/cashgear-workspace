@@ -169,11 +169,15 @@ export function AiPanel({
     setProblem(null);
     let built;
     try {
+      // Phase 18: the server's own model's smaller limits, when it is the workspace's.
+      const state = ai.store.state(ai.workspaceId);
+      const limits = state.status !== 'idle' ? state.settings?.limits : undefined;
       built = buildRequest(task, {
         workspaceId: page.workspaceId,
         pageId: page.id,
         language,
         pageText,
+        ...(limits ? { limits } : {}),
       });
     } catch (error) {
       setProblem(
@@ -526,7 +530,7 @@ function AnswerView({
   onRetry: () => void;
   onCopy: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { run, task } = asked;
   const preview = useMemo(
     () => (run.status === 'done' ? previewOf(task, run.text) : null),
@@ -536,7 +540,9 @@ function AnswerView({
     return (
       <section className="cgw-ai-answer" aria-busy="true" data-testid="ai-answer">
         <div className="cgw-ai-label" role="status">
-          {t('ai.writing')}
+          {run.ahead
+            ? t('aiPlan.queued', { number: run.ahead.toLocaleString(i18n.language) })
+            : t('ai.writing')}
         </div>
         <div className="cgw-ai-text" dir="auto">
           {run.text}

@@ -25,11 +25,16 @@ export interface Allowance {
 }
 
 export interface AiSettings {
-  /** On, and a key is set. */
+  /** On, and a key is set (or, Phase 18, the server's own model needs none). */
   enabled: boolean;
-  provider: 'anthropic';
+  /** Phase 18: `local` while the workspace's model is the server's own. */
+  provider: 'anthropic' | 'local';
   model: string;
   models: string[];
+  /** Phase 18: the server's own model among `models`, when its package is on the server. */
+  localModel?: string;
+  /** Phase 18: the server's own model's smaller limits, while it is the workspace's model. */
+  limits?: AiLimitSet;
   /** Owners and admins only. */
   hasKey?: boolean;
   keySetAt?: string | null;
@@ -115,6 +120,8 @@ export interface AiCompleteRequest {
   pageId?: Id;
   language: 'en' | 'ar';
   input: Record<string, unknown>;
+  /** Phase 18: the stream's lines this client reads beyond 0.7.0's (a server before 0.18.0 ignores it). */
+  events?: 'queued'[];
 }
 
 export type AiStopReason = 'end' | 'length';
@@ -128,7 +135,9 @@ export type AiEvent =
       stopReason: AiStopReason;
       usage: { inputTokens: number; outputTokens: number };
     }
-  | { type: 'error'; code: AiStreamErrorCode };
+  | { type: 'error'; code: AiStreamErrorCode }
+  /** Phase 18: the answer waits its turn for the server's own model, `ahead` answers before it. */
+  | { type: 'queued'; ahead: number };
 
 export const AI_STREAM_ERRORS = ['ai.refused', 'ai.keyInvalid', 'ai.provider', 'ai.limit'] as const;
 export type AiStreamErrorCode = (typeof AI_STREAM_ERRORS)[number];
@@ -147,6 +156,17 @@ export class AiError extends Error {
     super(`AI: ${code}${status === null ? '' : ` (${status})`}`);
     this.name = 'AiError';
   }
+}
+
+/** What a request's texts are held to before they are sent (the server holds them again). */
+export interface AiLimitSet {
+  rewriteText: number;
+  pageText: number;
+  prompt: number;
+  question: number;
+  instruction: number;
+  /** A custom rewrite's request (Phase 18: the server's own model's; else `instruction`). */
+  requestPrompt?: number;
 }
 
 /** The input limits the server holds a request to (INTEGRATIONS.md, AI, Rules). */
