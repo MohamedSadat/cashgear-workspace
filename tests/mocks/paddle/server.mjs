@@ -528,6 +528,16 @@ document.getElementById('now').onclick = function () { act(true); };
       }
     }
     if (
+      (match = /^\/subscriptions\/(sub_[a-z0-9]+)\/cancel$/.exec(path)) &&
+      req.method === 'POST'
+    ) {
+      const s = state.subscriptions.get(match[1]);
+      if (!s) return error(404, 'not_found');
+      if (s.status === 'canceled') return error(400, 'subscription_locked_canceled');
+      await cancel(s, body.effective_from === 'immediately');
+      return json(200, { data: entity(s) });
+    }
+    if (
       (match = /^\/customers\/(ctm_[a-z0-9]+)\/portal-sessions$/.exec(path)) &&
       req.method === 'POST'
     ) {

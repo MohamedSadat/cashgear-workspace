@@ -85,7 +85,7 @@ public sealed class PagePurgeJob(DocStates states, BlobStore blob, TimeProvider 
 /// row and every blob. The audit log is append-only and keeps its rows. Safe to stop at any point:
 /// the next run carries on from what is left, and the workspace row goes last.
 /// </summary>
-public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
+public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock, Cgw.Core.Billing.BillingOptions billing, Cgw.Core.Billing.PaddleClient paddle, ILogger<WorkspacePurgeJob> logger) : IJob
 {
     public string Name => "purgeWorkspaces";
     public TimeSpan Interval => TimeSpan.FromHours(1);
@@ -101,9 +101,38 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         {
             db.ChangeTracker.Clear();
             db.Scope.Switch(id);
+            if (!await StopBillingAsync(db, ct)) continue;
             await PurgeAsync(db, id, ct);
         }
         return due.Count == 5;
+    }
+
+    /// <summary>
+    /// Phase 18: a workspace deleted for good stops paying: its subscription at Paddle, while it gives a
+    /// plan, is cancelled at once before its rows go. False when Paddle could not be reached: the
+    /// workspace waits for the next pass, so nothing is left billing a workspace that no longer exists.
+    /// </summary>
+    public async Task<bool> StopBillingAsync(CgwDb db, CancellationToken ct)
+    {
+        var held = await db.WorkspaceBilling.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (held?.SubscriptionId is not { } subscription || !Cgw.Core.Billing.BillingStatuses.Entitles(held.Status) && held.Status != Cgw.Core.Billing.BillingStatuses.Paused)
+            return true;
+        if (!billing.Offered)
+        {
+            logger.LogError("Workspace {Workspace}'s subscription {Subscription} is left at Paddle: billing is not configured to cancel it", held.WorkspaceId, subscription);
+            return true;
+        }
+        try
+        {
+            await paddle.CancelNowAsync(subscription, ct);
+            logger.LogInformation("Workspace {Workspace} deleted for good: its subscription {Subscription} is cancelled at Paddle", held.WorkspaceId, subscription);
+            return true;
+        }
+        catch (Cgw.Core.Billing.PaddleException error)
+        {
+            logger.LogWarning("Paddle could not cancel {Subscription}: {Code} ({Status}); the purge waits", subscription, error.PaddleCode ?? "none", (int?)error.Status);
+            return false;
+        }
     }
 
     public async Task PurgeAsync(CgwDb db, Guid workspaceId, CancellationToken ct)
@@ -123,6 +152,9 @@ public sealed class WorkspacePurgeJob(BlobStore blob, TimeProvider clock) : IJob
         await db.AiSettings.ExecuteDeleteAsync(ct);
         await db.AiUsage.ExecuteDeleteAsync(ct);
         await db.AiReservations.ExecuteDeleteAsync(ct);
+        // Phase 18: its plan (cancelled at Paddle first, StopBillingAsync) and its checkouts.
+        await db.WorkspaceBilling.ExecuteDeleteAsync(ct);
+        await db.BillingCheckouts.ExecuteDeleteAsync(ct);
         // Phase 14: its host names, freed for another workspace (their certificates' files go with the worker's next pass).
         await db.SiteDomains.ExecuteDeleteAsync(ct);
         await db.PublishedSites.ExecuteDeleteAsync(ct);

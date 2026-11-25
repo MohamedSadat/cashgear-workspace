@@ -138,6 +138,21 @@ public sealed class PaddleClient(BillingOptions billing, HttpClient http)
         return ReadSubscription(await SendAsync(HttpMethod.Patch, "/subscriptions/" + Uri.EscapeDataString(subscriptionId), body, ct));
     }
 
+    /// <summary>A subscription cancelled at once (a workspace deleted for good: its purge).</summary>
+    public async Task CancelNowAsync(string subscriptionId, CancellationToken ct)
+    {
+        try
+        {
+            await SendAsync(HttpMethod.Post, "/subscriptions/" + Uri.EscapeDataString(subscriptionId) + "/cancel",
+                new JsonObject { ["effective_from"] = "immediately" }, ct);
+        }
+        // Cancelled already, or no longer Paddle's: nothing left to stop.
+        catch (PaddleException error) when (error.Status is HttpStatusCode.NotFound
+            || error.PaddleCode is "subscription_locked_canceled" or "subscription_is_canceled_action_invalid")
+        {
+        }
+    }
+
     /// <summary>An authenticated link to Paddle's customer portal for the customer (made anew each time; it expires).</summary>
     public async Task<string> PortalAsync(string customerId, string? subscriptionId, CancellationToken ct)
     {

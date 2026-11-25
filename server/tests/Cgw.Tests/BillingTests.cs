@@ -424,6 +424,33 @@ public sealed class BillingTests(ServerFixture server, PaddleMock paddle) : ICla
     }
 
     [Fact]
+    public async Task A_workspace_deleted_for_good_stops_paying_at_paddle_before_its_rows_go()
+    {
+        await paddle.Control("reset");
+        var api = Billing();
+        var ws = await Ws.Create(server);
+        var owner = await SignedIn(api, ws.Account);
+        await Subscribe(owner, ws.Id, "team");
+        await Deliver(api);
+        Assert.Equal("team", (await State(owner, ws.Id)).GetProperty("planId").GetString());
+
+        var job = new WorkspacePurgeJob(server.Worker.GetRequiredService<Cgw.Core.Blob.BlobStore>(), TimeProvider.System,
+            api.Services.GetRequiredService<BillingOptions>(), api.Services.GetRequiredService<PaddleClient>(), NullLogger<WorkspacePurgeJob>.Instance);
+        await using (var db = server.NewDb(ws.Id))
+        {
+            Assert.True(await job.StopBillingAsync(db, CancellationToken.None));
+            await job.PurgeAsync(db, ws.Id, CancellationToken.None);
+        }
+        var subscription = (await paddle.Get("state")).GetProperty("subscriptions")[0];
+        Assert.Equal("canceled", subscription.GetProperty("status").GetString());
+        await using (var db = server.NewDb(ws.Id))
+        {
+            Assert.Empty(await db.WorkspaceBilling.ToListAsync());
+            Assert.Empty(await db.BillingCheckouts.ToListAsync());
+        }
+    }
+
+    [Fact]
     public async Task The_pay_page_runs_paddles_checkout_on_the_sites_origin_with_no_cookie_and_no_session()
     {
         var sites = server.NewSites(b => b.UseSetting("Billing:Paddle:ClientToken", "test_0123456789abcdef0123456")
