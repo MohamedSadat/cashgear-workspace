@@ -118,7 +118,8 @@ public sealed class AiTests(ServerFixture server)
         Assert.False(seen.GetProperty("enabled").GetBoolean());
         Assert.Equal("anthropic", seen.GetProperty("provider").GetString());
         Assert.Equal("claude-opus-5-5", seen.GetProperty("model").GetString());
-        Assert.Equal(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"], seen.GetProperty("models").EnumerateArray().Select(m => m.GetString()));
+        // Phase 18: the server's own model last, when its package is here (the tests' stand-in).
+        Assert.Equal(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", Cgw.Core.Ai.CompletionModelOptions.Model], seen.GetProperty("models").EnumerateArray().Select(m => m.GetString()));
         Assert.False(seen.TryGetProperty("hasKey", out _));
         Assert.False(seen.TryGetProperty("usage", out _));
         var owners = await AiKit.Settings(ws.Client, ws.Id);
@@ -526,9 +527,9 @@ public sealed class AiTests(ServerFixture server)
             .SelectMany(t => t.IsGenericType ? t.GetGenericArguments().Append(t) : [t])
             .ToList();
         Assert.DoesNotContain(named, t => t.Namespace == "Cgw.Core.Workbooks");
-        // The service's only collaborators: the database, access, search (by words and, Phase 10, by meaning), its key store and settings, the embeddings settings, (Phase 13) Cash Gear's subscription and its allowance, audit and a clock.
+        // The service's only collaborators: the database, access, search (by words and, Phase 10, by meaning), its key store and settings, the embeddings settings, (Phase 13) Cash Gear's subscription and its allowance, (Phase 18) the server's own model's settings, audit and a clock.
         Assert.Equal(
-            ["Access", "AiAllowance", "AiKeys", "AiOptions", "AiSubscriptionOptions", "Audit", "CgwDb", "EmbeddingsService", "MeaningSearch", "SearchService", "TenantScope", "TimeProvider"],
+            ["Access", "AiAllowance", "AiKeys", "AiOptions", "AiSubscriptionOptions", "Audit", "CgwDb", "CompletionModelOptions", "EmbeddingsService", "MeaningSearch", "SearchService", "TenantScope", "TimeProvider"],
             typeof(AiService).GetConstructors().Single().GetParameters().Select(p => p.ParameterType.Name).Order(StringComparer.Ordinal));
         // And no source of the module or its routes names the ERP's address, links or sessions.
         foreach (var file in Directory.EnumerateFiles(Path.Combine(server.Root, "server", "src", "Cgw.Core", "Ai"), "*.cs")

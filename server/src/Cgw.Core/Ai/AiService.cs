@@ -46,6 +46,8 @@ public sealed record AiPrepared(Member Member, Guid RequestId, string Action, Gu
     /// <summary>Phase 13: made with Cash Gear's key, and the reservation of the allowance it holds.</summary>
     public bool Subscription { get; init; }
     public Guid? Reservation { get; init; }
+    /// <summary>Phase 18: the client reads <c>queued</c> lines.</summary>
+    public bool ReadsQueued { get; init; }
 }
 
 /// <summary>
@@ -54,28 +56,40 @@ public sealed record AiPrepared(Member Member, Guid RequestId, string Action, Gu
 /// for this server and the workspace and a key is set. The module calls no other system than its
 /// provider, and has no route to the ERP.
 /// </summary>
-public sealed class AiService(CgwDb db, Access access, TenantScope scope, SearchService search, MeaningSearch meaning, EmbeddingsService embeddings, AiKeys keys, AiOptions options, AiSubscriptionOptions subscription, AiAllowance allowance, Audit audit, TimeProvider clock)
+public sealed class AiService(CgwDb db, Access access, TenantScope scope, SearchService search, MeaningSearch meaning, EmbeddingsService embeddings, AiKeys keys, AiOptions options, AiSubscriptionOptions subscription, AiAllowance allowance, CompletionModelOptions completion, Audit audit, TimeProvider clock)
 {
     public const string Provider = AnthropicProvider.ProviderId;
 
+    /// <summary>Phase 18: the provider of the server's own completion model.</summary>
+    public const string LocalProvider = "local";
+
     private async Task<AiSettings?> RowAsync(CancellationToken ct) => await db.AiSettings.FirstOrDefaultAsync(ct);
 
-    /// <summary>Whether a completion may run: on here, on for the workspace, and a key: its own set, or (Phase 13) Cash Gear's offered to it.</summary>
+    /// <summary>The models offered: Anthropic's, then (Phase 18) the server's own when its package is here.</summary>
+    private IReadOnlyList<string> Models => completion.Available ? [.. options.Models, CompletionModelOptions.Model] : options.Models;
+
+    private string ModelOf(AiSettings? row) => row?.Model is { } m && Models.Contains(m) ? m : options.DefaultModel;
+
+    /// <summary>Whether a completion may run: on here, on for the workspace, and a key: its own set, or (Phase 13) Cash Gear's offered to it, or (Phase 18) none for the server's own model.</summary>
     private bool On(AiSettings? row) => options.Enabled && row is { Enabled: true } && HasKey(row);
 
     private bool HasKey(AiSettings row) =>
-        row.KeySource == KeySources.Subscription ? subscription.OffersCompletions(row.WorkspaceId) : row.KeyCipher is not null;
+        CompletionModelOptions.IsLocal(row.Model) ? completion.Available
+        : row.KeySource == KeySources.Subscription ? subscription.OffersCompletions(row.WorkspaceId, row.PlanPriceId) : row.KeyCipher is not null;
 
     public async Task<AiSettingsDto> SettingsAsync(Member member, CancellationToken ct = default)
     {
         var row = await RowAsync(ct);
-        var model = row?.Model is { } m && options.Models.Contains(m) ? m : options.DefaultModel;
+        var model = ModelOf(row);
+        var local = CompletionModelOptions.IsLocal(model);
         var dto = new AiSettingsDto
         {
             Enabled = On(row),
-            Provider = Provider,
+            Provider = local ? LocalProvider : Provider,
             Model = model,
-            Models = options.Models,
+            Models = Models,
+            Limits = local ? AiLimitsDto.Of(AiLimits.Local) : null,
+            LocalModel = completion.Available ? CompletionModelOptions.Model : null,
             Embeddings = await embeddings.SettingsAsync(member, row, ct),
             KeySource = row?.KeySource ?? KeySources.Own,
         };
@@ -96,16 +110,18 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             KeySetAt = row?.KeyCipher is not null ? row.KeySetAt : null,
             KeySetBy = setBy,
             Usage = new AiUsageDto(month.ToString("yyyy-MM", CultureInfo.InvariantCulture), used?.Requests ?? 0, used?.Input ?? 0, used?.Output ?? 0),
-            Subscription = subscription.OffersCompletions(member.WorkspaceId) ? await allowance.UsageAsync(member.WorkspaceId, AiAllowance.Completions, ct) : null,
+            Subscription = subscription.OffersCompletions(member.WorkspaceId, row?.PlanPriceId) ? await allowance.UsageAsync(member.WorkspaceId, AiAllowance.Completions, ct) : null,
         };
     }
 
     public async Task<Result<AiSettingsDto>> UpdateAsync(Member member, Actor actor, AiSettingsUpdate body, CancellationToken ct = default)
     {
         if (!member.IsAdmin) return Failure.Denied("Only an owner or admin changes the workspace's AI");
-        if (body.Model is { } model && !options.Models.Contains(model)) return Failure.Invalid("model is one of " + string.Join(", ", options.Models));
+        if (body.Model is { } model && !Models.Contains(model)) return Failure.Invalid("model is one of " + string.Join(", ", Models));
         if (body.KeySource is { } source && !KeySources.All.Contains(source)) return Failure.Invalid("keySource is own or subscription");
-        if (body.KeySource == KeySources.Subscription && !subscription.OffersCompletions(member.WorkspaceId))
+        // Phase 18: the workspace's paid plan decides what the subscription offers it.
+        var planPrice = await db.AiSettings.AsNoTracking().Select(r => r.PlanPriceId).FirstOrDefaultAsync(ct);
+        if (body.KeySource == KeySources.Subscription && !subscription.OffersCompletions(member.WorkspaceId, planPrice))
             return Failure.Invalid("Cash Gear's subscription is not offered to this workspace");
         string? newKey = null;
         var removeKey = false;
@@ -122,7 +138,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             default:
                 return Failure.Invalid("apiKey is the provider's key (20 to 500 characters, no spaces) or null to remove it");
         }
-        var embeddingsChange = embeddings.Read(body.Embeddings, member.WorkspaceId);
+        var embeddingsChange = embeddings.Read(body.Embeddings, member.WorkspaceId, planPrice);
         if (!embeddingsChange.Ok) return embeddingsChange.Failure!;
 
         // Under the settings row's lock, which the worker's writes of vectors take too: vectors are
@@ -206,22 +222,27 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
             var page = await db.Pages.AsNoTracking().Where(p => p.Id == pageId && p.DeletedAt == null).Select(p => new { p.Id }).FirstOrDefaultAsync(ct);
             if (page is null || !Levels.AtLeast(await access.PageLevelAsync(member, pageId), Levels.View)) return Failure.NotFound("No such page");
         }
-        var read = AiRequestBuilder.Read(action, body.Input);
+        var read = AiRequestBuilder.Read(action, body.Input, CompletionModelOptions.IsLocal(ModelOf(row)) ? AiLimits.Local : null);
         if (!read.Ok) return read.Failure!;
         var input = read.Value!;
 
         IReadOnlyList<AiSource>? sources = null;
         if (input is AskInput ask)
         {
-            sources = await SourcesAsync(member, ask.Question, ct);
+            // Phase 18: the server's own model sends nothing off the host, so its question is searched
+            // by meaning only when search by meaning is made here too (voyage-4-nano), else by its words.
+            var hostOnly = CompletionModelOptions.IsLocal(ModelOf(row)) && !LocalModelOptions.IsLocal(row!.EmbeddingsModel);
+            sources = await SourcesAsync(member, ask.Question, ct, hostOnly);
             if (sources.Count == 0)
                 return new AiPrepared(member, Guid.CreateVersion7(), action, body.PageId, row!.Model, null, []);
         }
-        var model = options.Models.Contains(row!.Model) ? row.Model : options.DefaultModel;
-        var onSubscription = row.KeySource == KeySources.Subscription;
-        if ((onSubscription ? subscription.AnthropicKey : keys.Unprotect(member.WorkspaceId, row.KeyCipher!)) is not { } key)
+        var model = ModelOf(row);
+        // Phase 18: the server's own model needs no key, and is on no allowance: no text leaves the host.
+        var local = CompletionModelOptions.IsLocal(model);
+        var onSubscription = !local && row!.KeySource == KeySources.Subscription;
+        if ((local ? "" : onSubscription ? subscription.AnthropicKey : keys.Unprotect(member.WorkspaceId, row!.KeyCipher!)) is not { } key)
             return new Failure(Codes.AiKeyInvalid, 502, "The workspace's key could not be read: enter it again");
-        var request = AiRequestBuilder.Build(input, body.Language, sources);
+        var request = AiRequestBuilder.Build(input, body.Language, sources, local ? AiLimits.Local : null);
         // Phase 13: on Cash Gear's subscription, the call's most (its text's tokens, estimated never
         // short, and its output limit) is reserved of the month's allowance before it is sent.
         Guid? reservation = null;
@@ -237,6 +258,7 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
         {
             Subscription = onSubscription,
             Reservation = reservation,
+            ReadsQueued = body.Events?.Contains("queued") == true,
         };
     }
 
@@ -250,10 +272,10 @@ public sealed class AiService(CgwDb db, Access access, TenantScope scope, Search
     /// (Phase 10), those pages and the pages search by meaning finds, fused by reciprocal rank
     /// (k = 60), the top eight; with them off, exactly as in 0.9.0.
     /// </summary>
-    public async Task<IReadOnlyList<AiSource>> SourcesAsync(Member member, string question, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AiSource>> SourcesAsync(Member member, string question, CancellationToken ct = default, bool hostOnly = false)
     {
         var words = await WordSourcesAsync(member, question, ct);
-        var meant = await meaning.ForAskAsync(member, question, AiRequestBuilder.MaxSources, ct);
+        var meant = hostOnly ? [] : await meaning.ForAskAsync(member, question, AiRequestBuilder.MaxSources, ct);
         var top = meant.Count == 0 ? words : Fuse(words, meant.Select(h => (h.PageId, h.Title)).ToList());
         var ids = top.Select(t => t.PageId).ToList();
         if (ids.Count == 0) return [];

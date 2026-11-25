@@ -980,6 +980,13 @@ public sealed class AiSettings : ITenantOwned
     public string KeySource { get; set; } = Ai.KeySources.Own;
     /// <summary><c>own</c> (the default) or <c>subscription</c>, for a Voyage model's embeddings (the local model needs none).</summary>
     public string EmbeddingsKeySource { get; set; } = Ai.KeySources.Own;
+
+    /// <summary>
+    /// Phase 18: the price of the workspace's paid plan while its subscription gives one (active,
+    /// trialing or past due), written with <see cref="WorkspaceBilling"/> in one transaction; null with
+    /// none. The allowance is the server's plan of that price (<see cref="Ai.AiSubscriptionOptions"/>).
+    /// </summary>
+    public string? PlanPriceId { get; set; }
 }
 
 /// <summary>

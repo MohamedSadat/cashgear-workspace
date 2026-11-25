@@ -106,6 +106,7 @@ public static class SitesHost
         services.AddScoped<SiteReader>();
         // Phase 14: the sites' own host name, and the addresses of a site at its own.
         services.AddSingleton(sp => SitesOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton(sp => PayPageOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         // Phase 10: the plugins host. Frame tickets are stored hashed (found by their hash): this
         // process holds no Data Protection, and its identity is denied the key ring's table.
         services.AddSingleton(sp => PluginsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
@@ -146,12 +147,13 @@ public static class SitesHost
                 headers.Remove("Set-Cookie");
                 if (context.Items[PluginFileKey] is true) return Task.CompletedTask;
                 // Phase 16: a form link's page posts its answers; every other page posts nothing.
+                // Phase 18: the pay page runs Paddle's checkout, and only it.
                 headers.ContentSecurityPolicy = context.Items[FormPages.PolicyKey] as string ?? csp;
                 headers.XContentTypeOptions = "nosniff";
                 headers["Referrer-Policy"] = "no-referrer";
-                headers["Cross-Origin-Opener-Policy"] = "same-origin";
+                headers["Cross-Origin-Opener-Policy"] = context.Items[PayPages.OpenerKey] as string ?? "same-origin";
                 headers["Cross-Origin-Resource-Policy"] = "same-origin";
-                headers["Permissions-Policy"] = PermissionsPolicy;
+                headers["Permissions-Policy"] = context.Items[PayPages.PermissionsKey] as string ?? PermissionsPolicy;
                 if (hsts && context.Request.IsHttps) headers.StrictTransportSecurity = "max-age=31536000";
                 if (context.Items[IndexedKey] is not true) headers["X-Robots-Tag"] = "noindex";
                 return Task.CompletedTask;
@@ -331,6 +333,8 @@ public static class SitesHost
 
         // Phase 16: a form link's pages, under a path no slug can take.
         app.MapFormPages();
+        // Phase 18: the pay page, where Paddle's checkout opens.
+        app.MapPayPages();
 
         app.Map("/{slug}", (string slug, HttpContext http, SiteReader reader) => SlugAsync(slug, null, http, reader));
         app.Map("/{slug}/{pageId:guid}", (string slug, Guid pageId, HttpContext http, SiteReader reader) => SlugAsync(slug, pageId, http, reader));

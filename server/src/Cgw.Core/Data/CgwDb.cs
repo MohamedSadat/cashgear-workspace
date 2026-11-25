@@ -90,6 +90,10 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     /// <summary>Phase 17: people's own reminders of rows' dates.</summary>
     public DbSet<RowReminder> RowReminders => Set<RowReminder>();
     public DbSet<FormLink> FormLinks => Set<FormLink>();
+    // Phase 18: billing through Paddle.
+    public DbSet<WorkspaceBilling> WorkspaceBilling => Set<WorkspaceBilling>();
+    public DbSet<BillingCheckout> BillingCheckouts => Set<BillingCheckout>();
+    public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
     public DbSet<Webhook> Webhooks => Set<Webhook>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
 
@@ -510,6 +514,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             // Phase 13: the keys' sources.
             e.Property(x => x.KeySource).HasMaxLength(16).IsUnicode(false).HasDefaultValue(Ai.KeySources.Own);
             e.Property(x => x.EmbeddingsKeySource).HasMaxLength(16).IsUnicode(false).HasDefaultValue(Ai.KeySources.Own);
+            // Phase 18: the paid plan's price.
+            e.Property(x => x.PlanPriceId).HasMaxLength(64).IsUnicode(false);
             // The worker's queue: workspaces with embeddings on.
             e.HasIndex(x => x.EmbeddingsEnabled).HasFilter("[EmbeddingsEnabled] = 1").HasDatabaseName("IX_AiSettings_Embeddings");
         });
@@ -757,6 +763,35 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         });
 
         // Phase 16: forms.
+        // Phase 18: a workspace's subscription at Paddle, the checkouts it started, the webhooks applied.
+        b.Entity<WorkspaceBilling>(e =>
+        {
+            e.HasKey(x => x.WorkspaceId);
+            e.HasIndex(x => x.SubscriptionId).IsUnique().HasFilter("[SubscriptionId] IS NOT NULL");
+            e.Property(x => x.CustomerId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.SubscriptionId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.Status).HasMaxLength(16).IsUnicode(false);
+            e.Property(x => x.PriceId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.ScheduledAction).HasMaxLength(16).IsUnicode(false);
+        });
+        b.Entity<BillingCheckout>(e =>
+        {
+            e.HasKey(x => x.TransactionId);
+            e.HasIndex(x => new { x.WorkspaceId, x.CreatedAt });
+            e.Property(x => x.TransactionId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.PlanId).HasMaxLength(32).IsUnicode(false);
+            e.Property(x => x.PriceId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.SubscriptionId).HasMaxLength(64).IsUnicode(false);
+        });
+        b.Entity<BillingEvent>(e =>
+        {
+            e.HasKey(x => x.EventId);
+            e.HasIndex(x => x.ReceivedAt);
+            e.Property(x => x.EventId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.Type).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.SubscriptionId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.Outcome).HasMaxLength(16).IsUnicode(false);
+        });
         b.Entity<FormLink>(e =>
         {
             e.HasKey(x => x.Id);
@@ -827,6 +862,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<AutomationApproval>(b);
         Filter<RowReminder>(b);
         Filter<FormLink>(b);
+        Filter<WorkspaceBilling>(b);
+        Filter<BillingCheckout>(b);
         Filter<Webhook>(b);
         Filter<WebhookDelivery>(b);
     }

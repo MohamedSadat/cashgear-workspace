@@ -133,6 +133,10 @@ public sealed class ServerFixture : IAsyncLifetime
         // so voyage-4-nano is offered and embeds on this machine, in the API and the worker alike.
         ["Ai:LocalModel:Path"] = Path.Combine(FindRoot(), "tests", "fixtures", "local-model"),
         ["Ai:LocalModel:Threads"] = "1",
+        // Phase 18: the completion model's stand-in (tests/fixtures/completion-model, a test package),
+        // so the server's own model is offered for AI and answers on this machine.
+        ["Ai:CompletionModel:Path"] = Path.Combine(FindRoot(), "tests", "fixtures", "completion-model"),
+        ["Ai:CompletionModel:Threads"] = "1",
         // Phase 10: the plugins' host (the Sites process's second one).
         ["Plugins:PublicUrl"] = PluginsUrl,
         // Phase 11: a domain's TXT record is read from the mock provider's DNS stand-in, never from DNS.

@@ -1345,6 +1345,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/workspaces/{workspaceId}/billing': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['getBilling'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/billing/checkout': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['startBillingCheckout'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/billing/plan': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['changeBillingPlan'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/billing/portal': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['openBillingPortal'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/workspaces/{workspaceId}/billing/refresh': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['refreshBilling'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/workspaces/{workspaceId}/changes': {
     parameters: {
       query?: never;
@@ -1879,6 +1959,7 @@ export interface components {
   schemas: {
     AiCompleteRequest: {
       action?: null | string;
+      events?: null | string[];
       input?: components['schemas']['JsonElement'];
       language?: null | string;
       /** Format: uuid */
@@ -1887,6 +1968,8 @@ export interface components {
       workspaceId: string;
     };
     AiEventDto: {
+      /** Format: int32 */
+      ahead?: null | number | string;
       code?: null | string;
       model?: null | string;
       pages?: null | components['schemas']['AiSourceDto'][];
@@ -1895,6 +1978,22 @@ export interface components {
       text?: null | string;
       type: string;
       usage?: null | components['schemas']['AiTokensDto'];
+    };
+    AiLimitsDto: {
+      /** Format: int32 */
+      erpRecords: number | string;
+      /** Format: int32 */
+      instruction: number | string;
+      /** Format: int32 */
+      pageText: number | string;
+      /** Format: int32 */
+      prompt: number | string;
+      /** Format: int32 */
+      question: number | string;
+      /** Format: int32 */
+      requestPrompt: number | string;
+      /** Format: int32 */
+      rewriteText: number | string;
     };
     AiPersonDto: {
       /** Format: uuid */
@@ -1909,6 +2008,8 @@ export interface components {
       keySetAt?: null | string;
       keySetBy?: null | components['schemas']['AiPersonDto'];
       keySource?: string;
+      limits?: null | components['schemas']['AiLimitsDto'];
+      localModel?: null | string;
       model: string;
       models: string[];
       provider: string;
@@ -2033,6 +2134,42 @@ export interface components {
     };
     AutomationSwitchRequest: {
       enabled: boolean;
+    };
+    BillingDto: {
+      canManage: boolean;
+      checkoutPending?: boolean;
+      /** Format: date-time */
+      periodEndsAt?: null | string;
+      planId?: null | string;
+      plans: components['schemas']['BillingPlanDto'][];
+      scheduledAction?: null | string;
+      /** Format: date-time */
+      scheduledAt?: null | string;
+      status: string;
+    };
+    BillingLinkDto: {
+      url: string;
+    };
+    BillingPlanChoice: {
+      language?: null | string;
+      planId: null | string;
+    };
+    BillingPlanDto: {
+      /** Format: int64 */
+      embeddingsMonthlyTokens: number | string;
+      id: string;
+      /** Format: int64 */
+      monthlyTokens: number | string;
+      nameAr: string;
+      nameEn: string;
+      price: null | components['schemas']['BillingPriceDto'];
+    };
+    BillingPriceDto: {
+      amount: string;
+      currency: string;
+      /** Format: int32 */
+      frequency: number | string;
+      interval: null | string;
     };
     ChangeDto: {
       entity: null | components['schemas']['EntityDto'];
@@ -3203,6 +3340,7 @@ export interface components {
     };
     VersionInfo: {
       api: string;
+      billing: boolean;
       /** Format: int32 */
       propertyTypes: number | string;
       /** Format: int32 */
@@ -6019,6 +6157,124 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WorkspaceAutomationsDto'];
+        };
+      };
+    };
+  };
+  getBilling: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BillingDto'];
+        };
+      };
+    };
+  };
+  startBillingCheckout: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BillingPlanChoice'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BillingLinkDto'];
+        };
+      };
+    };
+  };
+  changeBillingPlan: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BillingPlanChoice'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BillingDto'];
+        };
+      };
+    };
+  };
+  openBillingPortal: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BillingLinkDto'];
+        };
+      };
+    };
+  };
+  refreshBilling: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workspaceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BillingDto'];
         };
       };
     };

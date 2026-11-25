@@ -43,6 +43,19 @@ public sealed record AiSettingsDto
     /// offers it to the workspace: the month's allowance, used and reserved. Absent when not offered.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AllowanceDto? Subscription { get; init; }
+    /// <summary>
+    /// Phase 18: with the server's own model chosen, the smaller limits its requests are held to (the
+    /// characters of each action's text); absent for Anthropic's, whose are 0.7.0's.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiLimitsDto? Limits { get; init; }
+    /// <summary>Phase 18: the server's own model among <see cref="Models"/>, when its package is here; absent otherwise.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? LocalModel { get; init; }
+}
+
+/// <summary>Phase 18: what a client holds a request to before sending it (the server holds it again).</summary>
+public sealed record AiLimitsDto(int RewriteText, int PageText, int Prompt, int Question, int Instruction, int RequestPrompt, int ErpRecords)
+{
+    public static AiLimitsDto Of(AiLimits l) => new(l.RewriteText, l.PageText, l.Prompt, l.Question, l.Instruction, l.RequestPrompt, l.ErpRecords);
 }
 
 /// <summary>Who set the key: a workspace member's id and name.</summary>
@@ -116,11 +129,17 @@ public sealed record AiCompleteRequest
     public Guid? PageId { get; init; }
     public string? Language { get; init; }
     public JsonElement Input { get; init; }
+    /// <summary>
+    /// Phase 18: the stream's lines the client reads beyond 0.7.0's: <c>queued</c> (the answer waits
+    /// its turn for the server's own model). A client before 0.18.0 sends none, and is sent none.
+    /// </summary>
+    public IReadOnlyList<string>? Events { get; init; }
 }
 
 /// <summary>
 /// One line of <c>/ai/complete</c>'s NDJSON stream (for the OpenAPI document; each line holds the
-/// members of its <c>type</c> only): <c>start</c>, <c>sources</c>, <c>text</c>, <c>done</c>, <c>error</c>.
+/// members of its <c>type</c> only): <c>start</c>, <c>sources</c>, <c>text</c>, <c>done</c>, <c>error</c>;
+/// Phase 18: <c>queued</c>, with <c>ahead</c>, to a client that asked for it.
 /// </summary>
 public sealed record AiEventDto
 {
@@ -132,6 +151,8 @@ public sealed record AiEventDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? StopReason { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public AiTokensDto? Usage { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Code { get; init; }
+    /// <summary>Phase 18, <c>queued</c>: the answers before this one for the server's own model.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? Ahead { get; init; }
 }
 
 public sealed record AiSourceDto(Guid PageId, string Title);

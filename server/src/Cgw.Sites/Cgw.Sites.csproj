@@ -13,4 +13,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Cgw.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Phase 18: the pay page's one script, beside Paddle.js. -->
+    <EmbeddedResource Include="pay.js" LogicalName="Cgw.Sites.pay.js" />
+  </ItemGroup>
 </Project>

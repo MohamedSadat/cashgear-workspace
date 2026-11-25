@@ -58,6 +58,11 @@ for (const folder of ['api', 'sites'])
 for (const signIn of ['OpenIddict.Server.dll', 'OpenIddict.Server.AspNetCore.dll', 'Cgw.Api.dll'])
   if (existsSync(join(out, 'sites', signIn)))
     throw new Error(`The sites package holds ${signIn}: it must have no sign-in code`);
+// Phase 13 and 18: the models' runtimes (ONNX Runtime, and GenAI for completions) are the API's and
+// the worker's; the Sites process serves the public and loads neither.
+for (const runtimeLibrary of ['onnxruntime.dll', 'onnxruntime-genai.dll'])
+  if (existsSync(join(out, 'sites', runtimeLibrary)))
+    throw new Error(`The sites package holds ${runtimeLibrary}: it loads no model`);
 
 mkdirSync(join(out, 'migrate'), { recursive: true });
 run('dotnet', ['tool', 'restore']);

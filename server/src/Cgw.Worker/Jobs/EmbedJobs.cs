@@ -66,7 +66,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
         var due = await db.AiSettings.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
             .Where(s => s.EmbeddingsEnabled && (s.EmbeddingsKeyCipher != null || s.EmbeddingsModel == local || s.EmbeddingsKeySource == onSubscription) && models.Contains(s.EmbeddingsModel))
             .Where(s => only == null || s.WorkspaceId == only)
-            .Join(db.Workspaces.Where(w => w.DeletedAt == null), s => s.WorkspaceId, w => w.Id, (s, _) => new { s.WorkspaceId, s.EmbeddingsModel, s.EmbeddingsGeneration, s.EmbeddingsKeyCipher, s.EmbeddingsKeySource })
+            .Join(db.Workspaces.Where(w => w.DeletedAt == null), s => s.WorkspaceId, w => w.Id, (s, _) => new { s.WorkspaceId, s.EmbeddingsModel, s.EmbeddingsGeneration, s.EmbeddingsKeyCipher, s.EmbeddingsKeySource, s.PlanPriceId })
             .ToListAsync(ct);
         var more = false;
         var now = clock.GetUtcNow();
@@ -77,7 +77,7 @@ public sealed class EmbedJob(IEmbeddingProvider provider, EmbeddingKeys keys, Em
             db.Scope.Switch(row.WorkspaceId);
             var source = LocalModelOptions.IsLocal(row.EmbeddingsModel) ? KeySources.Own : row.EmbeddingsKeySource;
             // On the subscription only while this server offers it to the workspace.
-            if (source == KeySources.Subscription && !subscription.OffersEmbeddings(row.WorkspaceId)) continue;
+            if (source == KeySources.Subscription && !subscription.OffersEmbeddings(row.WorkspaceId, row.PlanPriceId)) continue;
             more |= await RunWorkspaceAsync(db, new EmbedSettings(row.WorkspaceId, row.EmbeddingsModel, row.EmbeddingsGeneration, row.EmbeddingsKeyCipher) { KeySource = source }, ct);
         }
         return more;

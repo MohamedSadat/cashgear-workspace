@@ -16,7 +16,10 @@
   its subscription are read the same way (CGW_AI_ANTHROPIC_KEY, CGW_AI_VOYAGE_KEY), and given to the
   API and the worker only. Phase 14: with -CustomDomains, the certificates' private key password
   (CGW_SITES_CERT_PASSWORD) the same way, the worker's only (the scheduled task that binds the
-  certificates, as SYSTEM, reads it from the worker service's environment).
+  certificates, as SYSTEM, reads it from the worker service's environment). Phase 18: Paddle's API
+  key and webhook secret for the paid plans the same way (CGW_PADDLE_API_KEY,
+  CGW_PADDLE_WEBHOOK_SECRET), the API's and the worker's only; the Sites process is given only
+  Paddle's client-side token, which Paddle makes public by design.
 
   On a host outside a domain (no gMSA), leave out -ServiceAccount: the app pool runs as its own
   ApplicationPoolIdentity and the worker as its virtual account (NT SERVICE\<service name>), and
@@ -109,6 +112,23 @@ param(
   [long] $AiEmbeddingsMonthlyTokens = 0,
   [hashtable] $AiWorkspaceMonthlyTokens = @{},
   [hashtable] $AiWorkspaceEmbeddingsMonthlyTokens = @{},
+  # Phase 18: the local completion model's package (the zip scripts/completion-model.mjs makes),
+  # unpacked to <Root>\models\completions for the API only (the worker and the sites never load it).
+  # Left out on an update, a package unpacked before is kept. The server loads it only if its files
+  # are the ones pinned in its code.
+  [string] $CompletionModel = '',
+  # Phase 18: the processor threads one answer of the local completion model takes (0: half the
+  # processors, at most 8), and how many answers may wait for the one being written (0: 8).
+  [int] $CompletionModelThreads = 0,
+  [int] $CompletionModelQueue = 0,
+  # Phase 18: Cash Gear's paid plans through Paddle (docs/OPERATIONS.md, "Billing"). Its API key and
+  # webhook secret come from this session's environment only: CGW_PADDLE_API_KEY and
+  # CGW_PADDLE_WEBHOOK_SECRET. The client-side token (public by Paddle's design), sandbox or live,
+  # and each plan by its id, for example
+  # @{ team = @{ PriceId = 'pri_...'; MonthlyTokens = 10000000; EmbeddingsMonthlyTokens = 10000000; NameEn = 'Team'; NameAr = '...' } }.
+  [string] $PaddleClientToken = '',
+  [ValidateSet('', 'sandbox', 'live')] [string] $PaddleEnvironment = '',
+  [hashtable] $BillingPlans = @{},
   # Phase 14: published sites at a workspace's own host names (docs/OPERATIONS.md, "A site's own host
   # name"). Certificates by ACME, written by the worker to <Root>\certificates (<host>.pfx, their
   # password from CGW_SITES_CERT_PASSWORD); a scheduled task (site-bindings.ps1, as SYSTEM, every 2
@@ -206,6 +226,39 @@ if ($LocalModel -or (Test-Path (Join-Path $modelFolder 'cgw-model.json'))) {
   if ($LocalModelThreads -gt 0) { $environment['Ai__LocalModel__Threads'] = "$LocalModelThreads" }
 }
 
+# Phase 18: the local completion model, the API's only, where step 2 unpacks it (or kept).
+$completionFolder = Join-Path $Root 'models\completions'
+$apiOnly = [ordered]@{}
+if ($CompletionModel) {
+  if (-not (Test-Path $CompletionModel -PathType Leaf)) { throw "-CompletionModel: no file at $CompletionModel" }
+}
+if ($CompletionModel -or (Test-Path (Join-Path $completionFolder 'cgw-model.json'))) {
+  $apiOnly['Ai__CompletionModel__Path'] = $completionFolder
+  if ($CompletionModelThreads -gt 0) { $apiOnly['Ai__CompletionModel__Threads'] = "$CompletionModelThreads" }
+  if ($CompletionModelQueue -gt 0) { $apiOnly['Ai__CompletionModel__Queue'] = "$CompletionModelQueue" }
+}
+# Phase 18: Paddle and the plans, for the API (checkouts, the webhook) and the worker (the daily
+# reconcile). Its key and secret from this session's environment, never a parameter or a file.
+if ($BillingPlans.Count -gt 0) {
+  if (-not $env:CGW_PADDLE_API_KEY -or -not $env:CGW_PADDLE_WEBHOOK_SECRET) {
+    throw '-BillingPlans: set CGW_PADDLE_API_KEY and CGW_PADDLE_WEBHOOK_SECRET in this session (Paddle''s API key and the webhook destination''s secret).'
+  }
+  if (-not $PaddleClientToken) { throw '-BillingPlans needs -PaddleClientToken (Paddle > Developer tools > Authentication).' }
+  $environment['Billing__Paddle__ApiKey'] = $env:CGW_PADDLE_API_KEY
+  $environment['Billing__Paddle__WebhookSecret'] = $env:CGW_PADDLE_WEBHOOK_SECRET
+  if ($PaddleEnvironment) { $environment['Billing__Paddle__Environment'] = $PaddleEnvironment }
+  foreach ($id in $BillingPlans.Keys) {
+    $plan = $BillingPlans[$id]
+    if ($id -notmatch '^[a-z0-9-]{1,32}$') { throw "-BillingPlans: a plan's id is lowercase letters, digits and dashes: $id" }
+    if ([string]$plan.PriceId -notmatch '^pri_[a-z0-9]+$') { throw "-BillingPlans: plan $id needs PriceId, Paddle's pri_... id" }
+    $environment["Billing__Plans__$($id)__PriceId"] = [string]$plan.PriceId
+    $environment["Billing__Plans__$($id)__MonthlyTokens"] = "$([long]$plan.MonthlyTokens)"
+    $environment["Billing__Plans__$($id)__EmbeddingsMonthlyTokens"] = "$([long]$plan.EmbeddingsMonthlyTokens)"
+    if ($plan.NameEn) { $environment["Billing__Plans__$($id)__Names__en"] = [string]$plan.NameEn }
+    if ($plan.NameAr) { $environment["Billing__Plans__$($id)__Names__ar"] = [string]$plan.NameAr }
+  }
+}
+
 # Phase 14: a site's own host names, their certificates made and renewed by the worker.
 $certificateFolder = Join-Path $Root 'certificates'
 $workerOnly = [ordered]@{}
@@ -245,6 +298,11 @@ $sitesEnvironment = [ordered]@{
   Logging__Format = 'json'
   'Logging__LogLevel__Microsoft.AspNetCore' = 'Warning'
   Logging__EventLog__Enabled = 'true'
+}
+# Phase 18: the pay page's client-side token, the one thing of Paddle's the Sites process is given.
+if ($BillingPlans.Count -gt 0) {
+  $sitesEnvironment['Billing__Paddle__ClientToken'] = $PaddleClientToken
+  if ($PaddleEnvironment) { $sitesEnvironment['Billing__Paddle__Environment'] = $PaddleEnvironment }
 }
 if ($AzureClientId) {
   $sitesEnvironment['AZURE_CLIENT_ID'] = $AzureClientId
@@ -320,6 +378,20 @@ if ($LocalModel) {
   if (Test-Path $modelFolder) { Remove-Item -Recurse -Force $modelFolder }
   Move-Item $staging $modelFolder
 }
+# Phase 18: the completion model's package the same way (its zip holds a file past 2 GB, which
+# Expand-Archive takes slowly: .NET's own reader instead).
+if ($CompletionModel) {
+  Write-Host "Unpacking the completion model from $CompletionModel..."
+  $staging = Join-Path $Root "models\unpacking-$([guid]::NewGuid().ToString('N'))"
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::ExtractToDirectory($CompletionModel, $staging)
+  if (-not (Test-Path (Join-Path $staging 'cgw-model.json'))) {
+    Remove-Item -Recurse -Force $staging
+    throw "-CompletionModel: $CompletionModel holds no cgw-model.json (make it with node scripts/completion-model.mjs)"
+  }
+  if (Test-Path $completionFolder) { Remove-Item -Recurse -Force $completionFolder }
+  Move-Item $staging $completionFolder
+}
 
 # 3. The app pool and the site: no managed code (ASP.NET Core Module), its own identity.
 if (-not (Test-Path "IIS:\AppPools\$SiteName")) { New-WebAppPool $SiteName | Out-Null }
@@ -335,6 +407,10 @@ Set-ItemProperty "IIS:\AppPools\$SiteName" -Name startMode -Value AlwaysRunning
 & "$env:windir\system32\inetsrv\appcmd.exe" clear config -section:system.applicationHost/applicationPools "/[name='$SiteName'].environmentVariables" | Out-Null
 foreach ($name in $environment.Keys) {
   & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools "/+[name='$SiteName'].environmentVariables.[name='$name',value='$($environment[$name])']" | Out-Null
+}
+# Phase 18: what the API alone is given (the completion model).
+foreach ($name in $apiOnly.Keys) {
+  & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools "/+[name='$SiteName'].environmentVariables.[name='$name',value='$($apiOnly[$name])']" | Out-Null
 }
 if (-not (Test-Path "IIS:\Sites\$SiteName")) {
   # SslFlags 1: Server Name Indication, so the certificate is bound to this host name only and

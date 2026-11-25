@@ -2,12 +2,14 @@
   <!--
     Phase 13: voyage-4-nano on ONNX Runtime, the embeddings made on this server. Referenced by the API
     (a question) and the worker (pages and rows) only: the Sites process serves the public and loads no
-    model and no ONNX Runtime.
+    model and no ONNX Runtime. Phase 18: the completion model on ONNX Runtime GenAI, over the same ONNX
+    Runtime, run by the API only.
   -->
   <ItemGroup>
     <ProjectReference Include="../Cgw.Core/Cgw.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
   </ItemGroup>
 </Project>

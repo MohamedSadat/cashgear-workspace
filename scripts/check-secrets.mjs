@@ -48,6 +48,12 @@ const RULES = [
   { name: 'AWS access key', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/ },
   { name: 'Slack token', pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}/ },
   { name: 'Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+  // Phase 18: Paddle's API keys and a notification destination's secret (the sandbox's too).
+  {
+    name: 'Paddle key',
+    pattern: /\bpdl_(?:live|sdbx)_apikey_[a-z0-9]{26}_[A-Za-z0-9]{22}_[A-Za-z0-9]{3}\b/,
+  },
+  { name: 'Paddle webhook secret', pattern: /\bpdl_ntfset_[a-z0-9]{26}_[A-Za-z0-9]{32,}\b/ },
   {
     name: 'JSON web token',
     pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
@@ -150,6 +156,14 @@ function selftest() {
     ['Slack token', `xox${'b'}-1234567890-abcdefghij`],
     ['Google API key', `AI${'za'}${'Sy'}${b64(33, 4).replace(/[+/]/g, '_')}`],
     [
+      'Paddle key',
+      `pdl_${'sdbx'}_apikey_${'0123456789abcdefghjkmnpqrs'}_${'ABCDEFGHJKMNPQRSTUVWXY'}_${'a1Z'}`,
+    ],
+    [
+      'Paddle webhook secret',
+      `pdl_${'ntfset'}_${'0123456789abcdefghjkmnpqrs'}_${b64(32, 7).replace(/[+/]/g, 'q')}`,
+    ],
+    [
       'JSON web token',
       `ey${'J'}hbGciOiJIUzI1NiJ9.ey${'J'}zdWIiOiIxMjM0NTY3ODkwIn0.${b64(43, 6).replace(/[+/]/g, '-')}`,
     ],
@@ -164,6 +178,7 @@ function selftest() {
     'Server=db;Password=$env:CGW_SQL_PASSWORD;',
     'Server=db;Password=${{ env.MSSQL_SA_PASSWORD }};',
     'const accountKey = `AccountKey=${key}`;',
+    "export const DEFAULT_KEY = 'mock_paddle_api_key_for_tests_only_0001';",
   ];
   const failures = [];
   for (const [rule, text] of must)

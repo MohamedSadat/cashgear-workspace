@@ -30,7 +30,7 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
     /// </summary>
     public bool HasKey(AiSettings row) =>
         LocalModelOptions.IsLocal(row.EmbeddingsModel)
-        || (row.EmbeddingsKeySource == KeySources.Subscription ? subscription.OffersEmbeddings(row.WorkspaceId) : row.EmbeddingsKeyCipher is not null);
+        || (row.EmbeddingsKeySource == KeySources.Subscription ? subscription.OffersEmbeddings(row.WorkspaceId, row.PlanPriceId) : row.EmbeddingsKeyCipher is not null);
 
     /// <summary>Whether the workspace's calls are on Cash Gear's subscription (a Voyage model with its key).</summary>
     public static bool OnSubscription(AiSettings row) =>
@@ -42,7 +42,7 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
     /// </summary>
     public string? KeyFor(Guid workspaceId, AiSettings row) =>
         LocalModelOptions.IsLocal(row.EmbeddingsModel) ? ""
-        : row.EmbeddingsKeySource == KeySources.Subscription ? (subscription.OffersEmbeddings(workspaceId) ? subscription.VoyageKey : null)
+        : row.EmbeddingsKeySource == KeySources.Subscription ? (subscription.OffersEmbeddings(workspaceId, row.PlanPriceId) ? subscription.VoyageKey : null)
         : row.EmbeddingsKeyCipher is { } cipher ? keys.Unprotect(workspaceId, cipher) : null;
 
     public string ModelOf(AiSettings? row) => row?.EmbeddingsModel is { } m && options.Models.Contains(m) ? m : options.DefaultModel;
@@ -88,18 +88,18 @@ public sealed class EmbeddingsService(CgwDb db, EmbeddingKeys keys, EmbeddingsOp
             KeySetBy = setBy,
             Usage = new EmbeddingsUsageDto(month.ToString("yyyy-MM", CultureInfo.InvariantCulture), used?.Requests ?? 0, used?.Tokens ?? 0),
             Progress = progress,
-            Subscription = subscription.OffersEmbeddings(member.WorkspaceId) ? await allowance.UsageAsync(member.WorkspaceId, AiAllowance.Embeddings, ct) : null,
+            Subscription = subscription.OffersEmbeddings(member.WorkspaceId, row?.PlanPriceId) ? await allowance.UsageAsync(member.WorkspaceId, AiAllowance.Embeddings, ct) : null,
         };
     }
 
     /// <summary>The body's embeddings part, checked before anything changes: a model offered, a plausible key or null.</summary>
-    public Result<EmbeddingsChange?> Read(EmbeddingsUpdate? body, Guid workspaceId)
+    public Result<EmbeddingsChange?> Read(EmbeddingsUpdate? body, Guid workspaceId, string? planPrice)
     {
         if (body is null) return Result<EmbeddingsChange?>.Success(null);
         if (body.Model is { } model && !options.Models.Contains(model))
             return Failure.Invalid("embeddings.model is one of " + string.Join(", ", options.Models));
         if (body.KeySource is { } source && !KeySources.All.Contains(source)) return Failure.Invalid("embeddings.keySource is own or subscription");
-        if (body.KeySource == KeySources.Subscription && !subscription.OffersEmbeddings(workspaceId))
+        if (body.KeySource == KeySources.Subscription && !subscription.OffersEmbeddings(workspaceId, planPrice))
             return Failure.Invalid("Cash Gear's subscription for search by meaning is not offered to this workspace");
         string? newKey = null;
         var remove = false;

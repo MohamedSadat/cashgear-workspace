@@ -23,6 +23,9 @@ public static class KeySources
 /// apart: <c>MonthlyTokens</c> and <c>EmbeddingsMonthlyTokens</c> for every workspace, and
 /// <c>Workspaces__&lt;workspaceId&gt;__MonthlyTokens</c> (and <c>__EmbeddingsMonthlyTokens</c>) for one. A
 /// workspace with no allowance (none set, or 0), or a server without the key, is not offered it.
+/// Phase 18: a workspace on a paid plan (its AI settings' <c>PlanPriceId</c>, while its subscription
+/// gives one) has the plan's allowance where it is more than the default; a workspace's own override
+/// still wins over both.
 /// </summary>
 public sealed record AiSubscriptionOptions(
     string? AnthropicKey,
@@ -35,23 +38,32 @@ public sealed record AiSubscriptionOptions(
 
     public static readonly AiSubscriptionOptions None = new(null, null, null, null, new Dictionary<Guid, (long?, long?)>());
 
-    /// <summary>A workspace's monthly allowance of completions' tokens; null or 0: not offered.</summary>
-    public long CompletionsFor(Guid workspaceId) =>
-        (Workspaces.TryGetValue(workspaceId, out var own) && own.Completions is { } mine ? mine : Completions) ?? 0;
+    /// <summary>Phase 18: the paid plans, when this server offers billing (<see cref="Billing.BillingOptions"/>).</summary>
+    public IReadOnlyList<Billing.BillingPlan> Plans { get; init; } = [];
 
-    public long EmbeddingsFor(Guid workspaceId) =>
-        (Workspaces.TryGetValue(workspaceId, out var own) && own.Embeddings is { } mine ? mine : Embeddings) ?? 0;
+    /// <summary>The plan of a workspace's paid price (its AI settings' <c>PlanPriceId</c>), or none.</summary>
+    public Billing.BillingPlan? PlanOf(string? planPrice) => planPrice is null ? null : Plans.FirstOrDefault(p => p.PriceId == planPrice);
 
-    public bool OffersCompletions(Guid workspaceId) => AnthropicKey is not null && CompletionsFor(workspaceId) > 0;
+    /// <summary>A workspace's monthly allowance of completions' tokens; 0: not offered.</summary>
+    public long CompletionsFor(Guid workspaceId, string? planPrice) =>
+        Workspaces.TryGetValue(workspaceId, out var own) && own.Completions is { } mine ? mine
+        : Math.Max(Completions ?? 0, PlanOf(planPrice)?.MonthlyTokens ?? 0);
 
-    public bool OffersEmbeddings(Guid workspaceId) => VoyageKey is not null && EmbeddingsFor(workspaceId) > 0;
+    public long EmbeddingsFor(Guid workspaceId, string? planPrice) =>
+        Workspaces.TryGetValue(workspaceId, out var own) && own.Embeddings is { } mine ? mine
+        : Math.Max(Embeddings ?? 0, PlanOf(planPrice)?.EmbeddingsMonthlyTokens ?? 0);
 
-    public long AllowanceOf(Guid workspaceId, string kind) => kind == AiAllowance.Embeddings ? EmbeddingsFor(workspaceId) : CompletionsFor(workspaceId);
+    public bool OffersCompletions(Guid workspaceId, string? planPrice) => AnthropicKey is not null && CompletionsFor(workspaceId, planPrice) > 0;
+
+    public bool OffersEmbeddings(Guid workspaceId, string? planPrice) => VoyageKey is not null && EmbeddingsFor(workspaceId, planPrice) > 0;
+
+    public long AllowanceOf(Guid workspaceId, string kind, string? planPrice) =>
+        kind == AiAllowance.Embeddings ? EmbeddingsFor(workspaceId, planPrice) : CompletionsFor(workspaceId, planPrice);
 
     // The key and the keys of the record must not reach a log through its generated ToString.
     public override string ToString() => $"AiSubscriptionOptions {{ Anthropic = {AnthropicKey is not null}, Voyage = {VoyageKey is not null} }}";
 
-    public static AiSubscriptionOptions From(IConfiguration configuration)
+    public static AiSubscriptionOptions From(IConfiguration configuration, Billing.BillingOptions billing)
     {
         var section = configuration.GetSection(Section);
         static string? Key(string? value) => AiKeys.Plausible(value?.Trim()) ? value!.Trim() : null;
@@ -60,7 +72,10 @@ public sealed record AiSubscriptionOptions(
         foreach (var child in section.GetSection("Workspaces").GetChildren())
             if (Guid.TryParse(child.Key, out var id))
                 workspaces[id] = (Tokens(child["MonthlyTokens"]), Tokens(child["EmbeddingsMonthlyTokens"]));
-        return new AiSubscriptionOptions(Key(section["AnthropicKey"]), Key(section["VoyageKey"]), Tokens(section["MonthlyTokens"]), Tokens(section["EmbeddingsMonthlyTokens"]), workspaces);
+        return new AiSubscriptionOptions(Key(section["AnthropicKey"]), Key(section["VoyageKey"]), Tokens(section["MonthlyTokens"]), Tokens(section["EmbeddingsMonthlyTokens"]), workspaces)
+        {
+            Plans = billing.Offered ? billing.Plans : [],
+        };
     }
 }
 
@@ -99,6 +114,10 @@ public sealed class AiAllowance(CgwDb db, AiSubscriptionOptions options, TimePro
 
     private static string[] ActionsOf(string kind) => kind == Embeddings ? EmbeddingActions.All : AiActions.All;
 
+    /// <summary>The workspace's paid plan's price, as its AI settings hold it (Phase 18).</summary>
+    private Task<string?> PlanPriceAsync(Guid workspaceId, CancellationToken ct) =>
+        db.AiSettings.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(s => s.WorkspaceId == workspaceId).Select(s => s.PlanPriceId).FirstOrDefaultAsync(ct);
+
     /// <summary>This month's use of the subscription by the workspace (the caller's tenant scope).</summary>
     public async Task<AllowanceDto> UsageAsync(Guid workspaceId, string kind, CancellationToken ct = default)
     {
@@ -109,7 +128,7 @@ public sealed class AiAllowance(CgwDb db, AiSubscriptionOptions options, TimePro
             .SumAsync(u => (long?)(u.InputTokens + u.OutputTokens), ct) ?? 0;
         var reserved = await db.AiReservations.AsNoTracking().Where(r => r.Kind == kind && r.ExpiresAt > now)
             .SumAsync(r => (long?)r.Tokens, ct) ?? 0;
-        return new AllowanceDto(start.ToString("yyyy-MM", CultureInfo.InvariantCulture), options.AllowanceOf(workspaceId, kind), used, reserved);
+        return new AllowanceDto(start.ToString("yyyy-MM", CultureInfo.InvariantCulture), options.AllowanceOf(workspaceId, kind, await PlanPriceAsync(workspaceId, ct)), used, reserved);
     }
 
     /// <summary>
@@ -119,8 +138,6 @@ public sealed class AiAllowance(CgwDb db, AiSubscriptionOptions options, TimePro
     /// </summary>
     public async Task<Result<Guid>> ReserveAsync(Guid workspaceId, string kind, long tokens, CancellationToken ct = default)
     {
-        var allowance = options.AllowanceOf(workspaceId, kind);
-        if (allowance <= 0) return Refused(kind);
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -128,8 +145,9 @@ public sealed class AiAllowance(CgwDb db, AiSubscriptionOptions options, TimePro
             await using var tx = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, ct);
             await db.Database.ExecuteSqlRawAsync("SELECT 1 FROM [AiSettings] WITH (UPDLOCK, HOLDLOCK) WHERE [WorkspaceId] = @ws",
                 [new SqlParameter("@ws", System.Data.SqlDbType.Binary, 16) { Value = GuidBytes.ToBytes(workspaceId) }], ct);
+            // The plan is read under the lock its change takes too (Phase 18: BillingService.ApplyAsync).
             var usage = await UsageAsync(workspaceId, kind, ct);
-            if (usage.Used + usage.Reserved + tokens > allowance)
+            if (usage.Allowance <= 0 || usage.Used + usage.Reserved + tokens > usage.Allowance)
             {
                 await tx.RollbackAsync(ct);
                 Result<Guid> refused = Refused(kind);

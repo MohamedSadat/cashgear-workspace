@@ -81,11 +81,17 @@ public static class Modules
         services.AddSingleton<AiKeys>();
         services.AddScoped<AiService>();
         // Phase 13: Cash Gear's subscription (its keys from the host's environment only) and the allowances.
-        services.AddSingleton(_ => AiSubscriptionOptions.From(configuration));
+        // Phase 18: the paid plans (Paddle) give their allowances.
+        services.AddSingleton(sp => Cgw.Core.Billing.BillingOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton(sp => AiSubscriptionOptions.From(configuration, sp.GetRequiredService<Cgw.Core.Billing.BillingOptions>()));
+        services.AddSingleton(sp => new Cgw.Core.Billing.PaddleClient(
+            sp.GetRequiredService<Cgw.Core.Billing.BillingOptions>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5), AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }));
+        services.AddSingleton<Cgw.Core.Billing.BillingPrices>();
+        services.AddScoped<Cgw.Core.Billing.BillingService>();
         services.AddScoped<AiAllowance>();
-        services.AddSingleton<IAiProvider>(sp => new AnthropicProvider(
-            sp.GetRequiredService<AiOptions>(),
-            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        // Phase 18: Anthropic, or the server's own completion model, by the workspace's model.
+        services.AddLocalCompletions(configuration);
         // Phase 10: embeddings (search by meaning) with the workspace's own Voyage key, and the
         // in-memory copies of the vectors (one set an API process).
         services.AddSingleton(sp => EmbeddingsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
@@ -122,6 +128,7 @@ public static class Modules
         api.MapPlugins();
         api.MapAutomations();
         api.MapForms();
+        api.MapBilling();
         return api;
     }
 }

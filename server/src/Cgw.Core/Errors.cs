@@ -136,6 +136,15 @@ public static class Codes
     /// <summary>A row made blocked, through Blocked by, by a row it blocks (an operation's refusal).</summary>
     public const string DependencyLoop = "dependency.loop";
 
+    // Phase 18: billing.
+
+    /// <summary>Paddle could not be reached, or refused what the server asked (502).</summary>
+    public const string BillingProvider = "billing.provider";
+    /// <summary>A checkout for a workspace on a plan already: it changes its plan instead (409).</summary>
+    public const string BillingSubscribed = "billing.subscribed";
+    /// <summary>A plan change or the portal for a workspace with no subscription (409).</summary>
+    public const string BillingNone = "billing.none";
+
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
     [
@@ -153,6 +162,7 @@ public static class Codes
         AutomationLimit, AutomationNone, WebhookAddress, TimeZoneUnknown,
         FormLinkExists, FormRows,
         ApprovalClosed, ApprovalAnswered, DependencyLoop,
+        BillingProvider, BillingSubscribed, BillingNone,
     ];
 }
 

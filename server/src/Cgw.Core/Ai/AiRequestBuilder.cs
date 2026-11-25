@@ -26,6 +26,36 @@ public sealed record ErpChangesInput(string Instruction, string ConnectorId, str
 public sealed record AiSource(int Number, Guid PageId, string Title, string Text);
 
 /// <summary>
+/// The limits a request is held to (Phase 18): Anthropic's (<see cref="Claude"/>, 0.7.0's), or the
+/// server's own model's (<see cref="Local"/>), smaller, as a processor reads a prompt at tens of
+/// tokens a second and writes one at a few: each action's text, its sources, the ERP's records, and
+/// each action's answer in tokens (<see cref="OutputTokens"/>).
+/// </summary>
+public sealed record AiLimits(
+    int RewriteText, int PageText, int Prompt, int Question, int Instruction, int RequestPrompt,
+    int Sources, int SourceText, int ErpRecords, int ErpFields, int ErpBytes, IReadOnlyDictionary<string, int>? Output)
+{
+    public static readonly AiLimits Claude = new(20_000, 100_000, 4_000, 1_000, 2_000, 1_000, 8, 8_000, 500, 200, 400 * 1024, null);
+
+    /// <summary>The server's own model (the spike's limits; decisions, 2026-11-25).</summary>
+    public static readonly AiLimits Local = new(4_000, 12_000, 2_000, 1_000, 1_000, 500, 4, 2_000, 50, 30, 40 * 1024,
+        new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            [AiActions.Rewrite] = 2_048,
+            [AiActions.Summarise] = 768,
+            [AiActions.ActionItems] = 768,
+            [AiActions.GeneratePage] = 1_536,
+            [AiActions.GenerateDatabase] = 1_536,
+            [AiActions.Ask] = 768,
+            [AiActions.ErpChanges] = 1_536,
+        });
+
+    /// <summary>An action's answer's most tokens: the local model's own, else Anthropic's by effort.</summary>
+    public int OutputTokens(string action, string effort) =>
+        Output is not null && Output.TryGetValue(action, out var tokens) ? tokens : effort == "low" ? 16_000 : 32_000;
+}
+
+/// <summary>
 /// The one place a request to a model is built (INTEGRATIONS.md, AI, "One place builds the
 /// request"): each action's fixed instructions and the <c>input</c> fields its table names, read one
 /// by one, so nothing else the client sends can reach a provider. Pure: it reads no store and calls
@@ -58,15 +88,19 @@ public static class AiRequestBuilder
 
     private static string LanguageName(string language) => language == "ar" ? "Arabic" : "English";
 
-    /// <summary>Reads an action's input; a failure is <c>request.invalid</c> (400) or <c>limit.size</c> (413).</summary>
-    public static Result<AiInput> Read(string action, JsonElement input)
+    /// <summary>
+    /// Reads an action's input; a failure is <c>request.invalid</c> (400) or <c>limit.size</c> (413).
+    /// Phase 18: held to <paramref name="limits"/> (Anthropic's unless the server's own model's).
+    /// </summary>
+    public static Result<AiInput> Read(string action, JsonElement input, AiLimits? limits = null)
     {
+        var l = limits ?? AiLimits.Claude;
         if (input.ValueKind != JsonValueKind.Object) return Failure.Invalid("input is an object");
         switch (action)
         {
             case AiActions.Rewrite:
             {
-                if (Text(input, "text", MaxRewriteText, out var text) is { } bad) return bad;
+                if (Text(input, "text", l.RewriteText, out var text) is { } bad) return bad;
                 var instruction = String(input, "instruction");
                 if (instruction is null || !RewriteInstructions.Contains(instruction)) return Failure.Invalid("instruction is one of " + string.Join(", ", RewriteInstructions));
                 string? target = null, prompt = null;
@@ -75,24 +109,34 @@ public static class AiRequestBuilder
                     target = String(input, "target");
                     if (target is not ("en" or "ar")) return Failure.Invalid("target is en or ar");
                 }
-                if (instruction == "custom" && Text(input, "prompt", MaxRequestPrompt, out prompt) is { } badPrompt) return badPrompt;
+                if (instruction == "custom" && Text(input, "prompt", l.RequestPrompt, out prompt) is { } badPrompt) return badPrompt;
                 return new RewriteInput(text!, instruction, target, prompt);
             }
             case AiActions.Summarise or AiActions.ActionItems:
-                return Text(input, "text", MaxPageText, out var page) is { } badPage ? badPage : new PageTextInput(action, page!);
+                return Text(input, "text", l.PageText, out var page) is { } badPage ? badPage : new PageTextInput(action, page!);
             case AiActions.GeneratePage or AiActions.GenerateDatabase:
-                return Text(input, "prompt", MaxPrompt, out var p) is { } badP ? badP : new PromptInput(action, p!);
+                return Text(input, "prompt", l.Prompt, out var p) is { } badP ? badP : new PromptInput(action, p!);
             case AiActions.Ask:
-                return Text(input, "question", MaxQuestion, out var q) is { } badQ ? badQ : new AskInput(q!);
+                return Text(input, "question", l.Question, out var q) is { } badQ ? badQ : new AskInput(q!);
             case AiActions.ErpChanges:
-                return ReadErp(input);
+                return ReadErp(input, l);
             default:
                 return Failure.Invalid("action is one of " + string.Join(", ", AiActions.All));
         }
     }
 
-    /// <summary>The request for a read input, in the person's interface language; <paramref name="sources"/> for <c>ask</c>.</summary>
-    public static AiRequest Build(AiInput input, string language, IReadOnlyList<AiSource>? sources = null)
+    /// <summary>
+    /// The request for a read input, in the person's interface language; <paramref name="sources"/> for
+    /// <c>ask</c>. Phase 18: its sources and its answer's tokens by <paramref name="limits"/>.
+    /// </summary>
+    public static AiRequest Build(AiInput input, string language, IReadOnlyList<AiSource>? sources = null, AiLimits? limits = null)
+    {
+        var l = limits ?? AiLimits.Claude;
+        var built = Instructions(input, language, sources, l);
+        return built with { MaxTokens = l.OutputTokens(built.Action, built.Effort) };
+    }
+
+    private static AiRequest Instructions(AiInput input, string language, IReadOnlyList<AiSource>? sources, AiLimits l)
     {
         var lang = LanguageName(language);
         return input switch
@@ -120,7 +164,7 @@ public static class AiRequestBuilder
             AskInput q => Markdown(q.Action,
                 "Answer the person's question from the numbered pages only. After each sentence that uses a page, cite it as [n], its number. "
                 + "If the pages do not answer the question, say so in one sentence. Answer in the language of the question, as Markdown.",
-                Tag("question", q.Question) + string.Concat((sources ?? []).Take(MaxSources).Select(Source)), "medium"),
+                Tag("question", q.Question) + string.Concat((sources ?? []).Take(l.Sources).Select(s => Source(s, l.SourceText))), "medium"),
             ErpChangesInput e => Json(e.Action,
                 "Prepare changes to ERP records as the person's instruction asks. You are given the fields that may be changed, with their rules "
                 + "(for a lookup, the only codes it may take), and the records. Propose only the changes the instruction asks for, only to those fields and records, "
@@ -145,16 +189,16 @@ public static class AiRequestBuilder
     } + " Answer with the rewritten text only, as Markdown, with nothing before or after it.";
 
     private static AiRequest Markdown(string action, string task, string user, string effort) =>
-        new(action, $"{Marker(action)}\n{Preamble}\n{task}", user, effort, effort == "low" ? 16_000 : 32_000, null);
+        new(action, $"{Marker(action)}\n{Preamble}\n{task}", user, effort, 0, null);
 
     private static AiRequest Json(string action, string task, string user, string effort, JsonElement schema) =>
-        new(action, $"{Marker(action)}\n{Preamble}\n{task}", user, effort, effort == "low" ? 16_000 : 32_000, schema);
+        new(action, $"{Marker(action)}\n{Preamble}\n{task}", user, effort, 0, schema);
 
     private static string Tag(string name, string content) => $"<{name}>\n{content}\n</{name}>";
 
-    private static string Source(AiSource s)
+    private static string Source(AiSource s, int max)
     {
-        var text = s.Text.Length > MaxSourceText ? s.Text[..MaxSourceText] : s.Text;
+        var text = s.Text.Length > max ? s.Text[..max] : s.Text;
         return $"\n<page number=\"{s.Number.ToString(CultureInfo.InvariantCulture)}\">\nTitle: {OneLine(s.Title)}\n\n{text}\n</page>";
     }
 
@@ -181,16 +225,16 @@ public static class AiRequestBuilder
     private static bool Name(string? s, int max) =>
         s is { Length: > 0 } && s.Length <= max && s.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
 
-    private static Result<AiInput> ReadErp(JsonElement input)
+    private static Result<AiInput> ReadErp(JsonElement input, AiLimits l)
     {
-        if (Encoding.UTF8.GetByteCount(input.GetRawText()) > MaxErpBytes) return TooLong("input", MaxErpBytes);
-        if (Text(input, "instruction", MaxInstruction, out var instruction) is { } bad) return bad;
+        if (Encoding.UTF8.GetByteCount(input.GetRawText()) > l.ErpBytes) return TooLong("input", l.ErpBytes);
+        if (Text(input, "instruction", l.Instruction, out var instruction) is { } bad) return bad;
         if (!input.TryGetProperty("connector", out var connector) || connector.ValueKind != JsonValueKind.Object
             || String(connector, "id") is not { } id || !Name(id, 100)
             || String(connector, "schemaVersion") is not { } version || !Name(version, 100))
             return Failure.Invalid("connector is {id, schemaVersion}");
-        if (!input.TryGetProperty("fields", out var fields) || fields.ValueKind != JsonValueKind.Array || fields.GetArrayLength() is 0 or > MaxErpFields)
-            return Failure.Invalid($"fields is a list of 1 to {MaxErpFields} editable fields");
+        if (!input.TryGetProperty("fields", out var fields) || fields.ValueKind != JsonValueKind.Array || fields.GetArrayLength() == 0 || fields.GetArrayLength() > l.ErpFields)
+            return Failure.Invalid($"fields is a list of 1 to {l.ErpFields} editable fields");
         var outFields = new JsonArray();
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var f in fields.EnumerateArray())
@@ -227,8 +271,8 @@ public static class AiRequestBuilder
             }
             outFields.Add(field);
         }
-        if (!input.TryGetProperty("records", out var records) || records.ValueKind != JsonValueKind.Array || records.GetArrayLength() is 0 or > MaxErpRecords)
-            return Failure.Invalid($"records is a list of 1 to {MaxErpRecords} records");
+        if (!input.TryGetProperty("records", out var records) || records.ValueKind != JsonValueKind.Array || records.GetArrayLength() == 0 || records.GetArrayLength() > l.ErpRecords)
+            return Failure.Invalid($"records is a list of 1 to {l.ErpRecords} records");
         var outRecords = new JsonArray();
         foreach (var r in records.EnumerateArray())
         {

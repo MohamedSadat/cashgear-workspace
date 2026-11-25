@@ -6,3 +6,5 @@
 *.woff2 binary
 *.onnx binary
 *.bin binary
+# Phase 18: the completion model's stand-in is hashed byte for byte (scripts/completion-model/make-test-model.py)
+tests/fixtures/completion-model/** binary

@@ -5998,6 +5998,181 @@
           }
         }
       }
+    },
+    "/api/v1/workspaces/{workspaceId}/billing": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "getBilling",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/billing/checkout": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "startBillingCheckout",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingPlanChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingLinkDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/billing/plan": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "changeBillingPlan",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingPlanChoice"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/billing/portal": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "openBillingPortal",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingLinkDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/billing/refresh": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "operationId": "refreshBilling",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingDto"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6033,6 +6208,15 @@
           },
           "input": {
             "$ref": "#/components/schemas/JsonElement"
+          },
+          "events": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -6093,6 +6277,85 @@
               "null",
               "string"
             ]
+          },
+          "ahead": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "AiLimitsDto": {
+        "required": [
+          "rewriteText",
+          "pageText",
+          "prompt",
+          "question",
+          "instruction",
+          "requestPrompt",
+          "erpRecords"
+        ],
+        "type": "object",
+        "properties": {
+          "rewriteText": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageText": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "prompt": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "question": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "instruction": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "requestPrompt": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "erpRecords": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -6184,6 +6447,22 @@
               {
                 "$ref": "#/components/schemas/AllowanceDto"
               }
+            ]
+          },
+          "limits": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AiLimitsDto"
+              }
+            ]
+          },
+          "localModel": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }
@@ -6657,6 +6936,167 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "BillingDto": {
+        "required": [
+          "plans",
+          "status",
+          "canManage"
+        ],
+        "type": "object",
+        "properties": {
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BillingPlanDto"
+            }
+          },
+          "planId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "periodEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "scheduledAction": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scheduledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "canManage": {
+            "type": "boolean"
+          },
+          "checkoutPending": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BillingLinkDto": {
+        "required": [
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "BillingPlanChoice": {
+        "required": [
+          "planId"
+        ],
+        "type": "object",
+        "properties": {
+          "planId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BillingPlanDto": {
+        "required": [
+          "id",
+          "nameEn",
+          "nameAr",
+          "monthlyTokens",
+          "embeddingsMonthlyTokens",
+          "price"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nameEn": {
+            "type": "string"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "monthlyTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "embeddingsMonthlyTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "price": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BillingPriceDto"
+              }
+            ]
+          }
+        }
+      },
+      "BillingPriceDto": {
+        "required": [
+          "amount",
+          "currency",
+          "interval",
+          "frequency"
+        ],
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "interval": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "frequency": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -11572,7 +12012,8 @@
           "api",
           "propertyTypes",
           "viewTypes",
-          "stepKinds"
+          "stepKinds",
+          "billing"
         ],
         "type": "object",
         "properties": {
@@ -11605,6 +12046,9 @@
               "string"
             ],
             "format": "int32"
+          },
+          "billing": {
+            "type": "boolean"
           }
         }
       },
@@ -12685,6 +13129,9 @@
     },
     {
       "name": "Forms"
+    },
+    {
+      "name": "Billing"
     }
   ]
 }

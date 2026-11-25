@@ -25,6 +25,12 @@ public sealed record AiStarted(string Model) : AiChunk;
 /// <summary>The next piece of the answer.</summary>
 public sealed record AiText(string Text) : AiChunk;
 
+/// <summary>
+/// Phase 18: the answer waits its turn for the server's own model, <paramref name="Ahead"/> answers
+/// before it (the one being written included). Sent to a client only when it asked for it.
+/// </summary>
+public sealed record AiQueued(int Ahead) : AiChunk;
+
 /// <summary>The end: <c>end</c>, <c>length</c> (cut at the token limit) or <c>refused</c>, and the tokens used.</summary>
 public sealed record AiFinished(string StopReason, long InputTokens, long OutputTokens) : AiChunk
 {

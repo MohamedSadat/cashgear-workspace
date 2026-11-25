@@ -47,6 +47,16 @@
       "reason": "Phase 13: ONNX Runtime's managed half, brought by Microsoft.ML.OnnxRuntime; its nuspec names the MIT licence by file"
     },
     {
+      "package": "Microsoft.ML.OnnxRuntimeGenAI",
+      "license": "MIT (licence file)",
+      "reason": "Phase 18: ONNX Runtime GenAI, the local completion model's runtime over ONNX Runtime (API only); its nuspec names the MIT licence by file, read: MIT"
+    },
+    {
+      "package": "Microsoft.ML.OnnxRuntimeGenAI.Managed",
+      "license": "MIT (licence file)",
+      "reason": "Phase 18: ONNX Runtime GenAI's managed half, brought by Microsoft.ML.OnnxRuntimeGenAI; its nuspec names the MIT licence by file, read: MIT"
+    },
+    {
       "package": "Microsoft.Identity.Client.NativeInterop",
       "license": "Microsoft Software License Terms (redistributable)",
       "reason": "Microsoft's MSAL broker interop, brought by Microsoft.Data.SqlClient; not copyleft"

@@ -193,6 +193,10 @@ public static class RateLimits
     public const string Pull = "pull";
     /// <summary>The default of <see cref="Pull"/> (<c>RateLimits__pull</c>).</summary>
     public const int PullPerMinute = 120;
+    /// <summary>Phase 18: checkouts, plan changes, the portal and reading the plan again, per person: each one calls Paddle.</summary>
+    public const string Billing = "billing";
+    /// <summary>Phase 18: Paddle's webhooks, per address (Paddle sends from a few addresses, in bursts).</summary>
+    public const string Paddle = "paddle";
 
     public static IServiceCollection AddCgwRateLimits(this IServiceCollection services, IConfiguration configuration)
     {
@@ -249,6 +253,8 @@ public static class RateLimits
             options.AddPolicy(Meaning, c => Window("meaning:" + Who(c), Limit(Meaning, 30)));
             options.AddPolicy(Frames, c => Window("frames:" + Who(c), Limit(Frames, 120)));
             options.AddPolicy(Pull, c => Window("pull:" + Who(c), Limit(Pull, PullPerMinute)));
+            options.AddPolicy(Billing, c => Window("billing:" + Who(c), Limit(Billing, 20)));
+            options.AddPolicy(Paddle, c => Window("paddle:" + Ip(c), Limit(Paddle, 600)));
         });
     }
 }

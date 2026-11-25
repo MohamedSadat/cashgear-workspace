@@ -32,4 +32,19 @@ public static class LocalModelServices
         services.AddSingleton<IEmbeddingProvider, EmbeddingRouter>();
         return services;
     }
+
+    /// <summary>
+    /// Phase 18, the API only: Anthropic's provider, the server's own completion model and the router
+    /// as <see cref="IAiProvider"/>.
+    /// </summary>
+    public static IServiceCollection AddLocalCompletions(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddSingleton(sp => CompletionModelOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton(sp => new LocalCompletionProvider(sp.GetRequiredService<CompletionModelOptions>(), sp.GetRequiredService<ILogger<LocalCompletionProvider>>()));
+        services.AddSingleton(sp => new AnthropicProvider(
+            sp.GetRequiredService<AiOptions>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = Timeout.InfiniteTimeSpan }));
+        services.AddSingleton<IAiProvider, AiProviderRouter>();
+        return services;
+    }
 }

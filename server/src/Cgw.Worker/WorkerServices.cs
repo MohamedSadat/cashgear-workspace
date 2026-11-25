@@ -60,7 +60,9 @@ public static class WorkerServices
         services.AddSingleton(sp => EmbeddingsOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
         services.AddSingleton<EmbeddingKeys>();
         // Phase 13: Cash Gear's subscription (its keys from the host's environment only).
-        services.AddSingleton(_ => AiSubscriptionOptions.From(configuration));
+        // Phase 18: the paid plans give their allowances (BillingOptions); the worker reconciles them daily.
+        services.AddSingleton(sp => Cgw.Core.Billing.BillingOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsProduction()));
+        services.AddSingleton(sp => AiSubscriptionOptions.From(configuration, sp.GetRequiredService<Cgw.Core.Billing.BillingOptions>()));
         // Phase 13: voyage-4-nano on this server beside Voyage's API, by the workspace's model.
         services.AddLocalModel(configuration);
         services.AddSingleton<IJob, EmbedJob>();
@@ -85,6 +87,13 @@ public static class WorkerServices
         services.AddSingleton<IJob, AutomationRetentionJob>();
         // Phase 17: people's own reminders of rows' dates.
         services.AddSingleton<IJob, ReminderJob>();
+        // Phase 18: the paid plans reconciled with Paddle daily.
+        services.AddSingleton(sp => new Cgw.Core.Billing.PaddleClient(
+            sp.GetRequiredService<Cgw.Core.Billing.BillingOptions>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5), AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan }));
+        services.AddSingleton<Cgw.Core.Billing.BillingPrices>();
+        services.AddScoped<Cgw.Core.Billing.BillingService>();
+        services.AddSingleton<IJob, BillingReconcileJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

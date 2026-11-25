@@ -53,6 +53,8 @@ public static class AiEndpoints
         // The provider has accepted the call before anything is answered: a refused key or a
         // provider that is down is a problem with its code, not a stream that ends at once.
         var chunks = provider.CompleteAsync(ready.Call, http.RequestAborted).GetAsyncEnumerator(http.RequestAborted);
+        // Phase 18: the server's own model accepts at once (a full line is refused here, 503
+        // ai.limit) and then may say where the answer waits; the stream starts with that acceptance.
         try
         {
             if (!await chunks.MoveNextAsync() || chunks.Current is not AiStarted started)
@@ -118,6 +120,9 @@ public static class AiEndpoints
                         {
                             case AiText text:
                                 await WriteAsync(response, new AiEventDto { Type = "text", Text = text.Text }, ct);
+                                break;
+                            case AiQueued queued when ready.ReadsQueued:
+                                await WriteAsync(response, new AiEventDto { Type = "queued", Ahead = queued.Ahead }, ct);
                                 break;
                             case AiFinished done:
                                 input = done.InputTokens;
