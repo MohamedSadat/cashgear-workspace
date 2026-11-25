@@ -113,9 +113,22 @@
 }
 
 /* A page's buttons show on hover and focus, and are out of the accessibility tree until then
-   (the library's own, from `98e4ff0`). A section's are always there ("Add a page in"). */
+   (the library's own, from `98e4ff0`). The library hides them in place, so their room (about
+   50 px) cut every title short with no button drawn: here a row's hidden buttons hold no room, and
+   its title runs to the row's end. The open page's row is selected, which the library shows the
+   buttons of; here they still wait for hover or focus, so the top bar's "Page actions" stays the
+   one on screen. A section's are always there ("Add a page in"), and touch screens keep the
+   library's (always shown). */
 .cgw-tree [data-cg-tree-actions] {
+  display: none;
   gap: 2px;
+}
+
+.cgw-tree [data-cg-tree-row]:hover > [data-cg-tree-actions],
+.cgw-tree [role='treeitem']:focus > [data-cg-tree-row] > [data-cg-tree-actions],
+.cgw-tree [data-cg-tree-actions]:focus-within,
+.cgw-tree .cgw-tree-section [data-cg-tree-actions] {
+  display: inline-flex;
 }
 
 .cgw-tree .cgw-tree-section [data-cg-tree-actions] {
@@ -123,16 +136,21 @@
   opacity: 1;
 }
 
-/* The open page's row is selected, which the library shows the buttons of; here they still wait
-   for hover or focus, so the top bar's "Page actions" stays the one on screen. Touch screens keep
-   the library's (always shown). */
-@media (hover: hover) {
-  .cgw-tree
-    [role='treeitem'][aria-selected='true']:not(:focus):not(:hover)
-    > div
-    > [data-cg-tree-actions]:not(:focus-within) {
-    visibility: hidden;
+@media (hover: none) {
+  .cgw-tree [data-cg-tree-actions] {
+    display: inline-flex;
   }
+}
+
+/* Recent and favourites: a title sits beside its icon whichever way its own text runs (a title in
+   Arabic, `dir="auto"`, was drawn at the row's far end, away from its icon); who has the page open
+   stays at the end. */
+.cgw-side-link > .cgw-tree-title {
+  flex: 0 1 auto;
+}
+
+.cgw-side-link > .cgw-side-presence {
+  margin-inline-start: auto;
 }
 
 .cgw-tree-action {
