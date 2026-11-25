@@ -1,2 +1,8 @@
-export { DesktopStore, StoreRequestError, type Transport } from './store';
+export {
+  DesktopStore,
+  StoreRequestError,
+  answerBytes,
+  type Transport,
+  type TransportAnswer,
+} from './store';
 export { decodeFrame, encodeFrame } from './frame';

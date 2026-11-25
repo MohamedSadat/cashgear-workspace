@@ -51,10 +51,32 @@ import {
 import { decodeFrame, encodeFrame } from './frame';
 import { OutboxIndex, type OutboxEntry } from './outbox';
 
+/**
+ * An answer frame as a transport gives it. Over Tauri's custom protocol `invoke` resolves a raw
+ * answer as an `ArrayBuffer`; once one of its fetches has failed in a start (WebView2 just started
+ * after a kill), Tauri sends every later call of that start by `postMessage`, and a raw answer
+ * comes back as an array of numbers.
+ */
+export type TransportAnswer = Uint8Array | ArrayBuffer | readonly number[];
+
 /** Sends one request frame and resolves with the answer frame. */
-export type Transport = (frame: Uint8Array) => Promise<Uint8Array>;
+export type Transport = (frame: Uint8Array) => Promise<TransportAnswer>;
 
 export class StoreRequestError extends Error {}
+
+/** An answer's bytes, whichever shape it came in; an array of anything but bytes is refused. */
+export function answerBytes(answer: TransportAnswer): Uint8Array {
+  if (answer instanceof Uint8Array) return answer;
+  if (answer instanceof ArrayBuffer) return new Uint8Array(answer);
+  if (!Array.isArray(answer)) throw new StoreRequestError('The store answered no frame.');
+  const bytes = new Uint8Array(answer.length);
+  answer.forEach((n: unknown, i) => {
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 255)
+      throw new StoreRequestError('The store answered no frame.');
+    bytes[i] = n;
+  });
+  return bytes;
+}
 
 /** A quarantine entry as the Rust store answers it: its parts follow as blobs. */
 type EntryHeader = Omit<QuarantineEntry, 'parts'> & { parts?: number };
@@ -105,7 +127,7 @@ export class DesktopStore implements LocalStore {
     header: Record<string, unknown>,
     blobs: Uint8Array[] = [],
   ): Promise<{ value: T; blobs: Uint8Array[] }> {
-    const answer = decodeFrame(await this.transport(encodeFrame(header, blobs)));
+    const answer = decodeFrame(answerBytes(await this.transport(encodeFrame(header, blobs))));
     const result = answer.header as { ok?: T; error?: string };
     if (result.error !== undefined) throw new StoreRequestError(result.error);
     return { value: result.ok as T, blobs: answer.blobs };

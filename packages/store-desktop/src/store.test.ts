@@ -9,7 +9,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { STORE_SCHEMA_VERSION, type Id, type MirrorSnapshot, type Operation } from '@cgw/workspace';
 import { describeLocalStore } from '@cgw/workspace/testing';
-import { DesktopStore } from './store';
+import { DesktopStore, StoreRequestError, answerBytes } from './store';
 import { cliPath, cliTransport } from './testing/cli';
 import { decodeFrame, encodeFrame } from './frame';
 
@@ -50,6 +50,20 @@ describe('frames', () => {
     expect(decoded.blobs.map((b) => [...b])).toEqual([[0, 255, 3], []]);
     expect(() => decodeFrame(frame.subarray(0, frame.length - 2))).toThrow();
   });
+
+  // Tauri's invoke answers raw bytes as an ArrayBuffer, or as an array of numbers once it has
+  // fallen back to postMessage for the rest of a start.
+  it('are read from an ArrayBuffer or an array of numbers alike', () => {
+    const frame = encodeFrame({ ok: 1 }, [new Uint8Array([0, 255, 128])]);
+    expect(answerBytes(frame)).toBe(frame);
+    expect([...answerBytes(frame.slice().buffer)]).toEqual([...frame]);
+    expect([...answerBytes(Array.from(frame))]).toEqual([...frame]);
+    expect([...answerBytes([])]).toEqual([]);
+    for (const refused of [[256], [-1], [1.5], [Number.NaN], ['1'], [null], {}, 'AAEC', null])
+      expect(() => answerBytes(refused as unknown as number[]), JSON.stringify(refused)).toThrow(
+        StoreRequestError,
+      );
+  });
 });
 
 if (cliPath()) {
@@ -81,6 +95,29 @@ if (cliPath()) {
       expect(doc.updates.map((u) => [...u.data])).toEqual([[1, 2, 3]]);
       expect(await again.getPref('x')).toEqual({ y: 1 });
       await second.close();
+    });
+
+    // What the app's transport gives after Tauri's postMessage fallback (an array of numbers) and
+    // before it (an ArrayBuffer): the same store, bytes kept byte for byte.
+    it('works over answers as arrays of numbers and as ArrayBuffers', async () => {
+      const cli = cliTransport();
+      const page = '0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
+      const data = new Uint8Array(256).map((_, i) => 255 - i);
+      const posted = await DesktopStore.open(async (frame) =>
+        Array.from(answerBytes(await cli.transport(frame))),
+      );
+      await posted.appendDocUpdates(page, [
+        { updateId: '0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c', data },
+      ]);
+      await posted.setPref('fallback', { kept: true });
+      const fetched = await DesktopStore.open(
+        async (frame) => answerBytes(await cli.transport(frame)).slice().buffer,
+      );
+      for (const store of [posted, fetched]) {
+        expect((await store.loadDoc(page)).updates.map((u) => [...u.data])).toEqual([[...data]]);
+        expect(await store.getPref('fallback')).toEqual({ kept: true });
+      }
+      await cli.close();
     });
   });
 
