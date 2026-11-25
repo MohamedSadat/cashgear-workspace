@@ -4,6 +4,44 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.17.0] - 2026-11-25
+
+Run work as it really goes: rules that wait, decide and ask for approval; tasks that repeat, remind
+you, nest and depend on each other; and a number for every row.
+
+- **Rules that wait and decide.** A rule's steps can now wait (a time, until a date of the row, or
+  until the row matches conditions, for up to 90 days), branch (if, else if, else on the row as it
+  is then) and ask people for approval: named people, a group (any one of it, or all of it) or a
+  person property's people. Those asked approve or reject in their inbox, with a comment, and by
+  mail; past its deadline the rule takes its "no answer" path. Who answered, and their comments,
+  can go into the row. A waiting rule goes on even after the server restarts, reads the row again
+  first, and finishes as the rule was when it started; switched off, it stops.
+- **Repeating rows.** Repeat one of a database's templates: daily, weekly on chosen days, monthly on
+  a day or on a weekday of a week (the last Friday), yearly, every so many, until a day or a number
+  of times. A new row comes on each of its days at the time you choose in your workspace's time
+  zone, or as soon as the last one is checked or complete, its day in a date property you choose.
+  "Repeat a template" is in the New menu.
+- **Reminders.** "Remind me" on a row's page reminds you of any of its dates, at the time or 15
+  minutes, an hour, a day or a week before (a day with no time at 09:00), in your inbox and by mail
+  as you chose; only you are reminded, and never of a row you can no longer read. A date
+  property's "Remind people of this date" makes a rule that reminds a person property's people.
+- **Sub-items.** Switch on Parent and Sub-items in a view's Properties menu, and a table nests each
+  row's sub-items under it, up to five levels, each parent with a button to hide its own, read as a
+  tree by a screen reader. A filter keeps a matching sub-item's parents shown. Boards and lists show
+  a parent's count.
+- **Dependencies.** Switch on Blocked by and Blocking, and a timeline draws an arrow from each row
+  to the rows it blocks, dashed in red when one starts before its blocker ends. If you choose, moving a
+  row's dates moves the rows it blocks by as many days. A row cannot be blocked by a row it blocks.
+- **A unique id.** A new property type numbers every row of a database, with a prefix of your own
+  (`TASK-12`). Numbers are given by the server when a row first reaches it (a row made offline shows
+  "—" until then), never reused or edited; rows already there are numbered in the order they were
+  made. Sorted and filtered as numbers.
+- **Older versions.** 0.16.0 and earlier keep these rules, the unique id and the relations' roles as
+  they are while they edit the database; they do not add them.
+- **For whoever runs the server.** Three migrations (`Phase17Workflows`, `Phase17UniqueIds`, which
+  numbers the rows already stored, and `Phase17Reminders`) and the worker's `reminders` job.
+  Install the server before the web app: the app offers these only once the server keeps them.
+
 ## [0.16.0] - 2026-11-24
 
 Collect rows by a form: a database's form view, answered by your team in the app and by anyone
