@@ -104,7 +104,7 @@ jobs:
           run=$(gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
           if [ -n "$run" ]; then
             gh run download "$run" --name phase2-server --dir bench/previous-run
-            for name in phase2.json phase4.json phase10.json phase11.json phase13.json phase14.json phase15.json; do
+            for name in phase2.json phase4.json phase10.json phase11.json phase13.json phase14.json phase15.json phase17.json; do
               found=$(find bench/previous-run -name "$name" | head -n 1)
               if [ -n "$found" ]; then mkdir -p bench/previous && cp "$found" "bench/previous/$name"; fi
             done
@@ -156,6 +156,13 @@ jobs:
       # and passes with nothing changed tracked.
       - name: Phase 15 server budget (date triggers at 50,000 rows)
         run: pnpm bench:phase15 -- --server
+        env:
+          CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
+      # Phase 17's server budgets (bench/phase17.mjs --server, Phase17Bench): with 10,000 runs
+      # waiting, a pass finding those due; 10,000 reminders due in a minute, each one's lag to the
+      # inbox; the tree's first page of a 50,000-row table with 10,000 parents.
+      - name: Phase 17 server budgets (waits, reminders, sub-items)
+        run: pnpm bench:phase17 -- --server
         env:
           CGW_TEST_SQL: Server=localhost,1433;User ID=sa;Password=${{ env.MSSQL_SA_PASSWORD }};TrustServerCertificate=true;Encrypt=false
       - uses: actions/upload-artifact@v4
@@ -304,7 +311,7 @@ jobs:
           $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
           if ($run) {
             gh run download $run --name phase-verification --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json', 'phase15.json', 'phase16.json') {
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json', 'phase15.json', 'phase16.json', 'phase17.json') {
               $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
@@ -392,6 +399,11 @@ jobs:
       # against the server stack above.
       - name: Phase 16 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase16
+      # Phase 17's (bench/phase17.mjs --no-server): the first rows of a 50,000-row table with 10,000
+      # parents nesting their sub-items, and a 50,000-row timeline with 10,000 dependencies (first
+      # bars and a drag), in Chrome against the server stack above (relations seeded by sqlcmd).
+      - name: Phase 17 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase17 -- --no-server
       - uses: actions/upload-artifact@v4
         if: always()
         with:
