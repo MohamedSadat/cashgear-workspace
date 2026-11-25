@@ -23,8 +23,9 @@
 //                                              on 4278, v0.4.0 on 4277, v0.5.0 on 4276,
 //                                              v0.6.0 on 4275, v0.7.0 on 4274, v0.8.0 on
 //                                              4272, v0.9.0 on 4271, v0.10.0 on 4270, v0.14.0
-//                                              on 4269, v0.15.0 on 4267 (4273 is this build's
-//                                              preview; 4268 the passkey specs' build)
+//                                              on 4269, v0.15.0 on 4267, v0.16.0 on 4266 (4273
+//                                              is this build's preview; 4268 the passkey specs'
+//                                              build)
 // The API a build talks to is fixed at build time: VITE_CGW_API, 127.0.0.1:5280 (the e2e stack,
 // which must allow each build's origin: scripts/server-stack.mjs) unless set.
 import { spawn, spawnSync } from 'node:child_process';
@@ -50,6 +51,9 @@ export const OLD_BUILDS = {
   // Phase 16: a form view, the eighth type, which 0.15.0 draws as a table. 4268 is the passkey
   // specs' build (scripts/web-localhost.mjs).
   'v0.15.0': { port: 4267 },
+  // Phase 17: rules with waits, branches and approvals, a repeating row, a unique id and relations
+  // with a role, none of which 0.16.0 knows.
+  'v0.16.0': { port: 4266 },
 };
 export const OLD_TAG = 'v0.2.0';
 export const originOf = (tag = OLD_TAG) => `http://127.0.0.1:${OLD_BUILDS[tag].port}`;

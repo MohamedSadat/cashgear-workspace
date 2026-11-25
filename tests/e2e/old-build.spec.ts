@@ -64,6 +64,9 @@
 //
 // Phase 16 (v0.15.0 on :4267, seven view types): a form view is drawn there as a table; renamed
 // there, the server keeps it a form with its settings.
+//
+// Phase 17 (v0.16.0 on :4266): rules that wait and ask, a repeating row, a unique id and relations
+// with a role; a property renamed there, the server keeps every one of them.
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -86,7 +89,7 @@ import {
   showView,
   typeValue,
 } from './database';
-import { P, STATUS, runsOf, saveRule, seedTasks } from '../../bench/phase15-seed.mjs';
+import { P, STATUS, opOf, push, runsOf, saveRule, seedTasks } from '../../bench/phase15-seed.mjs';
 import { answerFields, seedForm } from '../../bench/phase16-seed.mjs';
 import { API } from './database';
 import {
@@ -1514,5 +1517,180 @@ test('the v0.15.0 build shows a form view as a table, and the server keeps it a 
   const kept = await viewOf();
   expect(kept.type).toBe('form');
   expect(kept.config.form).toEqual(made.config.form);
+  await api.dispose();
+});
+
+// Phase 17 (v0.16.0 on :4266, seven step kinds unknown, twenty-one property types): a database with
+// rules that wait and ask for approval, a repeating row, a unique id and relations to itself with
+// a role (sub-items and dependencies). A property renamed there goes up without the twenty-second
+// type and without the roles it never read; the server keeps the unique id, its numbers, the roles
+// and every rule as it was.
+test('the v0.16.0 build edits a database with 0.17.0 rules, a unique id and sub-items, and the server keeps them', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.16.0');
+  const account = await newAccount('Tasks and v0.16.0');
+  const api = await apiSession(account);
+  const seeded = await seedTasks(api, { rows: 3, name: 'Tasks v0.16.0' });
+  // A unique id, and Parent and Sub-items, as this build adds them.
+  const relation = (id: string, name: string, reverse: string, role: string) => ({
+    id,
+    name,
+    type: 'relation',
+    relation: { databaseId: seeded.databaseId, reversePropertyId: reverse, role },
+  });
+  await push(api, seeded.workspaceId, [
+    opOf(seeded.workspaceId, 'db.update', seeded.databaseId, {
+      properties: [
+        { id: 'pUid0001', name: 'Ticket', type: 'uniqueId', uniqueId: { prefix: 'TASK' } },
+        relation('pPrnt001', 'Parent', 'pSubs001', 'parent'),
+        relation('pSubs001', 'Sub-items', 'pPrnt001', 'subItems'),
+      ],
+      propertyTypes: 22,
+    }),
+  ]);
+  const template = uuidv7();
+  const now = new Date().toISOString();
+  await push(api, seeded.workspaceId, [
+    opOf(seeded.workspaceId, 'page.create', template, {
+      id: template,
+      workspaceId: seeded.workspaceId,
+      sectionId: seeded.sectionId,
+      parentPageId: seeded.databaseId,
+      orderKey: 'a5',
+      kind: 'row',
+      title: 'Weekly review',
+      icon: null,
+      coverAssetId: null,
+      isTemplate: true,
+      templateOfPageId: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      trashedAt: null,
+      trashRootId: null,
+      row: { values: {} },
+    }),
+  ]);
+  await saveRule(api, seeded, {
+    name: 'Wait and ask',
+    trigger: { kind: 'rowAdded' },
+    steps: [
+      { kind: 'wait', until: { kind: 'time', minutes: 1440 } },
+      {
+        kind: 'approval',
+        people: [],
+        groups: [],
+        personProperties: [P.owner],
+        mode: 'any',
+        message: 'May it go?',
+        deadlineMinutes: 4320,
+        approved: [{ kind: 'set', values: { [P.status]: STATUS.done } }],
+        rejected: [],
+        noAnswer: [],
+      },
+    ],
+  });
+  await saveRule(api, seeded, {
+    name: 'Every Monday',
+    trigger: {
+      kind: 'recurring',
+      templateId: template,
+      start: '2026-11-30',
+      rule: { frequency: 'weekly', weekDays: ['monday'] },
+      mode: 'date',
+      at: '09:00',
+      dateProperty: null,
+      doneProperty: null,
+    },
+    steps: [],
+  });
+  const databaseOf = async () =>
+    (
+      (await api.get(`/api/v1/workspaces/${seeded.workspaceId}/tree`)).databases as {
+        id: string;
+        properties: Record<string, unknown>[];
+      }[]
+    ).find((d) => d.id === seeded.databaseId)!;
+  const propsBefore = (await databaseOf()).properties.filter((p) =>
+    ['pUid0001', 'pPrnt001', 'pSubs001'].includes(p.id as string),
+  );
+  const rulesBefore = await api.get(`/api/v1/databases/${seeded.databaseId}/automations`);
+  expect(rulesBefore.automations).toHaveLength(2);
+  const numbersOf = async () =>
+    (
+      (await api.get(`/api/v1/databases/${seeded.databaseId}/rows?limit=100`)).rows as {
+        title: string;
+        number?: number;
+        isTemplate: boolean;
+      }[]
+    )
+      .filter((r) => !r.isTemplate)
+      .map((r) => [r.title, r.number])
+      .sort();
+  const numbersBefore = await numbersOf();
+  expect(numbersBefore.map(([, n]) => typeof n)).toEqual(['number', 'number', 'number']);
+
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const sent: { type: string; payload: Record<string, unknown> }[] = [];
+  old.on('request', (request) => {
+    if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+    sent.push(...((request.postDataJSON()?.ops ?? []) as typeof sent));
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await old
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /Tasks/ })
+    .click({ timeout: 30000 });
+  const oldDb = fullPage(old);
+  await expect(grid(oldDb)).toBeVisible({ timeout: 20000 });
+  // Its relations are plain relations there; the rules list draws.
+  await expect(oldDb.getByRole('columnheader', { name: 'Parent', exact: true })).toHaveCount(1);
+  await oldDb.getByRole('button', { name: 'Automations of this database' }).click();
+  const box = old.getByRole('dialog', { name: 'Automations' });
+  await expect(box).toContainText('Wait and ask');
+  await expect(box).toContainText('Every Monday');
+  await box.getByRole('button', { name: 'Close' }).click();
+
+  // A property renamed there: Notes is Remarks.
+  const menu = await propertyMenu(old, 'Notes', 'Text', oldDb);
+  await menu.getByRole('textbox', { name: 'Property name' }).fill('Remarks');
+  await menu.getByRole('textbox', { name: 'Property name' }).press('Enter');
+  await old.keyboard.press('Escape');
+  await expect(oldDb.getByRole('columnheader', { name: 'Remarks', exact: true })).toBeVisible();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await expect
+    .poll(() => sent.filter((op) => op.type === 'db.update').length, { timeout: 30000 })
+    .toBeGreaterThan(0);
+  expect(
+    sent.filter((op) => op.type === 'db.update').every((op) => op.payload.propertyTypes !== 22),
+  ).toBe(true);
+  expect(oldErrors).toEqual([]);
+  await oldContext.close();
+
+  // The server took the name and kept the unique id, its numbers, the roles and the rules.
+  await expect
+    .poll(
+      async () =>
+        (await databaseOf()).properties.find((p) => p.id === P.notes)?.name as string | undefined,
+      { timeout: 30000 },
+    )
+    .toBe('Remarks');
+  const propsAfter = (await databaseOf()).properties.filter((p) =>
+    ['pUid0001', 'pPrnt001', 'pSubs001'].includes(p.id as string),
+  );
+  expect(propsAfter).toEqual(propsBefore);
+  expect(await numbersOf()).toEqual(numbersBefore);
+  const rulesOf = (list: { automations: { rule: unknown }[] }) =>
+    list.automations.map((a) => a.rule);
+  const rulesAfter = await api.get(`/api/v1/databases/${seeded.databaseId}/automations`);
+  expect(rulesOf(rulesAfter)).toEqual(rulesOf(rulesBefore));
   await api.dispose();
 });
