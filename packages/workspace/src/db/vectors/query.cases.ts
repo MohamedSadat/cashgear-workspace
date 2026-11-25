@@ -11,10 +11,12 @@ import type {
   QuerySpec,
   SortRule,
 } from '../types';
+import type { TreeLine } from '../query';
 import {
   ALICE,
   BOB,
   DB,
+  DB2,
   P,
   SAMI,
   STATUS_OPTIONS,
@@ -33,7 +35,8 @@ export interface QueryCase {
   spec: QuerySpec;
   ctx: QueryContext;
   groupKey?: string;
-  expected: { rows: string[]; groups: GroupCount[] | null };
+  /** Phase 17: a query with `tree` also gives each row's line (null: none, the query is flat). */
+  expected: { rows: string[]; groups: GroupCount[] | null; tree?: TreeLine[] | null };
 }
 
 export interface QuerySuite {
@@ -247,6 +250,7 @@ interface Q {
   group?: GroupRule;
   search?: string;
   window?: DateWindow | null;
+  tree?: string;
   ctx?: Partial<QueryContext>;
   groupKey?: string;
 }
@@ -264,8 +268,22 @@ function q(name: string, query: Q, rows: string[], groups: GroupCount[] | null =
   };
   if (query.search !== undefined) spec.search = query.search;
   if (query.window !== undefined) spec.window = query.window;
+  if (query.tree !== undefined) spec.tree = query.tree;
   const c: QueryCase = { name, spec, ctx: { ...CTX, ...query.ctx }, expected: { rows, groups } };
   if (query.groupKey !== undefined) c.groupKey = query.groupKey;
+  return c;
+}
+
+/** Phase 17: a case of a query with `tree`, its lines expected beside its rows. */
+function t(
+  name: string,
+  query: Q,
+  rows: string[],
+  tree: TreeLine[] | null,
+  groups: GroupCount[] | null = null,
+): QueryCase {
+  const c = q(name, query, rows, groups);
+  c.expected.tree = tree;
   return c;
 }
 
@@ -1081,12 +1099,127 @@ const uidCases: QueryCase[] = [
   q('a row not numbered yet', { filter: cond('pUid0001', 'isEmpty') }, ids(44)),
 ];
 
+// Phase 17: sub-items. Rows nest under the first live row their Parent relation names (a relation
+// of the database to itself); a filter keeps a match's ancestors shown (as no match); siblings in
+// the query's order; rows at the top when their parent is not shown, then any loop; the fifth level
+// holds every row deeper.
+const PARENT = prop(
+  'pPar0001',
+  'relation',
+  { relation: { databaseId: DB, reversePropertyId: 'pSub0001' } },
+  'Parent',
+);
+const SUBS = prop(
+  'pSub0001',
+  'relation',
+  { relation: { databaseId: DB, reversePropertyId: 'pPar0001' } },
+  'Sub-items',
+);
+const ELSEWHERE = prop(
+  'pRel0009',
+  'relation',
+  { relation: { databaseId: DB2, reversePropertyId: null } },
+  'Elsewhere',
+);
+const NESTED = database([TITLE, PARENT, SUBS, ELSEWHERE, P.number, P.checkbox]);
+const N = (n: number, parent: number | null, points?: number, extra: Partial<VectorRow> = {}) =>
+  row(n, {
+    title: `n${n}`,
+    // One base-62 digit after `a`: in order as text.
+    orderKey: `a${(n - 50).toString(36).toUpperCase()}`,
+    values: {
+      ...(parent === null ? {} : { pPar0001: [rowId(parent)] }),
+      ...(points === undefined ? {} : { pNum0001: points }),
+    },
+    ...extra,
+  });
+const NESTED_ROWS = [
+  N(51, null, 1),
+  N(52, 51, 5),
+  N(53, 52, 3),
+  N(54, 51, 2),
+  N(55, null, 9),
+  N(56, 57),
+  N(57, 56),
+  N(58, null),
+  N(59, 58),
+  N(60, 59),
+  N(61, 60),
+  N(62, 61),
+  N(63, 62),
+  N(64, 65),
+  N(65, null, undefined, { trashedAt: '2026-02-01T00:00:00.000Z' }),
+  N(66, 66),
+];
+const line = (depth: number, children: number, match = true): TreeLine => ({
+  depth,
+  children,
+  match,
+});
+const DEEP = [line(0, 1), line(1, 1), line(2, 1), line(3, 1), line(4, 1), line(4, 0)];
+const nestedCases: QueryCase[] = [
+  t(
+    'sub-items under their parents, loops after, the fifth level holding the deeper',
+    { tree: 'pPar0001' },
+    ids(51, 52, 53, 54, 55, 58, 59, 60, 61, 62, 63, 64, 66, 56, 57),
+    [
+      line(0, 2),
+      line(1, 1),
+      line(2, 0),
+      line(1, 0),
+      line(0, 0),
+      ...DEEP,
+      line(0, 0),
+      line(0, 0),
+      line(0, 1),
+      line(1, 1),
+    ],
+  ),
+  t(
+    'a filter keeps a match’s ancestors shown, as no match',
+    { tree: 'pPar0001', filter: cond('pNum0001', 'ge', 3) },
+    ids(51, 52, 53, 55),
+    [line(0, 1, false), line(1, 1), line(2, 0), line(0, 0)],
+  ),
+  t(
+    'siblings in the query’s order',
+    { tree: 'pPar0001', sorts: [desc('pNum0001')] },
+    ids(55, 51, 52, 53, 54, 58, 59, 60, 61, 62, 63, 64, 66, 56, 57),
+    [
+      line(0, 0),
+      line(0, 2),
+      line(1, 1),
+      line(2, 0),
+      line(1, 0),
+      ...DEEP,
+      line(0, 0),
+      line(0, 0),
+      line(0, 1),
+      line(1, 1),
+    ],
+  ),
+  t(
+    'grouped, no tree',
+    { tree: 'pPar0001', group: { propertyId: P.checkbox.id } },
+    ids(51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66),
+    null,
+    [g('false', 15), g('true', 0)],
+  ),
+  t(
+    'a relation to another database nests nothing',
+    { tree: 'pRel0009' },
+    ids(51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66),
+    null,
+  ),
+];
+
 export const queryVectors: QuerySuite[] = [
   { name: 'every property type', database: MAIN, rows: MAIN_ROWS, cases: mainCases },
   { name: 'status out of group order', database: REORDERED, rows: STATUS_ROWS, cases: statusCases },
   { name: 'text order', database: database([TITLE]), rows: TEXT_ROWS, cases: textCases },
   { name: 'the date window', database: WINDOWED, rows: WINDOW_ROWS, cases: windowCases },
   { name: 'unique ids', database: database([TITLE, UID]), rows: UID_ROWS, cases: uidCases },
+  { name: 'sub-items', database: NESTED, rows: NESTED_ROWS, cases: nestedCases },
 ];
 
 export { DB };

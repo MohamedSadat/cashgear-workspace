@@ -455,6 +455,15 @@ export function httpSyncApi(api: ApiClient): SyncApi {
         groups: groupCounts(answer.groups),
         total: num(answer.total),
         next: answer.next ?? null,
+        ...(answer.tree
+          ? {
+              tree: answer.tree.map((l) => ({
+                depth: num(l.depth),
+                children: num(l.children),
+                match: l.match === true,
+              })),
+            }
+          : {}),
       };
     },
 

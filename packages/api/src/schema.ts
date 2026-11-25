@@ -2672,6 +2672,7 @@ export interface components {
       limit?: null | number | string;
       search?: null | string;
       sorts?: unknown;
+      tree?: null | string;
       /** Format: uuid */
       viewId?: null | string;
       window?: null | components['schemas']['QueryWindowDto'];
@@ -2682,6 +2683,7 @@ export interface components {
       rows: components['schemas']['RowDto'][];
       /** Format: int64 */
       total: number | string;
+      tree?: null | components['schemas']['TreeLineDto'][];
     };
     QueryWindowDto: {
       endPropertyId?: null | string;
@@ -3100,6 +3102,13 @@ export interface components {
       views: components['schemas']['ViewDto'][];
       visits: components['schemas']['VisitDto'][];
       workspace: components['schemas']['WorkspaceDto'];
+    };
+    TreeLineDto: {
+      /** Format: int32 */
+      children: number | string;
+      /** Format: int32 */
+      depth: number | string;
+      match: boolean;
     };
     UnreadDto: {
       /** Format: int32 */

@@ -134,7 +134,13 @@ describe('db-query-vectors.json', () => {
           const result = queryRows(asDb(suite.database), suite.rows.map(asRow), c.spec, c.ctx, {
             groupKey: c.groupKey,
           });
-          expect({ rows: result.rows.map((r) => r.id), groups: result.groups }).toEqual(c.expected);
+          const got: Record<string, unknown> = {
+            rows: result.rows.map((r) => r.id),
+            groups: result.groups,
+          };
+          // Phase 17: a case with `tree` reads its lines too.
+          if (c.expected.tree !== undefined) got.tree = result.tree ?? null;
+          expect(got).toEqual(c.expected);
         });
     });
 });

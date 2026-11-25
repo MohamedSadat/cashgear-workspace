@@ -9357,6 +9357,12 @@
                 "$ref": "#/components/schemas/QueryWindowDto"
               }
             ]
+          },
+          "tree": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -9397,6 +9403,15 @@
               "null",
               "string"
             ]
+          },
+          "tree": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/TreeLineDto"
+            }
           }
         }
       },
@@ -11134,6 +11149,35 @@
             "items": {
               "$ref": "#/components/schemas/ViewDto"
             }
+          }
+        }
+      },
+      "TreeLineDto": {
+        "required": [
+          "depth",
+          "children",
+          "match"
+        ],
+        "type": "object",
+        "properties": {
+          "depth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "children": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "match": {
+            "type": "boolean"
           }
         }
       },

@@ -37,11 +37,18 @@ public sealed record QueryRequestDto(
     QueryContextDto? Context = null,
     string? After = null,
     int? Limit = null,
-    QueryWindowDto? Window = null);
+    QueryWindowDto? Window = null,
+    /// <summary>Phase 17: rows nested under their parents by this relation of the database to itself (no group).</summary>
+    string? Tree = null);
 
 public sealed record GroupCountDto(string Key, long Count);
 
-public sealed record QueryResponseDto(IReadOnlyList<RowDto> Rows, IReadOnlyList<GroupCountDto>? Groups, long Total, string? Next);
+/// <summary>Phase 17: a row's line in a tree of sub-items (db/query.ts <c>TreeLine</c>).</summary>
+public sealed record TreeLineDto(int Depth, int Children, bool Match);
+
+public sealed record QueryResponseDto(IReadOnlyList<RowDto> Rows, IReadOnlyList<GroupCountDto>? Groups, long Total, string? Next,
+    /// <summary>Phase 17, a query with <c>tree</c>: each row's line, beside <c>rows</c>.</summary>
+    IReadOnlyList<TreeLineDto>? Tree = null);
 
 /// <summary><c>columns[i]</c>: the property the file's column i fills, or null to leave it out.</summary>
 public sealed record ImportRequestDto(string? Csv, IReadOnlyList<string?>? Columns, bool Header = false);
@@ -179,7 +186,7 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
             window = QuerySpec.ReadWindow(windowJson, out var valid);
             if (!valid) return Failure.Invalid("window is {propertyId, endPropertyId?, from, to} with YYYY-MM-DD dates");
         }
-        spec = new QuerySpec { Filter = spec.Filter, Sorts = spec.Sorts, Group = spec.Group, Search = request.Search, Window = window };
+        spec = new QuerySpec { Filter = spec.Filter, Sorts = spec.Sorts, Group = spec.Group, Search = request.Search, Window = window, Tree = request.Tree };
         var size = Math.Clamp(request.Limit ?? DefaultQuery, 1, MaxQuery);
         var ctx = Context(request.Context, member, clock);
 
@@ -202,13 +209,24 @@ public sealed class DatabaseService(CgwDb db, DatabaseRowCache cache, ChangeLog 
         var start = 0;
         if (!string.IsNullOrEmpty(request.After))
         {
-            if (Query.After(schema, spec, result.Rows, request.After, ctx) is not { } at) return Failure.Invalid("The cursor is not valid");
-            start = at;
+            // A tree's order is no sort's: its cursor is the last row's id (the order is kept above).
+            if (result.Tree is not null)
+            {
+                var index = Guid.TryParse(request.After, out var afterId) ? result.Rows.FindIndex(r => r.Id == afterId) : -1;
+                if (index < 0) return Failure.Invalid("The cursor is not valid");
+                start = index + 1;
+            }
+            else if (Query.After(schema, spec, result.Rows, request.After, ctx) is not { } at) return Failure.Invalid("The cursor is not valid");
+            else start = at;
         }
         var page = result.Rows.Skip(start).Take(size).ToList();
-        var next = start + page.Count < result.Rows.Count && page.Count > 0 ? Query.Cursor(schema, spec, page[^1], ctx) : null;
+        var more = start + page.Count < result.Rows.Count && page.Count > 0;
+        var next = !more ? null : result.Tree is not null ? page[^1].IdText : Query.Cursor(schema, spec, page[^1], ctx);
         var rows = await DtosAsync(page.Select(r => r.Id).ToList(), level, ct);
-        return new QueryResponseDto(rows, result.Groups?.Select(g => new GroupCountDto(g.Key, g.Count)).ToList(), result.Rows.Count, next);
+        // Each answered row's line (a row deleted meanwhile leaves the answer, and its line with it).
+        var lines = result.Tree is null ? null : page.Select((r, i) => (r.Id, Line: result.Tree[start + i])).ToDictionary(x => x.Id, x => x.Line);
+        var tree = lines is null ? null : rows.Select(r => lines[r.Id] is var l ? new TreeLineDto(l.Depth, l.Children, l.Match) : null!).ToList();
+        return new QueryResponseDto(rows, result.Groups?.Select(g => new GroupCountDto(g.Key, g.Count)).ToList(), result.Rows.Count, next, tree);
     }
 
     // Export ----------------------------------------------------------------------------------------

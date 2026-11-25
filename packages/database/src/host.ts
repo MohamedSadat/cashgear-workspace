@@ -15,6 +15,7 @@ import type {
   PropertyType,
   QueryContext,
   QuerySpec,
+  TreeLine,
   ViewRecord,
   ViewType,
 } from './core';
@@ -126,6 +127,11 @@ export interface RowSnapshot {
   loading: boolean;
   /** Why the last fetch failed, as a notice code (`offline`, `access.denied`, ...), else null. */
   error: string | null;
+  /**
+   * Phase 17, a query with `tree`: each loaded row's line (its depth, its shown sub-items, whether
+   * it matched), beside `rows`; absent for a flat query (or a server before 0.17.0).
+   */
+  tree?: TreeLine[] | null;
 }
 
 /** A live, paged list of rows for one query. */

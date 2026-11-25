@@ -6,10 +6,12 @@ import type {
   FilterGroup,
   GroupCount,
   GroupRule,
+  PropertyId,
   QueryContext,
   SortRule,
   ViewRecord,
 } from '../db/types';
+import type { TreeLine } from '../db/query';
 import type { Id } from '../ids';
 import type {
   FavouriteRecord,
@@ -179,6 +181,8 @@ export interface QueryRequest {
   search?: string;
   /** Only the rows whose dates meet these days (Phase 9; `DateWindow`, the same rule). */
   window?: DateWindow | null;
+  /** Phase 17: rows nested under their parents by this relation (`QuerySpec.tree`); a server before 0.17.0 ignores it. */
+  tree?: PropertyId | null;
   context: QueryContext;
   /** The `next` of the previous page (opaque), or null for the first. */
   after?: string | null;
@@ -193,6 +197,8 @@ export interface QueryAnswer {
   /** The filtered count (in the group, with `groupKey`). */
   total: number;
   next: string | null;
+  /** Phase 17, a query with `tree`: each row's line, beside `rows` (none from a server before 0.17.0). */
+  tree?: TreeLine[] | null;
 }
 
 export interface DocPushRequest {

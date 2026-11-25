@@ -721,6 +721,7 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         if (payload.TryGetProperty("row", out var part) && part.ValueKind == JsonValueKind.Object && part.TryGetProperty("values", out var values))
             await WriteValuesAsync(member, schema, row, values, ct);
         await RelationEditsAsync(schema, row, null, ct);
+        await CheckDependenciesAsync(schema, row, ct);
         if (page.TrashedAt is null && !page.IsTemplate)
         {
             database.RowCount++;
@@ -748,7 +749,33 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
         row.Dirty = true;
         row.Changed.Add(PropertyTypes.LastEditedTime);
         await RelationEditsAsync(schema, row, before, ct);
+        await CheckDependenciesAsync(schema, row, ct);
         return row.Record;
+    }
+
+    /// <summary>
+    /// Phase 17: a row blocked, through its database's Blocked by, by a row it blocks (itself among
+    /// them) is refused (db/dependencies.ts <c>dependencyLoop</c>): walked up from every row this
+    /// operation changed the Blocked by of, the rows read as this operation leaves them.
+    /// </summary>
+    private async Task CheckDependenciesAsync(Schema schema, RowState changed, CancellationToken ct)
+    {
+        if (Dependencies.BlockedBy(schema) is not { } blockedBy) return;
+        var touched = rows.Values.Where(r => r.Record.DatabaseId == changed.Record.DatabaseId
+            && (r == changed || r.Changed.Contains(blockedBy.Id)) && Dependencies.Ids(r.Values.GetValueOrDefault(blockedBy.Id)).Count > 0).ToList();
+        foreach (var row in touched)
+        {
+            var stack = new Stack<Guid>(Dependencies.Ids(row.Values.GetValueOrDefault(blockedBy.Id)));
+            var seen = new HashSet<Guid>();
+            while (stack.Count > 0)
+            {
+                var id = stack.Pop();
+                if (id == row.Page.Id) throw new OpFailure(Codes.DependencyLoop, "A row cannot be blocked by a row it blocks");
+                if (!seen.Add(id)) continue;
+                if (await RowAsync(id, ct) is { } next && next.Record.DatabaseId == row.Record.DatabaseId && next.Page.TrashedAt is null)
+                    foreach (var up in Dependencies.Ids(next.Values.GetValueOrDefault(blockedBy.Id))) stack.Push(up);
+            }
+        }
     }
 
     /// <summary>

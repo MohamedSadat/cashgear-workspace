@@ -37,6 +37,7 @@ export {
 } from './values';
 export {
   DEFAULT_DATE_BY,
+  MAX_TREE_DEPTH,
   compareRows,
   groupKeys,
   inWindow,
@@ -48,7 +49,10 @@ export {
   type QueryKind,
   type QueryOptions,
   type QueryResult,
+  type TreeLine,
 } from './query';
+// Phase 17: a database's tasks (sub-items, dependencies).
+export { dependencyLoop, roleDef } from './dependencies';
 export * from './formula';
 export { computeRollup, formulaCell, type RelatedRows } from './rollup';
 export { checkFormula, computeRow, evaluateFormula, type ComputeContext } from './compute';

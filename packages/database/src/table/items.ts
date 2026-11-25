@@ -5,9 +5,30 @@ import type { RowSnapshot } from '../host';
 
 export type TableItem =
   | { kind: 'group'; key: string; group: string; count: number; collapsed: boolean }
-  | { kind: 'row'; key: string; group: string | null; row: RowRecord }
+  | {
+      kind: 'row';
+      key: string;
+      group: string | null;
+      row: RowRecord;
+      /** Phase 17, sub-items nested: its line (absent for a flat table). */
+      sub?: SubLine;
+    }
   | { kind: 'more'; key: string; group: string | null }
   | { kind: 'new'; key: string; group: string | null };
+
+/** Phase 17: a nested row's place: its depth, its shown sub-items, a parent shown for a match. */
+export interface SubLine {
+  depth: number;
+  children: number;
+  context: boolean;
+  collapsed: boolean;
+}
+
+/** The key a row's sub-items are hidden by in the table's collapsed set. */
+export const subKey = (rowId: string) => `t:${rowId}`;
+
+/** Sub-items nest to five levels; a row at the fifth keeps those deeper beside it, with no toggle. */
+const LAST_LEVEL = 4;
 
 // Row items are kept per row record (and group), so a snapshot where one row changed gives the
 // same item objects for the others and their memoised rows are not drawn again.
@@ -38,6 +59,7 @@ export function buildItems(
   canAdd: boolean,
   previous?: readonly TableItem[],
 ): TableItem[] {
+  if (snapshot.tree && !snapshot.groups) return treeItems(snapshot, collapsed, canAdd);
   if (!snapshot.groups && previous) {
     const rows = snapshot.rows;
     const extra = (snapshot.complete ? 0 : 1) + (canAdd ? 1 : 0);
@@ -75,6 +97,45 @@ export function buildItems(
     return items;
   }
   for (const row of snapshot.rows) items.push(rowItem(row, null));
+  if (!snapshot.complete) items.push({ kind: 'more', key: 'm:', group: null });
+  if (canAdd) items.push({ kind: 'new', key: 'n:', group: null });
+  return items;
+}
+
+/**
+ * Phase 17: a nested table's items: each row with its line, those under a collapsed row left out
+ * (a row at the fifth level shows its deeper rows beside it and hides none).
+ */
+function treeItems(
+  snapshot: RowSnapshot,
+  collapsed: ReadonlySet<string>,
+  canAdd: boolean,
+): TableItem[] {
+  const tree = snapshot.tree!;
+  const items: TableItem[] = [];
+  let hideBelow = -1;
+  for (let i = 0; i < snapshot.rows.length; i++) {
+    const row = snapshot.rows[i];
+    const line = tree[i] ?? { depth: 0, children: 0, match: true };
+    if (hideBelow >= 0) {
+      if (line.depth > hideBelow) continue;
+      hideBelow = -1;
+    }
+    const closed = line.children > 0 && line.depth < LAST_LEVEL && collapsed.has(subKey(row.id));
+    items.push({
+      kind: 'row',
+      key: `r:${row.id}`,
+      group: null,
+      row,
+      sub: {
+        depth: line.depth,
+        children: line.depth < LAST_LEVEL ? line.children : 0,
+        context: !line.match,
+        collapsed: closed,
+      },
+    });
+    if (closed) hideBelow = line.depth;
+  }
   if (!snapshot.complete) items.push({ kind: 'more', key: 'm:', group: null });
   if (canAdd) items.push({ kind: 'new', key: 'n:', group: null });
   return items;
@@ -122,6 +183,7 @@ export interface AriaLayout {
 }
 
 export function ariaLayout(items: readonly TableItem[], snapshot: RowSnapshot): AriaLayout {
+  if (snapshot.tree && !snapshot.groups) return treeLayout(items, snapshot);
   const n = items.length;
   const rowIndex = new Int32Array(n);
   const level = new Uint8Array(n);
@@ -162,6 +224,53 @@ export function ariaLayout(items: readonly TableItem[], snapshot: RowSnapshot): 
     }
   }
   const rowCount = snapshot.loading && !snapshot.rows.length && !snapshot.complete ? -1 : next - 1;
+  return { rowCount, rowIndex, level, posInSet, setSize };
+}
+
+/**
+ * Phase 17: a nested table is a tree grid: each line is a row in the order shown (rows under a
+ * collapsed one take no place), at its level (its depth and 1), its place among its siblings and
+ * their count (its parent's sub-items, or the top level's rows). The count is the header and every
+ * line shown, and the rows not loaded yet.
+ */
+function treeLayout(items: readonly TableItem[], snapshot: RowSnapshot): AriaLayout {
+  const n = items.length;
+  const rowIndex = new Int32Array(n);
+  const level = new Uint8Array(n);
+  const posInSet = new Int32Array(n);
+  const setSize = new Int32Array(n);
+  const tops = (snapshot.tree ?? []).filter((l) => l.depth === 0).length;
+  // The place reached at each depth, and the sibling count there (its parent's sub-items).
+  const places: number[] = [];
+  const sizes: number[] = [];
+  let next = 2;
+  let shown = 0;
+  for (let i = 0; i < n; i++) {
+    const item = items[i];
+    if (item.kind === 'row') {
+      const depth = item.sub?.depth ?? 0;
+      places.length = depth + 1;
+      sizes.length = depth + 1;
+      places[depth] = (places[depth] ?? 0) + 1;
+      if (depth === 0) sizes[0] = tops;
+      rowIndex[i] = next++;
+      level[i] = depth + 1;
+      posInSet[i] = places[depth];
+      setSize[i] = Math.max(sizes[depth] ?? places[depth], places[depth]);
+      // Its own sub-items, should they follow.
+      places[depth + 1] = 0;
+      sizes[depth + 1] = item.sub?.children ?? 0;
+      shown++;
+    } else if (item.kind === 'more') {
+      rowIndex[i] = next;
+      level[i] = 1;
+      posInSet[i] = (places[0] ?? 0) + 1;
+      setSize[i] = Math.max(tops, posInSet[i]);
+    }
+  }
+  const rest = snapshot.complete ? 0 : Math.max(0, snapshot.total - snapshot.rows.length);
+  const rowCount =
+    snapshot.loading && !snapshot.rows.length && !snapshot.complete ? -1 : shown + rest + 1;
   return { rowCount, rowIndex, level, posInSet, setSize };
 }
 

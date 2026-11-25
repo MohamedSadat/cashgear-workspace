@@ -10,6 +10,7 @@ import { TYPE_GLYPH, orderedProperties, uniqueName } from '../model/properties';
 import { moveProperty, withAllHidden, withHidden } from '../model/viewConfig';
 import { newPropertyDef } from '../properties/defs';
 import { TypePicker } from '../properties/TypePicker';
+import { TaskSettings } from '../tasks/TaskSettings';
 
 export function PropertiesEditor({
   database,
@@ -144,6 +145,8 @@ export function PropertiesEditor({
           </ul>
         </section>
       ) : null}
+      {/* Phase 17: sub-items and dependencies. */}
+      <TaskSettings database={database} />
     </div>
   );
 }

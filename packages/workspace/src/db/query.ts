@@ -101,6 +101,100 @@ export interface QueryResult {
   rows: RowRecord[];
   /** The groups to show, in order, with their counts over the filtered rows; null ungrouped. */
   groups: GroupCount[] | null;
+  /** Phase 17, a query with `tree`: each row's place in the tree, beside `rows`; else absent. */
+  tree?: TreeLine[] | null;
+}
+
+/** Phase 17: a row's line in a tree of sub-items. */
+export interface TreeLine {
+  /** 0 for a row whose parent is not shown; at most `MAX_TREE_DEPTH - 1` (deeper rows stay there). */
+  depth: number;
+  /** How many of its sub-items are shown. */
+  children: number;
+  /** False for a parent shown only because a row under it matched the query. */
+  match: boolean;
+}
+
+/** Phase 17: sub-items nest at most five levels; rows deeper are shown at the fifth. */
+export const MAX_TREE_DEPTH = 5;
+
+/** The relation a tree nests by: a live relation of the database to itself, else null. */
+function treeDef(database: DatabaseRecord, id: PropertyId | null | undefined): PropertyDef | null {
+  if (!id) return null;
+  const def = propsOf(database).get(id);
+  return def &&
+    !def.trashedAt &&
+    def.type === 'relation' &&
+    def.relation?.databaseId === database.id
+    ? def
+    : null;
+}
+
+/**
+ * Phase 17: rows nested under their parents. A row's parent is the first live row its relation
+ * names (never itself); the rows shown are those the query matched and every ancestor of theirs
+ * (a parent shown so is no match); siblings are in the query's order; a row whose parent is not
+ * shown is at the top, as is, after the rest, any row of a loop. Depth stops at the fifth level.
+ */
+function nest(
+  def: PropertyDef,
+  all: readonly RowRecord[],
+  matched: readonly RowRecord[],
+  compare: (a: RowRecord, b: RowRecord) => number,
+): { rows: RowRecord[]; tree: TreeLine[] } {
+  const live = new Map<string, RowRecord>();
+  for (const row of all) if (!row.isTemplate && !row.trashedAt) live.set(row.id, row);
+  const parentOf = (row: RowRecord): RowRecord | null => {
+    const ids = row.values?.[def.id];
+    if (!Array.isArray(ids)) return null;
+    for (const id of ids) {
+      const parent = typeof id === 'string' && id !== row.id ? live.get(id) : undefined;
+      if (parent) return parent;
+    }
+    return null;
+  };
+  const matches = new Set(matched);
+  const shown = new Set(matched);
+  for (const row of matched) {
+    let up = parentOf(row);
+    const seen = new Set<RowRecord>([row]);
+    while (up && !seen.has(up)) {
+      seen.add(up);
+      shown.add(up);
+      up = parentOf(up);
+    }
+  }
+  const ordered = [...shown].sort(compare);
+  const kids = new Map<RowRecord, RowRecord[]>();
+  const roots: RowRecord[] = [];
+  for (const row of ordered) {
+    const parent = parentOf(row);
+    if (parent && shown.has(parent)) {
+      const list = kids.get(parent);
+      if (list) list.push(row);
+      else kids.set(parent, [row]);
+    } else roots.push(row);
+  }
+  const rows: RowRecord[] = [];
+  const tree: TreeLine[] = [];
+  const visited = new Set<RowRecord>();
+  // Depth first, by a stack of its own: a chain of thousands of rows nests no call in another.
+  const visit = (start: RowRecord) => {
+    const stack: [RowRecord, number][] = [[start, 0]];
+    while (stack.length) {
+      const [row, depth] = stack.pop()!;
+      if (visited.has(row)) continue;
+      visited.add(row);
+      const children = kids.get(row) ?? [];
+      rows.push(row);
+      tree.push({ depth, children: children.length, match: matches.has(row) });
+      for (let i = children.length - 1; i >= 0; i--)
+        stack.push([children[i], Math.min(depth + 1, MAX_TREE_DEPTH - 1)]);
+    }
+  };
+  for (const row of roots) visit(row);
+  for (const row of ordered) visit(row);
+  return { rows, tree };
 }
 
 const OPERATORS: Record<QueryKind, readonly FilterOperator[]> = {
@@ -710,10 +804,16 @@ export function queryRows(
     if (!matchesFilter(database, row, spec.filter, ctx, options)) return false;
     return windowed === null || windowed(row);
   });
-  result.sort(compareRows(database, spec.sorts ?? [], ctx, options));
+  const compare = compareRows(database, spec.sorts ?? [], ctx, options);
+  result.sort(compare);
 
   const def = groupDef(database, spec.group);
-  if (!def || !spec.group) return { rows: result, groups: null };
+  if (!def || !spec.group) {
+    const parent = treeDef(database, spec.tree);
+    return parent
+      ? { ...nest(parent, rows, result, compare), groups: null }
+      : { rows: result, groups: null };
+  }
   const rule = spec.group;
   const keysByRow = new Map<RowRecord, string[]>();
   const counts = new Map<string, number>();

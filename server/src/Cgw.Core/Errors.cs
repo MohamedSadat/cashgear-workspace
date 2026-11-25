@@ -133,6 +133,8 @@ public static class Codes
     public const string ApprovalClosed = "approval.closed";
     /// <summary>An approval the person has answered already (409).</summary>
     public const string ApprovalAnswered = "approval.answered";
+    /// <summary>A row made blocked, through Blocked by, by a row it blocks (an operation's refusal).</summary>
+    public const string DependencyLoop = "dependency.loop";
 
     /// <summary>Every code, for the contract test.</summary>
     public static readonly IReadOnlyList<string> All =
@@ -150,7 +152,7 @@ public static class Codes
         DomainTaken, DomainDnsNotFound, DomainInUse, DomainNotVerified,
         AutomationLimit, AutomationNone, WebhookAddress, TimeZoneUnknown,
         FormLinkExists, FormRows,
-        ApprovalClosed, ApprovalAnswered,
+        ApprovalClosed, ApprovalAnswered, DependencyLoop,
     ];
 }
 

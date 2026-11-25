@@ -74,6 +74,10 @@ export interface TableRowProps {
   onEditDone(end: EditEnd): void;
   onOpenRow(rowId: string): void;
   onToggleGroup(key: string): void;
+  /** Phase 17: shows or hides a nested row's sub-items. */
+  onToggleRow?(rowId: string): void;
+  /** Phase 17: the words a nested row's toggle says. */
+  subWords?: { expand(title: string): string; collapse(title: string): string; context: string };
   onNewRow(group: string | null): void;
   onLoadMore(group: string | null): void;
 }
@@ -289,14 +293,20 @@ function TableRowView(props: TableRowProps) {
   const row = item.row;
   const sel = props.selected;
   const inSel = (c: number) => !!sel && c >= sel.left && c <= sel.right;
+  // Phase 17: a nested row, its sub-items shown or hidden by its toggle.
+  const sub = item.sub;
+  const named = row.title || env.t('untitled');
   return (
     <div
       role="row"
       id={rowDomId}
       aria-rowindex={rowIndex}
       {...tree}
+      aria-expanded={sub && sub.children > 0 ? !sub.collapsed : undefined}
       aria-selected={sel?.whole || undefined}
-      className={`cgw-trow${wrap ? ' is-wrapped' : ''}${sel?.whole ? ' is-row-selected' : ''}`}
+      className={`cgw-trow${wrap ? ' is-wrapped' : ''}${sel?.whole ? ' is-row-selected' : ''}${
+        sub?.context ? ' is-context' : ''
+      }`}
       style={style}
       data-item={index}
     >
@@ -332,8 +342,36 @@ function TableRowView(props: TableRowProps) {
         const title = def.type === 'title';
         let content = renderCell(def, row, env);
         if (title) {
+          const nest = sub ? (
+            <span
+              className="cgw-db-sub-indent"
+              style={{ inlineSize: `${sub.depth * 18 + 18}px` }}
+              aria-hidden={sub.children > 0 ? undefined : true}
+            >
+              {sub.children > 0 ? (
+                <button
+                  type="button"
+                  className="cgw-icon-button cgw-db-sub-toggle"
+                  tabIndex={-1}
+                  aria-label={
+                    sub.collapsed ? props.subWords?.expand(named) : props.subWords?.collapse(named)
+                  }
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    props.onToggleRow?.(row.id);
+                  }}
+                >
+                  <span aria-hidden="true" className="cgw-chevron" data-open={!sub.collapsed}>
+                    ›
+                  </span>
+                </button>
+              ) : null}
+            </span>
+          ) : null;
           content = (
             <>
+              {nest}
               <CgDragHandle
                 className="cgw-db-row-select"
                 tabIndex={-1}

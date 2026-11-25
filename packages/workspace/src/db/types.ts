@@ -102,6 +102,9 @@ export interface SelectOption {
 
 export type StatusGroup = 'todo' | 'inProgress' | 'complete';
 
+/** Phase 17: what a relation of a database to itself is for (`PropertyDef.relation.role`). */
+export type RelationRole = 'parent' | 'subItems' | 'blockedBy' | 'blocking';
+
 export interface StatusOption extends SelectOption {
   group: StatusGroup;
 }
@@ -139,8 +142,18 @@ export interface PropertyDef {
   number?: { format: NumberFormat; decimals: number | null; currency?: string | null };
   /** Date, created and edited time: shown with the time of day. */
   date?: { includeTime: boolean };
-  /** Relation: the database it points into and the property there kept in step with this one. */
-  relation?: { databaseId: Id; reversePropertyId: PropertyId | null };
+  /**
+   * Relation: the database it points into and the property there kept in step with this one.
+   * Phase 17: a relation of the database to itself may have a `role` (its sub-items' Parent and
+   * Sub-items, its dependencies' Blocked by and Blocking), and Blocked by `shift` (moving a row's
+   * dates moves the rows it blocks).
+   */
+  relation?: {
+    databaseId: Id;
+    reversePropertyId: PropertyId | null;
+    role?: RelationRole;
+    shift?: boolean;
+  };
   /** Rollup: a property of the related rows, reduced by a function. */
   rollup?: { relationPropertyId: PropertyId; targetPropertyId: PropertyId; fn: RollupFunction };
   /** Formula: the expression, with properties named by id: `prop("Ab12Cd34")`. */
@@ -419,6 +432,11 @@ export interface QuerySpec {
   search?: string;
   /** Only the rows whose dates meet these days (a calendar's or a timeline's; Phase 9). */
   window?: DateWindow | null;
+  /**
+   * Phase 17: rows nested under their parents (`queryRows`' `tree`), by this relation of the
+   * database to itself (its Parent property), when the query has no group.
+   */
+  tree?: PropertyId | null;
 }
 
 /**

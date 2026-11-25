@@ -183,6 +183,8 @@ public sealed class DatabaseVectorTests(ServerFixture server)
                     Search = Str(spec, "search"),
                     // Phase 9's date window.
                     Window = spec.TryGetProperty("window", out var w) ? QuerySpec.ReadWindow(w, out _) : null,
+                    // Phase 17's sub-items.
+                    Tree = Str(spec, "tree"),
                 };
                 var ctx = c.GetProperty("ctx");
                 var people = ctx.TryGetProperty("people", out var p) && p.ValueKind == JsonValueKind.Object
@@ -195,6 +197,9 @@ public sealed class DatabaseVectorTests(ServerFixture server)
                     ["rows"] = new JsonArray(result.Rows.Select(r => (JsonNode?)JsonValue.Create(r.IdText)).ToArray()),
                     ["groups"] = result.Groups is null ? null : new JsonArray(result.Groups.Select(x => (JsonNode?)new JsonObject { ["key"] = x.Key, ["count"] = x.Count }).ToArray()),
                 };
+                if (c.GetProperty("expected").TryGetProperty("tree", out _))
+                    actual["tree"] = result.Tree is null ? null
+                        : new JsonArray(result.Tree.Select(l => (JsonNode?)new JsonObject { ["depth"] = l.Depth, ["children"] = l.Children, ["match"] = l.Match }).ToArray());
                 Check(failures, $"{Str(suite, "name")}: {Str(c, "name")}", actual, c.GetProperty("expected"));
             }
         }

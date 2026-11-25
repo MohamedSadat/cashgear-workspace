@@ -6,6 +6,7 @@ export type {
   AutomationStep,
   AutomationTrigger,
   BranchPath,
+  RelationRole,
   StepKind,
   StepValue,
   TriggerKind,
@@ -93,11 +94,13 @@ export {
   operatorsFor,
   propertyKind,
   queryRows,
+  MAX_TREE_DEPTH,
   rollupType,
   windowSpan,
 } from '@cgw/workspace';
 export type {
   FormulaFunction,
+  TreeLine,
   QueryKind,
   QueryOptions,
   QueryResult,

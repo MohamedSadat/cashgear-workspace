@@ -21,6 +21,7 @@ import {
   type QueryContext,
   type QueryRequest,
   type RowRecord,
+  type TreeLine,
 } from '@cgw/workspace';
 import { noticeCode, type ShellDatabaseHost, type SourceMode } from './host';
 
@@ -45,6 +46,8 @@ interface ServerState {
   groupNext: Map<string, string | null>;
   /** Every row the answers brought, by id. */
   rows: Map<Id, RowRecord>;
+  /** Phase 17, a tree's query: each row's line by id, as the answers gave them. */
+  lines: Map<Id, TreeLine>;
   loading: boolean;
   error: string | null;
   /** Rises with every answer. */
@@ -132,6 +135,8 @@ export class ShellRowSource implements RowSource {
       localOnly,
       loading: false,
       error: null,
+      // Phase 17: sub-items nested, their lines beside the rows.
+      ...(result.tree ? { tree: result.tree } : {}),
     });
   }
 
@@ -167,6 +172,8 @@ export class ShellRowSource implements RowSource {
       ...(spec.search ? { search: spec.search } : {}),
       // A calendar's or a timeline's days (Phase 9): the server answers only the rows in them.
       ...(spec.window ? { window: spec.window } : {}),
+      // Phase 17: rows nested under their parents.
+      ...(spec.tree ? { tree: spec.tree } : {}),
       ...(groupKey !== undefined ? { groupKey } : {}),
       context: this.host.queryContext(),
       after,
@@ -187,6 +194,7 @@ export class ShellRowSource implements RowSource {
         groupRows: new Map(),
         groupNext: new Map(),
         rows: new Map(),
+        lines: new Map(),
         loading: true,
         error: null,
         version: 0,
@@ -201,6 +209,7 @@ export class ShellRowSource implements RowSource {
       const answer = await this.host.query(this.databaseId, this.requestFor(after, groupKey));
       if (this.closed || generation !== this.generation || state !== this.server) return;
       for (const row of answer.rows) state.rows.set(row.id, row);
+      answer.tree?.forEach((line, i) => state.lines.set(answer.rows[i].id, line));
       const ids = answer.rows.map((r) => r.id);
       if (groupKey === undefined) {
         const have = new Set(state.order);
@@ -298,14 +307,23 @@ export class ShellRowSource implements RowSource {
         error: state.error,
       });
     }
+    const all = added.length ? [...rows, ...added] : rows;
     this.set({
-      rows: added.length ? [...rows, ...added] : rows,
+      rows: all,
       groups: null,
       total,
       complete: state.next === null,
       localOnly: false,
       loading: state.loading,
       error: state.error,
+      // Phase 17: each row's line as the server gave it; a row added since sits at the top level.
+      ...(state.lines.size || (this.request.spec.tree && state.order.length)
+        ? {
+            tree: all.map(
+              (row) => state.lines.get(row.id) ?? { depth: 0, children: 0, match: true },
+            ),
+          }
+        : {}),
     });
   }
 

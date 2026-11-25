@@ -23,7 +23,7 @@ const { I18nextProvider } = await import('react-i18next');
 const { DatabaseView } = await import('../DatabaseView');
 const { createDatabaseI18n, en: catalogueEn } = await import('../i18n');
 const { seed, P } = await import('../testing/fixtures');
-const { ariaLayout, buildItems } = await import('./items');
+const { ariaLayout, buildItems, subKey } = await import('./items');
 const { addGridWords, gridAr, gridEn } = await import('./words');
 
 type Root = ReturnType<typeof createRoot>;
@@ -154,6 +154,48 @@ describe('what a screen reader counts', () => {
     // Unknown while the first page loads.
     const loading = snapshotOf({ loading: true, complete: false });
     expect(ariaLayout(buildItems(loading, new Set(), true), loading).rowCount).toBe(-1);
+  });
+
+  // Phase 17: sub-items nested (a tree grid of rows): each at its depth and 1, its place among its
+  // siblings of their count; a collapsed row's sub-items no lines; the rows not loaded counted.
+  it('nested: each row at its level, its place among its siblings, a collapsed row hiding its own', () => {
+    const rows = fakeRows(5, 'n');
+    const line = (depth: number, children: number, match = true) => ({ depth, children, match });
+    const tree = [line(0, 2), line(1, 1), line(2, 0), line(1, 0), line(0, 0, false)];
+    const s = snapshotOf({ rows, total: 5, tree });
+    const items = buildItems(s, new Set(), false);
+    const layout = ariaLayout(items, s);
+    expect(layout.rowCount).toBe(6);
+    expect([...layout.rowIndex]).toEqual([2, 3, 4, 5, 6]);
+    expect([...layout.level]).toEqual([1, 2, 3, 2, 1]);
+    expect([...layout.posInSet]).toEqual([1, 1, 1, 2, 2]);
+    expect([...layout.setSize]).toEqual([2, 2, 1, 2, 2]);
+    expect(items.map((i) => (i.kind === 'row' ? i.sub?.context : null))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
+    // The first row's sub-items hidden: its two, and the one under the first of them.
+    const closed = buildItems(s, new Set([subKey('n0')]), false);
+    expect(closed.map((i) => (i.kind === 'row' ? i.row.id : i.kind))).toEqual(['n0', 'n4']);
+    expect(closed[0].kind === 'row' && closed[0].sub?.collapsed).toBe(true);
+    expect(ariaLayout(closed, s).rowCount).toBe(3);
+    // Paged: the rows to come counted, "load more" at the top level's next place.
+    const paged = snapshotOf({
+      rows: rows.slice(0, 2),
+      total: 9,
+      tree: tree.slice(0, 2),
+      complete: false,
+    });
+    const pagedLayout = ariaLayout(buildItems(paged, new Set(), false), paged);
+    expect(pagedLayout.rowCount).toBe(10);
+    // A row at the fifth level keeps its deeper rows beside it, with no toggle.
+    const deep = snapshotOf({ rows: fakeRows(2, 'd'), total: 2, tree: [line(4, 1), line(4, 0)] });
+    const deepItems = buildItems(deep, new Set([subKey('d0')]), false);
+    expect(deepItems).toHaveLength(2);
+    expect(deepItems[0].kind === 'row' && deepItems[0].sub?.children).toBe(0);
   });
 
   it('grouped: each group a place, then all of its rows’ places when expanded, loaded or not', () => {

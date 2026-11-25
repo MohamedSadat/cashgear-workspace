@@ -34,6 +34,8 @@ public sealed class QuerySpec
     public string? Search { get; init; }
     /// <summary>Phase 9: only rows whose span meets these dates (the calendar's and the timeline's range).</summary>
     public DateWindow? Window { get; init; }
+    /// <summary>Phase 17: rows nested under their parents by this relation of the database to itself, when the query has no group.</summary>
+    public string? Tree { get; init; }
 
     /// <summary>
     /// A window as the request names it: <c>{propertyId, endPropertyId?, from, to}</c> with
@@ -101,7 +103,7 @@ public sealed class QuerySpec
 /// </summary>
 public static class Query
 {
-    public sealed record Result(List<RowData> Rows, List<GroupCount>? Groups);
+    public sealed record Result(List<RowData> Rows, List<GroupCount>? Groups, List<TreeLine>? Tree = null);
 
     public const string DefaultDateBy = "month";
 
@@ -558,7 +560,16 @@ public static class Query
         var result = keyed.Select(k => k.Row).ToList();
 
         var def = GroupDef(schema, spec.Group);
-        if (def is null || spec.Group is null) return new Result(result, null);
+        if (def is null || spec.Group is null)
+        {
+            // Phase 17: nested under their parents, an ancestor of a match shown too (keyed as it is met).
+            if (TreeDef(schema, spec.Tree) is not { } parent) return new Result(result, null);
+            var keys = keyed.ToDictionary(k => k.Row, k => k.Keys);
+            object?[] KeyOf(RowData row) => keys.TryGetValue(row, out var known) ? known : keys[row] = KeysOf(schema, rules, row, ctx, computed);
+            var (nested, lines) = Nest(parent, source, result,
+                (a, b) => Compare(rules, KeyOf(a), KeyOf(b), a.OrderKey, a.IdText, b.OrderKey, b.IdText));
+            return new Result(nested, null, lines);
+        }
         var rule = spec.Group;
         var keysByRow = new Dictionary<Guid, List<string>>();
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -581,6 +592,79 @@ public static class Query
             ? result.Where(row => keysByRow[row.Id].Contains(groupKey)).ToList()
             : result.Where(row => keysByRow[row.Id].Any(shown.Contains)).ToList();
         return new Result(result, groups);
+    }
+
+    // Sub-items (Phase 17) ----------------------------------------------------------------------------
+
+    /// <summary>Phase 17: a row's line in a tree of sub-items (db/query.ts <c>TreeLine</c>).</summary>
+    public sealed record TreeLine(int Depth, int Children, bool Match);
+
+    /// <summary>Sub-items nest at most five levels; rows deeper are shown at the fifth.</summary>
+    public const int MaxTreeDepth = 5;
+
+    /// <summary>The relation a tree nests by: a live relation of the database to itself, else null.</summary>
+    public static PropertyDef? TreeDef(Schema schema, string? id) =>
+        id is not null && schema.Live(id) is { Type: PropertyTypes.Relation } def && string.Equals(def.RelationDatabase, schema.IdText, StringComparison.OrdinalIgnoreCase) ? def : null;
+
+    /// <summary>
+    /// db/query.ts <c>nest</c>: rows nested under their parents. A row's parent is the first live row
+    /// its relation names (never itself); the rows shown are the matched ones and every ancestor of
+    /// theirs; siblings in the query's order; a row whose parent is not shown at the top, then any row
+    /// of a loop; depth stops at the fifth level.
+    /// </summary>
+    private static (List<RowData> Rows, List<TreeLine> Tree) Nest(PropertyDef def, IReadOnlyCollection<RowData> all, List<RowData> matched, Comparison<RowData> compare)
+    {
+        var live = new Dictionary<Guid, RowData>();
+        foreach (var row in all)
+            if (!row.IsTemplate && !row.Trashed) live[row.Id] = row;
+        RowData? ParentOf(RowData row)
+        {
+            if (Raw.List(row.Values.GetValueOrDefault(def.Id)) is not { } ids) return null;
+            foreach (var id in ids)
+                if (id is string text && Guid.TryParse(text, out var g) && g != row.Id && live.TryGetValue(g, out var parent)) return parent;
+            return null;
+        }
+        var matches = new HashSet<RowData>(matched);
+        var shown = new HashSet<RowData>(matched);
+        foreach (var row in matched)
+        {
+            var seen = new HashSet<RowData> { row };
+            for (var up = ParentOf(row); up is not null && seen.Add(up); up = ParentOf(up)) shown.Add(up);
+        }
+        var ordered = shown.ToList();
+        ordered.Sort(compare);
+        var kids = new Dictionary<RowData, List<RowData>>();
+        var roots = new List<RowData>();
+        foreach (var row in ordered)
+        {
+            if (ParentOf(row) is { } parent && shown.Contains(parent))
+            {
+                if (!kids.TryGetValue(parent, out var list)) kids[parent] = list = [];
+                list.Add(row);
+            }
+            else roots.Add(row);
+        }
+        var rows = new List<RowData>(ordered.Count);
+        var tree = new List<TreeLine>(ordered.Count);
+        var visited = new HashSet<RowData>();
+        // Depth first, by a stack of its own: a chain of thousands of rows nests no call in another.
+        void Visit(RowData start)
+        {
+            var stack = new Stack<(RowData Row, int Depth)>();
+            stack.Push((start, 0));
+            while (stack.Count > 0)
+            {
+                var (row, depth) = stack.Pop();
+                if (!visited.Add(row)) continue;
+                var children = kids.GetValueOrDefault(row) ?? [];
+                rows.Add(row);
+                tree.Add(new TreeLine(depth, children.Count, matches.Contains(row)));
+                for (var i = children.Count - 1; i >= 0; i--) stack.Push((children[i], Math.Min(depth + 1, MaxTreeDepth - 1)));
+            }
+        }
+        foreach (var row in roots) Visit(row);
+        foreach (var row in ordered) Visit(row);
+        return (rows, tree);
     }
 
     // Cursor ----------------------------------------------------------------------------------------

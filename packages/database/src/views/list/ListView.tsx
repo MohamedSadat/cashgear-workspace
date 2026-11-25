@@ -3,6 +3,7 @@
 // the window and an overscan are drawn). One line is in the tab order; the arrows, Home, End,
 // PageUp and PageDown move between lines, Enter opens a row (or a group, "Load more", "New"),
 // Shift+F10 opens a row's menu. "New" types a title in place; the row is made on Enter.
+import { SubCount } from '../../tasks/SubCount';
 import { CgContextMenu, type CgContextMenuActions, type CgContextMenuItem } from '@cashgear/ui';
 import type { RowRecord } from '@cgw/workspace';
 import {
@@ -405,6 +406,7 @@ const ListLine = memo(
           <span className={row.title ? undefined : 'cgw-card-untitled'} dir="auto">
             {row.title || env.t('untitled')}
           </span>
+          <SubCount row={row} env={env} />
         </span>
         <span className="cgw-db-list-props">
           {cardLines(row, shown).map((def) => (

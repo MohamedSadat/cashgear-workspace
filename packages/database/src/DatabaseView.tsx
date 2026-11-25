@@ -2,6 +2,7 @@
 // toolbar (filter, sort, group, properties, wrap, search, New), notices (view only, rows on this
 // device only, a failed fetch), and the active view, drawn by its type (views/registry.ts).
 // Embedded in a page (a `databaseView` block) or as the database's own full page.
+import { taskPair } from './tasks/model';
 import {
   CgButton,
   CgContextMenu,
@@ -143,6 +144,10 @@ export function DatabaseView({
   useEffect(() => () => void (searchTimer.current && clearTimeout(searchTimer.current)), []);
 
   // ---- Rows -------------------------------------------------------------------------------
+  const nestBy =
+    view && database && view.type === 'table' && !view.config.group
+      ? taskPair(database, 'subItems')?.first.id
+      : undefined;
   const request = useMemo<RowRequest | null>(
     () =>
       view && database
@@ -153,11 +158,13 @@ export function DatabaseView({
               sorts: view.config.sorts,
               group: view.config.group,
               ...(search ? { search } : {}),
+              // Phase 17: a table nests sub-items under their parents, while it has no group.
+              ...(nestBy ? { tree: nestBy } : {}),
             },
             pageSize: 100,
           }
         : null,
-    [view, database, search],
+    [view, database, search, nestBy],
   );
   // A calendar or a timeline reads its rows by queries of its own (a date window; Phase 9).
   const ownRows = !!view && !!viewType(view.type).ownRows;

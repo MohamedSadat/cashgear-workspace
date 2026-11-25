@@ -290,6 +290,8 @@ export type OpErrorCode =
   | 'page.trashed'
   | 'page.notTrashed'
   | 'section.notEmpty'
+  /** Phase 17: a row blocked by a row it blocks. */
+  | 'dependency.loop'
   | 'invalid';
 
 export class OpError extends Error {

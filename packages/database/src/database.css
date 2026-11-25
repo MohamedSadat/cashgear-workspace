@@ -1262,3 +1262,33 @@ textarea.cgw-inline-editor:focus-visible {
   cursor: default;
   opacity: 0.6;
 }
+
+/* Phase 17: sub-items nested in a table, and a parent shown only for a sub-item that matched. */
+.cgw-db-sub-indent {
+  display: inline-flex;
+  flex: none;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.cgw-db-sub-toggle {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.cgw-trow.is-context .cgw-tcell-title {
+  color: var(--cg-text-secondary);
+}
+
+.cgw-db-sub-count {
+  color: var(--cg-text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* Phase 17: the Properties menu's sub-items and dependencies. */
+.cgw-db-task-settings,
+.cgw-db-task-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

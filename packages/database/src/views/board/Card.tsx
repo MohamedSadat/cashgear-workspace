@@ -9,6 +9,7 @@ import { renderCell } from '../../cells/CellDisplay';
 import type { CellEnv } from '../../cells/env';
 import type { PropertyDef } from '../../core';
 import { cardLines } from './layout';
+import { SubCount } from '../../tasks/SubCount';
 
 /** A card's title and its lines. */
 export function CardContent({
@@ -36,6 +37,7 @@ export function CardContent({
           {title}
         </span>
       </div>
+      <SubCount row={row} env={env} />
       {cardLines(row, shown).map((def) => (
         <div key={def.id} className="cgw-card-line" title={def.name}>
           {renderCell(def, row, env)}

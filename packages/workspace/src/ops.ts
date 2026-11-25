@@ -15,6 +15,7 @@ import {
   startProperties,
   writeValues,
 } from './db/plan';
+import { dependencyLoop, roleDef } from './db/dependencies';
 import type { Id } from './ids';
 import { keyBetween, compareSiblings } from './order';
 import {
@@ -322,7 +323,14 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
             updatedBy: made.updatedBy ?? made.createdBy ?? null,
           };
           putRow(record);
-          putRows(await planRelationEdits(db, record, null, reader, at));
+          const touched = await planRelationEdits(db, record, null, reader, at);
+          // Phase 17: a new row may not close a loop of dependencies either.
+          if (roleDef(db, 'blockedBy'))
+            refuseLoop(db, new Map((await reader.rows(db.id)).map((r) => [r.id, r])), [
+              record,
+              ...touched,
+            ]);
+          putRows(touched);
           if (counts(record)) await recount(db.id, 1);
           break;
         }
@@ -568,7 +576,14 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
           updatedAt: at,
         };
         putRow(next);
-        putRows(await planRelationEdits(db, next, row.values, reader, at));
+        const touched = await planRelationEdits(db, next, row.values, reader, at);
+        // Phase 17: a row blocked by a row it blocks, as far as this device can see (the server sees all).
+        if (roleDef(db, 'blockedBy'))
+          refuseLoop(db, new Map((await reader.rows(db.id)).map((r) => [r.id, r])), [
+            next,
+            ...touched,
+          ]);
+        putRows(touched);
         break;
       }
       case 'automation.upsert': {
@@ -627,4 +642,14 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
     deleteRows: [...deleteRows],
     holds: split(reader.holds).put,
   };
+}
+
+/** Phase 17: refuses a change that makes a row blocked by a row it blocks (`dependencyLoop`). */
+function refuseLoop(
+  db: DatabaseRecord,
+  rows: ReadonlyMap<Id, RowRecord>,
+  changed: readonly RowRecord[],
+): void {
+  if (dependencyLoop(db, rows, changed))
+    throw new OpError('dependency.loop', 'A row cannot be blocked by a row it blocks');
 }

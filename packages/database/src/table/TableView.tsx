@@ -73,6 +73,7 @@ import {
   indexOfRow,
   itemHeight,
   type TableItem,
+  subKey,
 } from './items';
 import { navigate, startsTyping, type GridPos } from './navigation';
 import {
@@ -98,6 +99,7 @@ import {
 } from './TableRow';
 import { useCellCommands } from './useCells';
 import { useGridT } from './words';
+import { useTaskT } from '../tasks/words';
 import {
   columnRange,
   layoutOf,
@@ -177,7 +179,26 @@ export function TableView({
   }, [snapshot, collapsed, editable]);
   // What a screen reader counts: the query's total, each line's place of it (items.ts).
   const aria = useMemo(() => ariaLayout(items, snapshot), [items, snapshot]);
-  const tree = snapshot.groups !== null;
+  // Grouped, or (Phase 17) sub-items nested: a tree grid.
+  const tree = snapshot.groups !== null || !!snapshot.tree;
+  const tt = useTaskT();
+  const subWords = useMemo(
+    () => ({
+      expand: (title: string) => tt('expand', { title }),
+      collapse: (title: string) => tt('collapse', { title }),
+      context: tt('context'),
+    }),
+    [tt],
+  );
+  const toggleRow = useCallback((rowId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      const key = subKey(rowId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   // Ungrouped, every row is as tall as the next: the layout changes only with the count.
   const shapeKey = snapshot.groups ? items : `${items.length}:${items[items.length - 1]?.kind}`;
   const layout = useMemo(
@@ -699,6 +720,25 @@ export function TableView({
       return;
     }
 
+    // Phase 17: a nested row's title, as a tree grid's row: forward shows its sub-items, back hides them.
+    if (
+      entry?.kind === 'row' &&
+      entry.sub &&
+      entry.sub.children > 0 &&
+      pos.col === 0 &&
+      !mod &&
+      !event.altKey &&
+      !event.shiftKey &&
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+    ) {
+      const forward = (event.key === 'ArrowRight') !== dirRtl;
+      if (forward === entry.sub.collapsed) {
+        event.preventDefault();
+        toggleRow(entry.row.id);
+        return;
+      }
+    }
+
     if (entry && entry.kind !== 'row' && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       if (entry.kind === 'group') toggleGroup(entry.group);
@@ -1040,6 +1080,8 @@ export function TableView({
                 onEditDone={onEditDone}
                 onOpenRow={openRow}
                 onToggleGroup={toggleGroup}
+                onToggleRow={toggleRow}
+                subWords={subWords}
                 onNewRow={newRow}
                 onLoadMore={loadMore}
               />

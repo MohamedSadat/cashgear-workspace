@@ -165,6 +165,16 @@ export function createActions(host: DatabaseHost, databaseId: Id) {
       if (current && sameValue(current, def)) return Promise.resolve();
       return send([dbUpdate([def])]);
     },
+    /** Phase 17: several properties' definitions replaced at once (a pair of relations and their roles). */
+    updateProperties(defs: PropertyDef[]): Promise<void> {
+      const known = database()?.properties ?? [];
+      const changed = defs.filter((def) => {
+        const current = known.find((p) => p.id === def.id);
+        return !current || !sameValue(current, def);
+      });
+      if (!changed.length) return Promise.resolve();
+      return send([dbUpdate(changed)]);
+    },
     /**
      * Adds a property: to the database (next to `anchor` in its order when given) and, in the
      * view, next to `anchor` and shown.
