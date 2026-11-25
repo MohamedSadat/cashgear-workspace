@@ -2015,6 +2015,9 @@ own domain (`pay.paddle.io`), so the app needs no page of its own for it.
 | The model, and the spike's downloads | Three candidates measured by the spike for speed and for the app's own actions' answers in English and in Arabic: Qwen3-4B-Instruct-2507 (Apache 2.0), Phi-4-mini-instruct (MIT) and Qwen3.5-4B (Apache 2.0, dropped if the runtime cannot build it). Downloads, each into a folder of its own under `target/spike18`: each model's official weights from Hugging Face (about 8 GB each), a throwaway Python environment (PyTorch for the processor, Transformers, ONNX Runtime GenAI's model builder) for the one build to int4 ONNX, and `Microsoft.ML.OnnxRuntimeGenAI` (MIT) from NuGet; each model's licence and code read before it runs. On the reference machine first, then once on the production host over Remote Desktop at a quiet hour, nothing installed there and its folder deleted after |
 | The payment provider | Paddle, as merchant of record (it sells to the customer and handles VAT and sales tax): its hosted checkout and its customer portal, opened from Settings → AI by owners, so no card or payment detail ever reaches the app; its webhooks signed (HMAC); the tests against a mock of it, and the live test in its sandbox by keys you give at the time |
 | What is charged | Plans, each a flat price a month a workspace with a monthly allowance of tokens (completions and search by meaning apart), on Phase 13's allowance; prices in Paddle's catalogue and the plans' allowances in the server's environment, never in the code, set at the live test; an upgrade or a downgrade at once, a cancelled plan until the end of the period paid, a failed payment ending the allowance once Paddle stops retrying |
+| The live test (asked the same day, once Paddle's sandbox had to reach this machine) | You run it later in Paddle's sandbox, by OPERATIONS.md's runbook; the phase's evidence says it is owed |
+| The sandbox's preparation | By Paddle's API with your sandbox key: `scripts/paddle-sandbox.mjs` makes the product, its two monthly prices (Starter 9.00 and Team 29.00 USD) and the webhook destination, the key read from the environment only and a live key refused |
+| The host's run | At once (13:23 host time), every package unpacked in a scratch folder and deleted after |
 
 ### Defaults picked (say if any should change)
 
@@ -2022,3 +2025,81 @@ own domain (`pay.paddle.io`), so the app needs no page of its own for it.
 | --- | --- | --- |
 | Version | `v0.18.0` | One version per phase |
 | The old build | v0.17.0 served on 4265 for `old-build.spec.ts` | The next free port below 4266 |
+| The checkout | Paddle's own checkout, opened by Paddle.js (its overlay, the card typed into Paddle's frames) on the Sites process's pay page, `/_pay/en` and `/_pay/ar`, an origin with no sign-in, cookie or session; a transaction made by the server carries the workspace's id (`custom_data`) and names the pay page as its checkout's address. Paddle's hosted checkout (`pay.paddle.io`), which the question named, turned out to be for Mac and iOS apps only, with Paddle's approval | No card or payment detail reaches the app either way; Paddle's script runs where it can reach nothing of the person's |
+| The state of a plan | Read from Paddle's API whenever anything says it changed (a webhook, an owner back from the checkout, the daily reconcile); a webhook's body is a prompt to read it, never the state; applied only when Paddle's `updated_at` is newer | "A webhook replayed or forged changes nothing": a forgery fails the signature, a replay finds its event recorded and, were it not, Paddle's state as it is |
+| What gives a plan | `active`, `trialing` and `past_due` (Paddle retrying); `paused` and `canceled` none. A workspace on a plan has the larger of the plan's allowance and the default (`Ai__Subscription__MonthlyTokens`); its own override still wins over both | "A failed payment ending the allowance once Paddle stops retrying"; a paid plan never gives less than the free one |
+| Where the plan is held | The plan's price on the workspace's AI settings row (`PlanPriceId`), written with `WorkspaceBilling` in one transaction under that row's update lock, which every reservation takes | Every allowance check already reads that row; a call sees the plan or the one before it, never half |
+| Who buys | Owners subscribe, change the plan and open the portal; admins see the plan; members and guests see nothing of it | "Opened from Settings → AI by owners" |
+| A plan change | At once, prorated (`prorated_immediately`), a failed charge keeping the old plan (`prevent_change`); a second checkout of a workspace on a plan refused (`billing.subscribed`) | "An upgrade or a downgrade at once"; one subscription a workspace |
+| An owner back from the checkout | Settings asks the server to read the plan again from Paddle every 5 s for ten minutes while a checkout of the last hour waits, and on focus | The plan shows within a minute even if a webhook is late |
+| The daily reconcile | The worker's job each hour reads again every subscription not read for a day (200 a call) and the checkouts of the last day not yet a subscription; events kept 90 days, checkouts that came to nothing 30 | A lost webhook is mended within a day at the latest |
+| A workspace deleted for good | Its purge cancels its subscription at Paddle at once, then deletes its billing; Paddle unreachable, the purge waits | Nothing goes on billing a workspace that no longer exists |
+| A webhook's time | Within 5 minutes of the server's (Paddle's own libraries allow 5 seconds) | Clocks differ; a replay changes nothing anyway |
+| Gated on `/version` | `billing: true` when Paddle's key and secret and a plan are configured; the plan's part of Settings offered only then | Production's server is deployed after its web app |
+| The local model's line | A client that asks for it (`events: ['queued']`) is told how many answers are before its own while it waits; one that does not ask (before 0.18.0) is sent no such line | An older client reads an unknown line as a broken answer |
+| `ask` on the server's own model | Searched by meaning only when search by meaning is made on the server too (`voyage-4-nano`), else by its words alone | "No text leaves the host" |
+| The local model's offer | Every workspace on a server with the package, chosen in Settings → AI as a third source beside the workspace's key and Cash Gear's subscription; no key, no allowance; only the API runs it | The embedding model's offer (Phase 13); its cost is the host's processor, its queue keeps it fair |
+| The line's length | 8 answers waiting a process (`Ai__CompletionModel__Queue`); past it 503 `ai.limit` | A ninth would wait for minutes |
+| Threads | Half the processors, at most 8 (6 on the production host), as the embedding model's | Writing is bound by memory, not processors: 12 threads on the host wrote a whole answer only about 10 % sooner than 6 |
+| The test model | A one-layer Qwen3 over a byte-level vocabulary built by GenAI's own builder (`tests/fixtures/completion-model`, 1.2 MB), its weights fixing its answer (double quotes until its limit; under a schema, the schema's empty shape) | The tests and the e2e stack run the same runtime, tokenizer and guidance as the real package, as Phase 13's stand-in does |
+| The local model's budget | A rewrite of 2,000 characters, either language: on the production host 10 s to the first text and 60 s to the end (its run: 7.9 s and 55.5 s at the slowest); on the reference machine, where `Phase18LocalModelBench` runs with the real package, 25 s and 90 s (measured 20.6 s and 80.8 s, Arabic's, at 8 threads) | The plan's budget is the host's and "set by the spike"; the host keeps no package, so the gate a bench holds is the reference machine's, about twice as slow to the first text (no AVX-512 or VNNI) and half again to the end |
+
+### The spike (M18.1): results, and what they decided
+
+Run on 2026-11-25 on the reference machine (Xeon E5-2680 v3, 12 cores, 24 threads, AVX2, no
+AVX-512 or VNNI), each model's licence read and no code of a model's repository run (the builder's
+`trust_remote_code` off). Each model was built from its official weights to int4 for the processor
+(blocks of 32, int8 activations, accuracy level 4) by ONNX Runtime GenAI's own builder, called as a
+library (its command line's help text does not parse under Python 3.14), and run by a .NET harness
+on the app's own requests (`AiRequestBuilder`'s, every action, English and Arabic notes of 2,000
+characters with the faults of a hurried draft), answers up to 1,024 tokens.
+
+| Model | Licence | Revision | Runtime | Tokens for 2,000 characters, English / Arabic | Writing, tokens a second |
+| --- | --- | --- | --- | --- | --- |
+| Qwen3-4B-Instruct-2507 | Apache 2.0 | `cdbee75` | GenAI 0.19.0, ONNX Runtime 1.31.1 | 523 / 782 | about 8 |
+| Phi-4-mini-instruct | MIT | `cfbefac` | GenAI 0.19.0, ONNX Runtime 1.31.1 | 517 / 648 | about 9.5 |
+| Qwen3.5-4B | Apache 2.0 | `851bf6e` | GenAI 0.20.0, ONNX Runtime 1.32.0 | 535 / 655 | about 8.4 |
+
+- **Qwen3.5-4B, chosen.** Its Arabic was the best: a rewrite that kept the meaning, a grammar fix
+  that corrected the jussive (لم تنتهِ) and the accusatives (عددًا، وقتًا، متفائلًا) without
+  changing anything else, a translation that kept the city and the counts, a formal mail, a summary
+  with no wrong number; every ERP change right in both languages (all three Riyadh vendors), `ask`
+  citing the right page. Asked for a database of up to 100 example rows it wrote past 1,024 tokens:
+  the local model is asked for at most 12 properties and 10 rows, in 2,048 tokens. Its hybrid
+  attention (three linear layers to one full) keeps about 65 KB a token where Qwen3-4B keeps 294 KB.
+- **Qwen3-4B-Instruct-2507**: good English; Arabic with faults that change meaning (a rewrite
+  turned "two people instead of four" into a request to take the workers "from 4 to only 2", a translation moved Dammam to
+  Dhahran and 25 to 26), a grammar fix that fixed little and turned paragraphs into bullets, an ERP
+  change that missed a Riyadh vendor in Arabic.
+- **Phi-4-mini-instruct**: wrapped answers in tags and code fences, mistranslated ("Damman", "next
+  month", "containers"), repeated itself on a generated page, changed a Dammam vendor for "Riyadh"
+  and cited the wrong page. Not offered.
+- **The runtime.** GenAI 0.19.0 (the release for the server's ONNX Runtime 1.31) builds Qwen3.5 but
+  cannot run it on the processor ("GetMemoryInfo for CPU should not be used"); 0.20.0 does, and asks
+  ONNX Runtime 1.32.0 (13 November). The server moves to both: the embedding model gives the same
+  vectors on 1.32.0 as on 1.31.1, and both models run in one process on one ONNX Runtime (the
+  embedding's vector the same before and after a completion), which was the plan's risk. GenAI's
+  builder stays 0.19.0, which built the spike's model; 0.20.0 runs what it builds, its
+  multi-token prediction head (`mtp.onnx`) drafting tokens.
+- **Accuracy level** 1 (float activations) ran no faster than 4 on this processor (31 against 34
+  tokens a second reading a long prompt); 4 is kept, which the host's VNNI favours.
+- **GenAI's streaming decoder** writes a replacement character for a character split over two
+  tokens (an English answer's curly apostrophe): the provider decodes the answer whole each time
+  and sends only what is new and complete.
+
+The host's own run, on 2026-11-25 at 13:23 its time over Remote Desktop (with your word): each
+model's graph and real tokenizer with random weights of the real size written on the host (timing
+depends on the shapes, not the values: 4 threads read a prompt at 20.6 tokens a second with random
+weights and 19.9 with the real ones here), each answer forced to the reference run's length (466
+tokens in English, 717 in Arabic), from packages of 30 and 38 MB unpacked in a scratch folder and
+deleted after with their weights; nothing installed. The production host is an AMD EPYC 9575F with
+12 logical processors, AVX-512 and VNNI. A rewrite of 2,000 characters:
+
+| Model, threads | English: first text / whole | Arabic: first text / whole | Load, peak memory |
+| --- | --- | --- | --- |
+| Qwen3-4B, 6 (the server's) | 5.6–6.1 s / 34.3–35.6 s | 8.2–8.6 s / 58.2–60.8 s | 7.1 s, 5.0 GB |
+| Qwen3-4B, 12 | 3.4–4.2 s / 30.5–34.6 s | 5.2–6.8 s / 48.3–51.9 s | 7.0 s, 5.0 GB |
+| Qwen3.5-4B, 6 (the server's) | 6.4–6.8 s / 36.9–37.9 s | 7.9 s / 54.6–55.5 s | 5.6 GB |
+
+Random weights draft no token the model accepts, so Qwen3.5's figures there are its slowest case.
+The host writes about twice as fast as the reference machine.

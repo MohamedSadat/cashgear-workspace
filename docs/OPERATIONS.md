@@ -99,6 +99,10 @@ API's host and no token is in JavaScript (Q5).
    # $env:CGW_AI_ANTHROPIC_KEY and $env:CGW_AI_VOYAGE_KEY, removed after):
    #   -LocalModel <cgw-local-model-voyage-4-nano-587d8d6.zip> -LocalModelThreads 8
    #   -AiMonthlyTokens 2000000 -AiEmbeddingsMonthlyTokens 5000000
+   # Phase 18's completion model and paid plans (Paddle's key and webhook secret as the SMTP
+   # password, in $env:CGW_PADDLE_API_KEY and $env:CGW_PADDLE_WEBHOOK_SECRET, removed after):
+   #   -CompletionModel <cgw-completion-model-qwen3.5-4b-851bf6e.zip> -CompletionModelThreads 6
+   #   -PaddleClientToken <live_…> -BillingPlans @{ team = @{ PriceId = 'pri_…'; MonthlyTokens = 10000000; EmbeddingsMonthlyTokens = 10000000; NameEn = 'Team'; NameAr = 'الفريق' } }
    Remove-Item Env:\CGW_SMTP_PASSWORD
    ```
 
@@ -196,6 +200,11 @@ production, and no setting holds a key to Blob Storage or a SQL password.
 | `Ai__LocalModel__Threads`, `Ai__LocalModel__IdleMinutes` | Phase 13: the processor threads one embedding takes (half the processors, at most 8; `install.ps1 -LocalModelThreads`), and how long the model stays loaded unused (30). Loaded, it takes about 1 GB in each of the API and the worker |
 | `Ai__Subscription__AnthropicKey`, `__VoyageKey` | Phase 13, the API and the worker: Cash Gear's own keys for its subscription, from the environment only (`install.ps1` reads `CGW_AI_ANTHROPIC_KEY` and `CGW_AI_VOYAGE_KEY` from its session, as the SMTP password; never a parameter or a file). Without one, that part is not offered on the subscription |
 | `Ai__Subscription__MonthlyTokens`, `__EmbeddingsMonthlyTokens`, `__Workspaces__<id>__MonthlyTokens`, `__Workspaces__<id>__EmbeddingsMonthlyTokens` | Phase 13: a workspace's allowance a calendar month (UTC) in tokens, input and output alike, for AI and for search by meaning; a workspace's own by its id. 0 or unset: not offered (`install.ps1 -AiMonthlyTokens`, `-AiEmbeddingsMonthlyTokens`, `-AiWorkspaceMonthlyTokens @{'<id>' = n}`, `-AiWorkspaceEmbeddingsMonthlyTokens`). Past it, the workspace's calls are refused until the next month (429 `ai.limit`) |
+| `Ai__CompletionModel__Path` | Phase 18, the API only: the folder of the local completion model's package (`qwen3.5-4b`; `install.ps1 -CompletionModel` unpacks it to `<Root>\models\completions` and sets this). Set, and its files the ones pinned in the server's code, the model is offered in Settings → AI as "This server's own model". The worker and the Sites process are never given it |
+| `Ai__CompletionModel__Threads`, `__IdleMinutes`, `__Queue` | Phase 18: the processor threads one answer takes (half the processors, at most 8; `install.ps1 -CompletionModelThreads`), how long the model stays loaded unused (30), and how many answers may wait for the one being written (8; `-CompletionModelQueue`; past it 503 `ai.limit`). Loaded and writing, it took the spike's API about 5.6 GB at its peak on the production host |
+| `Billing__Paddle__ApiKey`, `__WebhookSecret` | Phase 18, the API and the worker: Paddle's API key and the notification destination's secret, from the environment only (`install.ps1` reads `CGW_PADDLE_API_KEY` and `CGW_PADDLE_WEBHOOK_SECRET` from its session, as the SMTP password). Without both, or with no plan, nothing of billing is offered and its routes answer 404 |
+| `Billing__Paddle__ClientToken`, `__Environment` | Phase 18: Paddle's client-side token (public by Paddle's design), the one thing of Paddle's the Sites process is given, for its pay page (`-PaddleClientToken`); `sandbox` or `live` (`-PaddleEnvironment`; unset, the API key's own prefix says) |
+| `Billing__Plans__<id>__PriceId`, `__MonthlyTokens`, `__EmbeddingsMonthlyTokens`, `__Names__en`, `__Names__ar` | Phase 18: each paid plan: Paddle's price (`pri_…`, whose amount is Paddle's catalogue's) and the allowance a month it gives for AI and for search by meaning, and its names (`install.ps1 -BillingPlans @{ team = @{ PriceId = 'pri_…'; MonthlyTokens = …; EmbeddingsMonthlyTokens = …; NameEn = 'Team'; NameAr = '…' } }`). A workspace on a plan has the larger of the plan's and the default allowance; its own override still wins |
 | `Ai__EmbeddingsFloor`, `Ai__EmbeddingsFloors__<model>` | Phase 10, the API: the least cosine similarity a page found by meaning must have (0.3, for every model unless one has its own); a question with no page above it finds none. Raise it if unrelated pages show under "Related by meaning"; lower it if related ones are missed |
 | `Ai__EmbeddingsSettleSeconds` | Phase 10, the worker: how long a page is left unchanged before it is embedded (30; the e2e stack sets 1, the server's tests 0). Leave unset in production |
 | `Automations__AllowLoopback` | Phase 15, development and tests only (`true`): a webhook may call http on a loopback address (the e2e stack's mock receiver). Ignored in Production, where a webhook calls https on port 443 to a public address only. For webhooks, the worker's host must reach its receivers on 443 |
@@ -239,6 +248,45 @@ configured on the server but the network:
   sessions not made through the provider (each `device.revoke` audited); a session made through
   the provider ends after the workspace's session length (24 hours unless set), as no one is
   told when someone leaves the organisation (there is no SCIM).
+
+### Billing through Paddle (Phase 18)
+
+Cash Gear's AI subscription is paid through Paddle, the merchant of record (INTEGRATIONS.md, Billing).
+Whoever runs the server sets it up once, in Paddle's dashboard (the sandbox first, then live; each
+has its own keys, settings and catalogue):
+
+1. **The catalogue**: a product for the subscription and a price a plan, monthly (Catalog →
+   Products). The plans' amounts are Paddle's; each price's id (`pri_…`) goes into a plan of
+   `-BillingPlans` with the allowance it gives.
+2. **An API key** (Developer tools → Authentication) with the permissions the server uses:
+   transactions (read and write), subscriptions (read and write), customer portal sessions (write),
+   prices (read). Paddle's keys expire (90 days unless chosen otherwise, a year at most) and mail
+   before they do: make a new one and run `install.ps1` again with it in `CGW_PADDLE_API_KEY`. A
+   **client-side token** for the pay page (`-PaddleClientToken`).
+3. **A notification destination** (Developer tools → Notifications): `https://<api host>/api/v1/billing/paddle`,
+   API version 1, the events `subscription.*` and `transaction.*`. Its secret key goes into
+   `CGW_PADDLE_WEBHOOK_SECRET`. The webhook answers 200 within Paddle's five seconds once applied,
+   401 to a body not signed with that secret.
+4. **The checkout's page**: the pay page is on the sites' host, `https://<sites host>/_pay/en`
+   (Checkout → Checkout settings → Default payment link; live needs the domain approved under
+   Website approval). Each transaction names it as its checkout's address.
+
+In the sandbox, steps 1, 3 and 4 can be made by Paddle's API instead, with a sandbox API key of every
+permission in the session only: `$env:PADDLE_API_KEY = '…'; node scripts/paddle-sandbox.mjs --webhook
+https://<api host>/api/v1/billing/paddle --pay-page https://<sites host>/_pay/en` makes the product,
+two monthly prices (Starter and Team), the notification destination and the default payment link,
+and prints the price ids and the destination's secret (once). It refuses a live key and writes
+nothing to disk. The live test (Phase 18's) is then: an owner subscribes with Paddle's test card,
+the plan and its allowance show in Settings → AI within a minute; the plan changed, then cancelled
+in the portal; a payment failed by Paddle's declining test card.
+
+Then `install.ps1 -BillingPlans … -PaddleClientToken … [-PaddleEnvironment sandbox]` with
+`$env:CGW_PADDLE_API_KEY` and `$env:CGW_PADDLE_WEBHOOK_SECRET` set in the session (and removed
+after). An update run without `-BillingPlans` turns billing off: the plans are not offered and the
+webhook answers 404 (Paddle retries for days, so a short pause loses nothing; the daily reconcile
+reads every subscription again). In Paddle, Retain → Payment recovery says whether a subscription
+whose retries end is cancelled or paused: either ends its plan here. A workspace deleted for good
+has its subscription cancelled at Paddle at once by its purge.
 
 ### A site's own host name (Phase 14)
 

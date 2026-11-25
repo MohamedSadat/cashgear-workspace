@@ -622,6 +622,21 @@ Gear's subscription, counted against its allowance), and one table:
 | --- | --- | --- |
 | `AiReservations` | `Id` (v7), `WorkspaceId`, `Kind` (`completions` or `embeddings`), `Tokens`, `CreatedAt`, `ExpiresAt` | A call on the subscription under way: the most it may use, reserved before it is sent under the workspace's `AiSettings` row's update lock, removed when its `AiUsage` row settles it (in the same transaction), or counted no more once `ExpiresAt` (15 minutes) passes. Indexed by (`WorkspaceId`, `Kind`, `ExpiresAt`). The month's use is the month's `AiUsage` rows marked `Subscription` plus the reservations not lapsed. Tenant-owned; the purge deletes it with its workspace; nothing of what was sent is in it |
 
+Phase 18 (migration `Phase18Billing`): `AiSettings.PlanPriceId` (varchar(64), null: the price of the
+workspace's paid plan while its subscription gives one, written with `WorkspaceBilling` in one
+transaction under the row's update lock, which every reservation takes; the allowance is the
+server's plan of that price), and three tables of Cash Gear's billing through Paddle
+(INTEGRATIONS.md, Billing). None holds a card, an address, a name, an email or an amount: Paddle's
+ids, a status, a price's id and a period, as Paddle's API answered them. The server's own
+completion model (`AiSettings.Model` `qwen3.5-4b`, the provider `local`) needs no
+column: no key, no allowance; its calls' `AiUsage` rows name it as their model.
+
+| Table | Key fields | Notes |
+| --- | --- | --- |
+| `WorkspaceBilling` | `WorkspaceId` (the key), `CustomerId` (`ctm_…`), `SubscriptionId` (`sub_…`, unique where set), `Status` (`none`, `active`, `trialing`, `past_due`, `paused`, `canceled`), `PriceId` (`pri_…`), `PeriodEndsAt`, `ScheduledAction` (`cancel`, `pause`), `ScheduledAt`, `ProviderUpdatedAt`, `UpdatedAt`, `CheckedAt` | A workspace's subscription at Paddle as last read from Paddle's API (never from a webhook's body), written only by `BillingService.ApplyAsync`, and only when Paddle's `updated_at` is newer than `ProviderUpdatedAt`. Its plan is the server's plan of `PriceId` while `Status` is `active`, `trialing` or `past_due`. `CheckedAt` is the daily reconcile's last read. Tenant-owned; deleted with its workspace (the subscription at Paddle is the owner's to cancel in the portal) |
+| `BillingCheckouts` | `TransactionId` (`txn_…`, the key), `WorkspaceId`, `PlanId`, `PriceId`, `UserId`, `CreatedAt`, `SubscriptionId` | A checkout an owner started: the transaction made at Paddle, so the owner's return and the reconcile find the subscription it became without a webhook. Indexed by (`WorkspaceId`, `CreatedAt`). Tenant-owned; one that became no subscription is deleted after 30 days |
+| `BillingEvents` | `EventId` (`evt_…`, the key), `Type`, `OccurredAt`, `ReceivedAt`, `AppliedToWorkspace`, `SubscriptionId`, `Outcome` (`applied`, `stale`, `ignored`, `unknown`, `duplicate`) | Each webhook Paddle signed, recorded once by its event id in the transaction that applied it, so a delivery again or a replay changes nothing. Not tenant-owned: an event names its workspace only through the subscription Paddle's API returns, kept as a note (`AppliedToWorkspace`), not an owner. Indexed by `ReceivedAt`; kept 90 days |
+
 ### Embeddings and plugins (Phase 10)
 
 As built (`server/src/Cgw.Core/Ai/Embeddings*.cs`, `Cgw.Core/Search/MeaningSearch.cs`,

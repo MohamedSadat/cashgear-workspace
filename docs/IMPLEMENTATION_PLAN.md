@@ -2541,13 +2541,13 @@ own runtime version, which must agree with it. The subscription's allowances are
 
 *M18.1 Completions on a local model*
 
-- [ ] The spike; then the provider `local` behind `IAiProvider`: its package made once by a script
+- [x] The spike; then the provider `local` behind `IAiProvider`: its package made once by a script
       with its hashes pinned, `install.ps1`'s part, Settings → AI's "On this server" for completions,
       the queue, each action's limits, JSON answers held to the schema.
 
 *M18.2 Billing*
 
-- [ ] Plans and their allowances; the provider's own checkout and portal, opened from Settings → AI
+- [x] Plans and their allowances; the provider's own checkout and portal, opened from Settings → AI
       by owners; its webhooks verified and applied once; the allowance read from the plan (the
       environment's overrides still win); a daily reconcile; audit; a mock provider for the tests and
       a live test in its sandbox by your keys.
@@ -2611,6 +2611,10 @@ further, Phase 18.
 - Left by Phase 14: more than one host name a site (one in 0.14.0, its slug's address leading
   there); names proven for a certificate by DNS-01 (a wildcard, or a name whose port 80 cannot reach
   the host), where 0.14.0 uses HTTP-01 alone.
+- Left by Phase 18: a model on the desktop, on the device itself (the server's only in 0.18.0); AI
+  charged otherwise than by plans of a monthly allowance (tokens metered with a cap, a price a
+  member), and payment other than Paddle's (invoices outside the app); a larger model, or one on a
+  graphics card, should the host gain one.
 
 ## Top risks, by the earliest phase that exposes them
 

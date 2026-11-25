@@ -1632,6 +1632,120 @@ own, and nothing of it is a track.
   can read its database, a formula's or rollup's result, times as UTC instants; `row` is null for a
   schedule. Nothing of the page's document, comments or the ERP is ever sent.
 
+## Billing: Paddle (Phase 18)
+
+Agreed on 2026-11-25 (decisions, Phase 18): Cash Gear's AI subscription is paid through Paddle, the
+merchant of record, which sells to the customer and takes VAT and sales tax. A workspace's plan is
+the allowance its owner bought; the plans themselves (a price at Paddle and a monthly allowance of
+tokens here) are the host's configuration, never the code's (OPERATIONS.md, Billing). Built in
+`server/src/Cgw.Core/Billing`, `Cgw.Api/Modules/BillingEndpoints.cs`, the Sites process's pay page
+(`Cgw.Sites/PayPages.cs`, `pay.js`) and the worker's `Jobs/BillingJobs.cs`; the client's in
+`packages/shell/src/ai/BillingSection.tsx` and `billing.ts`.
+
+```
+Settings → AI (owner) ─▶ POST …/billing/checkout ─▶ Paddle: POST /transactions (custom_data: the workspace)
+        │                         ◀── checkout.url = the sites' host /_pay/en?_ptxn=txn_…
+        └─ new tab ─▶ the pay page (Sites origin, no cookie) ─▶ Paddle.js opens Paddle's checkout
+                                             the card typed into Paddle's frames only
+Paddle ── webhook, signed ─▶ POST /api/v1/billing/paddle ─▶ GET /subscriptions/{id} at Paddle ─▶ applied once
+worker, hourly ─▶ the subscriptions not read for a day, read again (the daily reconcile)
+```
+
+| Route | Method | Access | Success |
+| --- | --- | --- | --- |
+| `/api/v1/workspaces/{id}/billing` | GET | Owner or admin | 200 `BillingDto` |
+| `/api/v1/workspaces/{id}/billing/checkout` | POST | Owner; `{planId, language?}`; the workspace on no plan | 200 `{url}`: Paddle's checkout on the pay page; 409 `billing.subscribed` |
+| `/api/v1/workspaces/{id}/billing/plan` | POST | Owner; `{planId}`; the workspace on a plan | 200 `BillingDto`, changed at once and prorated; 409 `billing.none` |
+| `/api/v1/workspaces/{id}/billing/portal` | POST | Owner; a workspace that has subscribed | 200 `{url}`: Paddle's customer portal, made anew each time; 409 `billing.none` |
+| `/api/v1/workspaces/{id}/billing/refresh` | POST | Owner or admin | 200 `BillingDto`, read again from Paddle |
+| `/api/v1/billing/paddle` | POST | No session; Paddle's signature | 200 applied or seen before; 401 no valid signature; 400 not an event; 503 Paddle's API unreachable (Paddle delivers again) |
+
+Paddle unreachable or refusing is 502 `billing.provider` on every owner's route.
+
+```ts
+interface BillingDto {
+  plans: { id: string; nameEn: string; nameAr: string; monthlyTokens: number; embeddingsMonthlyTokens: number;
+           price: { amount: string; currency: string; interval: string | null; frequency: number } | null }[];
+  planId: string | null;           // the plan whose allowance the workspace has
+  status: 'none' | 'active' | 'trialing' | 'past_due' | 'paused' | 'canceled';
+  periodEndsAt?: string | null;     // the end of the period paid
+  scheduledAction?: 'cancel' | 'pause' | null; scheduledAt?: string | null;
+  canManage: boolean;              // the caller is an owner
+  checkoutPending?: boolean;       // a checkout of the last hour not yet a subscription
+}
+```
+
+Rules:
+
+- **No card or payment detail reaches the app.** The checkout is Paddle's own (Paddle.js's overlay,
+  its card fields in Paddle's frames); the portal (payment method, invoices, cancelling) is Paddle's
+  own site. The server stores Paddle's ids, a subscription's status, its price's id and its period
+  (DATA_MODEL.md, Billing), never an amount, an address, a name or an email. Paddle's hosted
+  checkout (`pay.paddle.io`) is for Mac and iOS apps only, with Paddle's approval, so the web's
+  checkout opens on a page of ours: the **pay page**, `/_pay/en` and `/_pay/ar` on the Sites
+  process's own host, which has no sign-in, cookie or session, so Paddle's script there can reach
+  nothing of the person's. Its policy allows Paddle's script, frames and calls, payments in
+  Paddle's frames (`Permissions-Policy: payment`) and PayPal's window
+  (`Cross-Origin-Opener-Policy: same-origin-allow-popups`), on those pages only. It is given
+  Paddle's client-side token, public by Paddle's design, and nothing else of Paddle's. Paddle
+  requires the page's domain approved (Checkout → Website approval) for live payments.
+- **A checkout** is a transaction the server makes at Paddle (`POST /transactions`: the plan's
+  price, quantity 1, `custom_data: {cgwWorkspaceId}`, which Paddle copies to the subscription,
+  `checkout.url` the pay page, the workspace's Paddle customer when it has one), recorded with who
+  started it; Paddle answers its checkout's address, `?_ptxn=<transaction>` added, which Paddle.js
+  reads. The client opens it in a tab opened inside the click (a link that came later would be
+  refused as a pop-up), the desktop in the system browser. A workspace on a plan changes its plan
+  instead (`PATCH /subscriptions/{id}`, `prorated_immediately`, `prevent_change` on a failed
+  payment).
+- **Webhooks** (Paddle → `POST /api/v1/billing/paddle`): `Paddle-Signature: ts=<seconds>;h1=<hex>`,
+  HMAC-SHA256 keyed by the notification destination's secret over `<ts>:<raw body>`, lowercase hex,
+  any `h1` matching (a secret being rotated), compared in constant time, and the time within 5
+  minutes of the server's. Nothing is read before the signature holds. An event recorded already
+  (`BillingEvents`, by `event_id`) answers 200 and changes nothing; Paddle delivers at least once
+  and in no set order. A `subscription.*` event names its subscription by `data.id`, a
+  `transaction.*` one by `data.subscription_id`; any other is recorded `ignored`.
+- **Paddle's API is the state, the body only the prompt.** The subscription is read from Paddle
+  (`GET /subscriptions/{id}`, `Paddle-Version: 1`, the server's key) and applied in one place
+  (`BillingService.ApplyAsync`) when Paddle's `updated_at` is newer than the one held, to the
+  workspace its `custom_data` names (one of this server's, not deleted), with the event recorded in
+  the same transaction. So a webhook replayed, sent twice at once, out of order, or old changes
+  nothing, and a forged one is refused before anything is read. A second subscription of a
+  workspace already on one is left as it is, recorded `duplicate` and audited `billing.duplicate`.
+- **The plan and the allowance.** `active`, `trialing` and `past_due` give the plan of the
+  subscription's price (a renewal that failed holds while Paddle retries); `paused` and `canceled`
+  give none. A cancel at the period's end keeps the plan until Paddle cancels it then. Applied, the
+  plan's price is written on the workspace's AI settings row (`PlanPriceId`) under that row's lock,
+  which every reservation takes, so a call sees the plan or the one before it. The allowance is a
+  workspace's own override (`Ai__Subscription__Workspaces__<id>__*`) if set, else the larger of the
+  plan's and the default (`Ai__Subscription__MonthlyTokens` and `__EmbeddingsMonthlyTokens`), for
+  completions and for search by meaning each. Its month, reservations and refusal past it are Phase
+  13's.
+- **The reconcile.** The worker's `billingReconcile` runs hourly: every subscription not read from
+  Paddle for a day is read again (`GET /subscriptions?id=…`, 200 a call) and applied as a webhook's
+  would be, and a checkout of the last day that became no subscription yet is read through its
+  transaction, so a lost webhook is mended within a day at the latest. A subscription Paddle no
+  longer has is logged. Events are kept 90 days, checkouts that came to nothing 30.
+- **An owner back from Paddle** need not wait for a webhook: while a checkout waits, Settings asks
+  `…/billing/refresh` every 5 s for ten minutes, and when the window regains focus, which reads the
+  checkout's transaction and its subscription from Paddle. A webhook to the allowance shown is
+  within 60 s (the budget; `bench/phase18.mjs`).
+- **Audit**: `billing.checkout` (the plan, the transaction), `billing.plan` (from, to),
+  `billing.portal`, `billing.changed` (the plan and status before and after, the subscription, its
+  price and whether the server knows it, and what read it: a webhook's type, `refresh`, `change` or
+  `reconcile`), `billing.duplicate`. Paddle's key and secret are never returned or logged; a
+  failure is logged by Paddle's error code and status alone.
+- **Rate limits**: `billing`, 20 a minute a person (the checkout, plan, portal and refresh routes,
+  each a call to Paddle); `paddle`, 600 a minute an address (the webhook).
+- **Gated on `/version`**: `billing: true` when Paddle's key and secret and at least one plan are
+  configured. A client offers the plan's part of Settings only then; a server before 0.18.0 sends
+  none, which a client reads as false. Without them every billing route answers 404, as in 0.17.0.
+- **The mock** (`tests/mocks/paddle`, port 4291): the API calls above, a stand-in for Paddle.js
+  (`/paddle.js`) whose overlay is its own checkout page (Pay, a card that fails, Close), the portal
+  (cancel at the period's end or at once), webhooks signed as Paddle signs them, sent to a
+  destination and kept in an outbox a test delivers itself, and controls for a renewal that fails,
+  the end of the retries, a period's end, a replay and a forgery. The live test runs in Paddle's
+  sandbox with your keys.
+
 ## Future applications
 
 A new Cash Gear app (presentations, for example) integrates the way Sheet does:
@@ -1673,7 +1787,9 @@ public interface IEmbeddingProvider   // Phase 10: a provider of its own (Voyage
 | Bring your own key | Server, encrypted per workspace; never returned to any client | The workspace admin chooses the provider and model |
 | Cash Gear AI subscription (Phase 13) | The host's environment only | A monthly allowance per workspace, reserved before each call (below) |
 | Local model for embeddings (Phase 13) | No key: the model runs on the server | No text leaves the host for search by meaning (below) |
-| Local model for AI | The desktop app calls a local endpoint directly | Nothing leaves the device; desktop only; "Later" |
+| Local model for AI on the server (Phase 18) | No key: the model runs on the server | No text leaves the host; offered beside the workspace's key and Cash Gear's subscription (below) |
+| Paid plans (Phase 18) | Paddle's key and webhook secret in the host's environment only | A workspace's plan gives the subscription's allowance (Billing: Paddle, above) |
+| Local model for AI on the desktop | The desktop app calls a local endpoint directly | Nothing leaves the device; desktop only; "Later" |
 
 Rules:
 
@@ -1951,3 +2067,67 @@ with `reason: "allowance"`, which the AI panel and search by meaning say as such
 waits for the next month. Owners and admins see `subscription: {month, allowance, used, reserved}`
 beside each part's settings. The audit's `ai.request` and `ai.settings` name the subscription; no
 key is ever returned or logged.
+
+### Completions on this server (Phase 18)
+
+Agreed on 2026-11-25 after the spike (decisions, Phase 18): `qwen3.5-4b` (Qwen's Qwen3.5-4B,
+Apache 2.0, the revision pinned; its text model and its multi-token prediction head, without its
+vision tower), built to int4 for the processor, on ONNX Runtime GenAI 0.20.0 (MIT) over the server's
+own ONNX Runtime 1.32.0, which the embedding model shares, in the API process only (never the worker
+or the Sites process). Offered in Settings → AI as "This server's own model" beside the
+workspace's own key and Cash Gear's subscription when the server has its package
+(`Ai__CompletionModel__Path`): no key, no allowance, and no text leaves the host. Built in
+`server/src/Cgw.LocalModel/LocalCompletionProvider.cs` (the provider `local`, `AiProviderRouter`),
+`Cgw.Core/Ai/CompletionModelOptions.cs` and `AiRequestBuilder`'s `AiLimits.Local`.
+
+- **One builder, one stream.** The request is `AiRequestBuilder`'s, as it is for Anthropic: the
+  action's fixed instructions and the input fields its table names, held to the local model's own
+  smaller limits (below). The provider writes its system and user text in the model's own turns
+  (Qwen's ChatML, its turn opened with an empty think block so it answers without thinking first;
+  the manifest's `family` says which), and streams the answer as `AiChunk`s through
+  the same route, metering (`AiUsage`, the model `qwen3.5-4b`, never `Subscription`) and
+  audit (`ai.complete`). The router sends a call of the server's model to it and every other to
+  Anthropic.
+- **JSON held to the schema while it is written.** For `actionItems`, `generateDatabase` and
+  `erpChanges` the action's schema is GenAI's guidance (`json_schema`): every token is drawn only
+  from those the schema allows, so the answer is the schema's shape or is cut at its limit
+  (`length`), never another shape.
+- **One answer at a time a process; the rest in line, in order.** At most `Ai__CompletionModel__Queue`
+  (8) wait; past it 503 `ai.limit` before the stream starts. A waiting answer's stream starts at
+  once; a client that asks for it (`AiCompleteRequest.events: ['queued']`, from 0.18.0) is told
+  `{type: 'queued', ahead}` whenever the answers before it change, and the AI panel says so. A client
+  that does not ask (before 0.18.0) is sent no such line. A person who leaves stops their answer,
+  and the next one's turn comes.
+- **Text as it is decoded.** The answer's tokens are decoded whole each time and only what is new is
+  sent, so a character whose bytes fall in two tokens is sent once it is whole, never as a
+  replacement character (GenAI's own streaming decoder writes one for a split character).
+- **The limits** (`AiLimits.Local`, sent to owners and admins with the settings as `limits` so a
+  client holds a request to them before it is sent; an older client meets the server's 413
+  `limit.size`): a rewrite's text 4,000 characters, a page's text 12,000, a prompt 2,000, a
+  question 1,000, an instruction 1,000, a custom rewrite's request 500; `ask` 4 pages of at most
+  2,000 characters; `erpChanges` 50 records, 30 fields and 40 KB; each answer's tokens 2,048 for a
+  rewrite and a database, 768 for a summary, action items and an answer to `ask`, 1,536 for a page and
+  ERP changes, and a database is asked for at most 12 properties and 10 example rows (Anthropic, 20
+  and 100).
+- **`ask` stays on the host.** With the server's own model, a question is searched by meaning only
+  when search by meaning is made here too (`voyage-4-nano`); with Voyage's models, by its words
+  alone, so the question never goes to Voyage.
+- **The package** (`scripts/completion-model.mjs`, not in the deploy package): GenAI's folder built
+  from the pinned weights by GenAI's own builder (int4 weights in blocks of 32, int8 activations,
+  accuracy level 4): `genai_config.json`, `model.onnx` and `model.onnx.data` (2.7 GB), `mtp.onnx`
+  and its data (0.5 GB, the head GenAI drafts tokens with), the tokenizer's files, the licence, a
+  notice and `cgw-model.json` describing them (3.1 GB zipped). No code of the
+  model's repository runs. The server loads it only when each file's SHA-256 is one pinned in
+  `CompletionModelOptions.Pinned`, and never a test package (`tests/fixtures/completion-model`, a
+  one-layer Qwen3 over a byte-level vocabulary whose weights fix its answer) in Production. It loads
+  on first use and unloads after `Ai__CompletionModel__IdleMinutes` (30) unused; one answer takes
+  `Ai__CompletionModel__Threads` (half the processors, at most 8).
+- **Speed** (the spike, DECISIONS.md, Phase 18): a rewrite of 2,000 characters on the reference
+  machine at 8 threads, the real package, the slowest of three: its first text in 17.4 s and the
+  whole in 58.1 s in English, 20.6 s and 80.8 s in Arabic; loaded in 42 s, 4.3 GB more in the
+  process. On the production host (AMD EPYC 9575F, 6 threads; the graph and tokenizer with random
+  weights of the real size, so no drafted token taken: its slowest) 6.8 s and 37.9 s in English,
+  7.9 s and 55.5 s in Arabic. The budgets, either language: on the host 10 s to the first text and
+  60 s to the end; on the reference machine, where `Phase18LocalModelBench` runs
+  (`bench/phase18.mjs --local-model`), 25 s and 90 s. A person sees the text appear as it is
+  written, and the panel says when an answer waits for another.
