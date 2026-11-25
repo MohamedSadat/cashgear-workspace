@@ -1043,3 +1043,13 @@ Added as they are found, grouped by phase.
   in Arabic names its currency (`currencyDisplay: 'name'`, "دولار أمريكي").
 - A workspace made by the API alone has no section until a client makes one, so a build opened on it
   shows no "Add a page in" button: an old-build case lets the old build make its workspace.
+
+### After 0.18.0
+
+- Once one of Tauri 2.12's custom-protocol IPC fetches fails in a start (WebView2 just started after
+  a kill: CI run 45629309351), its script sends every later invoke of that start by
+  `window.ipc.postMessage`, which writes a `Uint8Array` payload as a JSON array of numbers and
+  answers a raw `Response` as one. `store` and `save_file` take either (`body_bytes` in the desktop's
+  `main.rs`), and `@cgw/store-desktop` reads either (`answerBytes`). To make it happen, block
+  `http://ipc.localhost/*` over CDP (`Network.setBlockedURLs`) and reload. The kill test sees a
+  compaction only by its `ipc.localhost/store` request, so it sees none in a start on the fallback.
