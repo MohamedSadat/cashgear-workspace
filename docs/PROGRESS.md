@@ -1956,6 +1956,89 @@ Benchmarks (`bench/phase17.mjs`: the server's in CI's server job, the browser's 
 | The tree's first page at 50,000 rows on the server, p95 | 300 ms (Phase 4's) | 7.1 ms | 14.3 ms |
 | The initial JavaScript | 350 kB (Phase 1) | 348.6 kB | 348.6 kB |
 
+## Phase 18: AI, further
+
+Done 2026-11-25. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45629309351 (commit `66b9a2d`, every job green, the Windows job on its third attempt: 449 browser e2e cases passed, one of them on a retry (Chrome's person's own reminder reaching the inbox at its time), 14 skipped; the desktop app's 64 passed; every kill test 25 of 25 and the migration's 10 of 10; every phase's budgets. Its first attempt's desktop kill test failed 1 run of 25 (Tauri's IPC fallback, below); its second's Phase 1 budgets flagged the editor's work per key at 200 blocks, 6.4 ms within its 8 ms budget against the last run's 3 ms, with no editor code changed (2.9 ms on the third)); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45629309338 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, SQL Server LocalDB 2025, Azurite); the production host's from its own run over Remote Desktop. Answers and defaults are in `DECISIONS.md` (2026-11-25: Phase 18, with the spike's results and the defaults picked while building it); the design in `INTEGRATIONS.md` (completions on this server; billing through Paddle; the AI modes), `DATA_MODEL.md` (`WorkspaceBilling`, `BillingCheckouts`, `BillingEvents`, `AiSettings.PlanPriceId`, the model `qwen3.5-4b`), `ARCHITECTURE.md` (the API's model and billing routes, the Sites process's pay page, the worker's reconcile and the purge) and `OPERATIONS.md` (the package and `install.ps1 -CompletionModel`, the Paddle runbook and the sandbox script, 0.18.0's migration); what changed for users in `CHANGELOG.md` (0.18.0).
+
+Milestones
+
+- [x] M18.1 Completions on a local model. The spike (DECISIONS.md, Phase 18: three models built
+      to int4 by GenAI's builder and run on the app's own requests in English and Arabic, here and
+      on the production host); commits `3b8e9cd` (the provider `local` behind `IAiProvider`,
+      `AiProviderRouter`, the line and its `queued` event, `AiLimits.Local`, JSON by GenAI's
+      guidance, the package's check, the stand-in, `install.ps1 -CompletionModel`), `e550390`
+      (Settings → AI's "This server's own model", the panel's limits and line), `34fbf34`
+      (Qwen3.5-4B, the spike's choice, on GenAI 0.20.0 and ONNX Runtime 1.32.0), `5590444` (the
+      package pinned)
+- [x] M18.2 Billing. Commits `3b8e9cd` (Paddle's client and signature, `BillingService` and its
+      routes, the webhook, the plan's price on the AI settings row, the allowance from the plan, the
+      pay page on the Sites process, `BillingReconcileJob`, the mock Paddle), `e550390` (Settings →
+      AI's plans, the checkout in a tab, the portal, the plan read again while a checkout waits),
+      `157d2f2` (a workspace deleted for good stops paying), `8bb6c88` (the sandbox prepared by its
+      API)
+- Specs, budgets and docs: `9d9639f` (`billing.spec.ts`, `ai-local.spec.ts`, `old-build.spec.ts`'s
+  v0.17.0 case, `bench/phase18.mjs`), `469e811` (CI's step), `158cf5b` (the design), and this
+  evidence with the release
+
+Notes
+
+- **The live test in Paddle's sandbox is owed.** You chose to run it yourself later (decisions,
+  2026-11-25): `scripts/paddle-sandbox.mjs` prepares the sandbox and OPERATIONS.md's runbook says
+  what to try. Until then the checkout, the portal and the webhooks are proven against the mock
+  Paddle only, which speaks the API calls the server makes and signs webhooks as Paddle documents.
+- **The model.** Qwen3.5-4B, of the three the spike tried, wrote the best Arabic; it needed GenAI
+  0.20.0 (0.19.0 builds it but cannot run it on the processor) and so ONNX Runtime 1.32.0, which the
+  embedding model moved to with it (its vectors the same as on 1.31.1, and the same after a
+  completion in the one process). The package is 3.1 GB zipped and is not in the deploy package.
+- **On the production host** the spike ran each model's graph and real tokenizer with random weights
+  of the real size (nothing installed; deleted after): Qwen3.5-4B at 6 threads wrote a 2,000-character
+  rewrite's first text in 6.4 to 6.8 s and the whole in 36.9 to 37.9 s in English, 7.9 s and 54.6 to
+  55.5 s in Arabic, its slowest (random weights draft no token the model accepts). Production runs
+  0.12.0 and has neither the package nor Paddle's keys yet.
+- **The initial JavaScript** is 348.7 kB of 350 (0.17.0: 348.6). The plans' part of Settings and
+  its words load with Settings → AI once the server offers billing.
+- **The bench with the real package** (`Phase18LocalModelBench`, the spike's own notes, 535 and 655
+  tokens in): loaded in 40 s on first use, 4.3 GB more in the process; no answer cut at its limit.
+  Its first run stopped before measuring (its Arabic notes were 1,695 characters, not 2,000): it now
+  rewrites the spike's own texts (`3a1fc6c`).
+- **What building it found.** GenAI's own streaming decoder writes a replacement character for a
+  character split over two tokens, so the provider decodes the answer whole; its JSON guidance lets
+  whitespace win a tie, which the stand-in's weights rank lowest; Qwen3.5 asked for a database of
+  100 example rows writes past 1,024 tokens, so the local model asks for 10 in 2,048. Phase 17's mail
+  test took the later of two mails by their whole-second `Date` and failed CI run 45582291731 when
+  both were sent in one second (`5b7ab77`, the test alone). `pay.js` reached `main` unformatted
+  (`d2bc2c8`). CI run 45605181895 found the rest: in Arabic Intl writes the dollar's sign as
+  "US$", Latin letters on an Arabic screen, so a price names its currency there ("دولار أمريكي",
+  `16e95b0`); the Arabic walks now allow `qwen3.5-4b` and Paddle as names; the local model's Arabic
+  summary looked for the page's actions by their English name; and the v0.17.0 case's workspace,
+  made by the API alone, had no section to add a page in (`66b9a2d`).
+- **Found and left:** after a kill the desktop app once started with Tauri's IPC by `postMessage`
+  (its custom protocol having failed once), which sends the store's binary frame as a JSON array, so
+  the store refused it for the rest of that start ("The local store could not be opened", 1 run of
+  25 in CI's first attempt; none of this phase's code runs there). A follow-up is proposed: the
+  store and file commands to take bytes either way. The e2e stack on this machine was another session's, of the 0.17.0 server, and
+  could not be ended from here: Phase 18's browser specs ran first in CI.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| With the local model, an action's answer streams in English and in Arabic, a JSON action's answer holds to its schema, and no text leaves the host | Pass | `LocalCompletionTests.The_servers_own_model_is_offered_with_no_key_and_its_answer_streams_in_english_and_arabic` (offered with no key, its answer in several chunks in both languages, metered as `qwen3.5-4b`, the mock AI provider sent nothing), `A_json_actions_answer_holds_to_its_schema_while_it_is_written` (action items, a database and ERP changes, each the schema's shape), `The_local_models_smaller_limits_hold_and_anthropics_are_as_they_were`, `Answers_wait_their_turn_in_order_and_past_the_line_are_refused`, `A_package_is_loaded_only_as_pinned_and_never_a_test_package_in_production`; the stand-in runs the same runtime, tokenizer and guidance as the real package. `ai-local.spec.ts` (Chrome, Edge): Settings → AI's "This server's own model" chosen with no key, a summary streaming in the panel in English and in Arabic, nothing reaching the mock provider; the screens under Axe and in Arabic. The real model: the spike's every action in both languages (DECISIONS.md), and `Phase18LocalModelBench`'s rewrites below. `ask` searches by meaning only on this server's own embeddings. `old-build.spec.ts`'s v0.17.0 case: that build reads the model's answer to its end |
+| An owner subscribes in the provider's checkout and the workspace's allowance follows within a minute; a cancelled or failed payment ends it as the plan says; a webhook replayed or forged changes nothing; no card or payment detail ever reaches the app | Pass (against the mock Paddle; the sandbox's live test owed, above) | `BillingTests.An_owner_subscribes_in_paddles_checkout_and_the_allowance_follows_its_webhooks`, `A_cancelled_plan_lasts_its_period_and_a_failed_payment_ends_it_when_paddle_stops_retrying`, `A_webhook_replayed_forged_old_or_edited_changes_nothing`, `A_signature_is_paddles_hex_hmac_of_the_time_and_body_and_any_h1_may_match`, `A_plan_changes_at_once_the_portal_is_paddles_and_a_workspaces_own_override_still_wins`, `Only_owners_buy_admins_see_members_do_not_and_without_paddle_nothing_is_there`, `A_lost_webhook_is_found_by_the_owners_return_and_by_the_daily_reconcile`, `A_workspace_deleted_for_good_stops_paying_at_paddle_before_its_rows_go`, `The_pay_page_runs_paddles_checkout_on_the_sites_origin_with_no_cookie_and_no_session`. `billing.spec.ts` (Chrome, Edge): an owner's checkout of Team on the pay page, paid in the mock's frame, the plan and its 10,000,000 tokens in Settings within a minute, the pay page's origin holding no cookie; the portal; a failed payment keeping the plan while Paddle retries and ending it when the retries end; the plans' part under Axe and in Arabic. `old-build.spec.ts`'s v0.17.0 case: that build shows a paid plan's allowance. No route of the app takes a card: the card is typed into Paddle's frames on the pay page |
+
+Also: the shell's `ai.test.ts` (every request asks for the `queued` line, a request held to the server's own model's smaller limits before it is sent, Settings reading where each key comes from, the month's allowance and the local model) and `sections.test.ts` (the `billing` section held to the catalogues' rules). The plans' part of Settings (offered only once `/version` says `billing`, the checkout's tab opened inside the click) is proven by `billing.spec.ts` only. Unit: 4,153 tests in `pnpm test` (6 skipped); server: 545 (524 passed, 21 skipped: the benches and the real-provider tests) server tests.
+
+Benchmarks (`bench/phase18.mjs`: the webhook's in CI's Windows job; the local model's by hand, `--local-model`, with the real package)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A webhook to the allowance shown: a paid checkout to Settings showing the plan's allowance, the slowest of five | 60 s | 0.37 s (median 0.06 s) | 0.59 s (median 0.13 s) |
+| The server's own model: a rewrite of 2,000 characters in English, first text, the slowest of three | On the host 10 s; on the reference machine 25 s (DECISIONS.md, Phase 18) | Not in CI (the package is 3.1 GB) | 16.0 s (median 16.0 s) at 8 threads; the host's run 6.4 to 6.8 s at 6 |
+| The same, the whole answer | On the host 60 s; on the reference machine 90 s | Not in CI | 56.6 s (median 56.4 s; 356 tokens); the host's 36.9 to 37.9 s |
+| The same in Arabic, first text | On the host 10 s; on the reference machine 25 s | Not in CI | 19.9 s (median 19.5 s); the host's 7.9 s |
+| The same in Arabic, the whole answer | On the host 60 s; on the reference machine 90 s | Not in CI | 80.2 s (median 79.5 s; 522 tokens); the host's 54.6 to 55.5 s |
+| The initial JavaScript | 350 kB (Phase 1) | 348.7 kB | 348.7 kB |
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)

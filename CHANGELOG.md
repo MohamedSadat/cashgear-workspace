@@ -4,6 +4,28 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.18.0] - 2026-11-25
+
+AI that never leaves your server, and Cash Gear's AI subscription paid for.
+
+- **AI on the server's own model.** Settings → AI offers "This server's own model" beside your
+  workspace's key and Cash Gear's subscription when the server has it installed: Qwen3.5-4B, an open
+  model that runs on the server's own processor. It needs no key and counts against no allowance,
+  and no text leaves the server. Every action works with it, in English and Arabic: rewriting,
+  translating, summarising, finding action items, drafting pages and databases, answering from your
+  pages and preparing ERP changes, each on shorter texts than Claude takes. Answers that are lists
+  or databases are kept to their shape while they are written. It writes one answer at a time; the
+  AI panel says how many are before yours while it waits. On Cash Gear's server a rewrite of 2,000
+  characters takes about 40 seconds in English and a minute in Arabic.
+- **Paid plans.** Owners choose a plan of Cash Gear's AI subscription in Settings → AI and pay in
+  Paddle's checkout; the workspace's monthly allowance follows within a minute of paying. Switch
+  plans at once, and manage the payment method, invoices and cancelling in Paddle's portal. A
+  cancelled plan lasts until the end of the period paid, and a failed payment keeps it while Paddle
+  tries again. Your card is typed into Paddle's own pages, never into Cash Gear Workspace; Paddle is
+  the merchant of record, and handles VAT and sales tax. Admins see the plan; members do not.
+- **Older versions.** 0.17.0 and earlier read the server's own model's answers as any other, and
+  show a paid plan's allowance; they do not offer the model or the plans.
+
 ## [0.17.0] - 2026-11-25
 
 Run work as it really goes: rules that wait, decide and ask for approval; tasks that repeat, remind
