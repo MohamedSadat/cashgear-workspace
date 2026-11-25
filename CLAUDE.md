@@ -38,7 +38,9 @@ reminders of a row's dates, sub-items nested in a table, dependencies drawn on a
 with their blocker, and a unique id for each row; then AI further: AI's answers written on the
 server's own model, Qwen3.5-4B on ONNX Runtime GenAI, with no key and no text leaving the host, and
 Cash Gear's AI subscription paid for through Paddle, its plans' allowances following its webhooks).
-No phase is planned next: what could come after is under "Later" in `docs/IMPLEMENTATION_PLAN.md`.
+Planned next (2026-11-25): Phase 19, Word, PDF and print (a page exported to Word and to PDF on the
+device, printed to a layout of its own), then Phase 20, suggested edits; what could come after is
+under "Later" in `docs/IMPLEMENTATION_PLAN.md`.
 Evidence is in `docs/PROGRESS.md`; spike results and the decisions they changed are in
 `docs/DECISIONS.md`.
 

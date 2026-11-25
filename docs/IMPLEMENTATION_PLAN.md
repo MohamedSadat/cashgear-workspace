@@ -4,8 +4,9 @@
 > after 0.7.0. Phases 11 to 13 added on 2026-11-19, from the themes chosen after 0.10.0. Phases 14
 > and 15 added on 2026-11-22, from the themes chosen after 0.13.0. Three phases added on 2026-11-24,
 > from a comparison with Notion (automations, forms, workflows and tasks), and put first the same
-> day: they are Phases 15 to 17, and AI, further, planned as Phase 15, is Phase 18. No phase starts
-> until you say so.
+> day: they are Phases 15 to 17, and AI, further, planned as Phase 15, is Phase 18. Phases 19 and 20
+> added on 2026-11-25, from the theme chosen after 0.18.0 (documents out). No phase starts until you
+> say so.
 
 ## Context
 
@@ -84,6 +85,8 @@ benchmarks run in CI on every push to `main`.
 | 16 | Forms: a database's form view, answered by members and by anyone with a form link, starting rules | `v0.16.0` |
 | 17 | Workflows and tasks: waits, branches and approvals in a rule; recurring rows, reminders, sub-items, dependencies on the timeline, a unique id | `v0.17.0` |
 | 18 | AI, further: completions on a local model, billing for Cash Gear's subscription | `v0.18.0` |
+| 19 | Word, PDF and print: a page exported to Word and to PDF on the device, and printed to a layout of its own | `v0.19.0` |
+| 20 | Suggested edits: a suggesting mode, suggestions accepted or rejected by a page's editors, and made by commenters too | `v0.20.0` |
 
 Changes from the brief's suggested phases, and why:
 
@@ -105,6 +108,11 @@ Changes from the brief's suggested phases, and why:
   rules first (the engine, and a rule acting for a person, the riskiest change to the server),
   forms second (a public way in, whose answers start rules), then the runs that wait and the tasks'
   views. Planned after AI, further, they were put before it the same day, at your word.
+- Phases 19 and 20 are the theme you chose on 2026-11-25, after 0.18.0: documents out, Word's
+  output from 2026-11-24's comparison with suggested edits. It was sized against 0.18.0 the same
+  day and proposed as two releases. The export and print come first, as they need no schema change.
+  Suggested edits come second: they raise the schema and let commenters change a page, through a
+  check of their own.
 
 ## Track U: missing components in `CashGear.React.UI`
 
@@ -2579,6 +2587,338 @@ own runtime version, which must agree with it. The subscription's allowances are
 
 ---
 
+## Phase 19: Word, PDF and print
+
+**Goals**
+
+A page leaves the workspace as a document: a Word file or a PDF, made on the device, offline too.
+Every block appears as the page shows it, in English and in Arabic. A page is printed to a layout
+of its own: size, margins, header and footer.
+
+**Dependencies**
+
+Phase 8's Word reader (the other half of a round trip), Phase 4's database views and Phase 5's
+sheet pictures. A spike at the phase's start, before M19.3, prints a page from a frame of its own in
+Chrome, Edge, the Windows app (WebView2) and the Mac app (WKWebView). It checks:
+
+- `@page` size and margins;
+- a header and a footer with page numbers, by `@page`'s margin boxes;
+- breaks kept out of images and table rows;
+- Arabic;
+- whether the desktop can save a PDF to a file without the print dialog (WebView2's `PrintToPdf`,
+  WKWebView's `createPDF`, through Tauri's `with_webview`).
+
+Sized on 2026-11-25, against 0.18.0 (nothing run):
+
+- **Word.** Nothing writes OOXML. The server's `DocumentFormat.OpenXml` writes xlsx only
+  (`Workbooks/Xlsx.cs`), and the client writes none; `fflate` (the shell's) zips the workspace
+  export in a worker. Phase 8's reader (`packages/doc/src/docx.ts` over `xml.ts`) reads Word's
+  headings, lists and check boxes, quotes, code, merged table cells, images, links, highlights and
+  `w:bidi`, so a writer has a reader for a round trip.
+- **The schema.** Version 6 has 13 block bodies and 5 inline nodes. A block's direction is `ltr`,
+  `rtl` or none; none means "from its first strong character", drawn as `dir="auto"`. Only an image
+  has an alignment, there are no columns, and a toggle's open state is the device's, not the
+  document's.
+- **A page's content.** `session.pageContent` gives a page's JSON from the local store, offline too.
+  The export reads assets from the store (`getAssetBytes`) and silently skips what the device lacks,
+  where the editor would fetch it (`remoteAssets`). "Export this page" (`PageMenu.tsx`) zips a page
+  and its sub-pages as Markdown and JSON; a row's page has no such entry. `toMarkdown` writes nothing
+  for a database, a sheet embed, an ERP block or a table of contents.
+- **Print.** Nothing prints: there is no `@media print`, `@page` or `window.print` in the app (only
+  the Sites stylesheet hides its tree in print). A printed page would lack what is far from the
+  screen:
+  - the editor draws top-level blocks with `content-visibility: auto`;
+  - it mounts frame blocks only within 800 to 2,400 px of the view;
+  - the table draws only its window.
+
+  The share link draws the same editor. The only renderer of a whole page is the server's
+  (`SiteRenderer`, with a database's first 100 rows by `SiteDatabaseHtml`), which a device offline
+  cannot reach.
+- **The desktop.** Tauri 2.12 (wry 0.57), with no `with_webview` code of ours. Files are saved
+  through `WorkspacePlatform.saveFile`: the dialog plugin's save dialog on the desktop, a download
+  on the web.
+- **A layout.** A page record holds its title, icon, cover and template fields. A new field goes
+  through the record, the planner, `sync/http.ts`, `PageDto`, a `Pages` column, `OpsService`'s
+  `page.update`, the API's types and the export's manifest. `page.update` applies only the fields
+  sent, so an older build's edit keeps the new field. The stores keep a page as JSON and need no
+  schema change.
+- **ERP data.** Every output today (the export, share links, sites) writes an ERP block as its
+  settings or a placeholder, never its rows.
+- **Fonts.** None shipped: the library's Inter and system fonts, and the system's for Arabic. The
+  sites name Noto Sans Arabic and Tahoma.
+
+**Questions for you (one batch, when the phase starts)**
+
+- Where it is made. Default: on the device from the local store, offline too, as the workspace
+  export is. Word is written in a worker; PDF comes from the browser's print engine, through the
+  print dialog's Save as PDF, on the web and the desktop. Nothing is sent to the server.
+- What is exported. Default: the page alone, or with its sub-pages (each after a page break, at most
+  200), from a page's menu and a row's (a row's properties as a table first). Comments are left out
+  and toggles are open. A mention is its text; a page mention links to the page's address in the
+  app.
+- Blocks that are not text. Default:
+  - a database block is a table of its view's rows: its filter, sort and shown properties, and a
+    board or list grouped as it groups; at most 1,000 rows, then a line saying how many more;
+  - a chart view is its chart;
+  - a sheet embed is its picture, fetched if the device lacks it;
+  - a plugin block is its text line;
+  - an image or file the device lacks while offline is a placeholder, named in a notice after.
+- ERP blocks. Default: a placeholder naming the list or report, as every output so far. The
+  alternative: the rows the person's own ERP session shows at that moment, fetched for the file and
+  written nowhere else.
+- The layout. Default: kept on the page, so every reader prints it the same way.
+  - A4 or Letter, A4 the default for new pages; portrait or landscape.
+  - Margins narrow, normal or wide.
+  - A header and a footer of text, with the page's title, the date and page numbers.
+  - The Word file gets the same section.
+  - Page setup is in a page's menu, for whoever can edit the page.
+- PDF on the desktop. Default: the print dialog's Save as PDF, as on the web. If the spike finds
+  WebView2's `PrintToPdf` works, the Windows app saves straight to a file instead.
+
+Proposed defaults, logged with the answers:
+
+- The layout is a page record's optional `layout`: JSON in a `Pages` column, which the server keeps
+  when an older build's edit does not send it.
+- The Word writer is `@cgw/doc`'s and is pure: the page's JSON and the files it is given go in, a
+  list of parts comes out, and the shell zips them.
+- The print view is a renderer of its own over the page's JSON, never the editor, drawn in a
+  same-origin frame.
+- The initial JavaScript is 348.7 kB of 350, so the writer, the renderer and Page setup load when
+  first used, and their words are a section.
+- The Word file names Word's theme fonts, with Consolas for code. Every paragraph's direction comes
+  from its block's; `dir: null` is resolved by the first strong character, as the editor does.
+
+**Tasks**
+
+*M19.1 A page's layout*
+
+- [ ] The page record's `layout` end to end: the planner, both stores, sync, `PageDto`, the `Pages`
+      column and its migration, `page.update`, the API's types, and the export's manifest and
+      import. Page setup in the page's menu, in English and in Arabic.
+
+*M19.2 Word*
+
+- [ ] The writer in `@cgw/doc`, covering every block, inline node and mark:
+      - directions;
+      - numbered and bulleted lists by `numbering.xml`, and check items;
+      - callouts and toggles;
+      - tables with merges and widths, and images with their sizes;
+      - links, and a table of contents as Word's field;
+      - the layout's section, with its header and footer.
+- [ ] Database blocks, sheet pictures and placeholders, given by the shell.
+- [ ] "Export to Word" in a page's and a row's menu, saved by `saveFile`.
+- [ ] Held to Phase 8's reader by a round trip, and to OOXML by `DocumentFormat.OpenXml`'s validator
+      run over the writer's vectors in the server's tests.
+
+*M19.3 Print and PDF*
+
+- [ ] The spike.
+- [ ] The print view, in a frame of its own:
+      - every block drawn, with no lazy or virtualised part;
+      - databases as tables;
+      - the layout's `@page`, header, footer and page numbers;
+      - breaks kept out of images and table rows.
+- [ ] "Print" and "Save as PDF" in a page's and a row's menu, on the web, the Windows app and the
+      Mac app, as the spike decides.
+
+**Acceptance criteria**
+
+- A page holding every block type, in English and in Arabic, is exported to Word on the device,
+  offline too. The file passes OOXML's validator and opens in Word. Read back by Phase 8's reader,
+  it gives the same blocks, marks and directions, apart from its listed losses.
+- A page printed in Chrome, Edge, the Windows app and the Mac app has every block, and the page's
+  size, orientation, margins, header, footer and page numbers. A database block's rows are a table
+  up to its limit. No image or table row is split over two pages.
+- A PDF saved from the web and from the desktop holds the page's text as text, with Arabic shaped
+  and in order.
+- No ERP row is in any file unless you choose so. Nothing reaches the server but the layout. An
+  older build's edit keeps a page's layout (the old-build spec's v0.18.0 case).
+- Page setup, the export's notices and the print view pass Axe and are checked in Arabic, light and
+  dark (print in light).
+
+**Performance benchmarks**
+
+- A page of 2,000 blocks, with 20 images and a database block of 1,000 rows, to a Word file ≤ 3 s on
+  the reference machine, while typing on another page stays within Phase 1's budget.
+- The same page's print view laid out and the print dialog open ≤ 3 s.
+- The initial JavaScript within Phase 1's 350 kB.
+
+**Risks**
+
+- The initial JavaScript is 1.3 kB under its budget: everything new loads when first used.
+- Two print engines: WKWebView may not draw `@page`'s margin boxes. The spike decides; a header and
+  a footer drawn in the page's own flow are the fallback.
+- Right to left in Word: a paragraph's `w:bidi` and its runs' `w:rtl` come from the block's
+  direction. They are held by the round trip, and by opening the Arabic file in Word by hand.
+- What the device lacks offline (an image, a sheet's picture, a database's rows): fetched when
+  online; offline, a placeholder and a notice of what was left out, never a silent gap.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `ARCHITECTURE.md`, `DATA_MODEL.md`, `SYNC_DESIGN.md` and `OPERATIONS.md` updated.
+- Tags `phase-19` and `v0.19.0`; a card for Phase 20.
+
+---
+
+## Phase 20: Suggested edits
+
+**Goals**
+
+Changes proposed rather than made. In a suggesting mode, text typed, deleted and formatted is kept
+as a suggestion by its author, and everyone sees it live. Suggestions are discussed, then accepted
+or rejected one by one or all at once by a page's editors. People who may only comment can suggest
+too.
+
+**Dependencies**
+
+Phase 6's comments, presence and inbox, and Phase 8's mail. Phase 19 is not needed, but its Word
+file and print view learn to read a page as it stands. A spike at the phase's start covers two
+things:
+
+- marks with attributes through the patched y-tiptap binding and Yjs under concurrency, run in the
+  convergence simulator: two authors' suggestions on one range, a deletion inside another's
+  insertion, an accept and a reject racing;
+- typing by an IME in the mode.
+
+Sized on 2026-11-25, against 0.18.0 (nothing run):
+
+- **The schema.** Version 6 has eight marks (`link`, `bold`, `italic`, `underline`, `strike`,
+  `code`, `textColour`, `highlight`), each excluding itself.
+  - A new mark needs version 7. An older build's binding fails on a mark it does not know and stops
+    editing, so the version gate (`meta.schemaVersion`, and the API's 426 `client.tooOld`) must open
+    the page read-only there. The read-only view keeps an unknown mark's text.
+  - The Q18 patch keeps unknown attributes on nodes only, so all of a mark's attributes must ship in
+    its first version.
+  - y-tiptap stores a mark that does not exclude itself as `name--<hash>`, which `cgw-ydoc` strips.
+    No mark has used that path yet.
+- **The editor.** It is editable or read-only, with no other mode. The block-id plugin is the only
+  `appendTransaction`, and no `filterTransaction` exists. Typing goes through `StableTyping`'s
+  `handleTextInput`. Undo is y-undo over this client's changes. `insertAiContent` is the pattern for
+  one undoable edit.
+- **Who may change a page.** The levels are `full`, `edit`, `comment` and `view`.
+  - A push needs `edit`: in `DocService`, and in the push's SQL fast path, the one copy of the access
+    rule outside C#.
+  - A non-editor's page opens read-only, its bubble toolbar showing only "Comment".
+  - Updates are relayed only once the worker has passed them (Q20). `ValidateJob` checks the
+    pusher's clients, that the pusher is still an editor, the epoch and the version. Then
+    `cgw-ydoc validate` checks names, ids, plain attribute values, link schemes and size. Nothing
+    checks what an edit does.
+- **Comments.** A thread is anchored by a block id and two relative positions, with its quote as the
+  fallback, and has no kind. Comments need a connection. There are six inbox kinds, and an older
+  build drops a kind it does not know.
+- **Readers.** Each of these would read a pending deletion and a pending insertion alike as text:
+  - `plainText` and `toMarkdown` (local search, the clipboard, AI, the export);
+  - `cgw-ydoc`'s JSON and text, which make the derived document (server search, embeddings, AI,
+    search by meaning, the server's export and Markdown, sites, share links);
+  - the worker's mention pass.
+- **History.** A restore sets a version's content through the editor, with its suggestions as they
+  were.
+
+**Questions for you (one batch, when the phase starts)**
+
+- Who suggests. Default: whoever can edit, by a Suggesting mode in the page's top bar, kept per
+  person and page on the device; and whoever can comment, whose page opens in Suggesting mode only.
+- What a suggestion holds. Default: text inserted and deleted, formatting added and removed, and
+  whole blocks inserted or deleted, each with its author and time. One person's consecutive typing
+  is one suggestion. These are edits only, with their controls off while suggesting: a block's type
+  changed or the block moved, a table's rows and columns, and an embed's or a database block's
+  settings.
+- Accepting and rejecting. Default: by whoever can edit, each one from the marked text or the list
+  beside the page, all of one person's, or all at once. Each is one undoable edit. An author may
+  withdraw their own. A resolved suggestion leaves its record only in the page's history.
+- Discussion and notices. Default: each suggestion is a thread in the comments panel, with replies.
+  A page's editors are told in the inbox (a new kind, `suggestion`) and by mail, by their setting.
+  The author is told when theirs is accepted or rejected.
+- What readers see. Default: a page as it stands, without pending suggestions: insertions left out,
+  deletions kept. This holds for search, embeddings, AI, sites, share links, exports, Word and
+  print. A mention in a pending insertion notifies no one until it is accepted. A share link and a
+  site show no suggestion.
+
+Proposed defaults, logged with the answers:
+
+- Schema 7 adds the marks `suggestionInsert`, `suggestionDelete` and `suggestionFormat`, with the
+  attributes `id`, `author` and `at` (a format also records the marks added and removed), and a
+  block's optional `suggestion`.
+- One reading "as it stands" in `@cgw/doc` and one in `cgw-ydoc`, held to shared vectors and used by
+  every reader.
+- The worker passes a commenter's update only if every change in it is that person's own suggestion
+  or the removal of one; otherwise it is refused, as an editor's broken update is.
+- `suggestion` is an inbox kind an older build drops.
+
+**Tasks**
+
+*M20.1 Suggestions in the document*
+
+- [ ] The spike.
+- [ ] Schema 7, with its migration, fixture and old-build case.
+- [ ] The Suggesting mode: typing, deleting, pasting, formatting and whole blocks turned into
+      suggestions, each as one undoable edit, drawn in its author's presence colour, in both
+      directions.
+
+*M20.2 Accept and reject*
+
+- [ ] Each one from the marked text, by the keys too.
+- [ ] The list beside the page, with each one's author, time and change; all of a person's, or all.
+- [ ] Withdrawal, and convergence when two people resolve one suggestion at once.
+
+*M20.3 Threads, notices and readers*
+
+- [ ] A suggestion's thread, the inbox's `suggestion` kind and its mail.
+- [ ] The readings "as it stands" in `@cgw/doc` and `cgw-ydoc`, with their vectors, and every reader
+      moved to them: search, embeddings, AI, sites, share links, exports, Word and print, and the
+      mention pass.
+
+*M20.4 Commenters suggest*
+
+- [ ] A commenter's push taken by the API's gate and the SQL fast path, held to the access oracle;
+      their page in Suggesting mode only.
+- [ ] The worker's check of each of their updates in `cgw-ydoc`, fuzzed with hostile updates.
+- [ ] A refused update set aside on the device, with a notice.
+
+**Acceptance criteria**
+
+- Typing, deleting, pasting and formatting while suggesting, in English and in Arabic, are kept as
+  suggestions by their author and shown to everyone live. Made offline, they merge on reconnect.
+  Undo takes back each as one edit.
+- Accepting gives the text as its author meant; rejecting gives it as it was. Every device
+  converges, including when two people resolve one suggestion at once.
+- A commenter's suggestion reaches an editor's open tab. An update of theirs that changes anything
+  else is refused by the server and reaches no one.
+- Search, embeddings, AI, sites, share links, exports, Word and print read a page as it stands. A
+  mention in a pending insertion notifies no one.
+- An older build opens a page with suggestions read-only and keeps it byte for byte (the old-build
+  spec's v0.19.0 case).
+- The mode, the list, a suggestion's thread, the inbox and the mail pass Axe and are checked in
+  Arabic.
+
+**Performance benchmarks**
+
+- Typing while suggesting, on a page of 5,000 blocks, within Phase 1's keystroke budget.
+- A commenter's suggestion to an editor's open tab, the worker's check included: ≤ 1 s at p95.
+- Accepting all of 500 suggestions on a page ≤ 500 ms; the list of 500 drawn ≤ 200 ms.
+
+**Risks**
+
+- A commenter's way into edits: the worker's check runs before anything is relayed (Q20), and is
+  fuzzed with hostile updates as S1 fuzzed the schema. The push's SQL fast path changes with the
+  rule, held by the access oracle.
+- Marks with attributes under concurrency (two authors on one range, a deletion inside another's
+  insertion): the spike and the convergence simulator come first.
+- Pending text leaking to readers: one reading in each language, shared vectors, and every reader on
+  it.
+- Schema 7 shuts older builds out of every page the new build edits, as every bump has. The web app
+  updates itself and the desktop by its updater. The spike also says whether the version can rise
+  only on a page that holds a suggestion.
+
+**Definition of done**
+
+- Acceptance criteria and benchmarks proven.
+- `DATA_MODEL.md`, `ARCHITECTURE.md`, `SYNC_DESIGN.md` and `OPERATIONS.md` updated.
+- Tags `phase-20` and `v0.20.0`; "Later" reviewed with you.
+
+---
+
 ## Later
 
 Not planned in any phase; listed so they are not lost. Reviewed on 2026-11-15: what was chosen
@@ -2590,7 +2930,9 @@ completions on a local model, billing for the subscription) were chosen, and wen
 15 the same day; the rest stays (`DECISIONS.md`). Reviewed again on 2026-11-22, after Phase 14:
 nothing moves (Phase 15 is next); Phase 14's two deferrals are added. On 2026-11-24 three themes
 that were not on it (automations, forms, workflows and tasks) became Phases 15 to 17, and AI,
-further, Phase 18.
+further, Phase 18. Reviewed again on 2026-11-25, after 0.18.0: documents out was chosen (Word's
+output from 2026-11-24's comparison, with suggested edits) and went to Phases 19 and 20 the same
+day. A public API is added; the rest stays (`DECISIONS.md`).
 
 - Embedded presentations, once that app exists.
 - Comments offline (online only from 0.6.0).
@@ -2615,6 +2957,9 @@ further, Phase 18.
   charged otherwise than by plans of a monthly allowance (tokens metered with a cap, a price a
   member), and payment other than Paddle's (invoices outside the app); a larger model, or one on a
   graphics card, should the host gain one.
+- A public API: workspace tokens with scopes, so other programs read and write pages, databases and
+  rows. This is the integration surface of 2026-11-24's comparison; outgoing webhooks are Phase
+  15's.
 
 ## Top risks, by the earliest phase that exposes them
 
@@ -2652,6 +2997,8 @@ further, Phase 18.
 | A form link reads more than its questions, or floods a database | 16 | Answers written only; limits per address and form; the link's switch |
 | A waiting run or a recurring row acts twice | 17 | Keyed by its event and due time, its operations by their ids |
 | The plan paid for and the allowance disagree | 18 | Webhooks verified and applied once, reconciled daily |
+| A printed or exported page lacks what the screen shows, or puts ERP rows in a file | 19 | A renderer of its own that draws every block; ERP blocks as you decide, placeholders by default |
+| A suggestion becomes a commenter's way into edits, or pending text reaches readers | 20 | The worker passes a commenter's update only if it holds their own suggestions alone; one reading "as it stands" used by every reader |
 
 ## Verification
 

@@ -27,7 +27,9 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 15: Automations | Done, 2026-11-24 (0.15.0; proven against loopback receivers in CI and on the e2e stack; a webhook to a public receiver, and installing it, are yours) | `phase-15`, `v0.15.0` |
 | Phase 16: Forms | Done, 2026-11-24 (0.16.0; proven on loopback in CI and on the e2e stack; a form link on the production host, and installing it, are yours) | `phase-16`, `v0.16.0` |
 | Phase 17: Workflows and tasks | Done, 2026-11-25 (0.17.0; proven in CI and on the e2e stack; a reminder's mail to a real inbox, and installing it, are yours) | `phase-17`, `v0.17.0` |
-| Phase 18: AI, further | Planned 2026-11-22 (as Phase 15; Phase 18 from 2026-11-24) | |
+| Phase 18: AI, further | Done, 2026-11-25 (0.18.0; proven against the mock Paddle in CI and on the e2e stack, the local model measured here and on the host; the live test in Paddle's sandbox, and installing it, are yours) | `phase-18`, `v0.18.0` |
+| Phase 19: Word, PDF and print | Planned 2026-11-25 | |
+| Phase 20: Suggested edits | Planned 2026-11-25 | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), U21 recurrence and U20 links between bars (2026-11-25), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `4a7d0b8` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
 | Track E: Cash Gear ERP connect contract | E1 to E5 done in `CashGear` and `ERPClient_React` (2026-11-14), E6 and E7 in `CashGear` (2026-11-15), E8 and E9 in `CashGear` (2026-11-18), E10 and E11 (2026-11-20); its `main` pushed on your word to `98deed36` | |

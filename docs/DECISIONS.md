@@ -2103,3 +2103,52 @@ deleted after with their weights; nothing installed. The production host is an A
 
 Random weights draft no token the model accepts, so Qwen3.5's figures there are its slowest case.
 The host writes about twice as fast as the reference machine.
+
+## 2026-11-25: After 0.18.0 (the Later list reviewed)
+
+Phase 18's definition of done asks for "Later" to be reviewed with you. The list was put to you in
+one batch: production, the sandbox test, product themes, then groundwork. It included what Phase 18
+left on it (a model on the desktop, AI charged otherwise, a larger model or one on a graphics card),
+what is owed (production's server, still 0.12.0, and the live test in Paddle's sandbox), and the two
+themes of 2026-11-24's comparison that were never chosen (Word's output, and an integration
+surface). Found before asking: OPERATIONS.md asks for 0.14.0's server to be installed before
+2026-12-14. On that day the clean-up would start deleting the first files in rows' file cells that
+no row's document named, those from 0.5.0's install on 2026-11-14.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Production's server | Now, in a session of its own. 0.18.0 is installed on the host over Remote Desktop at a quiet hour you pick: a verified backup, the migrations of Phases 13 to 18, one `install.ps1` run. Then the live checks owed run on it: `docs.test.cashgearerp.com` with its Let's Encrypt certificate, a webhook to a public receiver, a form link, and a reminder's mail to a real inbox. Whether the local models' packages (572 MB and 3.1 GB) go with it is asked there |
+| The live test in Paddle's sandbox | Yours, later, by `scripts/paddle-sandbox.mjs` and OPERATIONS.md's runbook, as decided on 2026-11-25; the evidence keeps saying it is owed |
+| Product themes | Documents out: a page exported to Word (.docx) and to PDF, a print layout (page size, margins, header and footer), and suggested edits that a page's editors accept or reject |
+| Groundwork with it | None for now. These stay on "Later": the import and offline gaps; publishing further (more than one host name a site, DNS-01); scale and upgrades (a backplane, Yjs 14, `@cashgear/app-kit`, the test of access lost without a feed change) |
+| Not chosen | These stay on "Later": AI, Phase 18's leftovers; a public API and larger organisations (workspace tokens with scopes, SAML and SCIM); platforms and offline (a mobile app, a Linux build, comments offline). The public API is added to the list |
+
+Documents out was sized against 0.18.0 the same day (`IMPLEMENTATION_PLAN.md`, Phases 19 and 20;
+nothing run):
+
+- Nothing writes OOXML. The server's `DocumentFormat.OpenXml` writes xlsx only. Phase 8's Word
+  reader is there for a round trip.
+- A page's content and assets are read from the local store, offline too, by the workspace export.
+- Nothing prints: the editor draws far blocks lazily and the table only its window. The only
+  renderer of a whole page is the server's site renderer.
+- A page record has no layout field, and the server applies only the fields an edit sends.
+- Every output writes an ERP block as a placeholder or its settings.
+- The schema is version 6 with eight marks. A new mark needs version 7, because an older build's
+  binding fails on a mark it does not know.
+- Levels `comment` and `edit` are distinct, and a push needs `edit`. Updates are relayed only once
+  the worker has passed them (Q20), but nothing checks what an update does.
+- Every reader of a page's text would read a pending deletion and a pending insertion alike.
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The split | Two releases. Phase 19 (`v0.19.0`) Word, PDF and print: a page's layout, the Word writer, the print view and PDF. Phase 20 (`v0.20.0`) suggested edits: the mode, accept and reject, threads and notices, every reader of a page's text, and commenters suggesting | The export needs no schema change and no new rule on the server. Suggestions raise the schema to 7, add an editor mode and, for commenters, a check of what an update holds: the larger risk, alone in its release |
+| The order | Word, PDF and print first | Nothing in it needs suggestions, and it is smaller. Phase 20 then teaches Phase 19's outputs to read a page as it stands. Say if you want them swapped |
+| The deploy | Not a phase and no version: a session of its own, proposed now. Its evidence goes in PROGRESS.md under "After 0.18.0: production", as 0.10.0's and 0.12.0's did, and OPERATIONS.md's "Production as installed" is updated | Production follows the releases. Nothing in the deploy changes the code |
+| The questions | Each phase's batch is asked when it starts | As every phase |
+| Added to "Later" | A public API: workspace tokens with scopes, so other programs read and write pages, databases and rows. This is the integration surface of 2026-11-24's comparison; outgoing webhooks are Phase 15's | It was offered and not chosen. On "Later" it is not lost |
+| Not offered as a choice | These stay on "Later" with their reasons: embedded presentations (no app yet), SQLite on OPFS (it needs COOP/COEP, which blocks embeds), snapshotting an ERP view (the hard limits) | Nothing to choose while their reason stands |
+| Version | `v0.19.0`, then `v0.20.0` | One version per phase |
