@@ -3,7 +3,6 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UpdateInfo, WorkspacePlatform } from '@cgw/shell';
-import { DesktopStore } from '@cgw/store-desktop';
 import { erpFor } from './erp';
 import { pluginsOriginFor } from './plugins';
 import { shareInFlight } from './shared';
@@ -80,9 +79,12 @@ export const desktopPlatform: WorkspacePlatform = {
   setWindowTheme: (theme) => getCurrentWindow().setTheme(theme),
   // External links open in the system browser, never inside the app's window.
   openExternal: (url) => openUrl(url),
-  // The SQLite store, through one typed command; requests and answers are binary frames.
-  openStore: () =>
-    DesktopStore.open(async (frame) => bytes(await invoke<ArrayBuffer>('store', frame))),
+  // The SQLite store, through one typed command; requests and answers are binary frames. Loaded
+  // when the desktop opens it (Phase 17): the web app, which shares this module, never fetches it.
+  openStore: async () => {
+    const { DesktopStore } = await import('@cgw/store-desktop');
+    return DesktopStore.open(async (frame) => bytes(await invoke<ArrayBuffer>('store', frame)));
+  },
   saveFile: async (name, data) => {
     await invoke('save_file', data, { headers: { 'x-file-name': encodeURIComponent(name) } });
   },
