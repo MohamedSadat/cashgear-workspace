@@ -203,8 +203,11 @@ public sealed class MailNotificationTests(ServerFixture server)
         Assert.Equal(HttpStatusCode.NoContent, (await team.Member.Client.PatchAsJsonAsync("/api/v1/account/me", new { locale = "ar" })).StatusCode);
         await Add(NotificationKinds.Approval, $"approval:{Guid.NewGuid():N}");
         await Mail(At(PastDelay * 3));
-        Assert.Equal(2, MailsTo(team.Member.Email).Count);
-        Assert.StartsWith("تطلب أتمتة Olive Owner موافقتك", MailsTo(team.Member.Email).OrderBy(m => m.Date).Last().Subject);
+        // Told from the reminder by its subject: a mail's Date has whole seconds, so two sent in one
+        // second tie, and the reminder could come last by Date.
+        var both = MailsTo(team.Member.Email);
+        Assert.Equal(2, both.Count);
+        Assert.StartsWith("تطلب أتمتة Olive Owner موافقتك", Assert.Single(both, m => m.Subject != reminder.Subject).Subject);
         await Set(team.Member.Client, "off");
         await Add(NotificationKinds.Reminder, $"reminder:{Guid.NewGuid():N}");
         await Mail(At(PastDelay * 5));
