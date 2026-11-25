@@ -17,6 +17,7 @@ mod bridge;
 mod sheet;
 mod updates;
 
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -43,24 +44,50 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|error| error.to_string())
 }
 
-/// One store request: a frame in, a frame out (crates/cgw-store). Bytes stay bytes.
+/// The bytes the page sent a command, as either of Tauri's two ways carries them.
+///
+/// Over its custom protocol (`ipc.localhost`) a `Uint8Array` is the request's body
+/// (`InvokeBody::Raw`). Once one of those fetches fails in a start (WebView2 just started after a
+/// kill), Tauri's script sends every later call of that start by `window.ipc.postMessage`, which
+/// writes the same bytes as a JSON array of numbers (`InvokeBody::Json`). Either is taken, and
+/// nothing else: an array holding anything but whole numbers from 0 to 255 is refused.
+fn body_bytes(body: &InvokeBody) -> Option<Cow<'_, [u8]>> {
+    match body {
+        InvokeBody::Raw(bytes) => Some(Cow::Borrowed(bytes)),
+        InvokeBody::Json(serde_json::Value::Array(items)) => items
+            .iter()
+            .map(|item| item.as_u64().and_then(|n| u8::try_from(n).ok()))
+            .collect::<Option<Vec<u8>>>()
+            .map(Cow::Owned),
+        InvokeBody::Json(_) => None,
+    }
+}
+
+/// One store request: a frame in, a frame out (crates/cgw-store). Bytes stay bytes: the answer is
+/// a raw body, which the page reads as an `ArrayBuffer`, or, after the postMessage fallback, as an
+/// array of numbers (apps/web/src/platform/desktop.ts).
 #[tauri::command]
 fn store(request: Request<'_>, store: State<'_, LocalStore>) -> Result<Response, String> {
-    let InvokeBody::Raw(frame) = request.body() else {
+    let mut store = store.0.lock().map_err(|error| error.to_string())?;
+    store_answer(&mut store, request.body()).map(Response::new)
+}
+
+/// The store's answer to a command's body: the frame it holds, handled, or a refusal.
+fn store_answer(store: &mut Store, body: &InvokeBody) -> Result<Vec<u8>, String> {
+    let Some(frame) = body_bytes(body) else {
         return Err("The store takes a binary frame.".into());
     };
-    let mut store = store.0.lock().map_err(|error| error.to_string())?;
-    Ok(Response::new(store.handle(frame)))
+    Ok(store.handle(&frame))
 }
 
 /// Saves bytes to a file the user picks in the system's dialog. The page sends the bytes and a
 /// suggested name in the headers; it never sends a path.
 #[tauri::command]
 async fn save_file(app: AppHandle, request: Request<'_>) -> Result<bool, String> {
-    let InvokeBody::Raw(bytes) = request.body() else {
+    let Some(bytes) = body_bytes(request.body()) else {
         return Err("Save takes the file's bytes.".into());
     };
-    let bytes = bytes.clone();
+    let bytes = bytes.into_owned();
     let name = request
         .headers()
         .get("x-file-name")
@@ -276,6 +303,120 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    /// A body as Tauri's postMessage fallback makes it: the page's message is JSON text whose
+    /// `payload` is a `Uint8Array` written by `JSON.stringify` (`process-ipc-message-fn.js`), and
+    /// the Rust side takes that `payload` as it parsed it (`ipc/protocol.rs`).
+    fn posted(bytes: &[u8]) -> InvokeBody {
+        let items: Vec<String> = bytes.iter().map(u8::to_string).collect();
+        let message = format!(
+            r#"{{"cmd":"store","callback":1,"error":2,"payload":[{}],"options":{{"customProtocolIpcBlocked":true}},"__TAURI_INVOKE_KEY__":"k"}}"#,
+            items.join(",")
+        );
+        let mut message: Value = serde_json::from_str(&message).unwrap();
+        InvokeBody::Json(message["payload"].take())
+    }
+
+    #[test]
+    fn a_body_is_raw_bytes_or_the_fallback_s_array_of_numbers() {
+        let bytes: Vec<u8> = (0..=255).collect();
+        assert!(matches!(
+            body_bytes(&InvokeBody::Raw(bytes.clone())),
+            Some(Cow::Borrowed(raw)) if raw == bytes.as_slice()
+        ));
+        assert_eq!(
+            body_bytes(&posted(&bytes)).unwrap().as_ref(),
+            bytes.as_slice()
+        );
+        assert_eq!(body_bytes(&posted(&[])).unwrap().as_ref(), b"");
+        assert_eq!(
+            body_bytes(&InvokeBody::Raw(Vec::new())).unwrap().as_ref(),
+            b""
+        );
+    }
+
+    #[test]
+    fn a_body_that_is_not_bytes_is_refused() {
+        for refused in [
+            json!({}),
+            json!(null),
+            json!("AAEC"),
+            json!({ "path": "C:\\Windows\\win.ini" }),
+            json!([0, 256]),
+            json!([0, -1]),
+            json!([1.5]),
+            json!([1.0]),
+            json!(["1"]),
+            json!([true]),
+            json!([null]),
+            json!([[1, 2]]),
+        ] {
+            assert!(
+                body_bytes(&InvokeBody::Json(refused.clone())).is_none(),
+                "{refused} was taken"
+            );
+        }
+    }
+
+    /// The store answers a frame sent by the fallback as it answers the same frame sent raw, a
+    /// blob's bytes included, and refuses a body that holds no frame.
+    #[test]
+    fn the_store_answers_a_frame_from_either_path_alike() {
+        let dir = std::env::temp_dir().join(format!(
+            "cgw-desktop-body-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut store = Store::open(&dir).unwrap();
+        let answer = |store: &mut Store, body: &InvokeBody| {
+            cgw_store::decode_frame(&store_answer(store, body).unwrap()).unwrap()
+        };
+
+        let version = cgw_store::encode_frame(&json!({ "op": "schemaVersion" }), &[]);
+        let raw = answer(&mut store, &InvokeBody::Raw(version.clone()));
+        let fallback = answer(&mut store, &posted(&version));
+        assert!(raw.header["ok"].is_u64(), "{}", raw.header);
+        assert_eq!(fallback.header, raw.header);
+
+        // An asset written through the fallback reads back, byte for byte, through either path.
+        let bytes: Vec<u8> = (0..=255).rev().collect();
+        let asset = json!({
+            "id": "0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c",
+            "workspaceId": "0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d",
+            "fileName": "bytes.bin",
+            "contentType": "application/octet-stream",
+            "sizeBytes": bytes.len(),
+        });
+        let put = cgw_store::encode_frame(
+            &json!({ "op": "putAsset", "asset": asset }),
+            std::slice::from_ref(&bytes),
+        );
+        let written = answer(&mut store, &posted(&put));
+        assert!(written.header.get("error").is_none(), "{}", written.header);
+        let get =
+            cgw_store::encode_frame(&json!({ "op": "getAssetBytes", "id": asset["id"] }), &[]);
+        for body in [InvokeBody::Raw(get.clone()), posted(&get)] {
+            let read = answer(&mut store, &body);
+            assert_eq!(read.header["ok"], json!(true), "{}", read.header);
+            assert_eq!(read.blobs, std::slice::from_ref(&bytes));
+        }
+
+        assert_eq!(
+            store_answer(
+                &mut store,
+                &InvokeBody::Json(json!({ "op": "schemaVersion" }))
+            ),
+            Err("The store takes a binary frame.".to_string())
+        );
+        drop(store);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// macOS lays its bundle settings (tauri.macos.conf.json) over tauri.conf.json, and nothing
     /// else: both platforms run under the one CSP and open the same links.
     #[test]
