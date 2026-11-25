@@ -182,9 +182,10 @@ test('the plan’s part of Settings under Axe and in Arabic', async ({ page, bro
     (await new AxeBuilder({ page }).include('[data-testid="billing"]').withTags(WCAG).analyze())
       .violations,
   ).toEqual([]);
-  // Paddle's name and the currency's sign are theirs; everything else is the app's, in Arabic.
+  // Paddle's name is theirs; everything else is the app's, in Arabic, the currency by its name.
+  await expect(plans.locator('[data-plan="team"]')).toContainText('دولار أمريكي');
   expect(
-    await englishIn(plans, 'the plans', { within: [], names: ['Paddle', 'US$', 'USD'] }),
+    await englishIn(plans, 'the plans', { within: ['input', 'select'], names: ['Paddle'] }),
   ).toEqual([]);
   expect(current.owner.errors).toEqual([]);
 });

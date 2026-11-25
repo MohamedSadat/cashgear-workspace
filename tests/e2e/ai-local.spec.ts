@@ -13,7 +13,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test, desktop } from './fixtures';
-import { pageActions, team, type Team } from './collab';
+import { team, type Team } from './collab';
 import { englishIn } from './erp12';
 import { MOCK_AI, writePage } from './meaning';
 
@@ -46,10 +46,12 @@ async function chooseLocal(page: Page, label: string) {
 }
 
 async function ask(page: Page, action: string, button: string) {
-  await pageActions(page).click();
+  const arabic = button !== 'Ask';
   await page
-    .getByRole('menuitem', { name: button === 'Ask' ? 'AI…' : 'الذكاء الاصطناعي…' })
+    .getByRole('region', { name: arabic ? 'الصفحة' : 'Page' })
+    .getByRole('button', { name: arabic ? 'إجراءات الصفحة' : 'Page actions' })
     .click();
+  await page.getByRole('menuitem', { name: arabic ? 'الذكاء الاصطناعي…' : 'AI…' }).click();
   await expect(panel(page)).toBeVisible();
   await panel(page).getByRole('radio', { name: action }).check();
   await panel(page).getByRole('button', { name: button, exact: true }).click();

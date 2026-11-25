@@ -43,7 +43,9 @@ import {
 // Settings' AI section on every screen walked there; from Phase 10 the embeddings provider's and
 // its models' names (Voyage AI, voyage-4), in the same section; from Phase 13 the model this server
 // runs itself (voyage-4-nano); from Phase 14 the example host name Settings → Publishing gives
-// (docs.example.com, `EXAMPLE_HOST`), a name in no language, shown on every screen walked there.
+// (docs.example.com, `EXAMPLE_HOST`), a name in no language, shown on every screen walked there;
+// from Phase 18 the completion model this server runs (qwen3.5-4b) and the payment provider's name
+// (Paddle), in Settings' AI section on every screen walked there.
 // The palette's "Related by meaning" group lists pages, as its others do.
 
 /**
@@ -55,7 +57,7 @@ const OWN_GROUPS = ['الصفحات', 'الأخيرة', 'ذات صلة بالم�
 const BREADCRUMBS = 'موقع هذه الصفحة';
 
 const KEYS =
-  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite|-nano)?|docs\.example\.com)\b/g;
+  /\b(Ctrl|Shift|Alt|Enter|Esc|Tab|Backspace|Delete|Del|Space|Cmd|Option|F\d+|CSV|Cash Gear (?:Sheet|ERP|Workspace)|ERP|Anthropic|Claude(?: (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)?)?|Voyage AI|voyage-4(?:-large|-lite|-nano)?|qwen3\.5-4b|Paddle|docs\.example\.com)\b/g;
 
 /**
  * What the person wrote or another system holds, beyond the main screens' own (Phase 5): names

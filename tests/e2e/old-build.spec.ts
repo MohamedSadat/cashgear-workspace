@@ -1712,11 +1712,29 @@ test('the v0.17.0 build uses AI on the server’s own model and shows a paid pla
   const PADDLE = 'http://127.0.0.1:4291';
   const account = await newAccount('AI and v0.17.0');
   const api = await apiSession(account);
-  const workspace = (await api.post('/api/v1/workspaces', {
-    id: uuidv7(),
-    name: 'Local AI v0.17.0',
-    icon: null,
-  })) as { id: string };
+
+  // The old build makes the workspace (one made by the API alone has no sections to add a page in).
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const asked: Record<string, unknown>[] = [];
+  old.on('request', (request) => {
+    if (request.method() === 'POST' && /\/ai\/complete$/.test(request.url()))
+      asked.push(request.postDataJSON());
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await old.getByLabel('Workspace name').fill('Local AI v0.17.0');
+  await old.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(editor(old)).toBeVisible();
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  const workspace = ((await api.get('/api/v1/workspaces')) as { id: string; name: string }[]).find(
+    (w) => w.name === 'Local AI v0.17.0',
+  )!;
+
+  // A paid plan bought through the mock Paddle, and AI on the server's own model.
   const { url } = (await api.post(`/api/v1/workspaces/${workspace.id}/billing/checkout`, {
     planId: 'team',
     language: 'en',
@@ -1734,19 +1752,7 @@ test('the v0.17.0 build uses AI on the server’s own model and shows a paid pla
     enabled: true,
     model: 'qwen3.5-4b',
   });
-
-  const oldContext = await browser.newContext({ baseURL: OLD });
-  const old = await oldContext.newPage();
-  const oldErrors: string[] = [];
-  old.on('pageerror', (error) => oldErrors.push(error.message));
-  const asked: Record<string, unknown>[] = [];
-  old.on('request', (request) => {
-    if (request.method() === 'POST' && /\/ai\/complete$/.test(request.url()))
-      asked.push(request.postDataJSON());
-  });
-  await old.goto(`${OLD}/`);
-  await signIn(old, account, `${OLD}/`);
-  await signedIn(old, account);
+  await old.reload();
   await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
   await newPage(old, 'Old notes');
   await editor(old).click();
