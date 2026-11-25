@@ -212,3 +212,17 @@
 .cgw-db-auto-run-steps li[data-depth='2'] {
   margin-inline-start: 32px;
 }
+
+/* Phase 17: a row's "Remind me", a line for each of its date properties. */
+.cgw-db-remind-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-block: 6px;
+}
+
+/* Phase 17: a repeating row's repetition, the library's fields inside the editor's part. */
+.cgw-db-auto-series {
+  margin-block: 4px;
+}

@@ -39,6 +39,8 @@ import {
   type StoredForm,
 } from './forms';
 import { formVectors, type FormVectors } from './vectors/form.cases';
+import { nextOccurrence, occurrencesBetween, readRecurrence } from './recurrence';
+import { recurrenceVectors, type RecurrenceVectors } from './vectors/recurrence.cases';
 
 const WRITE = process.env.DB_VECTORS_WRITE === '1';
 
@@ -399,4 +401,21 @@ describe('db-form-vectors.json', () => {
       const at = c.kind === 'next' ? nextPage : previousPage;
       expect(at(form, db, c.raw, v.ctx, c.at)).toBe(c.expected);
     });
+});
+
+// Phase 17: the days a repeating row falls on.
+describe('db-recurrence-vectors.json', () => {
+  const v = vectors<RecurrenceVectors>('db-recurrence-vectors.json', recurrenceVectors);
+  for (const c of v.cases)
+    it(c.name, () => {
+      const rule = readRecurrence(c.rule);
+      expect(rule).not.toBeNull();
+      if (c.next) expect(nextOccurrence(rule!, c.first, c.next.after)).toBe(c.next.expected);
+      if (c.between)
+        expect(occurrencesBetween(rule!, c.first, c.between.from, c.between.to)).toEqual(
+          c.between.expected,
+        );
+    });
+  for (const c of v.refused)
+    it(`refuses ${c.name}`, () => expect(readRecurrence(c.rule)).toBeNull());
 });

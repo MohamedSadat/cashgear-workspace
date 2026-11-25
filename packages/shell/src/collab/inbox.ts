@@ -8,9 +8,19 @@ import { answer, type PersonRef } from './comments';
 
 /**
  * Phase 15: `automation`, a rule's notice or (with `reason`) a run of one's own that stopped.
- * Phase 17: `approval`, an approval a rule asks of the person (with `approval`).
+ * Phase 17: `approval`, an approval a rule asks of the person (with `approval`); `reminder`, a row's
+ * date reached, by a rule's reminder or the person's own (with `reminder`).
  */
-export type NotificationKind = 'mention' | 'commentMention' | 'reply' | 'automation' | 'approval';
+export type NotificationKind =
+  'mention' | 'commentMention' | 'reply' | 'automation' | 'approval' | 'reminder';
+
+/** Phase 17: what a reminder is of: a date property (its name as it is now) and its value's start. */
+export interface ReminderOf {
+  propertyId: string;
+  propertyName: string;
+  /** A day (`YYYY-MM-DD`) or a UTC instant; null when the row had none by then. */
+  start: string | null;
+}
 
 /** Phase 17: an approval as its item shows it: `open` while it is asked, else its outcome. */
 export interface ApprovalState {
@@ -43,6 +53,8 @@ export interface NotificationDto {
   reason?: string | null;
   /** Phase 17, kind `approval`. */
   approval?: ApprovalState | null;
+  /** Phase 17, kind `reminder`. */
+  reminder?: ReminderOf | null;
 }
 
 export interface NotificationPage {
@@ -66,7 +78,24 @@ export interface NotificationsApi {
   ): Promise<ApprovalState>;
 }
 
-const KINDS = new Set<string>(['mention', 'commentMention', 'reply', 'automation', 'approval']);
+const KINDS = new Set<string>([
+  'mention',
+  'commentMention',
+  'reply',
+  'automation',
+  'approval',
+  'reminder',
+]);
+
+function readReminder(value: unknown): ReminderOf | null {
+  const r = value as Record<string, unknown> | null | undefined;
+  if (!r || typeof r.propertyId !== 'string') return null;
+  return {
+    propertyId: r.propertyId,
+    propertyName: String(r.propertyName ?? ''),
+    start: typeof r.start === 'string' ? r.start : null,
+  };
+}
 
 const STATES = new Set(['open', 'approved', 'rejected', 'noAnswer', 'stopped']);
 
@@ -109,6 +138,7 @@ export function readNotification(value: unknown): NotificationDto | null {
     automationName: (n.automationName as string | null | undefined) ?? null,
     reason: (n.reason as string | null | undefined) ?? null,
     approval,
+    reminder: n.kind === 'reminder' ? readReminder(n.reminder) : null,
   };
 }
 

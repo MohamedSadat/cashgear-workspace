@@ -425,6 +425,19 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<DateTimeOffset?>("ScannedUntil")
                         .HasColumnType("datetimeoffset(3)");
 
+                    b.Property<string>("SeriesDay")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<string>("SeriesNext")
+                        .HasMaxLength(10)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(10)");
+
+                    b.Property<byte[]>("SeriesRowId")
+                        .HasColumnType("binary(16)");
+
                     b.Property<string>("TriggerKind")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1425,6 +1438,11 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset(3)");
 
+                    b.Property<string>("DateStart")
+                        .HasMaxLength(40)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(40)");
+
                     b.Property<string>("DedupeKey")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1451,6 +1469,11 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<byte[]>("PageId")
                         .IsRequired()
                         .HasColumnType("binary(16)");
+
+                    b.Property<string>("PropertyId")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<DateTimeOffset?>("ReadAt")
                         .HasColumnType("datetimeoffset(3)");
@@ -2174,6 +2197,62 @@ namespace Cgw.Core.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("RealtimeTickets");
+                });
+
+            modelBuilder.Entity("Cgw.Core.Data.RowReminder", b =>
+                {
+                    b.Property<byte[]>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<int>("BeforeMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("DatabaseId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("DueAt")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<string>("PropertyId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<byte[]>("RowId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<DateTimeOffset?>("SentFor")
+                        .HasColumnType("datetimeoffset(3)");
+
+                    b.Property<byte[]>("UserId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.Property<byte[]>("WorkspaceId")
+                        .IsRequired()
+                        .HasColumnType("binary(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DueAt")
+                        .HasDatabaseName("IX_RowReminders_Due")
+                        .HasFilter("[DueAt] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("DueAt"), new[] { "SentFor" });
+
+                    b.HasIndex("RowId");
+
+                    b.HasIndex("UserId", "RowId", "PropertyId")
+                        .IsUnique();
+
+                    b.ToTable("RowReminders");
                 });
 
             modelBuilder.Entity("Cgw.Core.Data.Section", b =>
@@ -3039,6 +3118,9 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<string>("Properties")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Reminders")
+                        .HasColumnType("int");
 
                     b.Property<long>("RowCount")
                         .HasColumnType("bigint");

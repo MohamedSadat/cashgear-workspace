@@ -28,7 +28,7 @@ import {
 import type { ViewRecord, ViewType } from './core';
 import type { DatabaseHost, RowRequest } from './host';
 import { useDbT } from './i18n';
-import { propertyOf } from './model/properties';
+import { liveProperties, propertyOf } from './model/properties';
 import {
   conditionCount,
   emptyConfig,
@@ -39,6 +39,8 @@ import {
 } from './model/viewConfig';
 import { FilterEditor, newCondition } from './toolbar/FilterEditor';
 import { AutomationsButton } from './automations/AutomationsButton';
+import { openAutomations } from './automations/open';
+import { useAutoT } from './automations/words';
 import { GroupEditor } from './toolbar/GroupEditor';
 import { PropertiesEditor } from './toolbar/PropertiesEditor';
 import { SortEditor } from './toolbar/SortEditor';
@@ -176,6 +178,9 @@ export function DatabaseView({
   const viewMenu = useRef<CgContextMenuActions<ViewRecord>>(null);
   const templateMenu = useRef<CgContextMenuActions<null>>(null);
   const templates = useHost(host, () => host.rowTemplates(databaseId));
+  // Phase 17: "Repeat a template" (its words are the automations', merged with the toolbar's button).
+  const automations = useHost(host, () => host.automations);
+  const { t: at } = useAutoT();
   // CSV import and export (views stream: csv/extras.tsx).
   const extras = useViewsExtras(host, databaseId, editable);
 
@@ -624,7 +629,41 @@ export function DatabaseView({
           ariaLabel={t('views.menu', { name: view.name })}
         />
         <CgContextMenu<null>
-          items={rowTemplateItems({ host, databaseId, view, templates, t, editable })}
+          items={rowTemplateItems({
+            host,
+            databaseId,
+            view,
+            templates,
+            t,
+            editable,
+            // Phase 17: a template repeated by a new rule, on a server that makes repeating rows.
+            repeat: automations?.knowsWorkflows?.()
+              ? {
+                  text: at('series.repeat'),
+                  open: (template) =>
+                    openAutomations(
+                      databaseId,
+                      {
+                        kind: 'recurring',
+                        templateId: template.id,
+                        start: host.queryContext().today,
+                        rule: { frequency: 'weekly' },
+                        mode: 'date',
+                        at: '09:00',
+                        dateProperty:
+                          liveProperties(database).find((p) => p.type === 'date')?.id ?? null,
+                        doneProperty: null,
+                      },
+                      {
+                        name: at('series.repeatName', {
+                          template: template.title || t('rowTemplates.untitled'),
+                        }),
+                        steps: [],
+                      },
+                    ),
+                }
+              : undefined,
+          })}
           actionsRef={templateMenu}
           ariaLabel={t('toolbar.newFromTemplate')}
         />

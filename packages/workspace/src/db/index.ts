@@ -93,6 +93,8 @@ export type {
   TriggerValue,
   WaitFor,
 } from './automations';
+// Phase 17: a repeating row's repetition (its arithmetic is the rules' entry's too).
+export type { RecurrenceRule, Weekday, WeekOfMonth } from './recurrence';
 // Phase 16: a form view's questions. Only their types here: the rules' code is its own entry,
 // `@cgw/workspace/forms`, imported by the form view (loaded with it).
 export type {

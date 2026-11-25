@@ -111,13 +111,17 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         rule.AuthorId = member.UserId;
         rule.Version++;
         rule.UpdatedAt = now;
-        rule.WatchesRows = AutomationRules.WatchesRows((JsonArray)kept["steps"]!);
+        // Phase 17: a series by the last done waits for its last row's change, as a wait on a row does.
+        rule.WatchesRows = AutomationRules.WatchesRows((JsonArray)kept["steps"]!)
+            || (kind == "recurring" && (string?)trigger["mode"] == RecurringSeries.ByDone);
         // Phase 17: switched off, its waiting runs stop; changed, they finish by what they started with.
         if (wasOn && !enabled) await StopWaitingAsync(db, rule.Id, "rule.off", now, ct);
         var triggerChanged = !JsonNode.DeepEquals(JsonNode.Parse(before == "" ? "{}" : before)?["trigger"], trigger);
         // A date trigger runs for moments from when it was switched on or changed, never before.
         rule.ScannedUntil = kind == "date" ? (triggerChanged || !wasOn || rule.ScannedUntil is null ? now : rule.ScannedUntil) : null;
         rule.NextAt = kind == "schedule" ? AutomationTimes.Next(trigger, AutomationTimes.Zone(workspace.TimeZone), now) : null;
+        if (kind == "recurring") await PlaceSeriesAsync(db, rule, trigger, AutomationTimes.Zone(workspace.TimeZone), now, ct);
+        else (rule.SeriesNext, rule.SeriesDay, rule.SeriesRowId) = (null, null, null);
         await RecountAsync(workspace, [databaseId], ct);
         changes.Add(ChangeType, rule.Id, "upsert", rule.Version, member.UserId);
         return AutomationDto.From(rule);
@@ -132,6 +136,13 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
             var form = Guid.Parse((string)trigger["viewId"]!);
             if (!await db.DatabaseViews.AnyAsync(v => v.Id == form && v.DatabaseId == databaseId && v.Type == DatabaseOps.FormView, ct))
                 throw new AutomationInvalid("trigger.form", "The form is not a form view of this database");
+        }
+        // Phase 17: a repeating row is made from a template of this database.
+        if (rule["trigger"] is JsonObject series && (string?)series["kind"] == "recurring")
+        {
+            var template = Guid.Parse((string)series["templateId"]!);
+            if (!await db.Pages.AnyAsync(p => p.Id == template && p.ParentPageId == databaseId && p.Kind == PageKinds.Row && p.IsTemplate && p.DeletedAt == null && p.TrashedAt == null, ct))
+                throw new AutomationInvalid("trigger.template", "The template is not one of this database's");
         }
         foreach (var (step, _) in AutomationRules.AllSteps((JsonArray)rule["steps"]!))
         {
@@ -187,6 +198,34 @@ public sealed class AutomationService(CgwDb db, Access access, ChangeLog changes
         var workspace = await db.Workspaces.FirstAsync(w => w.Id == member.WorkspaceId, ct);
         await RecountAsync(workspace, [rule.DatabaseId], ct);
         changes.Add(ChangeType, rule.Id, "delete", rule.Version, member.UserId);
+    }
+
+    /// <summary>
+    /// Phase 17: where a repeating row's series goes on from (<see cref="RecurringSeries"/>), on its
+    /// save, its switch and a change of the workspace's zone. Off, it makes nothing. By its days, the
+    /// next day after the last made whose moment is now or later. By the last done, the next day at
+    /// once when there is no last row yet or it is done (or gone), else nothing until it is done.
+    /// </summary>
+    public static async Task PlaceSeriesAsync(CgwDb db, Automation rule, JsonObject trigger, TimeZoneInfo zone, DateTimeOffset now, CancellationToken ct)
+    {
+        (rule.SeriesNext, rule.NextAt) = (null, null);
+        if (!rule.Enabled || rule.DeletedAt is not null) return;
+        if ((string?)trigger["mode"] == RecurringSeries.ByDone)
+        {
+            if (rule.SeriesRowId is { } last)
+            {
+                var row = (await RowStore.ByIdsAsync(db, [last], ct)).FirstOrDefault();
+                var record = await db.Databases.AsNoTracking().FirstOrDefaultAsync(d => d.PageId == rule.DatabaseId, ct);
+                var done = (string?)trigger["doneProperty"];
+                var def = record is null || done is null ? null : Schema.Parse(record.PageId, record.Version, record.Properties).Live(done);
+                if (row is { Trashed: false } && !RecurringSeries.IsDone(def, row.Values.GetValueOrDefault(done!))) return;
+            }
+            rule.SeriesNext = RecurringSeries.AfterDone(trigger, rule.SeriesDay, now, zone);
+            rule.NextAt = rule.SeriesNext is null ? null : now;
+            return;
+        }
+        rule.SeriesNext = RecurringSeries.NextDay(trigger, rule.SeriesDay, now.AddMinutes(-1), zone);
+        rule.NextAt = rule.SeriesNext is { } day ? RecurringSeries.At(trigger, day, zone) : null;
     }
 
     /// <summary>

@@ -23,6 +23,8 @@ export type {
   RowPlace,
   RowRef,
   RowRequest,
+  RowReminder,
+  RowRemindersHost,
   RowSnapshot,
   RowSource,
 } from './host';

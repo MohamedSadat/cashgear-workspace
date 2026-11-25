@@ -450,6 +450,11 @@ public sealed class WorkspaceDatabase : ITenantOwned
     public int EventRules { get; set; }
     /// <summary>Phase 17: the number the next row stored gets (<see cref="DatabaseRow.Number"/>).</summary>
     public long NextNumber { get; set; } = 1;
+    /// <summary>
+    /// Phase 17: people's own reminders of its rows' dates (<see cref="RowReminder"/>), counted by
+    /// their routes: a write of a row works its reminders' moments out again only while this is above 0.
+    /// </summary>
+    public int Reminders { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -825,6 +830,8 @@ public static class NotificationKinds
     public const string Automation = "automation";
     /// <summary>Phase 17: an approval a rule asks of the person, answered from the inbox (its <c>ApprovalId</c>).</summary>
     public const string Approval = "approval";
+    /// <summary>Phase 17: a row's date reached, by a rule's reminder or the person's own (its <c>PropertyId</c> and <c>DateStart</c>).</summary>
+    public const string Reminder = "reminder";
 }
 
 /// <summary>
@@ -859,6 +866,9 @@ public sealed class Notification : ITenantOwned
     public string? Reason { get; set; }
     /// <summary>Phase 17, kind <c>approval</c>: the person's approval to answer.</summary>
     public Guid? ApprovalId { get; set; }
+    /// <summary>Phase 17, kind <c>reminder</c>: the row's date property, and its value's start as it was reminded of (a day, or a UTC instant).</summary>
+    public string? PropertyId { get; set; }
+    public string? DateStart { get; set; }
 }
 
 public static class MailModes

@@ -56,6 +56,8 @@ public static class Modules
         services.AddScoped<Cgw.Core.Automations.AutomationService>();
         services.AddScoped<Cgw.Core.Automations.AutomationQueries>();
         services.AddScoped<Cgw.Core.Automations.ApprovalService>();
+        // Phase 17: people's own reminders of rows' dates (the worker sends them).
+        services.AddScoped<Cgw.Core.Automations.ReminderService>();
         services.AddSingleton<Cgw.Core.Automations.WebhookKeys>();
         services.AddSingleton(sp => Cgw.Core.Automations.WebhookOptions.From(configuration, sp.GetRequiredService<IHostEnvironment>()));
         // Phase 16: forms (a link's pages are the Sites process's; its answers are written here).

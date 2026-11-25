@@ -83,6 +83,8 @@ public static class WorkerServices
         services.AddSingleton<IJob, AutomationJob>();
         services.AddSingleton<IJob, WebhookJob>();
         services.AddSingleton<IJob, AutomationRetentionJob>();
+        // Phase 17: people's own reminders of rows' dates.
+        services.AddSingleton<IJob, ReminderJob>();
         services.AddHostedService<JobLoop>();
         return services;
     }

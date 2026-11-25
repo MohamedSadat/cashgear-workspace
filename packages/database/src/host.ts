@@ -418,6 +418,35 @@ export interface AutomationsHost {
   groups(): Promise<{ id: Id; name: string }[]>;
   /** Says when a database's rules changed (the feed's `automation` change). */
   onChange(listener: () => void): () => void;
+  /**
+   * Phase 17: the server keeps 0.17.0's steps (its `/version` counts 7 step kinds), and with them
+   * makes repeating rows and keeps people's own reminders: "Repeat a template", a date's "Remind
+   * people" and a row's "Remind me" are offered only then.
+   */
+  knowsWorkflows?(): boolean;
+  /** Phase 17: the person's own reminders of a row's dates, read and set online only. */
+  reminders?: RowRemindersHost;
+}
+
+/** Phase 17: one of the person's own reminders of a row's date. */
+export interface RowReminder {
+  propertyId: PropertyId;
+  /** 0, 15, 60, 1,440 or 10,080: how long before the date's moment. */
+  beforeMinutes: number;
+  /** When it is sent next; null while the row has no date there. */
+  dueAt: string | null;
+}
+
+/** Phase 17: a person's own reminders (the shell's, over the server's routes; online only). */
+export interface RowRemindersHost {
+  list(databaseId: Id, rowId: Id): Promise<RowReminder[]>;
+  set(
+    databaseId: Id,
+    rowId: Id,
+    propertyId: PropertyId,
+    beforeMinutes: number,
+  ): Promise<RowReminder[]>;
+  remove(databaseId: Id, rowId: Id, propertyId: PropertyId): Promise<RowReminder[]>;
 }
 
 /** A workbook a view was exported to. */

@@ -5047,6 +5047,935 @@
       "expected": {
         "reason": "step.value"
       }
+    },
+    {
+      "name": "a row every Monday and Tuesday at 08:30, its day in Due, no steps",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date",
+          "at": "08:30",
+          "dateProperty": "pDate001"
+        },
+        "steps": []
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "recurring",
+            "templateId": "01900000-0000-7000-8000-00000000c001",
+            "start": "2026-12-01",
+            "rule": {
+              "frequency": "weekly",
+              "weekDays": ["monday", "tuesday"]
+            },
+            "mode": "date",
+            "at": "08:30",
+            "dateProperty": "pDate001",
+            "doneProperty": null
+          },
+          "steps": []
+        }
+      }
+    },
+    {
+      "name": "the next row once the last is complete, its owner told",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "monthly",
+            "interval": 1,
+            "weekOfMonth": "last",
+            "weekDays": ["friday"]
+          },
+          "mode": "done",
+          "doneProperty": "pStat001"
+        },
+        "steps": [
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "recurring",
+            "templateId": "01900000-0000-7000-8000-00000000c001",
+            "start": "2026-12-01",
+            "rule": {
+              "frequency": "monthly",
+              "interval": 1,
+              "weekOfMonth": "last",
+              "weekDays": ["friday"]
+            },
+            "mode": "done",
+            "at": null,
+            "dateProperty": null,
+            "doneProperty": "pStat001"
+          },
+          "steps": [
+            {
+              "kind": "notify",
+              "people": [],
+              "groups": [],
+              "personProperties": ["pPers001"],
+              "message": "",
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a series by its days drops what done is",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date",
+          "doneProperty": "pTick001"
+        },
+        "steps": []
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "recurring",
+            "templateId": "01900000-0000-7000-8000-00000000c001",
+            "start": "2026-12-01",
+            "rule": {
+              "frequency": "weekly",
+              "weekDays": ["monday", "tuesday"]
+            },
+            "mode": "date",
+            "at": null,
+            "dateProperty": null,
+            "doneProperty": null
+          },
+          "steps": []
+        }
+      }
+    },
+    {
+      "name": "a checkbox ticked is done",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "daily"
+          },
+          "mode": "done",
+          "doneProperty": "pTick001"
+        },
+        "steps": []
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "recurring",
+            "templateId": "01900000-0000-7000-8000-00000000c001",
+            "start": "2026-12-01",
+            "rule": {
+              "frequency": "daily"
+            },
+            "mode": "done",
+            "at": null,
+            "dateProperty": null,
+            "doneProperty": "pTick001"
+          },
+          "steps": []
+        }
+      }
+    },
+    {
+      "name": "a series by the last done with nothing that says done",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "done"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.property"
+      }
+    },
+    {
+      "name": "done as a text",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "done",
+          "doneProperty": "pText001"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.property"
+      }
+    },
+    {
+      "name": "its day into a created time",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date",
+          "dateProperty": "pMade001"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.property"
+      }
+    },
+    {
+      "name": "its day into a property deleted",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date",
+          "dateProperty": "pGone001"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.property"
+      }
+    },
+    {
+      "name": "no template",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "mine",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.template"
+      }
+    },
+    {
+      "name": "a start that is no day",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-02-30",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger"
+      }
+    },
+    {
+      "name": "neither by its days nor by the last done",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "often"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger"
+      }
+    },
+    {
+      "name": "a time of day that is none",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date",
+          "at": "24:00"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger"
+      }
+    },
+    {
+      "name": "every hour",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "hourly"
+          },
+          "mode": "date"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.recurrence"
+      }
+    },
+    {
+      "name": "a series that ends before it starts",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "daily",
+            "range": "endByDate",
+            "endDate": "2026-11-30"
+          },
+          "mode": "date"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.recurrence"
+      }
+    },
+    {
+      "name": "every seven days, only on days other than its own",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "daily",
+            "interval": 7,
+            "weekDays": ["monday"]
+          },
+          "mode": "date"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "trigger.recurrence"
+      }
+    },
+    {
+      "name": "conditions on a row not yet made",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": {
+          "kind": "group",
+          "op": "and",
+          "children": []
+        },
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "conditions"
+      }
+    },
+    {
+      "name": "more than 20 steps",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "recurring",
+          "templateId": "01900000-0000-7000-8000-00000000c001",
+          "start": "2026-12-01",
+          "rule": {
+            "frequency": "weekly",
+            "weekDays": ["tuesday", "monday"]
+          },
+          "mode": "date"
+        },
+        "steps": [
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          },
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": ""
+          }
+        ]
+      },
+      "expected": {
+        "reason": "steps"
+      }
+    },
+    {
+      "name": "a row added with no steps is still refused",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": []
+      },
+      "expected": {
+        "reason": "steps"
+      }
+    },
+    {
+      "name": "a reminder of a day before the due date, to its owner",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "date",
+          "propertyId": "pDate001",
+          "offsetMinutes": -1440
+        },
+        "steps": [
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": "",
+            "reminder": true
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "date",
+            "propertyId": "pDate001",
+            "offsetMinutes": -1440,
+            "at": null
+          },
+          "steps": [
+            {
+              "kind": "notify",
+              "people": [],
+              "groups": [],
+              "personProperties": ["pPers001"],
+              "message": "",
+              "when": null,
+              "reminder": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a notice that is no reminder keeps no flag",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "date",
+          "propertyId": "pDate001",
+          "offsetMinutes": 0
+        },
+        "steps": [
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": "",
+            "reminder": false
+          }
+        ]
+      },
+      "expected": {
+        "rule": {
+          "id": "01900000-0000-7000-8000-00000000a001",
+          "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+          "databaseId": "01900000-0000-7000-8000-000000000001",
+          "name": "Close it",
+          "enabled": true,
+          "authorId": null,
+          "version": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "conditions": null,
+          "trigger": {
+            "kind": "date",
+            "propertyId": "pDate001",
+            "offsetMinutes": 0,
+            "at": null
+          },
+          "steps": [
+            {
+              "kind": "notify",
+              "people": [],
+              "groups": [],
+              "personProperties": ["pPers001"],
+              "message": "",
+              "when": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a reminder of no date",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "rowAdded"
+        },
+        "steps": [
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": "",
+            "reminder": true
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.reminder"
+      }
+    },
+    {
+      "name": "a reminder that is a word",
+      "rule": {
+        "id": "01900000-0000-7000-8000-00000000a001",
+        "workspaceId": "01900000-0000-7000-8000-0000000000ff",
+        "databaseId": "01900000-0000-7000-8000-000000000001",
+        "name": "Close it",
+        "enabled": true,
+        "authorId": null,
+        "version": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "conditions": null,
+        "trigger": {
+          "kind": "date",
+          "propertyId": "pDate001",
+          "offsetMinutes": 0
+        },
+        "steps": [
+          {
+            "kind": "notify",
+            "personProperties": ["pPers001"],
+            "message": "",
+            "reminder": "yes"
+          }
+        ]
+      },
+      "expected": {
+        "reason": "step.reminder"
+      }
     }
   ],
   "starts": [
@@ -5668,6 +6597,32 @@
           "pStat001": "sDone001"
         },
         "formId": "01900000-0000-7000-8000-00000000e001"
+      },
+      "expected": false
+    },
+    {
+      "name": "a row done starts no repeating rule: its series does",
+      "trigger": {
+        "kind": "recurring",
+        "templateId": "01900000-0000-7000-8000-00000000c001",
+        "start": "2026-12-01",
+        "rule": {
+          "frequency": "daily"
+        },
+        "mode": "done",
+        "at": null,
+        "dateProperty": null,
+        "doneProperty": "pStat001"
+      },
+      "change": {
+        "kind": "changed",
+        "changed": ["pStat001"],
+        "before": {
+          "pStat001": "sTodo001"
+        },
+        "after": {
+          "pStat001": "sDone001"
+        }
       },
       "expected": false
     }

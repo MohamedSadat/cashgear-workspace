@@ -481,6 +481,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/databases/{databaseId}/rows/{rowId}/reminders': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['listRowReminders'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/databases/{databaseId}/rows/{rowId}/reminders/{propertyId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['setRowReminder'];
+    post?: never;
+    delete: operations['deleteRowReminder'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/databases/{databaseId}/rows/{rowId}/runs': {
     parameters: {
       query?: never;
@@ -2443,10 +2475,16 @@ export interface components {
       /** Format: date-time */
       readAt: null | string;
       reason?: null | string;
+      reminder?: null | components['schemas']['NotificationReminderDto'];
       /** Format: uuid */
       threadId: null | string;
       /** Format: uuid */
       workspaceId: string;
+    };
+    NotificationReminderDto: {
+      propertyId: string;
+      propertyName: string;
+      start: null | string;
     };
     NotificationsDto: {
       next: null | string;
@@ -2707,6 +2745,17 @@ export interface components {
       password: string;
       returnUrl: null | string;
     };
+    ReminderDto: {
+      /** Format: int32 */
+      beforeMinutes: number | string;
+      /** Format: date-time */
+      dueAt: null | string;
+      propertyId: string;
+    };
+    ReminderRequest: {
+      /** Format: int32 */
+      beforeMinutes: number | string;
+    };
     RepairRequest: {
       /** Format: int32 */
       clientSchemaVersion: number | string;
@@ -2786,6 +2835,9 @@ export interface components {
       versions: components['schemas']['JsonElement'];
       /** Format: uuid */
       workspaceId: string;
+    };
+    RowRemindersDto: {
+      reminders: components['schemas']['ReminderDto'][];
     };
     RowsPageDto: {
       next: null | string;
@@ -4249,6 +4301,81 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PressDto'];
+        };
+      };
+    };
+  };
+  listRowReminders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        rowId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RowRemindersDto'];
+        };
+      };
+    };
+  };
+  setRowReminder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        propertyId: string;
+        rowId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReminderRequest'];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RowRemindersDto'];
+        };
+      };
+    };
+  };
+  deleteRowReminder: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        databaseId: string;
+        propertyId: string;
+        rowId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RowRemindersDto'];
         };
       };
     };

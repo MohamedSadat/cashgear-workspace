@@ -5458,6 +5458,150 @@
         }
       }
     },
+    "/api/v1/databases/{databaseId}/rows/{rowId}/reminders": {
+      "get": {
+        "tags": [
+          "Automations"
+        ],
+        "operationId": "listRowReminders",
+        "parameters": [
+          {
+            "name": "rowId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowRemindersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/databases/{databaseId}/rows/{rowId}/reminders/{propertyId}": {
+      "put": {
+        "tags": [
+          "Automations"
+        ],
+        "operationId": "setRowReminder",
+        "parameters": [
+          {
+            "name": "rowId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "propertyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowRemindersDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Automations"
+        ],
+        "operationId": "deleteRowReminder",
+        "parameters": [
+          {
+            "name": "rowId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "propertyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowRemindersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/automations": {
       "get": {
         "tags": [
@@ -8380,6 +8524,38 @@
                 "$ref": "#/components/schemas/ApprovalDto"
               }
             ]
+          },
+          "reminder": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotificationReminderDto"
+              }
+            ]
+          }
+        }
+      },
+      "NotificationReminderDto": {
+        "required": [
+          "propertyId",
+          "propertyName",
+          "start"
+        ],
+        "type": "object",
+        "properties": {
+          "propertyId": {
+            "type": "string"
+          },
+          "propertyName": {
+            "type": "string"
+          },
+          "start": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -9514,6 +9690,50 @@
           }
         }
       },
+      "ReminderDto": {
+        "required": [
+          "propertyId",
+          "beforeMinutes",
+          "dueAt"
+        ],
+        "type": "object",
+        "properties": {
+          "propertyId": {
+            "type": "string"
+          },
+          "beforeMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "dueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ReminderRequest": {
+        "required": [
+          "beforeMinutes"
+        ],
+        "type": "object",
+        "properties": {
+          "beforeMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "RepairRequest": {
         "required": [
           "epoch",
@@ -9828,6 +10048,20 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "RowRemindersDto": {
+        "required": [
+          "reminders"
+        ],
+        "type": "object",
+        "properties": {
+          "reminders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReminderDto"
+            }
           }
         }
       },

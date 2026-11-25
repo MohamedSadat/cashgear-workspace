@@ -57,6 +57,35 @@ public static class AutomationEndpoints
             .WithName("pressButton")
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(4 * 1024));
 
+        // Phase 17: the person's own reminders of a row's dates (anyone who can read the row).
+        database.MapGet("/rows/{rowId:guid}/reminders", async Task<Results<Ok<RowRemindersDto>, ProblemHttpResult>> (Guid rowId,
+                ReminderService reminders, HttpContext http) =>
+            {
+                var access = http.DatabaseAccess();
+                var result = await reminders.ForRowAsync(access.Member, access.Page.Id, rowId, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("listRowReminders");
+
+        database.MapPut("/rows/{rowId:guid}/reminders/{propertyId}", async Task<Results<Ok<RowRemindersDto>, ProblemHttpResult>> (Guid rowId, string propertyId,
+                ReminderRequest body, ReminderService reminders, HttpContext http) =>
+            {
+                var access = http.DatabaseAccess();
+                var result = await reminders.SetAsync(access.Member, access.Page.Id, rowId, propertyId, body, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("setRowReminder")
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(4 * 1024));
+
+        database.MapDelete("/rows/{rowId:guid}/reminders/{propertyId}", async Task<Results<Ok<RowRemindersDto>, ProblemHttpResult>> (Guid rowId, string propertyId,
+                ReminderService reminders, HttpContext http) =>
+            {
+                var access = http.DatabaseAccess();
+                var result = await reminders.DeleteAsync(access.Member, access.Page.Id, rowId, propertyId, http.RequestAborted);
+                return result.Ok ? TypedResults.Ok(result.Value!) : Problems.From(result.Failure!);
+            })
+            .WithName("deleteRowReminder");
+
         var workspace = api.MapGroup("/workspaces/{workspaceId:guid}").WithTags("Automations").RequireAuthorization()
             .AddEndpointFilter<MemberFilter>().RequireRateLimiting(RateLimits.User);
 

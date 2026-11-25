@@ -826,6 +826,19 @@ function StepBody({
               onChange={(event) => onChange({ ...step, message: event.target.value })}
             />
           </Field>
+          {/* Phase 17: under a date trigger, a notice may be a reminder of the date reached. */}
+          {ctx.trigger.kind === 'date' && (data.stepKinds ?? 4) >= 7 ? (
+            <CgCheckBox
+              label={at('notify.reminder')}
+              description={at('notify.reminderHelp')}
+              checked={step.reminder === true}
+              onCheckedChange={(on) => {
+                const { reminder, ...rest } = step;
+                void reminder;
+                onChange(on === true ? { ...rest, reminder: true } : rest);
+              }}
+            />
+          ) : null}
         </>
       );
     case 'webhook':
@@ -921,7 +934,8 @@ export function StepList({
   const keys = useRef<string[]>([]);
   const counter = useRef(0);
   if (keys.current.length !== steps.length) keys.current = steps.map(() => `s${counter.current++}`);
-  const min = level === 1 ? 1 : 0;
+  // The rule's own list keeps a step; a repeating row's rule (its row made by its trigger) may keep none.
+  const min = level === 1 && ctx.trigger.kind !== 'recurring' ? 1 : 0;
   const items = steps.map((step, i) => ({ key: keys.current[i], step }));
   const change = (next: { key: string; step: AutomationStep }[]) => {
     keys.current = next.map((s) => s.key);

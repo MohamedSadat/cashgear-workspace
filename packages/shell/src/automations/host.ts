@@ -9,6 +9,8 @@ import type {
   AutomationsHost,
   DatabaseAutomations,
   Person,
+  RowReminder,
+  RowRemindersHost,
 } from '@cgw/database';
 import type { ApiClient } from '@cgw/api';
 import {
@@ -196,6 +198,57 @@ export class ShellAutomations implements AutomationsHost {
 
   knowsButtons() {
     return this.knowsPropertyType('button');
+  }
+
+  /** Phase 17: the server keeps 0.17.0's seven step kinds, and makes repeating rows and keeps reminders. */
+  knowsWorkflows() {
+    return (this.stepKinds ?? 0) >= 7;
+  }
+
+  /** Phase 17: the person's own reminders, on a server that keeps them. */
+  get reminders(): RowRemindersHost | undefined {
+    return this.knowsWorkflows() ? this.rowReminders : undefined;
+  }
+
+  private readonly rowReminders: RowRemindersHost = {
+    list: (databaseId, rowId) =>
+      this.remindersOf(
+        this.cloud.api.GET('/api/v1/databases/{databaseId}/rows/{rowId}/reminders', {
+          params: { path: { databaseId, rowId } },
+        }),
+      ),
+    set: (databaseId, rowId, propertyId, beforeMinutes) =>
+      this.remindersOf(
+        this.cloud.api.PUT('/api/v1/databases/{databaseId}/rows/{rowId}/reminders/{propertyId}', {
+          params: { path: { databaseId, rowId, propertyId } },
+          body: { beforeMinutes },
+        }),
+      ),
+    remove: (databaseId, rowId, propertyId) =>
+      this.remindersOf(
+        this.cloud.api.DELETE(
+          '/api/v1/databases/{databaseId}/rows/{rowId}/reminders/{propertyId}',
+          {
+            params: { path: { databaseId, rowId, propertyId } },
+          },
+        ),
+      ),
+  };
+
+  private async remindersOf(call: Parameters<typeof data>[0]): Promise<RowReminder[]> {
+    if (!this.online()) throw new Error('offline');
+    try {
+      const answer = (await data(call)) as {
+        reminders: { propertyId: string; beforeMinutes: number; dueAt?: string | null }[];
+      };
+      return answer.reminders.map((r) => ({
+        propertyId: r.propertyId as RowReminder['propertyId'],
+        beforeMinutes: r.beforeMinutes,
+        dueAt: r.dueAt ?? null,
+      }));
+    } catch (error) {
+      throw asCode(error);
+    }
   }
 
   /** Whether the server counts the type among those it keeps (its place in `KNOWN_PROPERTY_TYPES`). */

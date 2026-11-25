@@ -29,6 +29,10 @@ import './database.css';
 
 /** Phase 15: a row's automation runs, loaded when its automations are there. */
 const RowRuns = lazy(() => import('./automations/RowRuns').then((m) => ({ default: m.RowRuns })));
+/** Phase 17: the person's own reminders of the row's dates, loaded likewise. */
+const RowReminders = lazy(() =>
+  import('./automations/RowReminders').then((m) => ({ default: m.RowReminders })),
+);
 
 export interface RowPropertiesProps {
   host: DatabaseHost;
@@ -137,6 +141,9 @@ export function RowProperties({ host, rowId, editable: pageEditable = true }: Ro
             {/* A button property's "Add an automation" opens the dialog from here too. */}
             <AutomationsButton databaseId={database.id} hidden />
             <Suspense fallback={null}>
+              {automations.reminders ? (
+                <RowReminders automations={automations} database={database} rowId={row.id} />
+              ) : null}
               <RowRuns automations={automations} databaseId={database.id} rowId={row.id} />
             </Suspense>
           </>

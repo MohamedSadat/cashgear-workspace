@@ -4,7 +4,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import type { Id } from '@cgw/workspace';
 import type { AutomationTrigger } from '../core';
 import { useDatabaseContext, useHost } from '../context';
-import { onOpenAutomations } from './open';
+import { onOpenAutomations, type RuleStart } from './open';
 import { useAutoT } from './words';
 
 const AutomationsDialog = lazy(() =>
@@ -15,15 +15,17 @@ const AutomationsDialog = lazy(() =>
 export function AutomationsPanel({
   databaseId,
   start,
+  extra,
   onClose,
 }: {
   databaseId: Id;
   start?: AutomationTrigger;
+  extra?: RuleStart;
   onClose(): void;
 }) {
   return (
     <Suspense fallback={null}>
-      <AutomationsDialog databaseId={databaseId} start={start} onClose={onClose} />
+      <AutomationsDialog databaseId={databaseId} start={start} extra={extra} onClose={onClose} />
     </Suspense>
   );
 }
@@ -33,11 +35,11 @@ export function AutomationsButton({ databaseId, hidden }: { databaseId: Id; hidd
   const { host } = useDatabaseContext();
   const automations = useHost(host, () => host.automations);
   const { t: at } = useAutoT();
-  const [open, setOpen] = useState<{ start?: AutomationTrigger } | null>(null);
+  const [open, setOpen] = useState<{ start?: AutomationTrigger; extra?: RuleStart } | null>(null);
   useEffect(
     () =>
-      onOpenAutomations((id, start) => {
-        if (id === databaseId) setOpen({ start });
+      onOpenAutomations((id, start, extra) => {
+        if (id === databaseId) setOpen({ start, extra });
       }),
     [databaseId],
   );
@@ -60,6 +62,7 @@ export function AutomationsButton({ databaseId, hidden }: { databaseId: Id; hidd
         <AutomationsPanel
           databaseId={databaseId}
           start={open.start}
+          extra={open.extra}
           onClose={() => setOpen(null)}
         />
       ) : null}

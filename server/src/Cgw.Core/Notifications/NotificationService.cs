@@ -25,7 +25,12 @@ public sealed record NotificationDto(
     string? AutomationName = null,
     string? Reason = null,
     /// <summary>Phase 17, kind <c>approval</c>: the approval, its state and the person's answer.</summary>
-    Cgw.Core.Automations.ApprovalDto? Approval = null);
+    Cgw.Core.Automations.ApprovalDto? Approval = null,
+    /// <summary>Phase 17, kind <c>reminder</c>: the row's date property (its name as it is now) and the date reminded of.</summary>
+    NotificationReminderDto? Reminder = null);
+
+/// <summary>Phase 17: what a reminder in the inbox is of: a date property's value's start (a day, or a UTC instant).</summary>
+public sealed record NotificationReminderDto(string PropertyId, string PropertyName, string? Start);
 
 public sealed record NotificationsDto(IReadOnlyList<NotificationDto> Notifications, int Unread, string? Next);
 
@@ -181,11 +186,31 @@ public sealed class NotificationService(CgwDb db, ChangeLog changes, TimeProvide
             .ToDictionaryAsync(a => a.Id, a => a.Name, ct);
         var approvals = await Cgw.Core.Automations.ApprovalService.ForAsync(db,
             rows.Values.Where(r => r.ApprovalId is not null).Select(r => r.ApprovalId!.Value).ToList(), ct);
+        var reminders = await RemindersAsync(rows.Values, ct);
         var list = kept.Select(k => rows[k.Id]).Select(n => new NotificationDto(n.Id, n.Kind, n.WorkspaceId, n.PageId, titles.GetValueOrDefault(n.PageId, ""),
             n.BlockId, n.ThreadId, n.CommentId, People.Of(people, n.ActorUserId), n.Excerpt, n.CreatedAt, n.ReadAt,
             n.AutomationId, n.AutomationId is { } rule ? rules.GetValueOrDefault(rule) : null, n.Reason,
-            n.ApprovalId is { } approval ? approvals.GetValueOrDefault(approval) : null)).ToList();
+            n.ApprovalId is { } approval ? approvals.GetValueOrDefault(approval) : null,
+            reminders.GetValueOrDefault(n.Id))).ToList();
         return new NotificationsDto(list, await UnreadAsync(userId, memberships, ct), next);
+    }
+
+    /// <summary>Phase 17: each reminder's property by its name as its database has it now.</summary>
+    private async Task<Dictionary<Guid, NotificationReminderDto>> RemindersAsync(IEnumerable<Notification> rows, CancellationToken ct)
+    {
+        var list = rows.Where(n => n.Kind == NotificationKinds.Reminder && n.PropertyId is not null).ToList();
+        if (list.Count == 0) return [];
+        var pageIds = list.Select(n => n.PageId).Distinct().ToList();
+        var parents = await db.Pages.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(p => pageIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.ParentPageId, ct);
+        var databaseIds = parents.Values.OfType<Guid>().Distinct().ToList();
+        var schemas = (await db.Databases.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking().Where(d => databaseIds.Contains(d.PageId)).ToListAsync(ct))
+            .ToDictionary(d => d.PageId, d => Cgw.Core.Databases.Schema.Parse(d.PageId, d.Version, d.Properties));
+        return list.ToDictionary(n => n.Id, n =>
+        {
+            var schema = parents.GetValueOrDefault(n.PageId) is { } parent ? schemas.GetValueOrDefault(parent) : null;
+            return new NotificationReminderDto(n.PropertyId!, schema?.Live(n.PropertyId!)?.Name ?? "", n.DateStart);
+        });
     }
 
     /// <summary>Unread entries for pages the person can read now.</summary>

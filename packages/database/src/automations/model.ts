@@ -1,6 +1,6 @@
 // The rule editor's model (Phase 15): a new rule and new steps, what a trigger and a step say in
 // words, and what a refusal's reason or a run's outcome reads as. Pure: no React, no DOM.
-import type { Id } from '@cgw/workspace';
+import type { Id, RowRecord } from '@cgw/workspace';
 import {
   TITLE_PROPERTY,
   type AutomationRecord,
@@ -47,13 +47,33 @@ export const peopleProperties = (database: DatabaseRecord) =>
 /** Phase 16: the database's form views, which "a form is answered" names. */
 export const formViews = (views: readonly ViewRecord[]) => views.filter((v) => v.type === 'form');
 
-/** A trigger of the kind, with the database's first property (or form) that fits it. */
+/** What a new trigger may start from (Phase 17: a repeating row's template and today). */
+export interface TriggerStart {
+  forms?: readonly ViewRecord[];
+  templates?: readonly RowRecord[];
+  /** Today in the person's zone, `YYYY-MM-DD`. */
+  today?: string;
+}
+
+/** A trigger of the kind, with the database's first property (or form, or template) that fits it. */
 export function newTrigger(
   kind: TriggerKind,
   database: DatabaseRecord,
-  forms: readonly ViewRecord[] = [],
+  start: TriggerStart = {},
 ): AutomationTrigger {
+  const forms = start.forms ?? [];
   switch (kind) {
+    case 'recurring':
+      return {
+        kind,
+        templateId: start.templates?.[0]?.id ?? '',
+        start: start.today ?? new Date().toISOString().slice(0, 10),
+        rule: { frequency: 'weekly' },
+        mode: 'date',
+        at: '09:00',
+        dateProperty: liveProperties(database).find((p) => p.type === 'date')?.id ?? null,
+        doneProperty: null,
+      };
     case 'formAnswered':
       return { kind, viewId: forms[0]?.id ?? '' };
     case 'rowAdded':
@@ -126,7 +146,8 @@ export function newRule(
     enabled: true,
     trigger: trigger ?? { kind: 'rowAdded' },
     conditions: null,
-    steps: [newStep('set', database)],
+    // Phase 17: a repeating row's rule makes its row itself; its steps are for after.
+    steps: trigger?.kind === 'recurring' ? [] : [newStep('set', database)],
     authorId: null,
     version: 0,
     createdAt: '',
@@ -137,6 +158,31 @@ export function newRule(
 /** A step kind a rule of this trigger may hold (a schedule has no row to set or branch on). */
 export const stepFits = (kind: StepKind, trigger: AutomationTrigger) =>
   trigger.kind !== 'schedule' || (kind !== 'set' && kind !== 'branch');
+
+/** Phase 17: a rule's notices made plain notices (a reminder is only of a date reached). */
+export function withoutReminders(steps: readonly AutomationStep[]): AutomationStep[] {
+  return steps.map((step): AutomationStep => {
+    if (step.kind === 'notify' && step.reminder) {
+      const { reminder, ...rest } = step;
+      void reminder;
+      return rest;
+    }
+    if (step.kind === 'branch')
+      return {
+        ...step,
+        branches: step.branches.map((b) => ({ ...b, steps: withoutReminders(b.steps) })),
+        otherwise: withoutReminders(step.otherwise),
+      };
+    if (step.kind === 'approval')
+      return {
+        ...step,
+        approved: withoutReminders(step.approved),
+        rejected: withoutReminders(step.rejected),
+        noAnswer: withoutReminders(step.noAnswer),
+      };
+    return step;
+  });
+}
 
 const nameOf = (database: DatabaseRecord, id: string | null | undefined, at: AutoT) =>
   (id && propertyOf(database, id)?.name) || at('summary.missing');
@@ -176,8 +222,12 @@ export function triggerText(
     triggerValueText(def, v, at),
   /** Phase 16: a form view's name, by its id (a form gone is "a deleted form"). */
   formName: (viewId: Id) => string | undefined = () => undefined,
+  /** Phase 17: a repeating row's sentence (the rule editor's, which holds the library's words). */
+  series?: (trigger: Extract<AutomationTrigger, { kind: 'recurring' }>) => string,
 ): string {
   switch (trigger.kind) {
+    case 'recurring':
+      return series?.(trigger) ?? at('triggers.recurring');
     case 'formAnswered':
       return at('summary.formAnswered', {
         form: formName(trigger.viewId) || at('summary.missingForm'),
@@ -280,6 +330,9 @@ const PROBLEMS = new Set([
   'step.branch',
   'step.approval',
   'step.nesting',
+  'trigger.template',
+  'trigger.recurrence',
+  'step.reminder',
   'size',
   'rule',
 ]);
@@ -304,6 +357,7 @@ const REASONS = new Set([
   'rule.off',
   'rule.deleted',
   'automations.off',
+  'template.gone',
 ]);
 
 /** Why a run stopped or was skipped, in words. */

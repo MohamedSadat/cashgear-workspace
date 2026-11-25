@@ -48,7 +48,11 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
     public DateDueCache Dues => dues;
 
     /// <summary>The work one pass did, for the bench and the tests.</summary>
-    public sealed record PassReport(int Events, int Runs, int DateRules, int DueRows, TimeSpan DateTime, int Waits = 0, TimeSpan WaitsTime = default);
+    public sealed record PassReport(int Events, int Runs, int DateRules, int DueRows, TimeSpan DateTime, int Waits = 0, TimeSpan WaitsTime = default,
+        TimeSpan WaitsFindTime = default);
+
+    /// <summary>Phase 17: the last waits pass's finding of the runs due (taking them and reading them), apart from going on with them.</summary>
+    private TimeSpan waitsFind;
 
     public PassReport? LastPass { get; private set; }
 
@@ -62,6 +66,8 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             waits = await WaitsAsync(services, ct);
             waitsTime = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            // Phase 17: a series' day, or its last row done, makes its row within a second.
+            runs += await SeriesAsync(services, ct);
             nextWaits = clock.GetUtcNow() + WaitsEvery;
         }
         var dateRules = 0;
@@ -75,7 +81,7 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
             runs += dateRuns + await SchedulesAsync(services, ct);
             nextTimes = clock.GetUtcNow() + TimesEvery;
         }
-        LastPass = new PassReport(events, runs, dateRules, dueRows, dateTime, waits, waitsTime);
+        LastPass = new PassReport(events, runs, dateRules, dueRows, dateTime, waits, waitsTime, waitsFind);
         return events >= Batch || waits >= Batch;
     }
 
@@ -97,6 +103,8 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
     {
         var db = services.GetRequiredService<CgwDb>();
         var now = clock.GetUtcNow();
+        var finding = System.Diagnostics.Stopwatch.GetTimestamp();
+        waitsFind = TimeSpan.Zero;
         // Ids come back as binary(16), as raw SQL reads them.
         var raw = await db.Database.SqlQueryRaw<byte[]>("""
             WITH next AS (
@@ -107,10 +115,15 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
             new Microsoft.Data.SqlClient.SqlParameter("@batch", Batch),
             new Microsoft.Data.SqlClient.SqlParameter("@stale", now - Stale),
             new Microsoft.Data.SqlClient.SqlParameter("@now", now)).ToListAsync(ct);
-        if (raw.Count == 0) return 0;
+        if (raw.Count == 0)
+        {
+            waitsFind = System.Diagnostics.Stopwatch.GetElapsedTime(finding);
+            return 0;
+        }
         var taken = raw.Select(GuidBytes.FromBytes).ToList();
         var runs = await db.AutomationRuns.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
             .Where(r => taken.Contains(r.Id)).OrderBy(r => r.WaitUntil).ToListAsync(ct);
+        waitsFind = System.Diagnostics.Stopwatch.GetElapsedTime(finding);
         var runner = new AutomationRunner(services, states, clock, logger);
         foreach (var run in runs)
         {
@@ -215,6 +228,69 @@ public sealed class AutomationJob(DocStates states, TimeProvider clock, ILogger<
     {
         var list = ids.Distinct().ToList();
         return await db.Workspaces.AsNoTracking().Where(w => list.Contains(w.Id) && w.DeletedAt == null).ToDictionaryAsync(w => w.Id, ct);
+    }
+
+    // Repeating rows (Phase 17) ----------------------------------------------------------------------------
+
+    /// <summary>
+    /// The series whose next day has come (by its days, that day's moment; by the last done, at once
+    /// once the last is done): a row made from its template for that day, once whatever the worker
+    /// goes through (its run's key is the day), then the series moved on. By its days, a day a stopped
+    /// worker missed is passed over for the latest one, and a day while the workspace's rules are off
+    /// passes; by the last done, it waits for them. A pass that fails is tried again a minute later.
+    /// </summary>
+    private async Task<int> SeriesAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var db = services.GetRequiredService<CgwDb>();
+        var now = clock.GetUtcNow();
+        var rules = await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
+            .Where(a => a.TriggerKind == "recurring" && a.Enabled && a.DeletedAt == null && a.NextAt != null && a.NextAt <= now && a.SeriesNext != null)
+            .OrderBy(a => a.NextAt).Take(Batch).ToListAsync(ct);
+        if (rules.Count == 0) return 0;
+        var workspaces = await WorkspacesAsync(db, rules.Select(r => r.WorkspaceId), ct);
+        var runner = new AutomationRunner(services, states, clock, logger);
+        var runs = 0;
+        foreach (var rule in rules)
+        {
+            if (!workspaces.TryGetValue(rule.WorkspaceId, out var workspace)) continue;
+            var trigger = (JsonObject)JsonNode.Parse(rule.Definition)!["trigger"]!;
+            var zone = AutomationTimes.Zone(workspace.TimeZone);
+            var byDays = (string?)trigger["mode"] != RecurringSeries.ByDone;
+            var day = byDays ? RecurringSeries.Latest(trigger, rule.SeriesNext!, now, zone) : rule.SeriesNext!;
+            var seen = rule.SeriesNext;
+            var later = now.AddMinutes(1);
+            Guid? row = null;
+            if (workspace.AutomationsOff && !byDays)
+            {
+                await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => a.Id == rule.Id && a.SeriesNext == seen)
+                    .ExecuteUpdateAsync(s => s.SetProperty(a => a.NextAt, later), ct);
+                continue;
+            }
+            if (!workspace.AutomationsOff)
+            {
+                try
+                {
+                    var (ran, made) = await runner.OnRecurringAsync(rule, day, ct);
+                    if (ran) runs++;
+                    row = made;
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    logger.LogError(e, "Automation {Rule}'s series failed on {Day}", rule.Id, day);
+                    await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => a.Id == rule.Id && a.SeriesNext == seen)
+                        .ExecuteUpdateAsync(s => s.SetProperty(a => a.NextAt, later), ct);
+                    continue;
+                }
+            }
+            var next = byDays ? RecurringSeries.NextDay(trigger, day, now, zone) : null;
+            DateTimeOffset? nextAt = next is null ? null : RecurringSeries.At(trigger, next, zone);
+            // Where the series is, whatever a save did meanwhile; where it goes next, unless a save moved it.
+            await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => a.Id == rule.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.SeriesDay, day).SetProperty(a => a.SeriesRowId, a => row ?? a.SeriesRowId), ct);
+            await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => a.Id == rule.Id && a.SeriesNext == seen)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.SeriesNext, next).SetProperty(a => a.NextAt, nextAt), ct);
+        }
+        return runs;
     }
 
     // Schedules -------------------------------------------------------------------------------------------
@@ -445,11 +521,66 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
             change.FormId?.ToString());
         var runs = 0;
         foreach (var view in rules)
+            if ((string?)view.Trigger["kind"] == "recurring" && view.Rule.SeriesRowId == change.RowId)
+                await SeriesDoneAsync(view, rowChange, change.RowId, zone, now, ct);
+        foreach (var view in rules)
         {
             if (!AutomationRules.Starts(view.Trigger, view.Schema, rowChange, ctx)) continue;
             if (await RunAsync(view, workspace, change.RowId, change.Id, null, change.Depth + 1, change.ActorId, ct)) runs++;
         }
         return runs;
+    }
+
+    /// <summary>
+    /// Phase 17: a series by the last done whose last row became done (its checkbox checked, its status
+    /// complete): its next day set, made at once by the next series pass.
+    /// </summary>
+    private async Task SeriesDoneAsync(RuleView view, RowChange change, Guid rowId, TimeZoneInfo zone, DateTimeOffset now, CancellationToken ct)
+    {
+        if ((string?)view.Trigger["mode"] != RecurringSeries.ByDone || view.Rule.SeriesNext is not null || change.Kind != EventKinds.Changed) return;
+        if ((string?)view.Trigger["doneProperty"] is not { } done || !change.Changed.Contains(done)) return;
+        var def = view.Schema.Live(done);
+        if (!RecurringSeries.IsDone(def, change.After.GetValueOrDefault(done)) || RecurringSeries.IsDone(def, change.Before.GetValueOrDefault(done))) return;
+        if (RecurringSeries.AfterDone(view.Trigger, view.Rule.SeriesDay, now, zone) is not { } next) return;
+        await Db.Automations.IgnoreQueryFilters([CgwDb.Tenant])
+            .Where(a => a.Id == view.Rule.Id && a.Enabled && a.DeletedAt == null && a.SeriesRowId == rowId && a.SeriesNext == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.SeriesNext, next).SetProperty(a => a.NextAt, now), ct);
+    }
+
+    /// <summary>
+    /// Phase 17: a series' day: its row made from the template (its day in the date property), then
+    /// the rule's steps run for it, once. Whether a run was recorded, and the row it made.
+    /// </summary>
+    public async Task<(bool Ran, Guid? Row)> OnRecurringAsync(Automation rule, string day, CancellationToken ct)
+    {
+        var workspace = await WorkspaceAsync(rule.WorkspaceId, ct);
+        if (workspace is null) return (false, null);
+        var view = (await RulesAsync(rule.WorkspaceId, rule.DatabaseId, ct)).FirstOrDefault(v => v.Rule.Id == rule.Id);
+        if (view is null) return (false, null);
+        var key = $"recur:{day}";
+        var ran = await RunAsync(view, workspace, null, null, key, 1, null, ct, (st, token) => SeriesRowAsync(st, view.Trigger, day, token));
+        var row = await Db.AutomationRuns.AsNoTracking().Where(r => r.AutomationId == rule.Id && r.DueKey == key).Select(r => r.RowId).FirstOrDefaultAsync(ct);
+        return (ran, row);
+    }
+
+    /// <summary>The series' row for a day, made as the run's author (an id of the run's, the same if taken again); the run is for it from then.</summary>
+    private async Task<(bool, string?)> SeriesRowAsync(RunState st, JsonObject trigger, string day, CancellationToken ct)
+    {
+        var db = Db;
+        var template = Guid.Parse((string)trigger["templateId"]!);
+        if (!await db.Pages.AsNoTracking().AnyAsync(p => p.Id == template && p.ParentPageId == st.Rule.DatabaseId && p.IsTemplate && p.DeletedAt == null && p.TrashedAt == null, ct))
+            return (false, "template.gone");
+        var values = new JsonObject();
+        if ((string?)trigger["dateProperty"] is { } property && st.Schema.Live(property) is { Type: PropertyTypes.Date } def)
+            values[property] = RecurringSeries.DateValue(trigger, def, day, st.Zone);
+        var step = new JsonObject { ["databaseId"] = st.Rule.DatabaseId.ToString(), ["templateId"] = template.ToString(), ["values"] = values };
+        var (ok, code) = await AddRowAsync(st, "series", step, clock.GetUtcNow(), ct);
+        if (!ok) return (false, code);
+        var id = Derived(st.Run.StartedAt, st.Run.Id, "series:row");
+        st.Run.RowId = id;
+        await db.AutomationRuns.Where(r => r.Id == st.Run.Id).ExecuteUpdateAsync(s => s.SetProperty(r => r.RowId, id), ct);
+        st.Row = (await RowStore.ByIdsAsync(db, [id], ct)).FirstOrDefault();
+        return (true, null);
     }
 
     public async Task<bool> OnDateAsync(Automation rule, Guid row, DateTimeOffset at, CancellationToken ct)
@@ -524,7 +655,8 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
     /// limits, its author's right to it, its conditions, and its steps in order. Returns whether a
     /// run was recorded.
     /// </summary>
-    private async Task<bool> RunAsync(RuleView view, Workspace workspace, Guid? rowId, long? eventId, string? dueKey, int depth, Guid? actor, CancellationToken ct)
+    private async Task<bool> RunAsync(RuleView view, Workspace workspace, Guid? rowId, long? eventId, string? dueKey, int depth, Guid? actor, CancellationToken ct,
+        Func<RunState, CancellationToken, Task<(bool, string?)>>? make = null)
     {
         var db = Db;
         db.Scope.Switch(workspace.Id);
@@ -594,6 +726,16 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         var member = await AuthorAsync(run, rule, ct);
         if (member is null) return true;
         var st = new RunState(run, rule, view.Schema, view.Definition, workspace, member) { Row = row };
+        // Phase 17: a series makes its row first, as its author; the steps then run for it.
+        if (make is not null)
+        {
+            var (made, code) = await make(st, ct);
+            if (!made)
+            {
+                await StopAsync(run, code ?? "row.refused", null, ct);
+                return true;
+            }
+        }
         var flow = await ListAsync(st, (JsonArray)view.Definition["steps"]!, "", null, ct);
         await FinishAsync(st, flow, ct);
         return true;
@@ -1253,17 +1395,23 @@ public sealed class AutomationRunner(IServiceProvider services, DocStates states
         var message = (string)step["message"]!;
         var excerpt = message.Length > 200 ? message[..200] : message;
         var now = clock.GetUtcNow();
+        // Phase 17: a reminder names the date reached, as the row holds it now.
+        var reminder = step["reminder"] is JsonValue flag && flag.GetValueKind() == JsonValueKind.True;
+        var property = reminder ? (string?)st.Definition["trigger"]?["propertyId"] : null;
+        var start = property is not null && st.Row?.Values.GetValueOrDefault(property) is { } date ? Raw.Field(date, "start") as string : null;
         await LockedAsync(run.WorkspaceId, async changes => await NotificationService.AddAsync(db, changes, told.Select(m => new Notification
         {
             Id = Derived(run.StartedAt, run.Id, $"{path}:notice:{m.UserId:N}"),
             WorkspaceId = run.WorkspaceId,
             UserId = m.UserId,
-            Kind = NotificationKinds.Automation,
+            Kind = reminder ? NotificationKinds.Reminder : NotificationKinds.Automation,
             PageId = subject,
             ActorUserId = run.AuthorId,
             Excerpt = excerpt,
             DedupeKey = $"automation:{run.Id:N}:{path}",
             AutomationId = rule.Id,
+            PropertyId = property,
+            DateStart = start,
             CreatedAt = now,
         }).ToList(), ct), ct);
         record.Count = told.Count;

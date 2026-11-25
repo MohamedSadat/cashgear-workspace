@@ -142,6 +142,32 @@ function ApprovalAnswer({
   );
 }
 
+/** Phase 17: a reminder's date as the person reads it: a day, or an instant at its time. */
+function reminderDate(start: string | null, language: string): string {
+  if (!start) return '';
+  const day = start.length === 10;
+  const date = new Date(day ? `${start}T00:00:00Z` : start);
+  if (Number.isNaN(date.getTime())) return start;
+  return new Intl.DateTimeFormat(
+    language,
+    day ? { dateStyle: 'medium', timeZone: 'UTC' } : { dateStyle: 'medium', timeStyle: 'short' },
+  ).format(date);
+}
+
+/** Phase 17: a reminder's line and what it is of (with a rule's message after it, if it has one). */
+function reminderText(n: NotificationDto, t: Loose, title: string, language: string) {
+  const of = n.reminder
+    ? t('automations.inbox.reminderOf', {
+        property: n.reminder.propertyName || t('automations.inbox.reminderDate'),
+        date: reminderDate(n.reminder.start, language),
+      })
+    : '';
+  return {
+    line: t('automations.inbox.reminder', { title }),
+    excerpt: [of, n.excerpt].filter(Boolean).join(' · '),
+  };
+}
+
 const textKey = (kind: NotificationDto['kind']) =>
   kind === 'mention'
     ? 'inbox.mention'
@@ -244,22 +270,28 @@ export function InboxView({ collab, session }: { collab: Collab; session: Worksp
                       <span dir="auto">
                         {n.kind === 'automation'
                           ? automationText(n, t as unknown as Loose, name, title).line
-                          : n.kind === 'approval'
-                            ? t('automations.inbox.approval', {
-                                actor: name,
-                                name: `“${n.automationName || t('automations.settings.untitled')}”`,
-                                title,
-                              })
-                            : t(textKey(n.kind), { name, title })}
+                          : n.kind === 'reminder'
+                            ? reminderText(n, t as unknown as Loose, title, i18n.language).line
+                            : n.kind === 'approval'
+                              ? t('automations.inbox.approval', {
+                                  actor: name,
+                                  name: `“${n.automationName || t('automations.settings.untitled')}”`,
+                                  title,
+                                })
+                              : t(textKey(n.kind), { name, title })}
                       </span>
                     </span>
                     {(n.kind === 'automation'
                       ? automationText(n, t as unknown as Loose, name, title).excerpt
-                      : n.excerpt) && (
+                      : n.kind === 'reminder'
+                        ? reminderText(n, t as unknown as Loose, title, i18n.language).excerpt
+                        : n.excerpt) && (
                       <span className="cgw-inbox-excerpt" dir="auto">
                         {n.kind === 'automation'
                           ? automationText(n, t as unknown as Loose, name, title).excerpt
-                          : n.excerpt}
+                          : n.kind === 'reminder'
+                            ? reminderText(n, t as unknown as Loose, title, i18n.language).excerpt
+                            : n.excerpt}
                       </span>
                     )}
                     <time className="cgw-muted" dateTime={n.createdAt}>

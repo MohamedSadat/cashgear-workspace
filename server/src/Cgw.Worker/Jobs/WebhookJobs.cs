@@ -198,6 +198,11 @@ public sealed class AutomationRetentionJob(TimeProvider clock) : IJob
         var gone = await db.Automations.IgnoreQueryFilters(tenant).Where(a => a.DeletedAt != null && a.DeletedAt < before
             && !db.AutomationRuns.IgnoreQueryFilters(tenant).Any(r => r.AutomationId == a.Id)).Select(a => a.Id).Take(1000).ToListAsync(ct);
         if (gone.Count > 0) await db.Automations.IgnoreQueryFilters([CgwDb.Tenant]).Where(a => gone.Contains(a.Id)).ExecuteDeleteAsync(ct);
+        // Phase 17: a reminder of a row deleted for good, or of a person who left the workspace, goes too.
+        await db.RowReminders.IgnoreQueryFilters(tenant)
+            .Where(r => !db.Pages.IgnoreQueryFilters(tenant).Any(p => p.Id == r.RowId && p.DeletedAt == null)
+                || !db.WorkspaceMembers.IgnoreQueryFilters(tenant).Any(m => m.WorkspaceId == r.WorkspaceId && m.UserId == r.UserId))
+            .ExecuteDeleteAsync(ct);
         return runs.Count == 5000;
     }
 }

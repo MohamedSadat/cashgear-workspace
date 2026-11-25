@@ -25,8 +25,38 @@ public sealed class Automation : ITenantOwned
     public DateTimeOffset UpdatedAt { get; set; }
     /// <summary>Deleted: kept so the feed can tell the database's readers, removed with its runs after 30 days.</summary>
     public DateTimeOffset? DeletedAt { get; set; }
-    /// <summary>Phase 17: a step waits on its row (a date or conditions), so its rows' changes are written while it is on.</summary>
+    /// <summary>Phase 17: a step waits on its row (a date or conditions), or a series waits for its last row to be done, so its rows' changes are written while it is on.</summary>
     public bool WatchesRows { get; set; }
+    /// <summary>Phase 17, a repeating row: the day it makes a row for next (its moment in <see cref="NextAt"/>); by the last done, set once the last is done.</summary>
+    public string? SeriesNext { get; set; }
+    /// <summary>Phase 17, a repeating row: the last day it made a row for.</summary>
+    public string? SeriesDay { get; set; }
+    /// <summary>Phase 17, a repeating row: the last row it made (by the last done, the one whose being done makes the next).</summary>
+    public Guid? SeriesRowId { get; set; }
+}
+
+/// <summary>
+/// Phase 17: a person's own reminder of a row's date, at its moment or before it (a day with no time
+/// at 09:00 in the workspace's zone). Its moment is worked out again whenever the row's date
+/// changes, and by the worker every 10 minutes; sent once for each moment, and only while the
+/// person can read the row.
+/// </summary>
+public sealed class RowReminder : ITenantOwned
+{
+    public Guid Id { get; set; }
+    public Guid WorkspaceId { get; set; }
+    public Guid DatabaseId { get; set; }
+    public Guid RowId { get; set; }
+    /// <summary>The row's date property.</summary>
+    public string PropertyId { get; set; } = "";
+    public Guid UserId { get; set; }
+    /// <summary>How long before the date's moment: 0, 15, 60, 1,440 or 10,080 minutes.</summary>
+    public int BeforeMinutes { get; set; }
+    /// <summary>When it is sent: the date's moment less <see cref="BeforeMinutes"/>; null while the row has no date there.</summary>
+    public DateTimeOffset? DueAt { get; set; }
+    /// <summary>The moment it was last sent for (or passed over, already past when set): sent again only for another.</summary>
+    public DateTimeOffset? SentFor { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>

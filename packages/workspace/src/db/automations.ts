@@ -9,6 +9,7 @@ import { isId, type Id } from '../ids';
 import { OpError, type RowRecord } from '../types';
 import { isPropertyId } from './ids';
 import { matchesFilter } from './query';
+import { isDay, occurrencesBetween, readRecurrence, type RecurrenceRule } from './recurrence';
 import {
   STORED_TYPES,
   TITLE_PROPERTY,
@@ -90,7 +91,24 @@ export type AutomationTrigger =
    * Phase 16: a form view of the database answered (in the app or by its link): the row the answer
    * added. The server checks that the view is a form of this database.
    */
-  | { kind: 'formAnswered'; viewId: Id };
+  | { kind: 'formAnswered'; viewId: Id }
+  /**
+   * Phase 17: a repeating row. A row made from `templateId` (a template of this database) on each
+   * day the recurrence falls on from `start` (`mode: 'date'`, at `at` in the workspace's time zone,
+   * default 09:00), or the next of those days once the last row it made is done (`mode: 'done'`:
+   * its `doneProperty` checked, or its status in the complete group), made at once. Its day is
+   * written into `dateProperty` (null: none); then the rule's steps, if any, run for it.
+   */
+  | {
+      kind: 'recurring';
+      templateId: Id;
+      start: string;
+      rule: RecurrenceRule;
+      mode: 'date' | 'done';
+      at: string | null;
+      dateProperty: PropertyId | null;
+      doneProperty: PropertyId | null;
+    };
 
 export type TriggerKind = AutomationTrigger['kind'];
 
@@ -143,13 +161,18 @@ export type AutomationStep =
       templateId: Id | null;
       values: Record<PropertyId, StepValue>;
     })
-  /** Tells people, groups and the people in person properties, in their inbox and by their mail setting. */
+  /**
+   * Tells people, groups and the people in person properties, in their inbox and by their mail
+   * setting. Phase 17: under a date trigger, `reminder` tells them as a reminder of the date
+   * reached (the inbox's `reminder` kind) rather than as the rule's notice.
+   */
   | (StepBase & {
       kind: 'notify';
       people: Id[];
       groups: Id[];
       personProperties: PropertyId[];
       message: string;
+      reminder?: boolean;
     })
   /** Calls a workspace's webhook with the properties named (owners and admins only). */
   | (StepBase & { kind: 'webhook'; webhookId: Id; properties: PropertyId[] })
@@ -201,6 +224,7 @@ export const TRIGGER_KINDS: readonly TriggerKind[] = [
   'schedule',
   'button',
   'formAnswered',
+  'recurring',
 ];
 export const STEP_KINDS: readonly StepKind[] = [
   'set',
@@ -211,7 +235,10 @@ export const STEP_KINDS: readonly StepKind[] = [
   'branch',
   'approval',
 ];
-/** Phase 17: the step kinds a server before 0.17.0 keeps (`/version`'s `stepKinds` 4, or none). */
+/**
+ * Phase 17: the step kinds a server before 0.17.0 keeps (`/version`'s `stepKinds` 4, or none). A
+ * server that counts all seven also keeps the `recurring` trigger and a notice's `reminder`.
+ */
 export const STEP_KINDS_BEFORE_17 = 4;
 
 /** Phase 17: the step lists a step holds (a branch's paths and otherwise, an approval's three), in order. */
@@ -442,6 +469,44 @@ function checkTrigger(value: unknown, db: DatabaseRecord): AutomationTrigger {
       // Which views are forms of the database is the server's to check: a device may not hold them.
       if (!isId(value.viewId)) fail('trigger.form', 'A form trigger names its form');
       return { kind: 'formAnswered', viewId: value.viewId as Id };
+    case 'recurring': {
+      // Which rows are the database's templates is the server's to check, as a form's views are.
+      if (!isId(value.templateId)) fail('trigger.template', 'A repeating row names its template');
+      if (!isDay(value.start)) fail('trigger', 'A series starts on a day');
+      const rule = readRecurrence(value.rule);
+      if (!rule) return fail('trigger.recurrence', 'Not a recurrence');
+      const start = value.start as string;
+      if (occurrencesBetween(rule, start, start, '9999-12-31', 1).length === 0)
+        fail('trigger.recurrence', 'The recurrence never falls on a day');
+      const mode = value.mode;
+      if (mode !== 'date' && mode !== 'done')
+        fail('trigger', 'A series goes by its days or by the last row being done');
+      const at = value.at ?? null;
+      if (at !== null && !isTimeOfDay(at)) fail('trigger', 'A time of day is HH:mm');
+      const dateProperty = value.dateProperty ?? null;
+      if (dateProperty !== null) {
+        const def = live(db, dateProperty);
+        if (!def || def.type !== 'date')
+          fail('trigger.property', 'A series writes its day into a date property');
+      }
+      let doneProperty: PropertyId | null = null;
+      if (mode === 'done') {
+        const def = live(db, value.doneProperty);
+        if (!def || (def.type !== 'checkbox' && def.type !== 'status'))
+          fail('trigger.property', 'Done is a checkbox checked or a status complete');
+        doneProperty = def!.id;
+      }
+      return {
+        kind: 'recurring',
+        templateId: value.templateId as Id,
+        start,
+        rule,
+        mode: mode as 'date' | 'done',
+        at: at as string | null,
+        dateProperty: dateProperty as PropertyId | null,
+        doneProperty,
+      };
+    }
     default:
       return fail('trigger', 'Not a trigger');
   }
@@ -552,6 +617,8 @@ function checkIds(value: unknown, reason: string, max = MAX_RECIPIENTS): Id[] {
 interface StepCtx {
   db: DatabaseRecord;
   rowTrigger: boolean;
+  /** Phase 17: the rule's trigger (a notice is a reminder only of a date reached). */
+  trigger: TriggerKind;
   target: (id: Id) => DatabaseRecord | null;
   /** On an approval's approved or rejected path: who answered and the comment may be written. */
   answered: boolean;
@@ -658,10 +725,15 @@ function checkStep(value: unknown, ctx: StepCtx): AutomationStep {
       const recipients = checkRecipients(value, ctx);
       if (typeof value.message !== 'string' || value.message.length > MAX_MESSAGE)
         fail('step.message', 'A notice is at most 1,000 characters');
+      const reminder = value.reminder ?? false;
+      if (typeof reminder !== 'boolean') fail('step.reminder', 'A reminder is true or false');
+      if (reminder && ctx.trigger !== 'date')
+        fail('step.reminder', 'A reminder is of a date reached');
       return {
         kind: 'notify',
         ...recipients,
         message: value.message as string,
+        ...(reminder ? { reminder: true } : {}),
         when,
       };
     }
@@ -757,9 +829,21 @@ export function checkAutomation(
       ? null
       : checkGroup(value.conditions, 'conditions');
   if (conditions && !rowTrigger) fail('conditions', 'A schedule has no row to put conditions on');
-  if (!Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > MAX_STEPS)
-    fail('steps', 'A rule has 1 to 20 steps');
-  const ctx: StepCtx = { db, rowTrigger, target, answered: false, level: 1, count: { n: 0 } };
+  if (conditions && trigger.kind === 'recurring')
+    fail('conditions', 'A repeating row is made whatever it holds');
+  // Phase 17: a repeating row's rule makes its row itself, so it may have no steps of its own.
+  const fewest = trigger.kind === 'recurring' ? 0 : 1;
+  if (!Array.isArray(value.steps) || value.steps.length < fewest || value.steps.length > MAX_STEPS)
+    fail('steps', fewest ? 'A rule has 1 to 20 steps' : 'A rule has at most 20 steps');
+  const ctx: StepCtx = {
+    db,
+    rowTrigger,
+    trigger: trigger.kind,
+    target,
+    answered: false,
+    level: 1,
+    count: { n: 0 },
+  };
   const steps = (value.steps as unknown[]).map((step) => checkStep(step, ctx));
   const rule: AutomationRecord = {
     id: value.id as Id,

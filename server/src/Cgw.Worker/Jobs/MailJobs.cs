@@ -22,7 +22,7 @@ public sealed class NotificationMailJob(MailSettingsOptions options, TimeProvide
     /// <summary>A quarter of the delay (15 s with a minute's), at most 30 s.</summary>
     public TimeSpan Interval => TimeSpan.FromSeconds(Math.Clamp(options.Delay.TotalSeconds / 4, 1, 30));
     private const int PeopleAPass = 200;
-    private static readonly string[] Kinds = [NotificationKinds.Mention, NotificationKinds.CommentMention, NotificationKinds.Reply, NotificationKinds.Automation, NotificationKinds.Approval];
+    private static readonly string[] Kinds = [NotificationKinds.Mention, NotificationKinds.CommentMention, NotificationKinds.Reply, NotificationKinds.Automation, NotificationKinds.Approval, NotificationKinds.Reminder];
 
     public async Task<bool> RunAsync(IServiceProvider services, CancellationToken ct)
     {

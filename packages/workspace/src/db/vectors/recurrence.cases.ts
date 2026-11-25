@@ -1,0 +1,234 @@
+// db-recurrence-vectors.json (Phase 17): the days a repeating row falls on (`nextOccurrence`,
+// `occurrencesBetween` in db/recurrence.ts), and the rules `readRecurrence` refuses. The C# port's
+// `Recurrence` reads the same file. Hand-written: the answers are worked out, not computed.
+import type { RecurrenceRule } from '../recurrence';
+
+export interface RecurrenceCase {
+  name: string;
+  rule: unknown;
+  first: string;
+  /** `next`: the first day after `after`; `between`: the days from `from` to `to`, inclusive. */
+  next?: { after: string; expected: string | null };
+  between?: { from: string; to: string; expected: string[] };
+}
+
+export interface RefusedRule {
+  name: string;
+  rule: unknown;
+}
+
+export interface RecurrenceVectors {
+  cases: RecurrenceCase[];
+  refused: RefusedRule[];
+}
+
+const r = (rule: RecurrenceRule) => rule;
+
+const cases: RecurrenceCase[] = [
+  {
+    name: 'every day',
+    rule: r({ frequency: 'daily' }),
+    first: '2026-12-30',
+    between: {
+      from: '2026-12-30',
+      to: '2027-01-02',
+      expected: ['2026-12-30', '2026-12-31', '2027-01-01', '2027-01-02'],
+    },
+  },
+  {
+    name: 'every third day',
+    rule: r({ frequency: 'daily', interval: 3 }),
+    first: '2026-02-26',
+    between: {
+      from: '2026-02-01',
+      to: '2026-03-10',
+      expected: ['2026-02-26', '2026-03-01', '2026-03-04', '2026-03-07', '2026-03-10'],
+    },
+  },
+  {
+    name: 'every weekday only',
+    rule: r({
+      frequency: 'daily',
+      weekDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+    }),
+    first: '2026-11-27',
+    next: { after: '2026-11-27', expected: '2026-11-30' },
+  },
+  {
+    name: 'weekly on Sunday and Wednesday, from a Monday',
+    rule: r({ frequency: 'weekly', weekDays: ['wednesday', 'sunday'] }),
+    first: '2026-11-23',
+    between: {
+      from: '2026-11-23',
+      to: '2026-12-06',
+      expected: ['2026-11-25', '2026-11-29', '2026-12-02', '2026-12-06'],
+    },
+  },
+  {
+    name: 'every two weeks on its own weekday',
+    rule: r({ frequency: 'weekly', interval: 2 }),
+    first: '2026-11-24',
+    between: {
+      from: '2026-11-24',
+      to: '2026-12-31',
+      expected: ['2026-11-24', '2026-12-08', '2026-12-22'],
+    },
+  },
+  {
+    name: 'monthly on the 31st: a shorter month’s last day',
+    rule: r({ frequency: 'monthly', dayOfMonth: 31 }),
+    first: '2026-01-31',
+    between: {
+      from: '2026-01-01',
+      to: '2026-06-30',
+      expected: [
+        '2026-01-31',
+        '2026-02-28',
+        '2026-03-31',
+        '2026-04-30',
+        '2026-05-31',
+        '2026-06-30',
+      ],
+    },
+  },
+  {
+    name: 'monthly on the 31st in a leap year',
+    rule: r({ frequency: 'monthly', dayOfMonth: 31 }),
+    first: '2028-01-31',
+    next: { after: '2028-01-31', expected: '2028-02-29' },
+  },
+  {
+    name: 'monthly from the 30th keeps the 30th',
+    rule: r({ frequency: 'monthly' }),
+    first: '2026-01-30',
+    between: { from: '2026-02-01', to: '2026-03-31', expected: ['2026-02-28', '2026-03-30'] },
+  },
+  {
+    name: 'monthly on the last Friday',
+    rule: r({ frequency: 'monthly', weekOfMonth: 'last', weekDays: ['friday'] }),
+    first: '2026-11-01',
+    between: {
+      from: '2026-11-01',
+      to: '2027-01-31',
+      expected: ['2026-11-27', '2026-12-25', '2027-01-29'],
+    },
+  },
+  {
+    name: 'monthly on the second Monday and Thursday',
+    rule: r({ frequency: 'monthly', weekOfMonth: 'second', weekDays: ['monday', 'thursday'] }),
+    first: '2026-12-01',
+    between: { from: '2026-12-01', to: '2026-12-31', expected: ['2026-12-10', '2026-12-14'] },
+  },
+  {
+    name: 'every three months',
+    rule: r({ frequency: 'monthly', interval: 3, dayOfMonth: 15 }),
+    first: '2026-11-15',
+    between: {
+      from: '2026-11-01',
+      to: '2027-08-31',
+      expected: ['2026-11-15', '2027-02-15', '2027-05-15', '2027-08-15'],
+    },
+  },
+  {
+    name: 'yearly on 29 February: 28 February when not a leap year',
+    rule: r({ frequency: 'yearly' }),
+    first: '2028-02-29',
+    between: {
+      from: '2028-01-01',
+      to: '2032-12-31',
+      expected: ['2028-02-29', '2029-02-28', '2030-02-28', '2031-02-28', '2032-02-29'],
+    },
+  },
+  {
+    name: 'yearly in March on the first Monday',
+    rule: r({ frequency: 'yearly', month: 3, weekOfMonth: 'first', weekDays: ['monday'] }),
+    first: '2026-01-10',
+    between: { from: '2026-01-01', to: '2027-12-31', expected: ['2026-03-02', '2027-03-01'] },
+  },
+  {
+    name: 'five times, then no more',
+    rule: r({ frequency: 'daily', range: 'occurrenceCount', occurrenceCount: 5 }),
+    first: '2026-12-01',
+    next: { after: '2026-12-05', expected: null },
+  },
+  {
+    name: 'until a day, inclusive',
+    rule: r({ frequency: 'weekly', range: 'endByDate', endDate: '2026-12-15' }),
+    first: '2026-12-01',
+    between: {
+      from: '2026-12-01',
+      to: '2026-12-31',
+      expected: ['2026-12-01', '2026-12-08', '2026-12-15'],
+    },
+  },
+  {
+    name: 'the next after a day between occurrences',
+    rule: r({ frequency: 'monthly', dayOfMonth: 1 }),
+    first: '2026-01-01',
+    next: { after: '2026-11-25', expected: '2026-12-01' },
+  },
+  {
+    name: 'from the first day there is, a Monday',
+    rule: r({ frequency: 'weekly', weekDays: ['sunday', 'monday'] }),
+    first: '0001-01-01',
+    between: {
+      from: '0001-01-01',
+      to: '0001-01-08',
+      expected: ['0001-01-01', '0001-01-07', '0001-01-08'],
+    },
+  },
+  {
+    name: 'monthly in the first century',
+    rule: r({ frequency: 'monthly', dayOfMonth: 31 }),
+    first: '0050-01-31',
+    next: { after: '0050-01-31', expected: '0050-02-28' },
+  },
+  {
+    name: 'no day after the last there is',
+    rule: r({ frequency: 'daily', interval: 999 }),
+    first: '9999-12-01',
+    next: { after: '9999-12-01', expected: null },
+  },
+  {
+    name: 'yearly on 31 February: the month’s last day',
+    rule: r({ frequency: 'yearly', month: 2, dayOfMonth: 31 }),
+    first: '2026-03-01',
+    next: { after: '2026-03-01', expected: '2027-02-28' },
+  },
+  {
+    name: 'a year’s turn in a weekly rule',
+    rule: r({ frequency: 'weekly', weekDays: ['thursday'] }),
+    first: '2026-12-24',
+    between: {
+      from: '2026-12-24',
+      to: '2027-01-14',
+      expected: ['2026-12-24', '2026-12-31', '2027-01-07', '2027-01-14'],
+    },
+  },
+];
+
+const refused: RefusedRule[] = [
+  { name: 'no frequency', rule: { interval: 2 } },
+  { name: 'an unknown frequency', rule: { frequency: 'hourly' } },
+  { name: 'an interval of none', rule: { frequency: 'daily', interval: 0 } },
+  { name: 'a fractional interval', rule: { frequency: 'weekly', interval: 1.5 } },
+  { name: 'an unknown weekday', rule: { frequency: 'weekly', weekDays: ['funday'] } },
+  { name: 'a 32nd day', rule: { frequency: 'monthly', dayOfMonth: 32 } },
+  { name: 'a thirteenth month', rule: { frequency: 'yearly', month: 13 } },
+  { name: 'a fifth week', rule: { frequency: 'monthly', weekOfMonth: 'fifth' } },
+  {
+    name: 'a count of none',
+    rule: { frequency: 'daily', range: 'occurrenceCount', occurrenceCount: 0 },
+  },
+  {
+    name: 'an end that is no day',
+    rule: { frequency: 'daily', range: 'endByDate', endDate: '2026-02-30' },
+  },
+  {
+    name: 'an end in the year 0',
+    rule: { frequency: 'daily', range: 'endByDate', endDate: '0000-12-31' },
+  },
+  { name: 'not an object', rule: 'weekly' },
+];
+
+export const recurrenceVectors: RecurrenceVectors = { cases, refused };

@@ -190,6 +190,41 @@ public static partial class AutomationRules
                 // Phase 16: which views are forms of the database is checked by AutomationService.
                 if (!IsId(t["viewId"])) throw Fail("trigger.form", "A form trigger names its form");
                 return new JsonObject { ["kind"] = "formAnswered", ["viewId"] = Str(t["viewId"]) };
+            case "recurring":
+            {
+                // Phase 17: which rows are the database's templates is checked by AutomationService.
+                if (!IsId(t["templateId"])) throw Fail("trigger.template", "A repeating row names its template");
+                if (!Recurrence.IsDay(Str(t["start"]))) throw Fail("trigger", "A series starts on a day");
+                if (Recurrence.Kept(t["rule"]) is not { } kept) throw Fail("trigger.recurrence", "Not a recurrence");
+                var start = Str(t["start"])!;
+                if (Recurrence.Between(Recurrence.Read(t["rule"])!, start, start, "9999-12-31", 1).Count == 0)
+                    throw Fail("trigger.recurrence", "The recurrence never falls on a day");
+                var mode = Str(t["mode"]);
+                if (mode is not ("date" or "done")) throw Fail("trigger", "A series goes by its days or by the last row being done");
+                var at = IsNull(t["at"]) ? null : t["at"];
+                if (at is not null && !IsTimeOfDay(at)) throw Fail("trigger", "A time of day is HH:mm");
+                var dateProperty = IsNull(t["dateProperty"]) ? null : t["dateProperty"];
+                if (dateProperty is not null && Live(db, dateProperty) is not { Type: PropertyTypes.Date })
+                    throw Fail("trigger.property", "A series writes its day into a date property");
+                string? done = null;
+                if (mode == "done")
+                {
+                    if (Live(db, t["doneProperty"]) is not { } def || def.Type is not (PropertyTypes.Checkbox or PropertyTypes.Status))
+                        throw Fail("trigger.property", "Done is a checkbox checked or a status complete");
+                    done = def.Id;
+                }
+                return new JsonObject
+                {
+                    ["kind"] = "recurring",
+                    ["templateId"] = Str(t["templateId"]),
+                    ["start"] = start,
+                    ["rule"] = kept,
+                    ["mode"] = mode,
+                    ["at"] = Copy(at),
+                    ["dateProperty"] = Copy(dateProperty),
+                    ["doneProperty"] = done,
+                };
+            }
             default:
                 throw Fail("trigger", "Not a trigger");
         }
@@ -274,10 +309,12 @@ public static partial class AutomationRules
     private static JsonArray Distinct(IEnumerable<string> ids) => [.. ids.Distinct(StringComparer.Ordinal).Select(s => (JsonNode)JsonValue.Create(s)!)];
 
     /// <summary>What a step is checked within (db/automations.ts <c>StepCtx</c>).</summary>
-    private sealed class StepCtx(Schema db, bool rowTrigger, Func<Guid, Schema?> target)
+    private sealed class StepCtx(Schema db, bool rowTrigger, string trigger, Func<Guid, Schema?> target)
     {
         public Schema Db { get; } = db;
         public bool RowTrigger { get; } = rowTrigger;
+        /// <summary>Phase 17: the rule's trigger (a notice is a reminder only of a date reached).</summary>
+        public string Trigger { get; } = trigger;
         public Func<Guid, Schema?> Target { get; } = target;
         /// <summary>On an approval's approved or rejected path.</summary>
         public bool Answered { get; init; }
@@ -286,7 +323,7 @@ public static partial class AutomationRules
         /// <summary>Steps met so far in the whole rule (shared by every level).</summary>
         public int[] Count { get; init; } = [0];
 
-        public StepCtx Inner(bool answered) => new(Db, RowTrigger, Target) { Answered = answered, Level = Level + 1, Count = Count };
+        public StepCtx Inner(bool answered) => new(Db, RowTrigger, Trigger, Target) { Answered = answered, Level = Level + 1, Count = Count };
     }
 
     private static (JsonArray People, JsonArray Groups, JsonArray Properties) CheckRecipients(JsonObject step, StepCtx ctx)
@@ -374,15 +411,21 @@ public static partial class AutomationRules
             {
                 var (people, groups, properties) = CheckRecipients(step, ctx);
                 if (Str(step["message"]) is not { } message || message.Length > MaxMessage) throw Fail("step.message", "A notice is at most 1,000 characters");
-                return new JsonObject
+                // Phase 17: a reminder of a date reached, kept only when it is one.
+                if (!IsNull(step["reminder"]) && !IsBool(step["reminder"])) throw Fail("step.reminder", "A reminder is true or false");
+                var reminder = IsBool(step["reminder"]) && step["reminder"]!.GetValue<bool>();
+                if (reminder && ctx.Trigger != "date") throw Fail("step.reminder", "A reminder is of a date reached");
+                var notify = new JsonObject
                 {
                     ["kind"] = "notify",
                     ["people"] = people,
                     ["groups"] = groups,
                     ["personProperties"] = properties,
                     ["message"] = message,
-                    ["when"] = when,
                 };
+                if (reminder) notify["reminder"] = true;
+                notify["when"] = when;
+                return notify;
             }
             case "webhook":
             {
@@ -503,9 +546,14 @@ public static partial class AutomationRules
         var rowTrigger = Str(trigger["kind"]) != "schedule";
         var conditions = IsNull(rule["conditions"]) ? null : CheckGroup(rule["conditions"], "conditions");
         if (conditions is not null && !rowTrigger) throw Fail("conditions", "A schedule has no row to put conditions on");
-        if (rule["steps"] is not JsonArray steps || steps.Count < 1 || steps.Count > MaxSteps) throw Fail("steps", "A rule has 1 to 20 steps");
+        var kind = Str(trigger["kind"])!;
+        if (conditions is not null && kind == "recurring") throw Fail("conditions", "A repeating row is made whatever it holds");
+        // Phase 17: a repeating row's rule makes its row itself, so it may have no steps of its own.
+        var fewest = kind == "recurring" ? 0 : 1;
+        if (rule["steps"] is not JsonArray steps || steps.Count < fewest || steps.Count > MaxSteps)
+            throw Fail("steps", fewest == 1 ? "A rule has 1 to 20 steps" : "A rule has at most 20 steps");
         var checkedSteps = new JsonArray();
-        var ctx = new StepCtx(db, rowTrigger, target);
+        var ctx = new StepCtx(db, rowTrigger, kind, target);
         foreach (var step in steps) checkedSteps.Add(CheckStep(step, ctx));
         var output = new JsonObject
         {

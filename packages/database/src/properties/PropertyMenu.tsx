@@ -40,6 +40,7 @@ import { FormulaEditor } from './FormulaEditor';
 import { RelationSetup, RollupSetup } from './RelationSetup';
 import { TypePicker } from './TypePicker';
 import { ButtonSettings } from '../automations/ButtonSettings';
+import { RemindPeopleItem } from '../automations/RemindPeople';
 
 export type PropertyPanel =
   | { kind: 'main' }
@@ -404,6 +405,7 @@ export function PropertyMenuBody({
           {t('property.rollupSetup')}
         </CgMenuPanelItem>
       ) : null}
+      {editable ? <RemindPeopleItem def={def} database={database} onClose={onClose} /> : null}
       {editable && isDateType(def.type) ? (
         <CgMenuPanelSwitch
           checked={def.date?.includeTime === true}

@@ -595,10 +595,12 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
           throw new OpError('invalid', 'Id mismatch');
         const db = await liveDatabase(rule.databaseId);
         if (db.workspaceId !== op.workspaceId) throw new OpError('invalid', 'Id mismatch');
+        // Phase 17: a repeating row's rule makes its row itself, so it may have no steps.
+        const fewest = rule.trigger?.kind === 'recurring' ? 0 : 1;
         if (
           typeof rule.trigger?.kind !== 'string' ||
           !Array.isArray(rule.steps) ||
-          rule.steps.length < 1 ||
+          rule.steps.length < fewest ||
           rule.steps.length > 20
         )
           throw new OpError('invalid', 'A rule has a trigger and 1 to 20 steps');

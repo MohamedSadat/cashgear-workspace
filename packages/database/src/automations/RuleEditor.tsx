@@ -20,7 +20,7 @@ import {
   type StepKind,
   type TriggerKind,
 } from '../core';
-import { useDatabaseContext, useViews } from '../context';
+import { useDatabaseContext, useHost, useViews } from '../context';
 import type { DatabaseAutomations } from '../host';
 import { propertyOf } from '../model/properties';
 import { FilterEditor } from '../toolbar/FilterEditor';
@@ -32,8 +32,10 @@ import {
   problemKey,
   stepFits,
   weekdayName,
+  withoutReminders,
   writable,
 } from './model';
+import { SeriesEditor } from './Series';
 import { Field, StepList } from './StepList';
 import { useAutoT, type AutoT } from './words';
 
@@ -55,25 +57,38 @@ function TriggerEditor({
   onChange,
   at,
   locale,
+  workflows,
 }: {
   database: DatabaseRecord;
   trigger: AutomationTrigger;
   onChange(trigger: AutomationTrigger): void;
   at: AutoT;
   locale: string;
+  /** Phase 17: the server keeps 0.17.0's steps, and so makes repeating rows. */
+  workflows: boolean;
 }) {
   const { host } = useDatabaseContext();
   const forms = formViews(useViews(host, database.id));
+  const templates = useHost(host, () => host.rowTemplates(database.id));
+  const kinds = TRIGGER_KINDS.filter(
+    (k) => k !== 'recurring' || workflows || trigger.kind === 'recurring',
+  );
   const kind = (
     <Field label={at('trigger')}>
       <select
         className="cgw-select"
         value={trigger.kind}
         onChange={(event) =>
-          onChange(newTrigger(event.target.value as TriggerKind, database, forms))
+          onChange(
+            newTrigger(event.target.value as TriggerKind, database, {
+              forms,
+              templates,
+              today: host.queryContext().today,
+            }),
+          )
         }
       >
-        {TRIGGER_KINDS.map((k) => (
+        {kinds.map((k) => (
           <option key={k} value={k}>
             {at(`triggers.${k}`)}
           </option>
@@ -82,6 +97,20 @@ function TriggerEditor({
     </Field>
   );
   switch (trigger.kind) {
+    case 'recurring':
+      return (
+        <>
+          {kind}
+          <SeriesEditor
+            database={database}
+            trigger={trigger}
+            templates={templates}
+            onChange={onChange}
+            at={at}
+            locale={locale}
+          />
+        </>
+      );
     case 'rowAdded':
       return kind;
     case 'formAnswered':
@@ -383,6 +412,8 @@ export function RuleEditor({
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const rowTrigger = trigger.kind !== 'schedule';
+  // Phase 17: a repeating row is made whatever it holds, so its rule has no conditions.
+  const hasConditions = rowTrigger && trigger.kind !== 'recurring';
   const canManage = data.canManage;
 
   const draft = (): AutomationRecord => ({
@@ -390,7 +421,7 @@ export function RuleEditor({
     name: name.trim(),
     enabled,
     trigger,
-    conditions: rowTrigger ? conditions : null,
+    conditions: hasConditions ? conditions : null,
     steps,
   });
 
@@ -443,14 +474,16 @@ export function RuleEditor({
           trigger={trigger}
           locale={locale}
           at={at}
+          workflows={(data.stepKinds ?? 4) >= 7}
           onChange={(next) => {
             setTrigger(next);
             if (next.kind === 'schedule')
               setSteps((list) => list.filter((s) => stepFits(s.kind, next)));
+            if (next.kind !== 'date') setSteps((list) => withoutReminders(list));
           }}
         />
       </fieldset>
-      {rowTrigger ? (
+      {hasConditions ? (
         <section className="cgw-db-auto-part" aria-label={at('conditions')}>
           <h3 className="cgw-panel-title">{at('conditions')}</h3>
           {conditions ? (

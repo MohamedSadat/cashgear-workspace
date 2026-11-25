@@ -18,10 +18,20 @@ const { RunLog } = await import('./RunLog');
 // Behind React.lazy, loaded before the tests so the dialog draws in a few ticks.
 await import('./AutomationsDialog');
 await import('./RowRuns');
-const { triggerText, amountText } = await import('./model');
+await import('./RowReminders');
+const { triggerText, amountText, newRule, newTrigger, withoutReminders } = await import('./model');
+const { seriesText } = await import('./Series');
+const { openAutomations } = await import('./open');
+const { rowCreate, rowTemplateItems } = await import('../templates/rowTemplates');
 const { automationsEn } = await import('./words');
 import type { AutomationRecord, PropertyDef } from '../core';
-import type { AutomationRunsPage, AutomationsHost, DatabaseAutomations } from '../host';
+import type {
+  AutomationRunsPage,
+  AutomationsHost,
+  DatabaseAutomations,
+  RowReminder,
+  RowRemindersHost,
+} from '../host';
 
 type Root = ReturnType<typeof createRoot>;
 let root: Root | null = null;
@@ -73,6 +83,30 @@ class FakeAutomations implements AutomationsHost {
     void this.presses.push({ rowId, propertyId: def.id });
   groups = async () => [];
   onChange = () => () => undefined;
+  // Phase 17.
+  workflows = false;
+  knowsWorkflows = () => this.workflows;
+  kept: RowReminder[] = [];
+  reminderCalls: string[] = [];
+  get reminders(): RowRemindersHost | undefined {
+    if (!this.workflows) return undefined;
+    return {
+      list: async () => this.kept,
+      set: async (_db, _row, propertyId, beforeMinutes) => {
+        this.reminderCalls.push(`set:${propertyId}:${beforeMinutes}`);
+        this.kept = [
+          ...this.kept.filter((r) => r.propertyId !== propertyId),
+          { propertyId, beforeMinutes, dueAt: null },
+        ];
+        return this.kept;
+      },
+      remove: async (_db, _row, propertyId) => {
+        this.reminderCalls.push(`remove:${propertyId}`);
+        this.kept = this.kept.filter((r) => r.propertyId !== propertyId);
+        return this.kept;
+      },
+    };
+  }
 }
 
 const button = (label: string) =>
@@ -360,5 +394,197 @@ describe('automations in the views', () => {
     ).toBe('When Done changes to checked');
     expect(amountText(1440, 'en')).toBe('1 day');
     expect(amountText(-90, 'en')).toBe('90 minutes');
+  });
+  it('makes a repeating row of a template, offered only where the server makes them', async () => {
+    const s = seed(3);
+    const made = rowCreate(s.host, s.tasksId, { title: 'Water the plants', isTemplate: true })!;
+    await s.host.apply([made.op]);
+    const fake = new FakeAutomations();
+    s.host.automations = fake;
+    await mount(h(DatabaseView, { host: s.host, databaseId: s.tasksId, embedded: false }));
+    await click(button(automationsEn.buttonLabel));
+    await click(button(automationsEn.new));
+    const triggers = () =>
+      [...(selectLabelled(automationsEn.trigger)?.options ?? [])].map((o) => o.value);
+    // A server before 0.17.0 makes no repeating rows.
+    expect(triggers()).not.toContain('recurring');
+    await click(button(automationsEn.cancel));
+    fake.data = { ...fake.data, stepKinds: 7 };
+    await act(async () => root!.unmount());
+    root = null;
+    container.innerHTML = '';
+    await mount(h(DatabaseView, { host: s.host, databaseId: s.tasksId, embedded: false }));
+    await click(button(automationsEn.buttonLabel));
+    await click(button(automationsEn.new));
+    expect(triggers()).toContain('recurring');
+    await choose(selectLabelled(automationsEn.trigger)!, 'recurring');
+    // The template, the repetition's fields (the library's, in the automations' words), its days.
+    expect(selectLabelled(automationsEn.series.template)!.value).toBe(made.id);
+    expect(document.body.textContent).toContain(automationsEn.series.legend);
+    expect(document.body.textContent).not.toContain(automationsEn.conditions);
+    await choose(selectLabelled(automationsEn.series.mode)!, 'done');
+    expect(selectLabelled(automationsEn.series.done)!.value).toBe(P.status);
+    // Its row is made by the trigger: the step a new rule starts with is not needed.
+    await click(button(automationsEn.stepRemove.replace('{{number}}', '1')));
+    await click(button(automationsEn.save));
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(fake.saved).toHaveLength(1);
+    expect(fake.saved[0]).toMatchObject({
+      conditions: null,
+      steps: [],
+      trigger: {
+        kind: 'recurring',
+        templateId: made.id,
+        rule: { frequency: 'weekly' },
+        mode: 'done',
+        doneProperty: P.status,
+        dateProperty: P.due,
+      },
+    });
+
+    // "Repeat a template" opens on a new rule for it, named for it, with no steps.
+    await act(async () =>
+      openAutomations(
+        s.tasksId,
+        newTrigger('recurring', s.host.database(s.tasksId)!, {
+          templates: s.host.rowTemplates(s.tasksId),
+          today: '2026-12-01',
+        }),
+        { name: 'Repeat Water the plants', steps: [] },
+      ),
+    );
+    for (let i = 0; i < 5; i++) await flush();
+    expect((document.querySelector('input[maxlength="200"]') as HTMLInputElement).value).toBe(
+      'Repeat Water the plants',
+    );
+    await click(button(automationsEn.save));
+    expect(fake.saved[1]).toMatchObject({
+      name: 'Repeat Water the plants',
+      steps: [],
+      trigger: { kind: 'recurring', start: '2026-12-01', mode: 'date', at: '09:00' },
+    });
+  });
+
+  it('lists "Repeat a template" in the New menu only when given', async () => {
+    const s = seed(1);
+    const made = rowCreate(s.host, s.tasksId, { title: 'Water the plants', isTemplate: true })!;
+    await s.host.apply([made.op]);
+    const t = ((key: string) => key) as never;
+    const base = {
+      host: s.host,
+      databaseId: s.tasksId,
+      view: null,
+      templates: s.host.rowTemplates(s.tasksId),
+      t,
+      editable: true,
+    };
+    expect(rowTemplateItems(base).map((i) => i.key)).not.toContain('repeat');
+    const opened: string[] = [];
+    const items = rowTemplateItems({
+      ...base,
+      repeat: { text: 'Repeat a template', open: (template) => opened.push(template.id) },
+    });
+    const repeat = items.find((i) => i.key === 'repeat')!;
+    expect(repeat.text).toBe('Repeat a template');
+    (repeat.children![0] as unknown as { command(): void }).command();
+    expect(opened).toEqual([made.id]);
+  });
+
+  it("keeps a reminder only of a date reached, and sets a person's own reminders on a row", async () => {
+    const s = seed(3);
+    const db = s.host.database(s.tasksId)!;
+    // A rule's notices stop being reminders when its trigger is no date.
+    const notify = {
+      kind: 'notify' as const,
+      people: [],
+      groups: [],
+      personProperties: [P.owner],
+      message: '',
+      reminder: true,
+      when: null,
+    };
+    const { reminder, ...plain } = notify;
+    void reminder;
+    const group = { kind: 'group' as const, op: 'and' as const, children: [] };
+    expect(
+      withoutReminders([
+        notify,
+        {
+          kind: 'branch',
+          branches: [{ when: group, steps: [notify] }],
+          otherwise: [notify],
+          when: null,
+        },
+      ]),
+    ).toEqual([
+      plain,
+      {
+        kind: 'branch',
+        branches: [{ when: group, steps: [plain] }],
+        otherwise: [plain],
+        when: null,
+      },
+    ]);
+    // A repeating rule starts with no steps.
+    expect(newRule('r2', db.workspaceId, db, newTrigger('recurring', db)).steps).toEqual([]);
+
+    // A row's "Remind me": a choice for each date property, sent to the server once chosen.
+    const fake = new FakeAutomations();
+    s.host.automations = fake;
+    const row = [...s.host.rowRecords.values()].find(
+      (r) => r.databaseId === s.tasksId && !r.isTemplate,
+    )!;
+    await mount(h(RowProperties, { host: s.host, rowId: row.id }));
+    // A server before 0.17.0 keeps no reminders.
+    expect(document.body.textContent).not.toContain(automationsEn.remind.title);
+    await act(async () => root!.unmount());
+    root = null;
+    container.innerHTML = '';
+    fake.workflows = true;
+    await mount(h(RowProperties, { host: s.host, rowId: row.id }));
+    const details = [...document.querySelectorAll('details')].find((d) =>
+      d.textContent?.startsWith(automationsEn.remind.title),
+    )!;
+    expect(details).toBeTruthy();
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new Event('toggle'));
+    });
+    for (let i = 0; i < 5; i++) await flush();
+    const due = selectLabelled(automationsEn.remind.of.replace('{{property}}', 'Due'))!;
+    expect(due.value).toBe('');
+    await choose(due, '1440');
+    for (let i = 0; i < 3; i++) await flush();
+    expect(fake.reminderCalls).toEqual([`set:${P.due}:1440`]);
+    expect(due.value).toBe('1440');
+    await choose(due, '');
+    for (let i = 0; i < 3; i++) await flush();
+    expect(fake.reminderCalls).toEqual([`set:${P.due}:1440`, `remove:${P.due}`]);
+  });
+
+  it('sums up a repeating row in a sentence', () => {
+    const s = seed(1);
+    const words = createDatabaseI18n('en');
+    words.addResourceBundle(
+      'en',
+      'translation',
+      { database: { automations: automationsEn } },
+      true,
+      false,
+    );
+    const loose = words.t as unknown as (key: string, options?: Record<string, unknown>) => string;
+    const at = ((key: string, options?: Record<string, unknown>) =>
+      loose(`database.automations.${key}`, options)) as never;
+    const trigger = {
+      ...newTrigger('recurring', s.host.database(s.tasksId)!, { today: '2026-12-01' }),
+      templateId: 'tpl',
+      rule: { frequency: 'weekly' as const, interval: 2, weekDays: ['monday' as const] },
+    } as Extract<AutomationRecord['trigger'], { kind: 'recurring' }>;
+    expect(seriesText(trigger, at, 'en', () => 'Water the plants')).toBe(
+      'A row from “Water the plants”: Every 2 weeks on Monday',
+    );
+    expect(seriesText({ ...trigger, mode: 'done' }, at, 'en', () => undefined)).toBe(
+      'A row from “a deleted template” once the last is done: Every 2 weeks on Monday',
+    );
   });
 });

@@ -6,6 +6,7 @@ export type {
   AutomationStep,
   AutomationTrigger,
   BranchPath,
+  RecurrenceRule,
   RelationRole,
   StepKind,
   StepValue,

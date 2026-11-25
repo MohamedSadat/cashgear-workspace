@@ -10,7 +10,9 @@ import type { AutomationRecord, AutomationTrigger } from '../core';
 import { useDatabase, useDatabaseContext, useViews } from '../context';
 import type { DatabaseAutomations } from '../host';
 import { newRule, statusText, triggerText } from './model';
+import type { RuleStart } from './open';
 import { RuleEditor, stepNameOf } from './RuleEditor';
+import { seriesText } from './Series';
 import { RunLog } from './RunLog';
 import { useAutoT } from './words';
 import './automations.css';
@@ -20,6 +22,8 @@ export interface AutomationsDialogProps {
   onClose(): void;
   /** Open straight on a new rule with this trigger (a button property's "Add an automation"). */
   start?: AutomationTrigger;
+  /** Phase 17: its name and steps to start from ("Repeat a template", a date's "Remind people"). */
+  extra?: RuleStart;
 }
 
 type Screen =
@@ -32,7 +36,7 @@ function failureText(error: unknown): string {
   return error instanceof Error ? error.message : 'server.error';
 }
 
-export function AutomationsDialog({ databaseId, onClose, start }: AutomationsDialogProps) {
+export function AutomationsDialog({ databaseId, onClose, start, extra }: AutomationsDialogProps) {
   const { t: at, locale } = useAutoT();
   const { host } = useDatabaseContext();
   const automations = host.automations;
@@ -74,13 +78,19 @@ export function AutomationsDialog({ databaseId, onClose, start }: AutomationsDia
 
   // A button property's "Add an automation" opens on a new rule for it.
   useEffect(() => {
-    if (start && database && data?.canManage)
+    if (start && database && data?.canManage) {
+      const rule = newRule(uuidv7(), database.workspaceId, database, start);
       setScreen({
         kind: 'edit',
-        rule: newRule(uuidv7(), database.workspaceId, database, start),
+        rule: {
+          ...rule,
+          name: extra?.name ?? rule.name,
+          steps: extra?.steps ?? rule.steps,
+        },
         isNew: true,
       });
-  }, [start, database, data?.canManage]);
+    }
+  }, [start, extra, database, data?.canManage]);
 
   const stepName = stepNameOf(at);
   const loadRuns = useCallback(
@@ -212,6 +222,13 @@ export function AutomationsDialog({ databaseId, onClose, start }: AutomationsDia
                           locale,
                           undefined,
                           (id) => views.find((v) => v.id === id)?.name,
+                          (series) =>
+                            seriesText(
+                              series,
+                              at,
+                              locale,
+                              (id) => host.rowTemplates(databaseId).find((r) => r.id === id)?.title,
+                            ),
                         )}
                         {author ? ` · ${at('author', { name: author.name })}` : ''}
                       </span>

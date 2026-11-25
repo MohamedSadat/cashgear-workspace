@@ -83,7 +83,8 @@ export async function createTemplate(
 
 /**
  * The New button's template menu: a row from each template; then making a template, and opening
- * or deleting one (submenus).
+ * or deleting one (submenus). Phase 17: and repeating one (`repeat`, given when the server makes
+ * repeating rows), which opens the automations on a new repeating row from it.
  */
 export function rowTemplateItems(options: {
   host: DatabaseHost;
@@ -92,8 +93,9 @@ export function rowTemplateItems(options: {
   templates: readonly RowRecord[];
   t: DbT;
   editable: boolean;
+  repeat?: { text: string; open(template: RowRecord): void };
 }): CgContextMenuItem<null>[] {
-  const { host, databaseId, view, templates, t, editable } = options;
+  const { host, databaseId, view, templates, t, editable, repeat } = options;
   const name = (row: RowRecord) => row.title || t('rowTemplates.untitled');
   const items: CgContextMenuItem<null>[] = templates.map((template) => ({
     key: `new:${template.id}`,
@@ -120,6 +122,17 @@ export function rowTemplateItems(options: {
         command: () => host.openRow(template.id),
       })),
     });
+    if (repeat)
+      items.push({
+        key: 'repeat',
+        text: repeat.text,
+        disabled: !editable,
+        children: templates.map((template) => ({
+          key: `repeat:${template.id}`,
+          text: name(template),
+          command: () => repeat.open(template),
+        })),
+      });
     items.push({
       key: 'delete',
       text: t('rowTemplates.delete'),

@@ -906,6 +906,8 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
 
         // Phase 14: the index of rows' files, for each row whose files cells changed (or that is new).
         var files = new List<(WorkspaceDatabase Database, RowFiles.Entry Entry, bool Fresh)>();
+        // Phase 17: the rows whose people's reminders are worked out again (a date or the trash changed).
+        var reminded = new List<Guid>();
         foreach (var state in rows.Values.Where(r => r.Dirty))
         {
             var database = await DatabaseAsync(state.Record.DatabaseId, ct);
@@ -913,6 +915,7 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             {
                 var schema = SchemaOf(database);
                 var fresh = db.Entry(state.Record).State == EntityState.Added;
+                if (database.Reminders > 0 && !fresh && DatesMoved(schema, state)) reminded.Add(state.Page.Id);
                 // Phase 15: the change, for the rules a change of a row starts, only while the
                 // database has one switched on (DATA_MODEL.md, AutomationEvents).
                 if (database.EventRules > 0) AddEvent(database, state, fresh);
@@ -941,6 +944,18 @@ public sealed class DatabaseOps(CgwDb db, Access access, ChangeLog changes, Asse
             var database = group.First().Database;
             await RowFiles.ReplaceAsync(db, database.WorkspaceId, database.PageId, group.Select(f => f.Entry).ToList(), ct, fresh: group.Key.Fresh);
         }
+        if (reminded.Count > 0) await Automations.ReminderService.PlaceAsync(db, reminded, Now, ct);
+    }
+
+    /// <summary>Phase 17: whether a row's write moved a date its reminders read, or took it to the trash or back.</summary>
+    private bool DatesMoved(Schema schema, RowState state)
+    {
+        var trash = db.Entry(state.Page).Property(p => p.TrashedAt);
+        if (trash.IsModified && trash.OriginalValue != trash.CurrentValue) return true;
+        var old = ValueJson.ReadMap(state.Record.Values);
+        foreach (var def in schema.Properties)
+            if (def.Type == PropertyTypes.Date && !ValueJson.Same(old.GetValueOrDefault(def.Id), state.Values.GetValueOrDefault(def.Id))) return true;
+        return false;
     }
 
     /// <summary>

@@ -1112,6 +1112,18 @@ describe('the inbox', () => {
     // A kind it does not know and an approval with nothing to answer are no items.
     expect(readNotification({ ...note('x'), kind: 'reminderOfSomethingNew' })).toBeNull();
     expect(readNotification({ ...note('y'), kind: 'approval', approval: null })).toBeNull();
+    // Phase 17: a reminder, of a date property by its name now and the date reminded of.
+    expect(
+      readNotification({
+        ...note('r'),
+        kind: 'reminder',
+        reminder: { propertyId: 'pDate001', propertyName: 'Due', start: '2026-12-01' },
+      }),
+    ).toMatchObject({
+      kind: 'reminder',
+      reminder: { propertyId: 'pDate001', propertyName: 'Due', start: '2026-12-01' },
+    });
+    expect(readNotification({ ...note('s'), kind: 'reminder' })?.reminder).toBeNull();
   });
 
   it('reads its first page and the unread count, and more on asking', async () => {

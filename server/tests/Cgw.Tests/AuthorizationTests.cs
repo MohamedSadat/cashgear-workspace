@@ -224,6 +224,8 @@ public sealed partial class AuthorizationTests(ServerFixture server)
         var values = new Dictionary<string, string>
         {
             ["approvalId"] = approval.ToString(),
+            // Phase 17: a reminder of a date property of a row.
+            ["propertyId"] = "pDate001",
             ["workspaceId"] = ws.Id.ToString(),
             ["pageId"] = page.ToString(),
             ["assetId"] = asset.ToString(),

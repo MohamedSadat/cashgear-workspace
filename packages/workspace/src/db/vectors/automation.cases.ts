@@ -748,7 +748,202 @@ const check: CheckCase[] = [
     expected: refused('size'),
   },
   ...workflowCases(),
+  ...recurringCases(),
 ];
+
+/** Phase 17: repeating rows, and a notice that is a reminder. */
+function recurringCases(): CheckCase[] {
+  const series = (fields: Record<string, unknown>) => ({
+    kind: 'recurring',
+    templateId: TEMPLATE,
+    start: '2026-12-01',
+    rule: { frequency: 'weekly', weekDays: ['tuesday', 'monday'] },
+    mode: 'date',
+    ...fields,
+  });
+  const keptSeries = (fields: Record<string, unknown>) => ({
+    kind: 'recurring' as const,
+    templateId: TEMPLATE,
+    start: '2026-12-01',
+    rule: { frequency: 'weekly' as const, weekDays: ['monday', 'tuesday'] as const },
+    mode: 'date' as const,
+    at: null,
+    dateProperty: null,
+    doneProperty: null,
+    ...fields,
+  });
+  const repeat = (fields: Record<string, unknown>, steps: unknown[] = []) =>
+    given({ trigger: series(fields), steps });
+  const owner = { kind: 'notify', personProperties: ['pPers001'], message: '' };
+  const ownerKept = {
+    kind: 'notify' as const,
+    people: [],
+    groups: [],
+    personProperties: ['pPers001'],
+    message: '',
+    when: null,
+  };
+  return [
+    {
+      name: 'a row every Monday and Tuesday at 08:30, its day in Due, no steps',
+      rule: repeat({ at: '08:30', dateProperty: 'pDate001' }),
+      expected: kept({
+        trigger: keptSeries({ at: '08:30', dateProperty: 'pDate001' }) as never,
+        steps: [],
+      }),
+    },
+    {
+      name: 'the next row once the last is complete, its owner told',
+      rule: repeat(
+        {
+          rule: { frequency: 'monthly', interval: 1, weekOfMonth: 'last', weekDays: ['friday'] },
+          mode: 'done',
+          doneProperty: 'pStat001',
+        },
+        [owner],
+      ),
+      expected: kept({
+        trigger: keptSeries({
+          rule: { frequency: 'monthly', interval: 1, weekOfMonth: 'last', weekDays: ['friday'] },
+          mode: 'done',
+          doneProperty: 'pStat001',
+        }) as never,
+        steps: [ownerKept],
+      }),
+    },
+    {
+      name: 'a series by its days drops what done is',
+      rule: repeat({ doneProperty: 'pTick001' }),
+      expected: kept({ trigger: keptSeries({}) as never, steps: [] }),
+    },
+    {
+      name: 'a checkbox ticked is done',
+      rule: repeat({ mode: 'done', doneProperty: 'pTick001', rule: { frequency: 'daily' } }),
+      expected: kept({
+        trigger: keptSeries({
+          mode: 'done',
+          doneProperty: 'pTick001',
+          rule: { frequency: 'daily' },
+        }) as never,
+        steps: [],
+      }),
+    },
+    {
+      name: 'a series by the last done with nothing that says done',
+      rule: repeat({ mode: 'done' }),
+      expected: refused('trigger.property'),
+    },
+    {
+      name: 'done as a text',
+      rule: repeat({ mode: 'done', doneProperty: 'pText001' }),
+      expected: refused('trigger.property'),
+    },
+    {
+      name: 'its day into a created time',
+      rule: repeat({ dateProperty: 'pMade001' }),
+      expected: refused('trigger.property'),
+    },
+    {
+      name: 'its day into a property deleted',
+      rule: repeat({ dateProperty: 'pGone001' }),
+      expected: refused('trigger.property'),
+    },
+    {
+      name: 'no template',
+      rule: repeat({ templateId: 'mine' }),
+      expected: refused('trigger.template'),
+    },
+    {
+      name: 'a start that is no day',
+      rule: repeat({ start: '2026-02-30' }),
+      expected: refused('trigger'),
+    },
+    {
+      name: 'neither by its days nor by the last done',
+      rule: repeat({ mode: 'often' }),
+      expected: refused('trigger'),
+    },
+    {
+      name: 'a time of day that is none',
+      rule: repeat({ at: '24:00' }),
+      expected: refused('trigger'),
+    },
+    {
+      name: 'every hour',
+      rule: repeat({ rule: { frequency: 'hourly' } }),
+      expected: refused('trigger.recurrence'),
+    },
+    {
+      name: 'a series that ends before it starts',
+      rule: repeat({
+        rule: { frequency: 'daily', range: 'endByDate', endDate: '2026-11-30' },
+      }),
+      expected: refused('trigger.recurrence'),
+    },
+    {
+      name: 'every seven days, only on days other than its own',
+      rule: repeat({ rule: { frequency: 'daily', interval: 7, weekDays: ['monday'] } }),
+      expected: refused('trigger.recurrence'),
+    },
+    {
+      name: 'conditions on a row not yet made',
+      rule: given({
+        trigger: series({}),
+        conditions: { kind: 'group', op: 'and', children: [] },
+        steps: [],
+      }),
+      expected: refused('conditions'),
+    },
+    {
+      name: 'more than 20 steps',
+      rule: repeat(
+        {},
+        Array.from({ length: 21 }, () => owner),
+      ),
+      expected: refused('steps'),
+    },
+    {
+      name: 'a row added with no steps is still refused',
+      rule: given({ trigger: { kind: 'rowAdded' }, steps: [] }),
+      expected: refused('steps'),
+    },
+    {
+      name: 'a reminder of a day before the due date, to its owner',
+      rule: given({
+        trigger: { kind: 'date', propertyId: 'pDate001', offsetMinutes: -1440 },
+        steps: [{ ...owner, reminder: true }],
+      }),
+      expected: kept({
+        trigger: { kind: 'date', propertyId: 'pDate001', offsetMinutes: -1440, at: null },
+        steps: [{ ...ownerKept, reminder: true }],
+      }),
+    },
+    {
+      name: 'a notice that is no reminder keeps no flag',
+      rule: given({
+        trigger: { kind: 'date', propertyId: 'pDate001', offsetMinutes: 0 },
+        steps: [{ ...owner, reminder: false }],
+      }),
+      expected: kept({
+        trigger: { kind: 'date', propertyId: 'pDate001', offsetMinutes: 0, at: null },
+        steps: [ownerKept],
+      }),
+    },
+    {
+      name: 'a reminder of no date',
+      rule: given({ trigger: { kind: 'rowAdded' }, steps: [{ ...owner, reminder: true }] }),
+      expected: refused('step.reminder'),
+    },
+    {
+      name: 'a reminder that is a word',
+      rule: given({
+        trigger: { kind: 'date', propertyId: 'pDate001', offsetMinutes: 0 },
+        steps: [{ ...owner, reminder: 'yes' }],
+      }),
+      expected: refused('step.reminder'),
+    },
+  ];
+}
 
 /** Phase 17: waits, branches and approvals. */
 function workflowCases(): CheckCase[] {
@@ -1294,6 +1489,21 @@ const starts: StartCase[] = [
     name: 'a change of a row a form added is no answer',
     trigger: { kind: 'formAnswered', viewId: FORM },
     change: { ...changed(['pStat001'], {}, { pStat001: 'sDone001' }), formId: FORM },
+    expected: false,
+  },
+  {
+    name: 'a row done starts no repeating rule: its series does',
+    trigger: {
+      kind: 'recurring',
+      templateId: TEMPLATE,
+      start: '2026-12-01',
+      rule: { frequency: 'daily' },
+      mode: 'done',
+      at: null,
+      dateProperty: null,
+      doneProperty: 'pStat001',
+    },
+    change: changed(['pStat001'], { pStat001: 'sTodo001' }, { pStat001: 'sDone001' }),
     expected: false,
   },
 ];

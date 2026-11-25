@@ -87,6 +87,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
     public DbSet<AutomationEvent> AutomationEvents => Set<AutomationEvent>();
     public DbSet<AutomationRun> AutomationRuns => Set<AutomationRun>();
     public DbSet<AutomationApproval> AutomationApprovals => Set<AutomationApproval>();
+    /// <summary>Phase 17: people's own reminders of rows' dates.</summary>
+    public DbSet<RowReminder> RowReminders => Set<RowReminder>();
     public DbSet<FormLink> FormLinks => Set<FormLink>();
     public DbSet<Webhook> Webhooks => Set<Webhook>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
@@ -485,6 +487,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.BlockId).HasMaxLength(12).IsFixedLength().IsUnicode(false);
             e.Property(x => x.Excerpt).HasMaxLength(200);
             e.Property(x => x.DedupeKey).HasMaxLength(200).IsUnicode(false);
+            e.Property(x => x.PropertyId).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.DateStart).HasMaxLength(40).IsUnicode(false);
             // Phase 8: the mail job's queue, unread entries not yet given to a mail.
             e.HasIndex(x => x.CreatedAt).HasDatabaseName("IX_Notifications_MailDue")
                 .HasFilter("[ReadAt] IS NULL AND [MailId] IS NULL AND [EmailedAt] IS NULL")
@@ -679,6 +683,19 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Name).HasMaxLength(200);
             e.Property(x => x.TriggerKind).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.SeriesNext).HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.SeriesDay).HasMaxLength(10).IsUnicode(false);
+        });
+        b.Entity<RowReminder>(e =>
+        {
+            e.HasKey(x => x.Id);
+            // One a person, row and date property.
+            e.HasIndex(x => new { x.UserId, x.RowId, x.PropertyId }).IsUnique();
+            // A row's, which its date's changes work out again.
+            e.HasIndex(x => x.RowId);
+            // The worker's: those whose moment has come and is not yet sent.
+            e.HasIndex(x => x.DueAt).HasFilter("[DueAt] IS NOT NULL").IncludeProperties(x => new { x.SentFor }).HasDatabaseName("IX_RowReminders_Due");
+            e.Property(x => x.PropertyId).HasMaxLength(64).IsUnicode(false);
         });
         b.Entity<AutomationEvent>(e =>
         {
@@ -808,6 +825,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
         Filter<AutomationEvent>(b);
         Filter<AutomationRun>(b);
         Filter<AutomationApproval>(b);
+        Filter<RowReminder>(b);
         Filter<FormLink>(b);
         Filter<Webhook>(b);
         Filter<WebhookDelivery>(b);

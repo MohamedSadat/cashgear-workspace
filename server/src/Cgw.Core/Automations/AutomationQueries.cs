@@ -277,6 +277,10 @@ public sealed class AutomationQueries(CgwDb db, Access access, ChangeLog changes
                 foreach (var rule in await db.Automations.Where(a => a.DeletedAt == null && a.TriggerKind == "schedule").ToListAsync(ct))
                     if (System.Text.Json.Nodes.JsonNode.Parse(rule.Definition)?["trigger"] is System.Text.Json.Nodes.JsonObject trigger)
                         rule.NextAt = AutomationTimes.Next(trigger, tz, now);
+                // Phase 17: a series' days are reached at their time in the new zone.
+                foreach (var rule in await db.Automations.Where(a => a.DeletedAt == null && a.TriggerKind == "recurring").ToListAsync(ct))
+                    if (System.Text.Json.Nodes.JsonNode.Parse(rule.Definition)?["trigger"] is System.Text.Json.Nodes.JsonObject trigger)
+                        await AutomationService.PlaceSeriesAsync(db, rule, trigger, tz, now, ct);
             }
             return true;
         }, ct);
@@ -305,6 +309,12 @@ public sealed class AutomationQueries(CgwDb db, Access access, ChangeLog changes
             {
                 var workspace = await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == member.WorkspaceId, ct);
                 tracked.NextAt = AutomationTimes.Next(trigger, AutomationTimes.Zone(workspace.TimeZone), clock.GetUtcNow());
+            }
+            // Phase 17: a series switched on goes on from its last day; off, it makes nothing.
+            if (tracked.TriggerKind == "recurring" && System.Text.Json.Nodes.JsonNode.Parse(tracked.Definition)?["trigger"] is System.Text.Json.Nodes.JsonObject series)
+            {
+                var workspace = await db.Workspaces.AsNoTracking().FirstAsync(w => w.Id == member.WorkspaceId, ct);
+                await AutomationService.PlaceSeriesAsync(db, tracked, series, AutomationTimes.Zone(workspace.TimeZone), clock.GetUtcNow(), ct);
             }
             var ws = await db.Workspaces.FirstAsync(w => w.Id == member.WorkspaceId, ct);
             await automations.RecountAsync(ws, [tracked.DatabaseId], ct);
