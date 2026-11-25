@@ -9,7 +9,7 @@ import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { desktop, expect, test } from './fixtures';
 import { newAccount, signIn, signedIn, syncStatus, type TestAccount } from './cloud';
-import { expectInRow, fullPage, grid, otherDevice } from './database';
+import { expectInRow, fullPage, grid, openRow, otherDevice, rowValue } from './database';
 import { englishIn } from './erp12';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import {
@@ -302,4 +302,65 @@ test('the automations in Arabic', async ({ page }) => {
   expect(
     (await new AxeBuilder({ page }).include('[role="dialog"]').withTags(WCAG).analyze()).violations,
   ).toEqual([]);
+});
+
+// Found by Phase 17's specs (Axe's nested-interactive, WCAG 4.1.2): on a row's page a button
+// property's value was a control around the button. The button is the line's one control, the
+// next stop after the property's name, pressed once by its key; the row's properties under Axe in
+// English and Arabic. Last, so the Arabic walk above need not name its rule. Scanned before the
+// press: the earlier test's "Approve" rule sets the row's Owner, and a person's value is named
+// apart from its avatar's initials (Axe's label-content-name-mismatch, a defect of its own).
+test("a row's page: a button property's button is its one control, under Axe in both languages", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const rule = await saveRule(api, seeded, {
+    name: 'Approved on its page',
+    trigger: { kind: 'button', propertyId: P.approve },
+    steps: [{ kind: 'set', values: { [P.notes]: 'approved on its page' } }],
+  });
+  await openDatabase(page);
+  await openRow(page, 'Task 2');
+  const props = page.locator('.cgw-row-props');
+  const value = rowValue(page, 'Approve');
+  const approve = value.locator('.cgw-db-button-cell');
+  const line = props.locator('.cgw-row-prop').filter({ has: page.locator('.cgw-db-button-cell') });
+
+  // The row's properties with their runs opened (read when opened), under Axe.
+  const scan = async () => {
+    await expect(approve).toBeEnabled({ timeout: 30_000 });
+    // "Remind me" is drawn as the same disclosure, before the runs.
+    const runLog = props.locator('details.cgw-db-auto-row-runs').last();
+    await runLog.locator('summary').click();
+    await expect(runLog.locator('.cgw-db-auto-log')).toBeVisible();
+    await expect(runLog.locator('[role="status"], [role="alert"]')).toHaveCount(0, {
+      timeout: 30_000,
+    });
+    return (await new AxeBuilder({ page }).include('.cgw-row-props').withTags(WCAG).analyze())
+      .violations;
+  };
+  expect(await value.getAttribute('role')).toBeNull();
+  expect(await value.getAttribute('tabindex')).toBeNull();
+  expect(await scan()).toEqual([]);
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  expect(await scan()).toEqual([]);
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'en'));
+  await page.reload();
+
+  // By the keys: the next stop after the property's name is the button, and Enter presses once.
+  await expect(approve).toBeEnabled({ timeout: 30_000 });
+  await line.locator('.cgw-row-prop-name').focus();
+  await page.keyboard.press('Tab');
+  await expect(approve).toBeFocused();
+  await page.keyboard.press('Enter');
+  // The notice names the rules that run (the earlier test's "Approve" too, when run with it).
+  await expect(page.locator('.cgw-notice')).toContainText('“Approved on its page”');
+  await expect
+    .poll(async () => (await runsOf(api, seeded, rule.id)).length, { timeout: 30_000 })
+    .toBe(1);
+  await page.waitForTimeout(2000);
+  const runs = await runsOf(api, seeded, rule.id);
+  expect(runs.map((r: { rowTitle: string }) => r.rowTitle)).toEqual(['Task 2']);
 });

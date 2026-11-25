@@ -1208,6 +1208,15 @@ textarea.cgw-inline-editor:focus-visible {
   cursor: pointer;
 }
 
+/* Phase 15: a button property's value is its button alone; the line around it is not pressed. */
+.cgw-row-prop-value.cgw-type-button {
+  cursor: default;
+}
+
+.cgw-row-prop-value.cgw-type-button:hover {
+  background: none;
+}
+
 .cgw-row-prop-text {
   /* Lays its value out as the value's own children (it only names it). */
   display: contents;

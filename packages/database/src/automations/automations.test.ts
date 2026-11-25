@@ -351,6 +351,67 @@ describe('automations in the views', () => {
     expect(button('Approve it')!.disabled).toBe(true);
   });
 
+  // Axe's nested-interactive (WCAG 4.1.2), found by Phase 17's specs: on a row's page a button
+  // property's value was a control of its own (`role="button"`, in the tab order) around the button.
+  it("draws a button property's value on a row's page as the button alone", async () => {
+    const s = seed(2);
+    const fake = new FakeAutomations();
+    s.host.automations = fake;
+    const db = s.host.database(s.tasksId)!;
+    s.host.records.set(s.tasksId, {
+      ...db,
+      properties: [
+        ...db.properties,
+        { id: 'btnAppr1', name: 'Approve', type: 'button', button: { label: 'Approve it' } },
+      ],
+    });
+    const row = [...s.host.rowRecords.values()].find(
+      (r) => r.databaseId === s.tasksId && !r.isTemplate,
+    )!;
+    const lineOf = (approve: HTMLButtonElement) => {
+      const line = approve.closest<HTMLElement>('.cgw-row-prop')!;
+      // Nothing between the button and its line is a control, named, or in the tab order.
+      for (let at = approve.parentElement; at && at !== line; at = at.parentElement) {
+        expect(at.getAttribute('role')).toBeNull();
+        expect(at.hasAttribute('tabindex')).toBe(false);
+        expect(at.hasAttribute('aria-labelledby')).toBe(false);
+      }
+      // The line's controls: the property's name (its menu) and the button.
+      expect([...line.querySelectorAll('button, [tabindex], [role="button"]')]).toEqual([
+        line.querySelector('.cgw-row-prop-name'),
+        approve,
+      ]);
+      return line;
+    };
+    await mount(h(RowProperties, { host: s.host, rowId: row.id }));
+    const approve = button('Approve it') as HTMLButtonElement;
+    const line = lineOf(approve);
+    expect(approve.disabled).toBe(false);
+    // A press is the button's: once. A click beside it, in its value, neither presses nor edits.
+    await click(approve);
+    expect(fake.presses).toEqual([{ rowId: row.id, propertyId: 'btnAppr1' }]);
+    await click(line.querySelector('.cgw-row-prop-value')!);
+    expect(fake.presses).toHaveLength(1);
+    expect(line.querySelector('input, textarea, [role="dialog"]')).toBeNull();
+    // Every other value is still the control that edits it.
+    const others = [...container.querySelectorAll('.cgw-row-prop-value')].filter(
+      (v) => !v.classList.contains('cgw-type-button'),
+    );
+    expect(others.length).toBeGreaterThan(3);
+    for (const value of others) {
+      expect(value.getAttribute('role')).toBe('button');
+      expect(value.getAttribute('tabindex')).toBe('0');
+    }
+    // For a reader: the same one control, disabled.
+    await act(async () => root!.unmount());
+    root = null;
+    container.innerHTML = '';
+    await mount(h(RowProperties, { host: s.host, rowId: row.id, editable: false }));
+    const read = button('Approve it') as HTMLButtonElement;
+    lineOf(read);
+    expect(read.disabled).toBe(true);
+  });
+
   it('says what starts a rule in a sentence', () => {
     const s = seed(1);
     const db = s.host.database(s.tasksId)!;

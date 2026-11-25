@@ -1924,6 +1924,8 @@ Notes
   Production runs 0.12.0.
 - **Found and left:** on a row's page a button property's value is a `role="button"` holding the
   button (Axe's `nested-interactive`), from Phase 15; the specs scope Axe to their own panel there.
+  Fixed after 0.17.0 (2026-11-25): the value is the button alone, `automations.spec.ts` scans a
+  row's properties in English and Arabic, and `series.spec.ts` scans them again.
 
 Exit criteria
 

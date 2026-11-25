@@ -986,8 +986,11 @@ Added as they are found, grouped by phase.
 - Values written into `DatabaseRows` by SQL (a bench's seed) must raise the rows' `Seq` past the
   database's `RowsVersion` (and it with them), or the query cache, which reads rows written since its
   version, never sees them.
-- A row's page under Axe fails `nested-interactive` for a button property's value (Phase 15: the value
-  is a `role="button"` holding the button); scope Axe to a panel of one's own on such a page.
+- On a row's page every property's value is a `role="button"` that edits it, but a button property's
+  is its button alone (until 2026-11-25 it held the button: Axe's `nested-interactive`). A person's
+  value there fails Axe's `label-content-name-mismatch` (its avatar's initials), and by Axe's rule a
+  checkbox, file, relation or link value would fail `nested-interactive` (a control inside, even at
+  `tabindex="-1"`): a spec that scans a row's page keeps those values empty.
 - A template's name is in the New menu's list and in its "Repeat a template" submenu: a spec takes the
   submenu's item with `.last()`.
 - Phase 17's work before its last screens took the initial JavaScript to 351.1 kB (the M17.3 tree and

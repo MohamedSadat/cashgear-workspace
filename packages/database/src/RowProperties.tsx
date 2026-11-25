@@ -1,7 +1,7 @@
 // A row's properties as the shell shows them above the row page's body: each property's name
 // (which opens its menu) and its value, drawn and edited by the same cells as the table (Enter or
-// a click edits, Escape cancels, a commit is one write). The title is the page's own and is left
-// to the page.
+// a click edits, Escape cancels, a commit is one write). A button property's value is its button
+// alone. The title is the page's own and is left to the page.
 import type { Id, RowRecord } from '@cgw/workspace';
 import { lazy, Suspense, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { renderCell } from './cells/CellDisplay';
@@ -231,41 +231,48 @@ function PropertyLine({
         </button>
       </dt>
       <dd>
-        <div
-          ref={setCell}
-          className={`cgw-row-prop-value cgw-type-${def.type}`}
-          tabIndex={0}
-          role="button"
-          aria-labelledby={`${nameId} ${valueId}`}
-          aria-description={canEditValue ? t('cell.edit', { name: def.name }) : undefined}
-          aria-disabled={!canEditValue || undefined}
-          onKeyDown={onKeyDown}
-          onClick={(event) => {
-            // A click in the picker's flyout bubbles here through React's portal: the option
-            // chosen there closes the picker, and must not open it again.
-            if (!event.currentTarget.contains(event.target as Node)) return;
-            if ((event.target as HTMLElement).closest('a, button, input, textarea')) return;
-            start();
-          }}
-        >
-          {editing && kind === 'inline' ? (
-            <InlineEditor
-              def={def}
-              row={row}
-              env={env}
-              seed={editing.seed}
-              onDone={done}
-              label={def.name}
-            />
-          ) : (
-            <span id={valueId} className="cgw-row-prop-text">
-              {content ?? <span className="cgw-placeholder">{t('cell.empty')}</span>}
-            </span>
-          )}
-          {editing && kind === 'picker' && cell ? (
-            <PickerEditor def={def} row={row} env={env} anchor={cell} onDone={done} />
-          ) : null}
-        </div>
+        {def.type === 'button' ? (
+          // Phase 15's button is the line's one control (pressed once a press, disabled for a
+          // reader): a value that edits around it would nest it in another control (Axe's
+          // nested-interactive, WCAG 4.1.2), and it has no value to edit.
+          <div className={`cgw-row-prop-value cgw-type-${def.type}`}>{content}</div>
+        ) : (
+          <div
+            ref={setCell}
+            className={`cgw-row-prop-value cgw-type-${def.type}`}
+            tabIndex={0}
+            role="button"
+            aria-labelledby={`${nameId} ${valueId}`}
+            aria-description={canEditValue ? t('cell.edit', { name: def.name }) : undefined}
+            aria-disabled={!canEditValue || undefined}
+            onKeyDown={onKeyDown}
+            onClick={(event) => {
+              // A click in the picker's flyout bubbles here through React's portal: the option
+              // chosen there closes the picker, and must not open it again.
+              if (!event.currentTarget.contains(event.target as Node)) return;
+              if ((event.target as HTMLElement).closest('a, button, input, textarea')) return;
+              start();
+            }}
+          >
+            {editing && kind === 'inline' ? (
+              <InlineEditor
+                def={def}
+                row={row}
+                env={env}
+                seed={editing.seed}
+                onDone={done}
+                label={def.name}
+              />
+            ) : (
+              <span id={valueId} className="cgw-row-prop-text">
+                {content ?? <span className="cgw-placeholder">{t('cell.empty')}</span>}
+              </span>
+            )}
+            {editing && kind === 'picker' && cell ? (
+              <PickerEditor def={def} row={row} env={env} anchor={cell} onDone={done} />
+            ) : null}
+          </div>
+        )}
       </dd>
     </div>
   );

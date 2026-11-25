@@ -171,9 +171,9 @@ test("a person's own reminder of a row's date reaches their inbox at its time", 
       { timeout: 15_000 },
     )
     .toBe(1);
-  // The panel itself (a button property's value on a row's page nests a button: Phase 15's, apart).
+  // The row's properties with the panel among them (its Approve button among the values).
   expect(
-    (await new AxeBuilder({ page }).include('.cgw-db-remind').withTags(WCAG).analyze()).violations,
+    (await new AxeBuilder({ page }).include('.cgw-row-props').withTags(WCAG).analyze()).violations,
   ).toEqual([]);
 
   // Its time comes: in the inbox within a minute.
