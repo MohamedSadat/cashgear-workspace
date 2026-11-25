@@ -143,6 +143,38 @@ test('sub-items switched on nest under their parents, read as a tree grid', asyn
   await expect(line('Task 1')).toHaveCount(0);
   await line('Task 0').getByRole('button', { name: 'Show the sub-items of Task 0' }).click();
   await expect(line('Task 1')).toBeVisible();
+
+  // From the parent's side: Task 0's Sub-items without Task 2, by another device, and Task 2 is a
+  // top line again.
+  const subsOf = async (): Promise<string> => {
+    const tree = await api.get(`/api/v1/workspaces/${seeded.workspaceId}/tree`);
+    return tree.databases
+      .find((d: { id: string }) => d.id === seeded.databaseId)
+      ?.properties.find((p: { name: string }) => p.name === 'Sub-items')?.id;
+  };
+  await push(api, seeded.workspaceId, [
+    opOf(seeded.workspaceId, 'row.update', rows.get('Task 0').id, {
+      values: { [await subsOf()]: [rows.get('Task 1').id] },
+    }),
+  ]);
+  await expect(line('Task 2')).toHaveAttribute('aria-level', '1', { timeout: 30_000 });
+  await expect(line('Task 1')).toHaveAttribute('aria-level', '2');
+
+  // Right to left: the same tree, a sub-item's indent on its title's right.
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+  await page.reload();
+  await expect(line('Task 1')).toHaveAttribute('aria-level', '2', { timeout: 30_000 });
+  await expect(
+    line('Task 0').getByRole('button', { name: 'إخفاء المهام الفرعية لـTask 0' }),
+  ).toBeVisible();
+  const indent = (await line('Task 1').locator('.cgw-db-sub-indent').boundingBox())!;
+  const text = (await line('Task 1').locator('.cgw-title-text').boundingBox())!;
+  expect(indent.x).toBeGreaterThan(text.x);
+  expect(
+    (await new AxeBuilder({ page }).include('.cgw-database-page').withTags(WCAG).analyze())
+      .violations,
+  ).toEqual([]);
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'en'));
 });
 
 test('dependencies drawn on a timeline, and a blocker moved takes the rows it blocks', async ({
@@ -241,4 +273,17 @@ test('dependencies drawn on a timeline, and a blocker moved takes the rows it bl
     ],
   });
   expect(refused.results[0].error.code).toBe('dependency.loop');
+
+  // Right to left: the arrow drawn and each bar's description in Arabic.
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+  await page.reload();
+  await expect(bar('Task 1')).toBeVisible({ timeout: 60_000 });
+  await expect(bar('Task 1')).toHaveAccessibleDescription(/معاق بواسطة Task 0/);
+  await expect(bar('Task 0')).toHaveAccessibleDescription(/يعيق Task 1/);
+  await expect(
+    timeline.locator(
+      `[data-cg-timeline-link-from="${rows.get('Task 0').id}"][data-cg-timeline-link-to="${rows.get('Task 1').id}"]`,
+    ),
+  ).toBeAttached();
+  await page.evaluate(() => localStorage.setItem('cgw-language', 'en'));
 });
