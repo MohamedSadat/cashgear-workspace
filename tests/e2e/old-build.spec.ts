@@ -67,6 +67,9 @@
 //
 // Phase 17 (v0.16.0 on :4266): rules that wait and ask, a repeating row, a unique id and relations
 // with a role; a property renamed there, the server keeps every one of them.
+//
+// Phase 18 (v0.17.0 on :4265): a workspace on the server's own completion model and on a paid plan;
+// its AI panel reads an answer to the end, and its Settings show the plan's allowance.
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -74,6 +77,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, desktop } from './fixtures';
 import { editor, newPage, waitSaved, watchErrors } from './helpers';
 import { newAccount, signIn, signedIn, syncStatus } from './cloud';
+import { pageActions } from './collab';
 import { apiSession } from '../../scripts/cloud-account.mjs';
 import { oldBuild, originOf, serveOldBuild } from '../../scripts/old-build.mjs';
 import { writePluginBundles } from '../fixtures/plugins/make.mjs';
@@ -1692,5 +1696,86 @@ test('the v0.16.0 build edits a database with 0.17.0 rules, a unique id and sub-
     list.automations.map((a) => a.rule);
   const rulesAfter = await api.get(`/api/v1/databases/${seeded.databaseId}/automations`);
   expect(rulesOf(rulesAfter)).toEqual(rulesOf(rulesBefore));
+  await api.dispose();
+});
+
+// Phase 18 (v0.17.0 on :4265, no `queued` line asked, no billing): a workspace on the server's own
+// completion model and on a paid plan bought through Paddle (the mock). The v0.17.0 build's AI panel
+// asks for a summary and reads its answer to the end (the server sends it no line it does not
+// know: `queued` only to a client that asks), and on Cash Gear's subscription its Settings show the
+// paid plan's allowance.
+test('the v0.17.0 build uses AI on the server’s own model and shows a paid plan’s allowance', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.17.0');
+  const PADDLE = 'http://127.0.0.1:4291';
+  const account = await newAccount('AI and v0.17.0');
+  const api = await apiSession(account);
+  const workspace = (await api.post('/api/v1/workspaces', {
+    id: uuidv7(),
+    name: 'Local AI v0.17.0',
+    icon: null,
+  })) as { id: string };
+  const { url } = (await api.post(`/api/v1/workspaces/${workspace.id}/billing/checkout`, {
+    planId: 'team',
+    language: 'en',
+  })) as { url: string };
+  await fetch(`${PADDLE}/__mock/pay`, {
+    method: 'POST',
+    body: JSON.stringify({ transactionId: new URL(url).searchParams.get('_ptxn') }),
+  });
+  await expect
+    .poll(async () => (await api.get(`/api/v1/workspaces/${workspace.id}/billing`)).planId, {
+      timeout: 60000,
+    })
+    .toBe('team');
+  await api.put(`/api/v1/workspaces/${workspace.id}/ai-settings`, {
+    enabled: true,
+    model: 'qwen3-4b-instruct-2507',
+  });
+
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const asked: Record<string, unknown>[] = [];
+  old.on('request', (request) => {
+    if (request.method() === 'POST' && /\/ai\/complete$/.test(request.url()))
+      asked.push(request.postDataJSON());
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await newPage(old, 'Old notes');
+  await editor(old).click();
+  await old.keyboard.type('The racking arrived on time; the installers come next week.');
+  await waitSaved(old);
+  await pageActions(old).click();
+  await old.getByRole('menuitem', { name: 'AI…' }).click();
+  const panel = old.getByTestId('ai-panel');
+  await panel.getByRole('radio', { name: 'Summarise this page' }).check();
+  await panel.getByRole('button', { name: 'Ask', exact: true }).click();
+  // The answer read to its end: a proposal to accept, no broken stream.
+  await expect(panel.getByRole('button', { name: 'Insert at the top' })).toBeVisible({
+    timeout: 60000,
+  });
+  await expect(panel.locator('[data-code="response.invalid"]')).toHaveCount(0);
+  expect(asked).toHaveLength(1);
+  expect('events' in asked[0]).toBe(false);
+
+  // On Cash Gear's subscription: the paid plan's allowance, which 0.17.0 reads as any other.
+  await api.put(`/api/v1/workspaces/${workspace.id}/ai-settings`, {
+    model: 'claude-opus-5-5',
+    keySource: 'subscription',
+  });
+  await old.goto(`${OLD}/#/settings`);
+  await expect(old.getByTestId('ai-allowance')).toHaveText(
+    'This month: 0 of 10,000,000 tokens used.',
+    { timeout: 30000 },
+  );
+  expect(oldErrors).toEqual([]);
+  await oldContext.close();
   await api.dispose();
 });

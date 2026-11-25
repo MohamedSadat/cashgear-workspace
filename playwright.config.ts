@@ -58,6 +58,15 @@ export const mocks = [
     reuseExistingServer: !process.env.CI,
     timeout: 30000,
   },
+  // Phase 18: the mock Paddle (its API, the checkout's stand-in for Paddle.js, the portal), its
+  // webhooks to the e2e stack's API.
+  {
+    command:
+      'node tests/mocks/paddle/server.mjs --webhook http://127.0.0.1:5280/api/v1/billing/paddle',
+    url: 'http://127.0.0.1:4291/__mock/state',
+    reuseExistingServer: !process.env.CI,
+    timeout: 30000,
+  },
 ];
 
 // Chrome and Edge are the first-class browsers, as in Sheet. E2E_BASE_URL points the specs at a

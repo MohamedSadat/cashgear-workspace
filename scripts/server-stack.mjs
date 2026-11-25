@@ -56,7 +56,7 @@ const origins = [
   'tauri://localhost',
   // The old web builds that tests/e2e/old-build.spec.ts serves (scripts/old-build.mjs): v0.2.0,
   // v0.3.0, v0.4.0, v0.5.0, v0.6.0, v0.7.0, v0.8.0, v0.9.0, v0.10.0, (Phase 15) v0.14.0,
-  // (Phase 16) v0.15.0 and (Phase 17) v0.16.0.
+  // (Phase 16) v0.15.0, (Phase 17) v0.16.0 and (Phase 18) v0.17.0.
   'http://127.0.0.1:4279',
   'http://127.0.0.1:4278',
   'http://127.0.0.1:4277',
@@ -69,6 +69,7 @@ const origins = [
   'http://127.0.0.1:4269',
   'http://127.0.0.1:4267',
   'http://127.0.0.1:4266',
+  'http://127.0.0.1:4265',
 ];
 
 const children = [];
@@ -193,6 +194,20 @@ for (const project of ['Cgw.Api', 'Cgw.Worker', 'Cgw.Sites'])
 const ydoc = join(run, basename(ffi));
 cpSync(ffi, ydoc);
 
+// Phase 18: Paddle's mock for the e2e stack (its published test key and secret, never a real one).
+const paddleUrl = `http://127.0.0.1:${process.env.CGW_MOCK_PADDLE_PORT ?? 4291}`;
+const paddle = {
+  Billing__Paddle__ApiKey: 'mock_paddle_api_key_for_tests_only_0001',
+  Billing__Paddle__WebhookSecret: 'mock_paddle_webhook_secret_for_tests_0001',
+  Billing__Paddle__Environment: 'sandbox',
+  Billing__Paddle__BaseUrl: paddleUrl,
+};
+const payPage = {
+  Billing__Paddle__ClientToken: 'test_mockpaddleclienttoken0001',
+  Billing__Paddle__Environment: 'sandbox',
+  Billing__Paddle__ScriptUrl: `${paddleUrl}/paddle.js`,
+};
+
 const env = {
   ASPNETCORE_ENVIRONMENT: 'Development',
   DOTNET_ENVIRONMENT: 'Development',
@@ -276,6 +291,24 @@ const env = {
         Sites__Acme__IntervalSeconds: '5',
         Sites__CertificateStore: join(data, 'certificates'),
         Sites__CertificatePassword: randomUUID(),
+        // Phase 18: the completion model's stand-in (tests/fixtures/completion-model, a test package
+        // the API refuses in Production), so the server's own model is offered for AI; and Paddle's
+        // mock (tests/mocks/paddle, started by Playwright, its webhooks to this API), with two plans
+        // of its own catalogue's prices. Its key and webhook secret are the mock's published stand-ins.
+        Ai__CompletionModel__Path: join(root, 'tests', 'fixtures', 'completion-model'),
+        Ai__CompletionModel__Threads: '1',
+        ...paddle,
+        Billing__Plans__starter__PriceId: 'pri_01mockstarter',
+        Billing__Plans__starter__MonthlyTokens: '2000000',
+        Billing__Plans__starter__EmbeddingsMonthlyTokens: '2000000',
+        Billing__Plans__starter__Names__en: 'Starter',
+        Billing__Plans__starter__Names__ar: 'البداية',
+        Billing__Plans__team__PriceId: 'pri_01mockteam',
+        Billing__Plans__team__MonthlyTokens: '10000000',
+        Billing__Plans__team__EmbeddingsMonthlyTokens: '10000000',
+        Billing__Plans__team__Names__en: 'Team',
+        Billing__Plans__team__Names__ar: 'الفريق',
+        RateLimits__billing: '10000',
       }
     : {}),
 };
@@ -314,6 +347,8 @@ start('sites', 'dotnet', [bin('Cgw.Sites'), '--urls', `${sitesUrl};${pluginsUrl}
   ...Object.fromEntries(origins.map((origin, i) => [`Web__Origins__${i}`, origin])),
   // Phase 14: every spec and bench reads the sites from one address; the limit has a test of its own.
   ...(e2e ? { RateLimits__sites: '100000', RateLimits__sitesPlugins: '100000' } : {}),
+  // Phase 18: the pay page's client-side token and Paddle.js (the mock's): never the API key or secret.
+  ...(e2e ? payPage : {}),
   Logging__LogLevel__Default: 'Warning',
   Logging__LogLevel__Microsoft: 'Warning',
 });
