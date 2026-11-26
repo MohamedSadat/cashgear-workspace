@@ -1,9 +1,10 @@
 // Phase 19: a page out of the workspace (ARCHITECTURE.md, "Word, PDF and print"), loaded with the
-// first export or print. Export to Word: collected on the device, written and zipped in a worker,
-// saved by the platform (the desktop's save dialog, a download on the web). Print and Save as PDF:
-// the print view drawn into a root of the app's own document that only print media shows (the
-// spike: WebView2 saves only its top document to a PDF, WKWebView prints only its main frame), the
-// page's title as the document's while it prints, then printed by the engine:
+// first export or print. Export to Word: collected on the device (after 0.19.0 each page is read in
+// a worker, collect.ts), written and zipped in that worker, saved by the platform (the desktop's
+// save dialog, a download on the web). Print and Save as PDF: the print view, its HTML made in the
+// same worker, drawn into a root of the app's own document that only print media shows (the spike:
+// WebView2 saves only its top document to a PDF, WKWebView prints only its main frame), the page's
+// title as the document's while it prints, then printed by the engine:
 // - the web: `window.print()`; Save as PDF is the print dialog's own printer, which the person
 //   is told to choose;
 // - the Windows app: Print is `window.print()`; Save as PDF goes straight to a file the person
@@ -12,7 +13,7 @@
 //   by an `NSPrintOperation` of the paper's size with no margins, through the print panel, or to a
 //   file with none (`platform.print`).
 // The root goes once the dialog closes (`afterprint`), or once the platform's print is done.
-import type { OutInput, PrintMode, PrintView } from '@cgw/doc/out';
+import type { PrintMode, PrintView } from '@cgw/doc/out';
 import type { PrintJob, WorkspacePlatform } from '../platform';
 import { collect, leftOutText, type OutDeps } from './collect';
 import { NAMES } from './words';
@@ -39,23 +40,6 @@ export function fileName(title: string, untitled: string, extension: string): st
     .trim()
     .slice(0, 100);
   return `${safe || untitled}.${extension}`;
-}
-
-/** The Word file's bytes, written in a worker. */
-function writeInWorker(input: OutInput): Promise<Uint8Array> {
-  const worker = new Worker(new URL('./docx.worker.ts', import.meta.url), { type: 'module' });
-  return new Promise<Uint8Array>((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<{ ok?: Uint8Array; error?: string }>) => {
-      worker.terminate();
-      if (event.data.error !== undefined) reject(new Error(event.data.error));
-      else resolve(event.data.ok!);
-    };
-    worker.onerror = (event) => {
-      worker.terminate();
-      reject(new Error(event.message));
-    };
-    worker.postMessage(input);
-  });
 }
 
 /** Chromium draws `@page`'s margin boxes; WebKit (the Mac app, Safari) and others are paged by script. */
@@ -170,12 +154,11 @@ export async function runOut(
     subPages: request.subPages,
     purpose: request.kind === 'word' ? 'word' : 'print',
   });
-  const { input } = collected;
-  const title = input.pages[0]?.title ?? '';
-  const left = leftOutText(t, collected.leftOut, input.locale);
+  const { title } = collected;
+  const left = leftOutText(t, collected.leftOut, collected.locale);
   try {
     if (request.kind === 'word') {
-      const bytes = await writeInWorker(input);
+      const bytes = await collected.word();
       const name = fileName(title, untitled, 'docx');
       await platform.saveFile(
         name,
@@ -184,9 +167,8 @@ export async function runOut(
       );
       return { status: 'done', message: left };
     }
-    const { printView } = await import('@cgw/doc/out');
     const mode = platform.printMode ?? printMode();
-    const view = printView(input, mode);
+    const view = await collected.print(mode);
     const mounted = await mountPrintView(view, mode);
     const job: PrintJob = {
       pdf: request.kind === 'pdf',
