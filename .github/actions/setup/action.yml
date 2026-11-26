@@ -1,0 +1,37 @@
+name: Set up the workspace
+description: >
+  pnpm, Node 24, Rust 1.99.1 with its cache, .NET 10 and the workspace's packages, as every job of
+  ci.yml takes them (the repository checked out first).
+inputs:
+  rust-components:
+    description: Rust components beside the toolchain (rustfmt, clippy)
+    default: ''
+  rust-cache-key:
+    description: >
+      Swatinem/rust-cache's shared key, which stands where the job's id would (empty: the job's
+      own). The checks keep `windows`, the one job's key before 0.19.0's split; the jobs that build
+      only cgw-ydoc's library share `ffi`.
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 12.11.2
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: pnpm
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.99.1
+        components: ${{ inputs.rust-components }}
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: true
+        shared-key: ${{ inputs.rust-cache-key }}
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - run: pnpm install --frozen-lockfile
+      shell: bash

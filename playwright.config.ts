@@ -74,6 +74,9 @@ export const mocks = [
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4273';
 export default defineConfig({
   testDir: './tests/e2e',
+  // CI's shards (.github/workflows/ci.yml) run without the old builds, which a job of their own
+  // makes and runs: old-build.spec.ts skips a build it cannot find, so a shard leaves it out.
+  testIgnore: process.env.CGW_E2E_WITHOUT_OLD_BUILDS ? ['**/old-build.spec.ts'] : [],
   timeout: 60000,
   expect: { timeout: 15000 },
   fullyParallel: false,

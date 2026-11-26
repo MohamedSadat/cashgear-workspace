@@ -2248,3 +2248,25 @@ from the app's own document under print media. pdf.js read every PDF back.
 What it decided: the print view lives in the app's own document; Chromium (the web, the Windows
 app) prints it by `@page` with margin boxes; WebKit (the Mac app) by pages cut by script; the
 Windows app saves a PDF straight to a file; fonts as above; pictures capped to the page's content.
+
+## 2026-11-26: CI after 0.19.0, the web app first
+
+CI's Windows job took about 150 minutes a run (run 45738149579: the browser e2e 77, the desktop
+app's specs 23, the old builds 5, the kill tests 8, the budgets about 26), one step after another,
+while the server's job took 18 and the licence gates 1. Evidence in PROGRESS.md (After 0.19.0).
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| What CI builds and tests | "Web version is the most important for now, no need for further desktop build or test": `ci.yml` no longer builds the desktop app or runs its smoke test, its e2e specs (`playwright.desktop.config.ts`), its kill tests (while typing, during a store migration, during sync) or the budgets' desktop parts (`--desktop` of Phases 1, 3, 4, 5 and 6). The release workflow still builds the apps on a version tag. The Rust crates' fmt, clippy and tests and the SQLite store's conformance suite in `pnpm test` stay: under a minute together, and they hold the server's `cgw-ydoc` too |
+| The other workflows | Stop `macos.yml` on push (recommended): it runs only when started by hand (Actions, macOS, Run workflow). `release.yml` is unchanged and still builds, signs and tests both apps on a `v*` tag |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| How the rest is split | Jobs side by side, each building what it needs itself, none waiting on another: the checks (Rust, types, lint, format, unit tests, S3, S5, S7); the browser e2e in three shards a browser (`--project`, `--shard`); the old builds' spec with the builds it serves (`CGW_E2E_WITHOUT_OLD_BUILDS` leaves it out of the shards, where it would skip); the kill tests, S6 and the budgets of Phases 1 to 6; the budgets of Phases 7 to 19 | A web build takes under a minute and the server about two: a build job handing them on as artifacts would put its own run and an upload before every other job. Playwright shards by count of tests, file by file within a browser, so Chrome and Edge are sharded apart. Phase 1's gate reads the Chrome kill test's and S6's figures, so they share its job |
+| The budgets' figures | Two artifacts, `phase-verification-early` and `phase-verification-later`; each budget job downloads every `phase-verification*` of the last green run on main (the single one before the split too) | Each figure is still gated against the last green run on main on the same processor |
+| Shared set-up | Two composite actions, `.github/actions/setup` (pnpm, Node, Rust and its cache, .NET, the packages) and `.github/actions/server-stack` (LocalDB, `cgw-ydoc`, the server built) | Five Windows jobs take them; one place to change a version |
+| Rust's cache | The checks keep the one job's key (`windows`, `shared-key`); the jobs building only `cgw-ydoc` share `ffi` | The first run after the split starts warm where the build is large |

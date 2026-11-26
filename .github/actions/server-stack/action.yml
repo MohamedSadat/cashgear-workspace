@@ -1,0 +1,27 @@
+name: Ready the e2e server stack
+description: >
+  What scripts/server-stack.mjs --e2e runs on (Windows): SQL Server LocalDB, the worker's Yjs
+  library (cgw-ydoc over its C ABI) and the server built, so the stack's own build is incremental
+  and well within Playwright's five minutes for it. After ./.github/actions/setup.
+runs:
+  using: composite
+  steps:
+    - name: SQL Server LocalDB for the server stack
+      shell: pwsh
+      run: |
+        $tool = Get-Command sqllocaldb -ErrorAction SilentlyContinue
+        if (-not $tool) {
+          $found = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter SqlLocalDB.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $found) {
+            choco install sqllocaldb -y --no-progress
+            $found = Get-ChildItem 'C:\Program Files\Microsoft SQL Server' -Recurse -Filter SqlLocalDB.exe | Select-Object -First 1
+          }
+          $tool = $found.FullName
+          Add-Content $env:GITHUB_PATH (Split-Path $tool)
+        } else { $tool = $tool.Source }
+        & $tool create MSSQLLocalDB -s
+        & $tool info MSSQLLocalDB
+    - run: cargo build -p cgw-ydoc --profile ffi
+      shell: bash
+    - run: pnpm server:build
+      shell: bash
