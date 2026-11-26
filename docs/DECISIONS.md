@@ -2152,3 +2152,27 @@ nothing run):
 | Added to "Later" | A public API: workspace tokens with scopes, so other programs read and write pages, databases and rows. This is the integration surface of 2026-11-24's comparison; outgoing webhooks are Phase 15's | It was offered and not chosen. On "Later" it is not lost |
 | Not offered as a choice | These stay on "Later" with their reasons: embedded presentations (no app yet), SQLite on OPFS (it needs COOP/COEP, which blocks embeds), snapshotting an ERP view (the hard limits) | Nothing to choose while their reason stands |
 | Version | `v0.19.0`, then `v0.20.0` | One version per phase |
+
+## 2026-11-26: A site's certificate after a change of directory
+
+Found by 0.18.0's install in production (PROGRESS.md, After 0.18.0: production): the worker ordered a
+live certificate again only once a third of its life was left. After `install.ps1` ran again without
+`-AcmeStaging`, `docs.test.cashgearerp.com` would have kept its untrusted Let's Encrypt staging
+certificate for about 60 days. It moved on only once its row's `CertificateRenewAt` was set to now by
+SQL. A certificate's issuer does not name the directory it came from, so the worker cannot tell
+without keeping something.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| How the worker knows a certificate's directory | A nullable column, `SiteDomains.CertificateDirectory` (one additive migration, `SiteCertificateDirectory`), written with each certificate. A live row whose value is not `Sites__Acme__Directory` is ordered anew at once. Not chosen: reading the issuer of the stored `<host>.pfx` (only Let's Encrypt's `(STAGING)` names would tell, so only that one switch), and a `JobStates` row of the directory last ordered from (the whole server, not each name; tests side by side would need keys of their own) |
+| A certificate from before the column | Kept until its renewal, with no order at the update. Production's one name already has a production certificate |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Which changes order anew | Any change of directory, back to staging too; a failed order keeps the certificate live and follows the backoff (1 h, 6 h, then daily), as a renewal does | The directory named is the one the operator wants certificates from |
+| What else keeps it | `site.domain.certificate`'s audit detail names the directory; a name whose proof is lost loses it with its certificate; the API never shows it | Says where each certificate came from without a new screen |
+| Version | None: in the next release, its migration run by the next install | Not a phase |

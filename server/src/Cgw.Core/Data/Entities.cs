@@ -701,6 +701,13 @@ public sealed class SiteDomain : ITenantOwned
     /// <summary>Why the last order failed, as a short code (<c>notPointed</c>, <c>challenge</c>, <c>rateLimited</c>...).</summary>
     public string? CertificateError { get; set; }
     public string? CertificateThumbprint { get; set; }
+    /// <summary>
+    /// The ACME directory the live certificate came from (<c>Sites__Acme__Directory</c> when it was
+    /// ordered; after 0.18.0). A live certificate from another directory is ordered anew at once, so a
+    /// switch from staging to production replaces it. Null for one ordered before the column: it waits
+    /// for its renewal.
+    /// </summary>
+    public string? CertificateDirectory { get; set; }
     /// <summary>An order's HTTP-01 token and the key authorisation the Sites process answers it with, while it lasts.</summary>
     public string? ChallengeToken { get; set; }
     public string? ChallengeAnswer { get; set; }

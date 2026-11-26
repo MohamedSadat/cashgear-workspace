@@ -179,7 +179,7 @@ the host, `sqlcmd` needs `-I` for writes to a table with a filtered index (`QUOT
 | Blob Storage | Storage account `cashgearworkspace` (Spain Central, Standard LRS, no public access, soft delete and container soft delete 30 days, versioning), container `workspace`, CORS as in step 3 |
 | Blob identity | App registration `cashgear-workspace-api` with Storage Blob Data Contributor and Storage Blob Delegator on that account only; its certificate made on the host, PFX in `C:\CashGearWorkspace\secrets` (expires 2028-11-14; the app registration accepts it until 2027-11-14, so upload it again or make a new one before then) |
 | Sites | Site and app pool `CashGearWorkspaceSites` (from 2026-11-19), bound to `pages.cashgearerp.com` and `plugins.cashgearerp.com`, both pointed at the host by DNS |
-| A site's own host names | `-CustomDomains` from 2026-11-26, Let's Encrypt's production directory (its terms agreed by the owner), no contact address. Certificates: `C:\CashGearWorkspace\certificates`. Binding: the task `\Cash Gear Workspace\Site bindings`, its log `C:\CashGearWorkspace\logs\site-bindings.log`. ACME's path on Default Web Site goes to `pages.`. The certificates' password is only in the worker's environment, made on the host and read back by the next update. `docs.test.cashgearerp.com` serves the test workspace "Live checks"' site. After the switch from `-AcmeStaging` to the production directory, its live staging certificate was replaced only once its `CertificateRenewAt` was set to now by SQL (the worker renews with a third of a certificate's life left) |
+| A site's own host names | `-CustomDomains` from 2026-11-26, Let's Encrypt's production directory (its terms agreed by the owner), no contact address. Certificates: `C:\CashGearWorkspace\certificates`. Binding: the task `\Cash Gear Workspace\Site bindings`, its log `C:\CashGearWorkspace\logs\site-bindings.log`. ACME's path on Default Web Site goes to `pages.`. The certificates' password is only in the worker's environment, made on the host and read back by the next update. `docs.test.cashgearerp.com` serves the test workspace "Live checks"' site. After the switch from `-AcmeStaging` to the production directory, its live staging certificate was replaced only once its `CertificateRenewAt` was set to now by SQL (the worker renews with a third of a certificate's life left); from the release after 0.18.0 the worker replaces it by itself (A site's own host name, the switch from staging to production) |
 | DNS | cashgearerp.com at Squarespace (Google Cloud DNS's name servers; its edits ask for the owner's authenticator code). A wildcard `*` A record leads to the host, but a site's own name still needs its own `CNAME` to `pages.cashgearerp.com`: the proof's `TXT` record at `_cashgear-workspace.<name>` makes the name exist, and a wildcard covers no existing name. Squarespace's console appends the zone to a record's name: type `_cashgear-workspace.docs.test`, not the full name |
 | Local models | `voyage-4-nano` in `C:\CashGearWorkspace\models\voyage-4-nano` (from 2026-11-26, `cgw-local-model-voyage-4-nano-587d8d6.zip`), offered as "On this server". Not installed: the completion model, Cash Gear's subscription keys, and Paddle (billing off) |
 | Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account), with its own Google app password named "Cash Gear Workspace", entered on the host only. Gmail answers a wrong one with `535 5.7.8` (in the event log as "A confirm mail was not sent: AuthenticationException…"); test a new password from the host (an SMTP `AUTH` alone sends nothing) before storing it in the app pool's and the worker's `Smtp__Password` |
@@ -348,14 +348,36 @@ server makes their certificates once it is set up for it, which is whoever runs 
   trusts), then the production directory (the default). `-AgreeToAcmeTerms` says you have read its
   subscriber agreement; nothing is ordered without it. `-AcmeEmail` gives an optional contact for
   its expiry mails.
+- **The switch from staging to production** (the release after 0.18.0): each name keeps the
+  directory its live certificate came from (`SiteDomains.CertificateDirectory`), and a live
+  certificate from a directory other than `Sites__Acme__Directory` is ordered anew at once, with
+  two thirds of its life left or not. So `install.ps1` run again without `-AcmeStaging` replaces
+  every staging certificate within a few of the worker's passes (five names a pass, a pass a
+  minute); the task binds each new one within 2 minutes and removes the staging one. A name whose
+  new order fails keeps its staging certificate, live, and is tried again after 1 hour, 6 hours,
+  then daily. Any change of directory does the same, back to staging too, and each change orders
+  every name again (Let's Encrypt limits the certificates of one registered domain a week): switch
+  once. A certificate made by 0.18.0 or earlier has no directory kept and waits for its renewal
+  (a third of its life left). To replace one sooner, set its row's renewal time to now on the host,
+  as on 2026-11-26: `UPDATE SiteDomains SET CertificateRenewAt = SYSUTCDATETIME() WHERE Host =
+  N'<name>'` (`sqlcmd -I`).
 - **Network**: the host reaches the directory over https; the directory reaches the host on port 80
   for each name (the firewall open to the Internet on 80, as it is on 443), and the name's `CNAME`
   (or `A`/`AAAA`) leads to the host.
+- **A wildcard record does not cover a proven name**: each name needs its own `CNAME` to the sites'
+  host (or its own `A`/`AAAA`), even in a zone whose wildcard (`*.cashgearerp.com`) already leads to
+  the host. The proof's `TXT` record at `_cashgear-workspace.<name>` makes `<name>` exist in DNS
+  (with no records of its own), and a wildcard answers only for names that do not exist (RFC 4592),
+  so the name resolves to no address at all. Without its `CNAME` the first order fails `notPointed`
+  ("not pointed here") and is tried again after an hour; once the `CNAME` is added, take the name
+  off its site and choose it again to order at once (found on 2026-11-26 with
+  `docs.test.cashgearerp.com`).
 - **What the app shows** for each name: waiting for its `TXT` record, proven, the page whose site it
   serves, and its certificate (none yet, being made, live until a date, or why not: not pointed
   here, the authority could not reach the site, asked to wait, could not be reached, DNS could not
   be read). The worker looks every minute (`Sites__Acme__IntervalSeconds`); a failed order is tried
-  again after 1 hour, 6 hours, then daily, and renewal starts with a third of the lifetime left.
+  again after 1 hour, 6 hours, then daily, and renewal starts with a third of the lifetime left
+  (at once for a certificate from another directory).
 
 ## Updating
 

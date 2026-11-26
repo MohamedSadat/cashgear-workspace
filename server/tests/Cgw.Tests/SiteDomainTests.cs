@@ -356,6 +356,106 @@ public sealed class SiteDomainTests(ServerFixture server)
     }
 
     [Fact]
+    public async Task A_live_certificate_from_another_directory_is_ordered_anew_and_one_from_before_waits_for_its_renewal()
+    {
+        var ws = await Ws.Create(server);
+        var root = (await ws.NewPage("Switch")).GetProperty("id").GetGuid();
+        Assert.True((await ws.Client.PutAsJsonAsync($"/api/v1/pages/{root}/site", new { slug = Slug("switch"), indexing = false, language = "en" })).IsSuccessStatusCode);
+        var (id, host) = await Proven(ws, Host());
+        Assert.True((await Attach(ws.Client, root, host)).IsSuccessStatusCode);
+
+        await using var sites = server.NewSites(_ => { });
+        using var bridge = new Bridge(sites);
+        // Two directories, as Let's Encrypt's staging and production: each with a CA of its own.
+        await using var staging = await MockAcme.StartAsync(server, bridge.Port);
+        await using var production = await MockAcme.StartAsync(server, bridge.Port);
+        using var stagingCa = await staging.CaAsync();
+        using var productionCa = await production.CaAsync();
+        var store = Path.Combine(Path.GetTempPath(), "cgw-certs-" + Guid.NewGuid().ToString("N"));
+        var password = Guid.NewGuid().ToString("N");
+        // The worker as install.ps1 leaves it: run with -AcmeStaging, then again without.
+        async Task Run(MockAcme acme) => await JobLoop.RunOnceAsync(server.Worker, new SiteCertificateJob(
+                new SiteCertificateOptions(new Uri($"{acme.Url}/directory"), AgreeToTerms: true, Email: null, Store: store, Password: password),
+                server.Worker.GetRequiredService<SitesOptions>(), server.Worker.GetRequiredService<IDomainDns>(),
+                server.Worker.GetRequiredService<IDataProtectionProvider>(), TimeProvider.System, server.Worker.GetRequiredService<ILogger<SiteCertificateJob>>())
+            { Only = [host] },
+            server.Worker.GetRequiredService<ILoggerFactory>().CreateLogger("test"), TimeProvider.System, CancellationToken.None);
+        async Task<SiteDomain> Row()
+        {
+            await using var db = server.NewDb(ws.Id);
+            return await db.SiteDomains.AsNoTracking().SingleAsync(d => d.Id == id);
+        }
+        async Task Set(Action<Microsoft.EntityFrameworkCore.Query.UpdateSettersBuilder<SiteDomain>> set)
+        {
+            await using var db = server.NewDb(ws.Id);
+            await db.SiteDomains.Where(d => d.Id == id).ExecuteUpdateAsync(set);
+        }
+        X509Certificate2 Stored() => X509CertificateLoader.LoadPkcs12FromFile(Path.Combine(store, host + ".pfx"), password);
+
+        try
+        {
+            await Run(staging);
+            var row = await Row();
+            Assert.True(row.Certificate == CertificateStates.Live, $"{row.Certificate} {row.CertificateError}");
+            Assert.Equal($"{staging.Url}/directory", row.CertificateDirectory);
+            using (var pfx = Stored())
+                Assert.True(SignedBy(pfx, stagingCa));
+
+            // The switch: the staging certificate, with two thirds of its life left, is replaced at once.
+            await Run(production);
+            row = await Row();
+            Assert.Equal(1, await production.CertificatesAsync());
+            Assert.Equal(1, await staging.CertificatesAsync());
+            Assert.Equal(CertificateStates.Live, row.Certificate);
+            Assert.Equal($"{production.Url}/directory", row.CertificateDirectory);
+            Assert.InRange(row.CertificateRenewAt!.Value, DateTimeOffset.UtcNow.AddDays(59), DateTimeOffset.UtcNow.AddDays(61));
+            using (var pfx = Stored())
+            {
+                Assert.Equal(row.CertificateThumbprint, pfx.Thumbprint);
+                Assert.True(SignedBy(pfx, productionCa));
+                Assert.False(SignedBy(pfx, stagingCa));
+            }
+            await using (var db = server.NewDb(ws.Id))
+            {
+                var made = await db.AuditLog.Where(a => a.WorkspaceId == ws.Id && a.Action == "site.domain.certificate").Select(a => a.Detail).ToListAsync();
+                Assert.Equal(2, made.Count);
+                Assert.Contains(made, d => d!.Contains($"{production.Url}/directory", StringComparison.Ordinal));
+            }
+            // From production already: nothing more is ordered.
+            await Run(production);
+            Assert.Equal(1, await production.CertificatesAsync());
+
+            // A certificate ordered before its directory was kept waits for its renewal, wherever the
+            // directory now is, and is renewed there when due.
+            await Set(u => u.SetProperty(d => d.CertificateDirectory, (string?)null));
+            await Run(staging);
+            Assert.Equal(1, await staging.CertificatesAsync());
+            Assert.Null((await Row()).CertificateDirectory);
+            await Set(u => u.SetProperty(d => d.CertificateRenewAt, DateTimeOffset.UtcNow.AddMinutes(-1)));
+            await Run(staging);
+            Assert.Equal(2, await staging.CertificatesAsync());
+            Assert.Equal($"{staging.Url}/directory", (await Row()).CertificateDirectory);
+            using (var pfx = Stored())
+                Assert.True(SignedBy(pfx, stagingCa));
+        }
+        finally
+        {
+            if (Directory.Exists(store)) Directory.Delete(store, recursive: true);
+        }
+    }
+
+    /// <summary>Whether <paramref name="ca"/> signed the certificate: its chain built with that CA as the only root.</summary>
+    private static bool SignedBy(X509Certificate2 certificate, X509Certificate2 ca)
+    {
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(ca);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.DisableCertificateDownloads = true;
+        return chain.Build(certificate);
+    }
+
+    [Fact]
     public async Task A_name_that_does_not_lead_here_is_not_ordered_and_says_so()
     {
         var ws = await Ws.Create(server);
@@ -424,6 +524,9 @@ public sealed class SiteDomainTests(ServerFixture server)
 
         public async Task<int> CertificatesAsync() =>
             (await Http.GetFromJsonAsync<JsonElement>($"{Url}/__mock/state")).GetProperty("certificates").GetArrayLength();
+
+        /// <summary>The mock's CA, made when it started (each mock has its own).</summary>
+        public async Task<X509Certificate2> CaAsync() => X509Certificate2.CreateFromPem(await Http.GetStringAsync($"{Url}/__mock/ca"));
 
         public async Task FaultAsync(string kind) =>
             (await Http.PostAsJsonAsync($"{Url}/__mock/fault", new { kind })).EnsureSuccessStatusCode();

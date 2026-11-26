@@ -571,6 +571,7 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Certificate).HasMaxLength(20).IsUnicode(false);
             e.Property(x => x.CertificateError).HasMaxLength(40).IsUnicode(false);
             e.Property(x => x.CertificateThumbprint).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.CertificateDirectory).HasMaxLength(500).IsUnicode(false);
             e.Property(x => x.ChallengeToken).HasMaxLength(128).IsUnicode(false);
             e.Property(x => x.ChallengeAnswer).HasMaxLength(256).IsUnicode(false);
             e.Property(x => x.Version).IsConcurrencyToken();

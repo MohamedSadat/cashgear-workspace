@@ -15,7 +15,9 @@ namespace Cgw.Worker.Jobs;
 /// Phase 14 (M14.4; decisions, 2026-11-22): every proven host name that serves a site gets a
 /// certificate by ACME (HTTP-01, the Sites process answering the challenge from the database) into
 /// <c>Sites__CertificateStore</c>, where the IIS host's scheduled task binds it by name
-/// (<c>deploy/iis/site-bindings.ps1</c>), renewed once a third of its lifetime is left. Before each
+/// (<c>deploy/iis/site-bindings.ps1</c>), renewed once a third of its lifetime is left, or at once
+/// when it came from a directory other than <c>Sites__Acme__Directory</c> (after 0.18.0: a switch
+/// from Let's Encrypt's staging to its production replaces every staging certificate). Before each
 /// order, and once a day, the name's <c>TXT</c> record is read again: missing on two reads a day
 /// apart, the name is taken off its site, stops serving and its certificate is deleted (audited
 /// <c>site.domain</c>, reason <c>proof.lost</c>). A name must lead to the sites' own addresses before an
@@ -44,12 +46,16 @@ public sealed class SiteCertificateJob(SiteCertificateOptions options, SitesOpti
         if (!options.Configured) return false;
         var db = services.GetRequiredService<CgwDb>();
         var now = clock.GetUtcNow();
+        var directory = options.Directory!.ToString();
         var domains = db.SiteDomains.IgnoreQueryFilters([CgwDb.Tenant]).AsNoTracking()
             .Where(d => d.VerifiedAt != null && db.Workspaces.Any(w => w.Id == d.WorkspaceId && w.DeletedAt == null));
         if (Only is { } only) domains = domains.Where(d => only.Contains(d.Host));
+        // Due: no live certificate, a third of its life left, or one from another directory (a switch
+        // from staging to production); one ordered before the directory was kept waits for its renewal.
         var due = await domains
             .Where(d => d.SiteId != null && (d.CertificateNextAttemptAt == null || d.CertificateNextAttemptAt <= now)
-                && (d.Certificate != CertificateStates.Live || d.CertificateRenewAt <= now))
+                && (d.Certificate != CertificateStates.Live || d.CertificateRenewAt <= now
+                    || (d.CertificateDirectory != null && d.CertificateDirectory != directory)))
             .OrderBy(d => d.CertificateNextAttemptAt).Take(Batch).Select(d => d.Id).ToListAsync(ct);
         foreach (var id in due) await OrderAsync(db, id, ct);
         // A name that serves a site keeps its proof: read again once a day.
@@ -128,6 +134,7 @@ public sealed class SiteCertificateJob(SiteCertificateOptions options, SitesOpti
         row.CertificateExpiresAt = null;
         row.CertificateRenewAt = null;
         row.CertificateThumbprint = null;
+        row.CertificateDirectory = null;
         await SaveAsync(db, row, ct, audit => audit.Add(Actor.System, "site.domain", row.WorkspaceId, "workspace", row.WorkspaceId, new { host, siteId = site, reason = "proof.lost" }));
         Delete(host);
         return false;
@@ -166,6 +173,9 @@ public sealed class SiteCertificateJob(SiteCertificateOptions options, SitesOpti
             await SaveAsync(db, row, ct);
         }
         var host = row.Host;
+        var directory = options.Directory!.ToString();
+        if (row.Certificate == CertificateStates.Live && row.CertificateDirectory is { } from && from != directory)
+            log.LogInformation("A site's host name: {Host}'s live certificate came from {From}: ordered anew from {Directory}", host, from, directory);
         try
         {
             using var http = Handler is null ? new HttpClient() : new HttpClient(Handler, disposeHandler: false);
@@ -185,8 +195,9 @@ public sealed class SiteCertificateJob(SiteCertificateOptions options, SitesOpti
             done.CertificateAttempts = 0;
             done.CertificateError = null;
             done.CertificateThumbprint = made.Thumbprint;
+            done.CertificateDirectory = directory;
             await SaveAsync(db, done, ct, audit => audit.Add(Actor.System, "site.domain.certificate", done.WorkspaceId, "workspace", done.WorkspaceId,
-                new { host, expires = made.NotAfter, thumbprint = made.Thumbprint }));
+                new { host, expires = made.NotAfter, thumbprint = made.Thumbprint, directory }));
             log.LogInformation("A site's host name: a certificate for {Host} until {Expires}", host, made.NotAfter);
         }
         catch (AcmeException e)

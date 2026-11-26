@@ -2452,6 +2452,11 @@ namespace Cgw.Core.Data.Migrations
                     b.Property<int>("CertificateAttempts")
                         .HasColumnType("int");
 
+                    b.Property<string>("CertificateDirectory")
+                        .HasMaxLength(500)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("CertificateError")
                         .HasMaxLength(40)
                         .IsUnicode(false)
