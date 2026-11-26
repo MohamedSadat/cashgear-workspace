@@ -4,6 +4,8 @@
 // a chart view as its points, and its drawing as an SVG (`chartSvg`). Over a `DatabaseHost`, so it
 // reads what a view on screen would: the device's rows for a database held in full, the server's
 // query when online, the rows on this device offline (said by `localOnly`). Never saves anything.
+// After 0.19.0 the rows' cells are turned to text in slices of about 4 ms that give the main thread
+// back between them, so a wide view's 1,000 rows never hold it for a frame while someone types.
 import type { CgChartActions } from '@cashgear/ui';
 import { createElement, type RefObject } from 'react';
 import type { Id, PropertyDef, RowRecord } from '@cgw/workspace';
@@ -35,6 +37,8 @@ export interface OutOptions {
   /** The shell's translator, its keys whole (`database.cell.checked`): not this package's `t`. */
   say: OutT;
   locale: string;
+  /** How long cells are turned to text before the main thread is given back (4 ms; tests). */
+  sliceMs?: number;
 }
 
 export type ViewOut =
@@ -54,6 +58,26 @@ export type ViewOut =
   | { kind: 'none'; reason: 'missing' | 'form' | 'failed' };
 
 export const OUT_LIMIT = 1000;
+
+const SLICE_MS = 4;
+
+/** Each row's cells as text, a slice of about `sliceMs` at a time, the main thread given back between. */
+async function rowTexts(
+  rows: RowRecord[],
+  text: (row: RowRecord) => string[],
+  sliceMs: number,
+): Promise<string[][]> {
+  const out: string[][] = [];
+  let started = performance.now();
+  for (const row of rows) {
+    if (performance.now() - started >= sliceMs) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      started = performance.now();
+    }
+    out.push(text(row));
+  }
+  return out;
+}
 
 const COUNT: ChartMeasure = { kind: 'count' };
 
@@ -168,6 +192,7 @@ export async function viewOut(
     const lookups = lookupsOf(host, options.say, options.locale);
     const text = (row: RowRecord) =>
       shown.map((def: PropertyDef) => cellText(def, readCell(row, def), lookups));
+    const sliceMs = options.sliceMs ?? SLICE_MS;
     const rows: string[][] = [];
     let groups: { name: string; at: number; count: number }[] | undefined;
     const rule = view.config.group;
@@ -182,14 +207,15 @@ export async function viewOut(
           at: rows.length,
           count: group.count,
         });
-        rows.push(...take.map(text));
+        rows.push(...(await rowTexts(take, text, sliceMs)));
       }
     } else
       rows.push(
-        ...snapshot.rows
-          .filter((r) => !r.isTemplate)
-          .slice(0, limit)
-          .map(text),
+        ...(await rowTexts(
+          snapshot.rows.filter((r) => !r.isTemplate).slice(0, limit),
+          text,
+          sliceMs,
+        )),
       );
     return {
       kind: 'table',
