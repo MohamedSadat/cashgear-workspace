@@ -857,6 +857,9 @@ cold start and the kill tests' durability; a figure over its budget, or worse th
 - **Top bar.** Breadcrumbs, search, favourite, page menu (history, export, move, delete), save
   and connection status. On a narrow screen it never runs past the window: the breadcrumbs give
   way first, the two status labels break into two lines at most, and the buttons keep their size.
+  Under an on-screen keyboard it stays at the top, the page area scrolling above the keyboard:
+  where the browser ignores `interactive-widget=resizes-content` (Safari on iOS), the frame is fitted
+  to the visual viewport by script (`apps/web/src/keyboardFit.ts`).
 - **Collaboration (Phase 6).** The others on the page as avatars in the top bar, and beside pages
   others have open in the sidebar (only pages the viewer can see); their cursors and selections in
   the editor, named and coloured from the workspace's members. A comments panel beside the page
