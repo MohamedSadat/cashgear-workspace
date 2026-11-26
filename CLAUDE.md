@@ -1055,3 +1055,8 @@ Added as they are found, grouped by phase.
   `main.rs`), and `@cgw/store-desktop` reads either (`answerBytes`). To make it happen, block
   `http://ipc.localhost/*` over CDP (`Network.setBlockedURLs`) and reload. The kill test sees a
   compaction only by its `ipc.localhost/store` request, so it sees none in a start on the fallback.
+- IIS can report an app pool `Stopped` while its `w3wp` still runs: in 0.18.0's production install
+  one held the API's DLLs for minutes and robocopy failed (9). `install.ps1` now waits for a pool's
+  processes too, found by `-ap "<pool>"` on their command line, and ends one still running at the
+  deadline. A test without IIS: a copy of `powershell.exe` named `w3wp.exe` carrying `-ap "<name>"`
+  stands in for a pool's process.

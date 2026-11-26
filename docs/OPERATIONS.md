@@ -162,11 +162,13 @@ From 0.18.0, scripts beside the packages do steps 3 and 4 (not in the repo):
 - `cgw-live.ps1` reads the host names' certificates, reminders, the mail queue, webhook deliveries
   and runs.
 
-An update that stops at "Copying api failed (9)" met a `w3wp` of the API pool still alive after the
-pool read `Stopped` (0.18.0's first run). End it (`Get-CimInstance Win32_Process -Filter
-"name='w3wp.exe'"` names its pool after `-ap`) and run `install.ps1` again: the migrations already
-applied are skipped. On the host, `sqlcmd` needs `-I` for writes to a table with a filtered index
-(`QUOTED_IDENTIFIER`).
+0.18.0's first run stopped at "Copying api failed (9)": a `w3wp` of the API pool was still alive
+after the pool read `Stopped`. From the release after 0.18.0, `install.ps1` waits for a pool's
+processes as well as its state. It finds them by `-ap "<pool>"` on their command line, and at the
+deadline (the pool's `shutdownTimeLimit` and 30 s) it ends one still running, with a warning. With
+0.18.0's own script, end it by hand (`Get-CimInstance Win32_Process -Filter "name='w3wp.exe'"` names
+its pool after `-ap`) and run `install.ps1` again: the migrations already applied are skipped. On
+the host, `sqlcmd` needs `-I` for writes to a table with a filtered index (`QUOTED_IDENTIFIER`).
 
 | Part | Where |
 | --- | --- |

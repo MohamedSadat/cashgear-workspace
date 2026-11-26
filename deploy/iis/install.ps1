@@ -338,6 +338,35 @@ Write-Host 'Migrating the database...'
 & (Join-Path $package 'migrate\efbundle.exe') --connection $connection
 if ($LASTEXITCODE -ne 0) { throw "The migration failed ($LASTEXITCODE); nothing else was changed." }
 
+# An app pool's worker processes, found by the pool's name on their command line
+# (w3wp.exe -ap "<pool>"): IIS can report a pool Stopped while its process still runs.
+function Get-PoolProcess([string] $Pool) {
+  $pattern = '-ap\s+"' + [regex]::Escape($Pool) + '"'
+  @(Get-CimInstance Win32_Process -Filter "Name = 'w3wp.exe'" | Where-Object { $_.CommandLine -match $pattern })
+}
+
+# Waits for a stopped pool's processes to end until the deadline, then ends what is left: the pool
+# serves nothing more, but its process holds the files the copy replaces. In 0.18.0's production
+# install a w3wp of the API pool still ran minutes after the pool read Stopped, and the copy of the
+# API failed on its DLLs (robocopy 9).
+function Wait-PoolProcess([string] $Pool, [datetime] $Deadline) {
+  while (@(Get-PoolProcess $Pool).Count -gt 0) {
+    if ((Get-Date) -gt $Deadline) {
+      $left = @(Get-PoolProcess $Pool)
+      if ($left.Count -eq 0) { return }
+      Write-Warning "The app pool $Pool is stopped but its process $(($left | ForEach-Object ProcessId) -join ', ') still runs: ending it."
+      foreach ($process in $left) { Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue }
+      $end = (Get-Date).AddSeconds(30)
+      while (@(Get-PoolProcess $Pool).Count -gt 0) {
+        if ((Get-Date) -gt $end) { throw "The process of the app pool $Pool did not end" }
+        Start-Sleep -Seconds 1
+      }
+      return
+    }
+    Start-Sleep -Seconds 1
+  }
+}
+
 # 2. Stop the worker and the sites, copy the new files.
 if (Get-Service $ServiceName -ErrorAction SilentlyContinue) { Stop-Service $ServiceName -Force }
 foreach ($site in $SiteName, $SitesSiteName) {
@@ -356,6 +385,8 @@ foreach ($site in $SiteName, $SitesSiteName) {
       if ((Get-Date) -gt $deadline) { throw "The app pool $site did not stop within $wait seconds" }
       Start-Sleep -Seconds 1
     }
+    # Stopped is the pool's state, not its process's: wait for that too, within the same time.
+    Wait-PoolProcess $site $deadline
   }
 }
 foreach ($part in 'api', 'worker', 'sites') {
