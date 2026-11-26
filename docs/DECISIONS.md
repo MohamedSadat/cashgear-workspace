@@ -2304,3 +2304,20 @@ holds it in Chrome, Edge and Playwright's WebKit, over an emulated keyboard.
 | Leaving the editor on a phone | "Done editing" (✓), the toolbar's last tool, alone in an end rail that sticks at the bar's end while the other tools scroll under it; the press blurs the editor and clears the selection, so the keyboard and the toolbar go | Nine tools are wider than most phones. iOS's own ✓ is expected to end editing too (WebKit blurs the focused element on it), but it shows only in Safari, and was not checked on a device |
 | The emulated keyboard | The window keeps its height; the visual viewport is 420 of 812 pixels tall, `innerHeight` reads that, and the page's window scroll moves the visual viewport down as far as the layout viewport's foot | No desktop browser draws an on-screen keyboard. With `innerHeight` so the library's toolbar sat at the window's foot, as the screenshot showed; a real iPhone may differ in `innerHeight` and in how far Safari scrolls |
 | The top bar while typing at a page's foot | As Safari does it: Safari moves the visual viewport down to show the caret, and the top bar is out of view until the keyboard closes | Keeping it in view would mean fitting the whole frame to the visual viewport while the keyboard is up (`interactive-widget` done by script), which only a device can judge: its own change |
+
+## 2026-11-27: The top bar on a phone
+
+Seen in screenshots of a new page at 375x812: the top bar (breadcrumbs, save and sync status, star,
+"Page actions") was wider than the window, so the drawer's application area scrolled sideways and
+"Page actions" was cut off. Measured, it ran past the window from 320 pixels (11 in Arabic), and from
+375 down a long title's crumb ran out of the breadcrumbs over the status labels. `layout.spec.ts`'s
+"the top bar on a phone" holds it at 375x812 and 320x640, in English and Arabic.
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| What gives way on a phone | The breadcrumbs first (`flex-shrink: 4`, their crumbs cut by the library's ellipsis), then the sync status; the save status and the buttons keep their size | The page's title is shown whole just under the bar; the status labels say what nothing else on the screen does. At 320 pixels the title's crumb keeps a few letters |
+| The status labels on a phone | Two lines at most (5rem wide, balanced, an ellipsis past two lines), their longest word their least width | "On this device only" and "على هذا الجهاز فقط" read whole on two lines. Not chosen: one line cut by an ellipsis, which kept "On this de…", or a label hidden in its calm state, which would make the bar jump as saving and syncing come and go |
+| The breadcrumbs' last crumb | Every crumb shrinks at a factor of at least 1 (the others 2, the current 1, as the library's 1 and 0.5), in every layout | With the library's 0.5, once the other crumbs are at nothing flex layout takes only half the space the current one must give up, and it ran out of the trail (for Track U). Where there is room nothing changes: the wide layout measured the same before and after |
+| The sidebar's button on a phone | 44 pixels wide, no gap beside its label only a screen reader has | It was 55; the 11 pixels go to the title |

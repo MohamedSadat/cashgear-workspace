@@ -1159,3 +1159,9 @@ Added as they are found, grouped by phase.
   (`touchbarMargin.ts`'s `visualFoot`), followed on its `resize` and `scroll`. `keyboard.spec.ts`
   emulates the keyboard by redefining `height`, `offsetTop` and `innerHeight` on the instances and
   `window.scrollBy` (no desktop browser draws one).
+- Flex items still shrinking whose `flex-shrink`s sum to under 1 give up only that share of the
+  overflow: CgBreadcrumb's current crumb (0.5), left alone once the others were at nothing, ran out
+  of the trail over the top bar's status. A flex item with `overflow` other than `visible` has no
+  least size of its own, so a clipped label shrinks to nothing: `min-inline-size: min-content`. A
+  "fits" check reads each item's `scrollWidth` against its box: an item can draw over its neighbours
+  while every box is inside the window (`layout.spec.ts`'s `topBarSpills`).
