@@ -140,6 +140,23 @@ export default defineConfig({
   define: { __CGW_VERSION__: JSON.stringify(version) },
   server: { host: '127.0.0.1', port: 5273, strictPort: true },
   preview: { host: '127.0.0.1', port: 4273, strictPort: true, headers },
+  // After 0.19.0: in the workers, ProseMirror's packages and `@cgw/doc`'s own modules (none of which
+  // declares itself free of side effects, though they are) are taken as free of them, so a worker
+  // keeps only what it uses of them. The page out's worker reads a page's JSON through the Yjs
+  // binding's one function, whose module brought the editor's extensions (built at module level),
+  // ProseMirror's view, state and transforms and Tiptap's core: most of the worker, parsed and run
+  // at every export before the print view or the Word file could start. The app's own chunks, and
+  // so its initial JavaScript, are left as they were.
+  worker: {
+    rolldownOptions: {
+      treeshake: {
+        moduleSideEffects: (id: string) =>
+          !/[\\/](node_modules[\\/](\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(prosemirror-[a-z-]+|@tiptap[\\/]pm|rope-sequence|orderedmap|w3c-keyname)|packages[\\/]doc[\\/]src)[\\/]/.test(
+            id,
+          ),
+      },
+    },
+  },
   build: {
     target: 'es2022',
     rolldownOptions: {
