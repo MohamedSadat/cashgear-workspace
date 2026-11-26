@@ -223,7 +223,7 @@ test.describe('the block editor', () => {
     await expect(page.getByLabel('Add a caption')).toHaveValue('Quarterly chart');
   });
 
-  test('copy and paste blocks gives the copies new ids; Markdown pastes as blocks', async ({
+  test('copy and paste blocks gives the copies new ids, beside the others; Markdown pastes as blocks', async ({
     page,
   }) => {
     await createWorkspace(page);
@@ -258,7 +258,11 @@ test.describe('the block editor', () => {
       }, types);
     await paste(copied);
     const all = await blocks(page);
-    expect(all.map((b) => b.text).filter(Boolean)).toEqual(['One', 'Two', 'One', 'Two']);
+    // In the empty last line's place, beside the others: never inside the caret's block.
+    const topLevel = () =>
+      editor(page).evaluate((root) => root.querySelectorAll(':scope > [data-block]').length);
+    expect(all.map((b) => b.text)).toEqual(['One', 'Two', 'One', 'Two']);
+    expect(await topLevel()).toBe(4);
     expect(new Set(all.map((b) => b.id)).size).toBe(all.length);
     await page.keyboard.press('Enter');
     await paste({ 'text/plain': '## Pasted\n\n- [x] done item\n- plain item' });
@@ -266,5 +270,6 @@ test.describe('the block editor', () => {
     await expect(editor(page).locator('[data-kind="checkItem"][data-checked="true"]')).toHaveText(
       'done item',
     );
+    expect(await topLevel()).toBe(7);
   });
 });

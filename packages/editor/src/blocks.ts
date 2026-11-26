@@ -3,7 +3,13 @@
 // original; a move keeps the id; a merge keeps the id of the block merged into; a duplicate clears
 // ids so the id plugin mints new ones. Adapted from Phase 0's bench/editor/src/commands.ts.
 import { Fragment, type Node as PMNode, type ResolvedPos } from '@tiptap/pm/model';
-import { NodeSelection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
+import {
+  NodeSelection,
+  Selection,
+  TextSelection,
+  type EditorState,
+  type Transaction,
+} from '@tiptap/pm/state';
 import { newBlockId, type TextKind } from '@cgw/doc';
 
 export interface BlockInfo {
@@ -194,6 +200,93 @@ export function splitBlock(
   if (offset < size) tr.delete(bodyStart + offset, bodyStart + size);
   const freshPos = tr.mapping.map(insertAt, -1);
   return tr.setSelection(TextSelection.create(tr.doc, freshPos + 2));
+}
+
+/**
+ * Whole blocks put in at the selection (a paste), beside the block the caret is in and never inside
+ * it. A block may hold blocks (`block > (body | block)*`) and ProseMirror fits a closed slice into
+ * the deepest node that takes it, so a plain replace made every pasted block a child of the
+ * caret's block (and dropped the body of an empty one). Placed as Enter splits: an empty block
+ * without children is replaced; at the start of a block's text they go above it; elsewhere the head
+ * keeps the id and the children, the blocks go where Enter's new block would (the first children
+ * when the block's children show, else the next siblings), and the text after the caret follows
+ * them in a new block of the same kind. A selected block (or the block of a selected picture it
+ * holds alone) is replaced; anywhere else (a table's cell) they go where Enter's new block would
+ * after the selection's block. The caret ends after them.
+ */
+export function pasteBlocks(
+  state: EditorState,
+  blocks: Fragment,
+  toggleOpen: (id: string) => boolean,
+): Transaction | null {
+  if (!blocks.childCount) return null;
+  const tr = state.tr;
+  const { selection } = state;
+  const inText = (sel: typeof selection) =>
+    sel instanceof TextSelection &&
+    sel.$from.parent.type.name === 'textBody' &&
+    sel.$to.parent.type.name === 'textBody';
+  if (inText(selection) && !selection.empty) tr.deleteSelection();
+  // Where Enter's new block would go after a block: its first child, or its next sibling.
+  const enterPlace = (node: PMNode, pos: number) => {
+    const body = firstBody({ node, pos });
+    const closed =
+      body?.node.type.name === 'textBody' &&
+      body.node.attrs.kind === 'toggle' &&
+      !!node.attrs.id &&
+      !toggleOpen(node.attrs.id as string);
+    return hasChildBlocks(node) && !closed ? childBlocksStart({ node, pos }) : pos + node.nodeSize;
+  };
+  let end: number;
+  if (inText(tr.selection)) {
+    const $at = tr.selection.$from;
+    const body = $at.parent;
+    const blockPos = $at.before($at.depth - 1);
+    const blockNode = $at.node($at.depth - 1);
+    const offset = $at.parentOffset;
+    const size = body.content.size;
+    if (size === 0 && blockNode.childCount === 1) {
+      tr.replaceWith(blockPos, blockPos + blockNode.nodeSize, blocks);
+      end = blockPos + blocks.size;
+    } else if (offset === 0 && size > 0) {
+      tr.insert(blockPos, blocks);
+      end = blockPos + blocks.size;
+    } else {
+      let at = enterPlace(blockNode, blockPos);
+      let content = blocks;
+      if (offset < size) {
+        const tail = state.schema.nodes.block.create(
+          { id: newBlockId() },
+          body.type.create({ ...body.attrs, start: null }, body.content.cut(offset)),
+        );
+        content = blocks.addToEnd(tail);
+        tr.delete($at.pos, $at.end());
+        at -= size - offset; // the tail's text was before `at`
+      }
+      tr.insert(at, content);
+      end = at + blocks.size;
+    }
+  } else {
+    const sel = tr.selection;
+    const block =
+      sel instanceof NodeSelection && isBlock(sel.node)
+        ? blockInfoAt(tr.doc, sel.from)
+        : blockAt(sel.$from);
+    if (!block) {
+      // At the document's own level (all of it selected): the blocks are the document's children.
+      tr.replaceWith(sel.from, sel.to, blocks);
+      end = sel.from + blocks.size;
+    } else if (sel instanceof NodeSelection && (isBlock(sel.node) || block.node.childCount === 1)) {
+      // A selected block, or the block of a selected picture it holds alone, is replaced.
+      tr.replaceWith(block.pos, block.pos + block.node.nodeSize, blocks);
+      end = block.pos + blocks.size;
+    } else {
+      const at = enterPlace(block.node, block.pos);
+      tr.insert(at, blocks);
+      end = at + blocks.size;
+    }
+  }
+  return tr.setSelection(Selection.near(tr.doc.resolve(end), -1));
 }
 
 /** The block drawn just above this one: the previous sibling's deepest last descendant, else the parent. */
