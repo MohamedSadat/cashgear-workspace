@@ -422,37 +422,22 @@ jobs:
               if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
             }
           }
-      # Phase 2's first sync (bench/phase2.mjs): a 1,000-page workspace into a fresh Chrome
-      # context's IndexedDB, against the server stack above.
-      # Phase 7's (bench/phase7.mjs): the review of 500 changed ERP records less the ERP's dry
-      # run, and the first AI token less the provider's own time, in Chrome against the server
-      # stack above, the mock ERP and the mock provider it starts.
-      - name: Phase 7 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase7
-      # Phase 8's (bench/phase8.mjs): a paste of 1,000 cells into a synced table (shown, and on
-      # the server) and a 1,000-page Notion export imported on the device, in Chrome against the
-      # server stack above. The server's CPU per push against 0.7.0 is measured on the reference
-      # machine (bench/phase8-server.mjs), as it needs 0.7.0 built beside this build.
-      - name: Phase 8 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase8
-      # Phase 9's (bench/phase9.mjs): a published page of 2,000 blocks read from the Sites process
-      # (localhost:5290) over HTTP, fresh and from its cache, and a timeline over 50,000 rows in
-      # Chrome (its first bars and a drag), against the server stack above.
-      - name: Phase 9 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase9
-      # Phase 10's (bench/phase10.mjs --no-server): the review of 500 changed customers less the
-      # ERP's dry run, and typing between ten third-party plugin frames, in Chrome against the
-      # server stack above (its plugins host on localhost:5291) and the mocks. The server's
-      # retrieval by meaning runs in the server job.
-      - name: Phase 10 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase10 -- --no-server
-      # Phase 12's (bench/phase12.mjs): a chart view of 50,000 rows by count (its first bars), and
-      # pinning a 5,000-row database whose rows all have documents while typing on another page
-      # (until every document is on the device, and the keystroke budget meanwhile), in Chrome
-      # against the server stack above. The ERP's first page of a 100,000-record connector is
-      # Track E10's own measure, taken in the ERP's repository.
-      - name: Phase 12 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase12
+      # In this order from 2026-11-26: the benches that write the most to the server (Phase 9's
+      # and 12's seeds of 50,000 rows, Phase 8's paste) last. On a runner a few minutes old the
+      # server's bulk writes ran slow and uneven (a 50,000-row import past 30 s against 8 to 12.5;
+      # Phase 8's paste over its budget), as they never did 70 minutes into the one job before
+      # 0.19.0 or 14 minutes into the job beside (PROGRESS.md, After 0.19.0).
+      # Phase 19's (bench/phase19.mjs): a page of 2,000 blocks, 20 pictures and a database block of
+      # 1,000 rows on the device, to a Word file (typing on another page meanwhile) and to its print
+      # view laid out with the print dialog asked for; and, tracked, the whole print to "Save as
+      # PDF" (Chrome headed with --kiosk-printing). No server.
+      - name: Phase 19 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase19
+      # Phase 18's (bench/phase18.mjs): a paid checkout's webhooks to the workspace's allowance shown,
+      # against the server stack above and the mock Paddle (started if not running). The local
+      # completion model's budget needs the real package and is run by hand (--local-model).
+      - name: Phase 18 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase18
       # Phase 13's (bench/phase13.mjs --no-server): typing between ten networked plugin frames, each
       # reaching the mock host it was allowed (tests/mocks/net/server.mjs), in Chrome against the
       # server stack above. The server's retrieval at 1,000,000 chunks runs in the server job.
@@ -464,6 +449,28 @@ jobs:
       # server's file check at 50,000 rows runs in the server job.
       - name: Phase 14 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase14 -- --no-server
+      # Phase 7's (bench/phase7.mjs): the review of 500 changed ERP records less the ERP's dry
+      # run, and the first AI token less the provider's own time, in Chrome against the server
+      # stack above, the mock ERP and the mock provider it starts.
+      - name: Phase 7 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase7
+      # Phase 10's (bench/phase10.mjs --no-server): the review of 500 changed customers less the
+      # ERP's dry run, and typing between ten third-party plugin frames, in Chrome against the
+      # server stack above (its plugins host on localhost:5291) and the mocks. The server's
+      # retrieval by meaning runs in the server job.
+      - name: Phase 10 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase10 -- --no-server
+      # Phase 17's (bench/phase17.mjs --no-server): the first rows of a 50,000-row table with 10,000
+      # parents nesting their sub-items, and a 50,000-row timeline with 10,000 dependencies (first
+      # bars and a drag), in Chrome against the server stack above (relations seeded by sqlcmd).
+      - name: Phase 17 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase17 -- --no-server
+      # Phase 16's (bench/phase16.mjs): a form link's page, first byte from the Sites process's
+      # cache; an answer by the link to its row in an open tab; and 50 answers a second across five
+      # links for a minute (the answer route's time, typing on another page meanwhile); in Chrome
+      # against the server stack above.
+      - name: Phase 16 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase16
       # Phase 15's (bench/phase15.mjs --no-server): a rule's first step after the change that starts
       # it, shown in an open tab, and a paste of 1,000 cells starting a rule in each row (every run
       # done, typing on another page meanwhile), in Chrome against the server stack above. The
@@ -471,28 +478,24 @@ jobs:
       # ten rules is bench/phase8-server.mjs's, taken locally.
       - name: Phase 15 budgets, gated against the budgets and the last run on main
         run: pnpm bench:phase15 -- --no-server
-      # Phase 16's (bench/phase16.mjs): a form link's page, first byte from the Sites process's
-      # cache; an answer by the link to its row in an open tab; and 50 answers a second across five
-      # links for a minute (the answer route's time, typing on another page meanwhile); in Chrome
-      # against the server stack above.
-      - name: Phase 16 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase16
-      # Phase 17's (bench/phase17.mjs --no-server): the first rows of a 50,000-row table with 10,000
-      # parents nesting their sub-items, and a 50,000-row timeline with 10,000 dependencies (first
-      # bars and a drag), in Chrome against the server stack above (relations seeded by sqlcmd).
-      - name: Phase 17 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase17 -- --no-server
-      # Phase 18's (bench/phase18.mjs): a paid checkout's webhooks to the workspace's allowance shown,
-      # against the server stack above and the mock Paddle (started if not running). The local
-      # completion model's budget needs the real package and is run by hand (--local-model).
-      - name: Phase 18 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase18
-      # Phase 19's (bench/phase19.mjs): a page of 2,000 blocks, 20 pictures and a database block of
-      # 1,000 rows on the device, to a Word file (typing on another page meanwhile) and to its print
-      # view laid out with the print dialog asked for; and, tracked, the whole print to "Save as
-      # PDF" (Chrome headed with --kiosk-printing). No server.
-      - name: Phase 19 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase19
+      # Phase 9's (bench/phase9.mjs): a published page of 2,000 blocks read from the Sites process
+      # (localhost:5290) over HTTP, fresh and from its cache, and a timeline over 50,000 rows in
+      # Chrome (its first bars and a drag), against the server stack above.
+      - name: Phase 9 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase9
+      # Phase 8's (bench/phase8.mjs): a paste of 1,000 cells into a synced table (shown, and on
+      # the server) and a 1,000-page Notion export imported on the device, in Chrome against the
+      # server stack above. The server's CPU per push against 0.7.0 is measured on the reference
+      # machine (bench/phase8-server.mjs), as it needs 0.7.0 built beside this build.
+      - name: Phase 8 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase8
+      # Phase 12's (bench/phase12.mjs): a chart view of 50,000 rows by count (its first bars), and
+      # pinning a 5,000-row database whose rows all have documents while typing on another page
+      # (until every document is on the device, and the keystroke budget meanwhile), in Chrome
+      # against the server stack above. The ERP's first page of a 100,000-record connector is
+      # Track E10's own measure, taken in the ERP's repository.
+      - name: Phase 12 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase12
       - uses: actions/upload-artifact@v4
         if: always()
         with:
