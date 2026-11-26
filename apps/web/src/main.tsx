@@ -8,8 +8,23 @@ import { webPlatform } from './platform/web';
 
 const desktop = isTauri();
 const platform = desktop ? desktopPlatform : webPlatform;
+const root = document.getElementById('root')!;
 
-createRoot(document.getElementById('root')!).render(
+// The frame above an on-screen keyboard where the browser ignores index.html's
+// `interactive-widget=resizes-content` (Safari on iOS): keyboardFit.ts, loaded the first time the
+// visual viewport is shorter than the layout viewport, so the first screen carries none of it.
+const viewport = window.visualViewport;
+const shorter = () => {
+  if (viewport!.height >= document.documentElement.clientHeight - 1) return;
+  viewport!.removeEventListener('resize', shorter);
+  import('./keyboardFit').then(
+    ({ fitAboveKeyboard }) => fitAboveKeyboard(root),
+    (error: unknown) => console.warn('The frame will not fit above the keyboard:', error),
+  );
+};
+viewport?.addEventListener('resize', shorter);
+
+createRoot(root).render(
   <StrictMode>
     <WorkspaceApp platform={platform} />
   </StrictMode>,
