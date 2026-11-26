@@ -280,6 +280,19 @@ jobs:
       # Phase 11: the app built against the API on localhost, for the passkey specs (WebAuthn takes
       # no IP address as its relying party); Playwright serves it on localhost:4268.
       - run: node scripts/web-localhost.mjs --build
+      # layout.spec.ts's WebKit case (blocks made by Enter drawn in WebKit, which Chromium cannot
+      # show) runs from the chrome project with Playwright's own WebKit, and fails on CI without it.
+      # The shard holding the file moves as specs are added (shards are by count of tests), so each
+      # chrome shard lists its own files (about 5 s) and only the one with layout.spec.ts installs
+      # WebKit; the runners' Chrome and Edge need no install.
+      - name: Playwright's WebKit, in the chrome shard that runs layout.spec.ts
+        if: matrix.project == 'chrome'
+        shell: pwsh
+        run: |
+          $list = pnpm exec playwright test --list --reporter=list --project=chrome --shard=${{ matrix.shard }}/3
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ($list -match 'layout\.spec\.ts') { pnpm exec playwright install webkit }
+          else { 'layout.spec.ts is in another shard: no WebKit here' }
       - run: pnpm test:e2e --project=${{ matrix.project }} --shard=${{ matrix.shard }}/3
       - name: The last run on main's budget figures
         if: github.ref == 'refs/heads/main'

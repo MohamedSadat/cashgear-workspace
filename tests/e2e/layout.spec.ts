@@ -234,12 +234,15 @@ test.describe('a list typed on a phone', () => {
   // The report came from an iPhone: WebKit (Safari, iOS and the Mac app's WKWebView) left every
   // block made by Enter blank until the screen scrolled, which Chromium never did. Playwright's
   // WebKit runs it where it is installed (`npx playwright install webkit`, or a build named by
-  // CGW_E2E_WEBKIT); the configured browsers only start it, Chrome's project alone.
+  // CGW_E2E_WEBKIT); the configured browsers only start it, Chrome's project alone. CI installs it
+  // in the chrome shard that runs this file (ci.yml), so there a missing WebKit fails, never skips.
   test('every numbered item shows as soon as it is typed, in WebKit', async ({ baseURL }) => {
     test.skip(desktop, 'the desktop target has no WebKit');
     test.skip(test.info().project.name !== 'chrome', 'WebKit runs once, from the chrome project');
     const executablePath = process.env.CGW_E2E_WEBKIT || webkit.executablePath();
-    test.skip(!existsSync(executablePath), `no WebKit at ${executablePath}`);
+    const found = existsSync(executablePath);
+    expect(found || !process.env.CI, `no WebKit at ${executablePath} on CI`).toBe(true);
+    test.skip(!found, `no WebKit at ${executablePath}`);
     const browser = await webkit.launch({ executablePath });
     try {
       const context = await browser.newContext({

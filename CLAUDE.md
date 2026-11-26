@@ -1145,8 +1145,9 @@ Added as they are found, grouped by phase.
   scroll (an iPhone's numbered list). Chromium never did, so only WebKit shows it: the block holding
   the caret is `visible` (`decorations.ts`' `caretBlock`). Playwright's WebKit takes
   `CGW_E2E_WEBKIT` (`layout.spec.ts`); an older build than the one Playwright pins works by
-  `executablePath` (`ms-playwright/webkit-2336/Playwright.exe` under 1.65). WebKit logs the
-  viewport's `interactive-widget` as an unknown key, a console error.
+  `executablePath` (`ms-playwright/webkit-2336/Playwright.exe` under 1.65). CI installs it in the
+  chrome shard that lists `layout.spec.ts` (`ci.yml`), and there the case fails without it. WebKit
+  logs the viewport's `interactive-widget` as an unknown key, a console error.
 - A box with `overflow: hidden` is still a scroller: a press, a focus or Playwright's click on what
   it clips scrolls it (the sidebar's top was cut off so). Where only clipping is meant, `clip`. The
   page tree (`role="tree"`, CgTreeView) scrolls in its own box, not `.cgw-sidebar-body`. A spec that
