@@ -331,6 +331,8 @@ interface Paragraph {
   inline: DocJSON[];
   /** Images that were in it, as blocks after it (or instead of it, when it holds no text). */
   images: DocJSON[];
+  /** Phase 19: its text before the spaces at its ends were taken off (a code line keeps them). */
+  raw: string;
   style: Resolved;
   pPr: XmlElement | undefined;
   /** A Word check box (a content control) at its start, and whether it was ticked. */
@@ -595,6 +597,7 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
     const out: Paragraph = {
       inline: [],
       images: [],
+      raw: '',
       style,
       pPr,
       checkbox: null,
@@ -602,7 +605,8 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
       allBold: true,
     };
     content(p, out, style.run, null);
-    // Spaces at either end of a line are not its text.
+    out.raw = plainOf(out.inline);
+    // Spaces at either end of a line are not its text, unless it is a line of code.
     trimInline(out.inline);
     return out;
   };
@@ -668,7 +672,8 @@ export function readDocx(parts: DocxParts, options: DocxOptions = {}): DocxResul
     first = false;
     if (kind === 'code') {
       lists = [];
-      const text = plainOf(para.inline);
+      // A line of code keeps its indent (line breaks at its ends are spacing, taken off).
+      const text = para.raw.replace(/^\n+|\n+$/g, '');
       if (code)
         code.content = [{ type: 'text', text: `${code.content?.[0]?.text ?? ''}\n${text}` }];
       else {

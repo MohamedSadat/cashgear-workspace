@@ -62,7 +62,7 @@ export {
 } from './readonly';
 export { recoveredContent } from './recovered';
 export { plainText, toMarkdown, type TextContext } from './text';
-export { dateMentionText, isDateValue, localDate } from './dates';
+export { dateMentionText, formatDateMention, isDateValue, localDate } from './dates';
 export { docCodec, type DocCodecV3 } from './codec';
 export {
   canonicalStateText,

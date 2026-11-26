@@ -5,7 +5,7 @@
 import { Extension, type NodeViewRenderer } from '@tiptap/core';
 import { NodeSelection, type Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { isDateValue } from '@cgw/doc';
+import { formatDateMention, isDateValue } from '@cgw/doc';
 import type { EditorHost, OnHostChange } from './host';
 
 /** What the overlays give the editor's date mentions: the picker, while it is drawn. */
@@ -13,62 +13,12 @@ export interface DateUi {
   openDatePicker: ((pos: number, anchor: HTMLElement) => void) | null;
 }
 
-const DAY = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
-
-/** A date value as a Date, and whether it is a calendar date (drawn in UTC) or an instant. */
-function parse(value: string): { at: Date; day: boolean } | null {
-  const day = DAY.exec(value);
-  const at = day
-    ? new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])))
-    : new Date(value);
-  if (Number.isNaN(at.getTime())) return null;
-  if (day) at.setUTCFullYear(Number(day[1])); // Years below 100 are not 19xx.
-  return { at, day: !!day };
-}
-
-const formats = new Map<string, Intl.DateTimeFormat>();
-function format(locale: string | undefined, day: boolean): Intl.DateTimeFormat {
-  const key = `${locale ?? ''}|${day}`;
-  let made = formats.get(key);
-  if (!made) {
-    try {
-      made = new Intl.DateTimeFormat(
-        locale,
-        day
-          ? { dateStyle: 'medium', timeZone: 'UTC' }
-          : { dateStyle: 'medium', timeStyle: 'short' },
-      );
-    } catch {
-      made = new Intl.DateTimeFormat(undefined, day ? { timeZone: 'UTC' } : {});
-    }
-    formats.set(key, made);
-  }
-  return made;
-}
-
 /** The interface language dates are drawn in. */
 export const localeOf = (host: EditorHost) =>
   host.locale || document.documentElement.lang || undefined;
 
-/**
- * A date mention as the interface language writes it: a calendar date as that day (whatever the
- * device's time zone), an instant in the device's time zone, a span as the language writes a
- * span. Null when the stored date is not a date.
- */
-export function formatDateMention(
-  attrs: Record<string, unknown>,
-  locale: string | undefined,
-): string | null {
-  if (!isDateValue(attrs.date)) return null;
-  const start = parse(attrs.date);
-  if (!start) return null;
-  const end = isDateValue(attrs.end) ? parse(attrs.end) : null;
-  const shown = format(locale, start.day);
-  if (!end) return shown.format(start.at);
-  if (end.day === start.day && typeof shown.formatRange === 'function')
-    return shown.formatRange(start.at, end.at);
-  return `${shown.format(start.at)} – ${format(locale, end.day).format(end.at)}`;
-}
+// Phase 19: the mention's text is `@cgw/doc`'s, which the print view and the Word file share.
+export { formatDateMention };
 
 /**
  * Puts a date in place of a range (the `@query`, or the selection), with a space after it, in one

@@ -3,9 +3,13 @@
   "version": "0.18.0",
   "private": true,
   "type": "module",
-  "description": "The document layer: block schema, block ids, the Yjs seam, the page document and its autosave, plain text and Markdown. No React, no DOM.",
+  "description": "The document layer: block schema, block ids, the Yjs seam, the page document and its autosave, plain text and Markdown; from Phase 19 a page out as Word's parts and as the print view (`./out`). No React, no DOM.",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./out": "./src/out/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
