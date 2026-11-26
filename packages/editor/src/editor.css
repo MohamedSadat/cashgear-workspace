@@ -87,6 +87,12 @@
   overflow-clip-margin: 24px;
 }
 
+/* The block holding the caret (decorations.ts, `caretBlock`): WebKit left blocks made by Enter blank
+   until the window scrolled, as it never measured them while they held the caret. */
+.cgw-editor > .cgw-block.is-caret {
+  content-visibility: visible;
+}
+
 .cgw-block > .cgw-block {
   margin-inline-start: 26px;
 }

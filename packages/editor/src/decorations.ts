@@ -112,11 +112,34 @@ function placeholder(host: () => EditorHost) {
   });
 }
 
+/**
+ * The top-level block holding the caret is drawn whatever its distance from the viewport
+ * (`is-caret`: `content-visibility: visible`). WebKit (Safari, iOS, the Mac app's WKWebView) never
+ * works out how near the viewport a `content-visibility: auto` block is while it holds the caret,
+ * nor once the caret has left it: every block made by Enter stayed blank until a scroll or a
+ * resize. A block the caret leaves becomes `auto` afresh, and is measured then. One decoration.
+ */
+const caretBlock = new Plugin({
+  key: new PluginKey('cgwCaretBlock'),
+  props: {
+    decorations(state) {
+      const { $head } = state.selection;
+      if ($head.depth < 1) return null;
+      const block = $head.node(1);
+      if (block.type.name !== 'block') return null;
+      const pos = $head.before(1);
+      return DecorationSet.create(state.doc, [
+        Decoration.node(pos, pos + block.nodeSize, { class: 'is-caret' }),
+      ]);
+    },
+  },
+});
+
 export const BlockDecorations = Extension.create<{ host: () => EditorHost }>({
   name: 'cgwDecorations',
   addOptions: () => ({ host: () => ({}) }),
   addProseMirrorPlugins() {
-    return [numbers, placeholder(this.options.host)];
+    return [numbers, placeholder(this.options.host), caretBlock];
   },
 });
 
