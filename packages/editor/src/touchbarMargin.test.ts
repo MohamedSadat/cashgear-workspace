@@ -29,6 +29,21 @@ describe('the touch toolbar scroll margin', () => {
     expect(touchbarMargin(() => null)).toBeUndefined();
   });
 
+  // Safari on iOS keeps the layout viewport's height under its keyboard: what is seen ends at the
+  // visual viewport's foot, and `innerHeight` is no measure of it.
+  it('measures what the toolbar covers against the visual viewport where there is one', () => {
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: { offsetTop: 200, height: 420 },
+    });
+    try {
+      expect(touchbarMargin(() => barAt(570))?.bottom).toBe(50 + 8);
+      expect(touchbarMargin(() => barAt(700))?.bottom).toBe(8);
+    } finally {
+      delete (window as { visualViewport?: unknown }).visualViewport;
+    }
+  });
+
   it('is read by the editor only while the toolbar hands it its element', () => {
     const doc = new Y.Doc();
     writeJSON(doc.getXmlFragment(CONTENT), documentSchema(), build.docOf(build.paragraph('a')));

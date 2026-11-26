@@ -331,6 +331,7 @@ describe('the touch toolbar', () => {
       'Indent',
       'Outdent',
       'Block menu',
+      'Done editing',
     ]);
     // Indent and Outdent have the library's right-to-left drawings too.
     for (const name of ['Indent', 'Outdent'])
@@ -348,5 +349,43 @@ describe('the touch toolbar', () => {
     await act(async () => tool('Insert a block').click());
     expect(listbox()?.getAttribute('aria-label')).toBe('Commands');
     expect(texts()[1]).toBe('gammas /');
+  });
+
+  it('leaves the editor on Done editing, and is gone with its focus', async () => {
+    touch = true;
+    const { view, end } = await setup();
+    await end(1);
+    const done = () =>
+      document.querySelector<HTMLButtonElement>('button[aria-label="Done editing"]');
+    expect(done()?.classList.contains('cgw-touchbar-done')).toBe(true);
+    await act(async () => done()!.click());
+    expect(document.activeElement).not.toBe(view.dom);
+    expect(document.getSelection()?.rangeCount).toBe(0);
+    expect(document.querySelector('[data-cg-selection-toolbar="docked"]')).toBeNull();
+  });
+
+  it('sits at the visual viewport’s foot, followed as it moves', async () => {
+    touch = true;
+    const listeners: Record<string, (() => void)[]> = {};
+    const viewport = {
+      height: 400,
+      offsetTop: 0,
+      addEventListener: (name: string, listener: () => void) =>
+        (listeners[name] ??= []).push(listener),
+      removeEventListener: (name: string, listener: () => void) =>
+        (listeners[name] = (listeners[name] ?? []).filter((l) => l !== listener)),
+    };
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    cleanups.push(() => void delete (window as { visualViewport?: unknown }).visualViewport);
+    const { end } = await setup();
+    await end(1);
+    const bar = () => document.querySelector<HTMLElement>('[data-cg-selection-toolbar="docked"]')!;
+    expect(bar().style.insetBlockStart).toBe('400px');
+    expect(bar().style.insetBlockEnd).toBe('auto');
+    expect(bar().style.transform).toBe('translateY(-100%)');
+    // Safari scrolls the caret into view by moving the visual viewport down the layout viewport.
+    viewport.offsetTop = 180;
+    await act(async () => listeners.scroll?.forEach((listener) => listener()));
+    expect(bar().style.insetBlockStart).toBe('580px');
   });
 });

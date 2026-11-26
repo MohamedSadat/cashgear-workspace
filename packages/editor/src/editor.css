@@ -944,6 +944,18 @@ h3.cgw-body {
   touch-action: manipulation;
 }
 
+/* "Done editing" is the toolbar's end rail (`alignment: 'end'`), alone in it: the rail stays at the
+   bar's end edge while the other tools scroll under it, so a phone too narrow for every tool still
+   shows the way out of the editor. It sticks over the bar's own padding too, which would otherwise
+   show the tools passing under it. */
+.cgw-touchbar div:has(> span > .cgw-touchbar-done) {
+  position: sticky;
+  inset-inline-end: calc(-1 * var(--cg-space-1));
+  padding-inline: 4px var(--cg-space-1);
+  border-inline-start: 1px solid var(--cg-border);
+  background: var(--cg-surface);
+}
+
 /* A bookmark with a preview from the server (Q13). */
 .cgw-bookmark-card.has-preview {
   flex-wrap: wrap;

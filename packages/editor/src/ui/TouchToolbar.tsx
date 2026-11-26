@@ -1,15 +1,16 @@
 // The touch toolbar: on a narrow or touch screen, while the editor has focus, a row of block tools
 // sits above the on-screen keyboard: insert (the slash menu), bold, italic, move up and down,
-// indent, outdent and the block menu. With no hover and no Alt+Shift+arrows on a phone, it is how
-// blocks are moved there. `@cashgear/ui`'s CgSelectionToolbar docked (Track U2): presses in it keep
-// the focus in the editor, so the editor keeps its caret.
+// indent, outdent and the block menu, and at its end "Done editing", which leaves the editor (and
+// closes the keyboard). With no hover and no Alt+Shift+arrows on a phone, it is how blocks are moved
+// there. `@cashgear/ui`'s CgSelectionToolbar docked (Track U2): presses in it keep the focus in the
+// editor, so the editor keeps its caret.
 import { CgSelectionToolbar, type CgToolbarItem } from '@cashgear/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { currentBlock, indent, moveSibling, outdent, type BlockInfo } from '../blocks';
 import type { BlockEditor } from '../editor';
-import type { EditorHost } from '../host';
+import { editorString, type EditorHost } from '../host';
 import { openSlash } from '../slash';
-import type { TouchbarMarginStorage } from '../touchbarMargin';
+import { visualFoot, type TouchbarMarginStorage } from '../touchbarMargin';
 
 const QUERY = '(pointer: coarse), (max-width: 767px)';
 
@@ -26,6 +27,32 @@ function useMedia(query: string): boolean {
 }
 
 const none = () => () => {};
+
+/**
+ * The visual viewport's foot while the toolbar shows (touchbarMargin.ts's `visualFoot`). The
+ * library docks the toolbar by `innerHeight`, which on iOS under the keyboard is no measure of the
+ * layout viewport: there it sat behind the keyboard. Placed from the layout viewport's top at this
+ * foot, it is above the keyboard wherever Safari has moved the visual viewport; where the visual
+ * viewport is the layout viewport (Android, desktop) the place is the same as the library's.
+ */
+function useVisualFoot(active: boolean): number | null {
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const viewport = window.visualViewport;
+      if (!active || !viewport) return () => {};
+      viewport.addEventListener('resize', listener);
+      viewport.addEventListener('scroll', listener);
+      return () => {
+        viewport.removeEventListener('resize', listener);
+        viewport.removeEventListener('scroll', listener);
+      };
+    },
+    [active],
+  );
+  return useSyncExternalStore(subscribe, () =>
+    active && window.visualViewport ? Math.round(visualFoot()) : null,
+  );
+}
 
 export function TouchToolbar({
   editor: blockEditor,
@@ -121,10 +148,22 @@ export function TouchToolbar({
         if (!block || !open || !bar.current) return;
         open(block.pos, bar.current.getBoundingClientRect());
       }),
+      // At the bar's end, kept in view when its tools scroll along a narrow phone (editor.css).
+      // The editor's focus and the selection go inside the press (Tiptap's `blur` waits a frame),
+      // so the keyboard closes, and the toolbar with the focus.
+      {
+        ...tool('done', editorString(host, 'doneEditing'), 'check', () => {
+          editor.view.dom.blur();
+          editor.view.dom.ownerDocument.getSelection()?.removeAllRanges();
+        }),
+        alignment: 'end' as const,
+        className: 'cgw-touchbar-button cgw-touchbar-done',
+      },
     ];
-  }, [s, state, editor, blockEditor]);
+  }, [s, state, editor, blockEditor, host]);
 
   const shown = wanted && focused && editor.isEditable && !!s?.touchToolbar;
+  const foot = useVisualFoot(shown);
   // The caret scrolls into view above the toolbar while it shows (touchbarMargin.ts).
   useEffect(() => {
     const storage = (editor.storage as unknown as Record<string, TouchbarMarginStorage | undefined>)
@@ -149,6 +188,11 @@ export function TouchToolbar({
       size="large"
       autoCollapseText={false}
       zIndex={40}
+      style={
+        foot === null
+          ? undefined
+          : { insetBlockStart: foot, insetBlockEnd: 'auto', transform: 'translateY(-100%)' }
+      }
     />
   );
 }

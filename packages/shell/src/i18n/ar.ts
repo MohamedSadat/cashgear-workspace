@@ -197,6 +197,7 @@ export const ar: Catalogue = {
     outdent: 'إنقاص المسافة البادئة',
     insertBlock: 'إدراج كتلة',
     touchToolbar: 'أدوات الكتلة',
+    doneEditing: 'إنهاء التحرير',
     copyBlockLink: 'نسخ رابط الكتلة',
     deleteBlock: 'حذف',
     imageCaption: 'أضف تعليقًا',

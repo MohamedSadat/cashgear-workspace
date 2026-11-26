@@ -205,6 +205,7 @@ export const en = {
     outdent: 'Outdent',
     insertBlock: 'Insert a block',
     touchToolbar: 'Block tools',
+    doneEditing: 'Done editing',
     copyBlockLink: 'Copy link to block',
     deleteBlock: 'Delete',
     imageCaption: 'Add a caption',

@@ -78,6 +78,8 @@ export const EDITOR_STRING_DEFAULTS = {
   pluginBlock: 'Plugin block',
   pluginUnknown: 'This block needs a newer version of Cash Gear Workspace ({{type}}).',
   pluginUnavailable: "This block can't be shown here.",
+  /** After 0.19.0: the touch toolbar's last tool, which leaves the editor on a phone. */
+  doneEditing: 'Done editing',
 } as const;
 
 /** One of the Phase 6 strings: the host's, else the English default. */
