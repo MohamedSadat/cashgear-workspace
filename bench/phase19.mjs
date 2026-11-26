@@ -10,7 +10,11 @@
 //   - Export to Word: from the menu's click to the file's download, while keys are typed on another
 //     page of the same tab at a key every 35 ms (the export goes on when the page is left): budget
 //     3 s; the keys held to Phase 1's budget there (keydown to the end of the editor's transaction
-//     p95 8 ms, 16 on CI's runner), and their next frame tracked;
+//     p95 8 ms, 16 on CI's runner), and, after 0.19.0, their next frame p95 to a frame (33 ms), the
+//     page read in the export's worker. The keys type one sentence on through every run, a word
+//     at a time, so no run leaves half a word or starts inside one: Chrome's first spelling mark
+//     (its wavy line) took the GPU process up to about 300 ms once, holding every frame of the tab
+//     while nothing ran on the page;
 //   - Print: from the menu's click to `window.print()` being called with the print view laid out
 //     (its pictures loaded), which opens the print dialog: budget 3 s; and, tracked, from the click
 //     to the PDF the dialog's "Save as PDF" printer wrote (Chrome headed with `--kiosk-printing`:
@@ -57,13 +61,13 @@ const KEY_WORK_MAX = process.env.CI ? 16 : 8;
 const BUDGETS = {
   wordMs: { max: 3000, unit: 'ms', slack: 300 },
   wordKeyWorkP95: { max: KEY_WORK_MAX, unit: 'ms', slack: 2 },
+  // A key's next frame on the other page while the export runs (after 0.19.0: until then the
+  // page's document was read on the main thread, and a key could wait 80 ms and more for it).
+  wordKeyFrameP95: { max: 33, unit: 'ms', slack: 10 },
   // The print view laid out and `window.print()` called, which opens the dialog.
   printReadyMs: { max: 3000, unit: 'ms', slack: 300 },
-  // Tracked, not budgeted: the whole print to the dialog's "Save as PDF" printer, the PDF written;
-  // and a key's next frame on the other page (an export of half a second holds a few keys, one of
-  // which may wait out the page's document being read on the main thread).
+  // Tracked, not budgeted: the whole print to the dialog's "Save as PDF" printer, the PDF written.
   printPdfMs: { max: Infinity, unit: 'ms', slack: 500 },
-  wordKeyFrameP95: { max: Infinity, unit: 'ms', slack: 50 },
   wordFirstMs: { max: Infinity, unit: 'ms', slack: 500 },
   printPdfFirstMs: { max: Infinity, unit: 'ms', slack: 500 },
 };
@@ -219,6 +223,10 @@ function probes() {
   };
 }
 
+/** The sentence the keys type a word at a time, carried on from run to run: no word is cut. */
+const WORDS = 'the quick brown fox jumps over the lazy dog '.split(/(?<= )/);
+let typed = 0;
+
 const menu = async (page, item) => {
   await page.locator('.cgw-topbar').getByRole('button', { name: 'Page actions' }).click();
   await page.getByRole('menuitem', { name: item, exact: true }).click();
@@ -239,6 +247,8 @@ async function word(page, ids) {
   const editor = page.locator('.cgw-page .ProseMirror');
   await editor.waitFor();
   await editor.click();
+  // At the end of what earlier runs typed, so the sentence goes on whole.
+  await page.keyboard.press('Control+End');
   await page.waitForFunction(() => window.__watchEditor?.());
   await page.evaluate(() => {
     window.__keys.frame.length = 0;
@@ -246,9 +256,8 @@ async function word(page, ids) {
   });
   let saved = null;
   void download.then(() => (saved = Date.now()));
-  const text = 'the quick brown fox jumps over the lazy dog ';
-  for (let i = 0; saved === null && Date.now() - clicked < 60000; i = (i + 6) % text.length)
-    await page.keyboard.type(text.slice(i, i + 6), { delay: 35 });
+  while (saved === null && Date.now() - clicked < 60000)
+    await page.keyboard.type(WORDS[typed++ % WORDS.length], { delay: 35 });
   const file = await download;
   const bytes = readFileSync(await file.path());
   // The file holds the page: every row of the database's table and every picture.
