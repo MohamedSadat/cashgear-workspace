@@ -1664,6 +1664,10 @@ namespace Cgw.Core.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<string>("Layout")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
                     b.Property<string>("OrderKey")
                         .IsRequired()
                         .HasMaxLength(200)

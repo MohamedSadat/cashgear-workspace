@@ -206,6 +206,20 @@ async function readsTrashed(reader: MirrorReader, page: PageRecord): Promise<boo
 const counts = (row: RowRecord) => !row.trashedAt && !row.isTemplate;
 
 /**
+ * Phase 19: a page's layout is null or an object, short as JSON; the server checks its keys
+ * (layout.ts, `checkLayout`, which only Page setup writes through).
+ */
+function checkLayoutShape(payload: { layout?: unknown }) {
+  const { layout } = payload;
+  if (
+    layout !== undefined &&
+    layout !== null &&
+    (typeof layout !== 'object' || Array.isArray(layout) || JSON.stringify(layout).length > 4000)
+  )
+    throw new OpError('invalid', 'Not a layout');
+}
+
+/**
  * Plans a batch: checks every rule against the mirror as it will be after the operations before
  * it, and returns the records to write. Throws OpError on the first refusal; nothing is written.
  */
@@ -293,6 +307,7 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
         const { database, row, ...page } = op.payload;
         if (page.id !== op.entityId || page.workspaceId !== op.workspaceId)
           throw new OpError('invalid', 'Id mismatch');
+        checkLayoutShape(page);
         if (await reader.page(page.id)) throw new OpError('invalid', 'Page exists');
         const section = need(await reader.section(page.sectionId), 'Section');
         if (section.workspaceId !== op.workspaceId) throw new OpError('tree.section');
@@ -367,6 +382,7 @@ export async function planOps(ops: Operation[], base: MirrorReader): Promise<Pla
       case 'page.update': {
         const page = need(await reader.page(op.entityId), 'Page');
         if (await readsTrashed(reader, page)) throw new OpError('page.trashed');
+        checkLayoutShape(op.payload);
         if (isRow(page)) {
           const next: RowRecord = {
             ...page,

@@ -2683,6 +2683,7 @@ export interface components {
       id: string;
       isTemplate: boolean;
       kind: string;
+      layout?: unknown;
       orderKey: string;
       /** Format: uuid */
       parentPageId: null | string;
@@ -2947,6 +2948,7 @@ export interface components {
       id: string;
       isTemplate: boolean;
       kind: string;
+      layout?: unknown;
       /** Format: int64 */
       number?: null | number | string;
       orderKey: string;

@@ -765,7 +765,7 @@ export class WorkspaceSession {
 
   async updatePage(
     pageId: Id,
-    changes: Partial<Pick<PageRecord, 'title' | 'icon' | 'coverAssetId' | 'isTemplate'>>,
+    changes: Partial<Pick<PageRecord, 'title' | 'icon' | 'coverAssetId' | 'isTemplate' | 'layout'>>,
   ) {
     await this.apply([newOp('page.update', this.ws(), pageId, changes)]);
     if (changes.title !== undefined) this.scheduleIndex(pageId, 300);
@@ -953,6 +953,8 @@ export class WorkspaceSession {
         id: ids.get(page.id)!,
         orderKey: page.id === templateId ? record.orderKey : page.orderKey,
         coverAssetId: page.coverAssetId,
+        // Phase 19: a copy prints as its template does.
+        ...(page.layout ? { layout: page.layout } : {}),
         templateOfPageId: page.id === templateId ? templateId : null,
       };
     });

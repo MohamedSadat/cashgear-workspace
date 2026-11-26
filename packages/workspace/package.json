@@ -10,6 +10,7 @@
     ".": "./src/index.ts",
     "./automations": "./src/db/automations.ts",
     "./forms": "./src/db/forms.ts",
+    "./layout": "./src/layout.ts",
     "./testing": "./src/testing/conformance.ts"
   },
   "scripts": {

@@ -189,6 +189,11 @@ public sealed class Page : ITenantOwned
     /// has an empty <see cref="CreatedBy"/>, and created by shows the form.
     /// </summary>
     public Guid? FormId { get; set; }
+    /// <summary>
+    /// Phase 19: how the page prints and is written to Word, JSON as the device set it (Sync's
+    /// <see cref="Sync.PageLayouts"/>); null prints by the default layout.
+    /// </summary>
+    public string? Layout { get; set; }
 }
 
 /// <summary>The closure table, depth 0 included (a page is its own ancestor).</summary>

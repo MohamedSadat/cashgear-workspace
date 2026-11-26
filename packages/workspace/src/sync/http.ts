@@ -199,6 +199,8 @@ export const pageRecord = (p: Page): PageRecord => ({
   coverAssetId: p.coverAssetId ?? null,
   isTemplate: p.isTemplate,
   templateOfPageId: p.templateOfPageId ?? null,
+  // Phase 19: only on a page that has a layout (a server before 0.19.0 sends none).
+  ...layoutOf(p),
   version: num(p.version),
   createdAt: p.createdAt,
   updatedAt: p.updatedAt,
@@ -285,6 +287,13 @@ export const rowRecord = (r: RowDto): RowRecord => ({
   // Phase 17: its number, once the server has given it one (a server before 0.17.0 sends none).
   ...numberOf(r),
 });
+
+const layoutOf = (p: object): { layout?: Record<string, unknown> } => {
+  const layout = (p as { layout?: unknown }).layout;
+  return typeof layout === 'object' && layout !== null && !Array.isArray(layout)
+    ? { layout: layout as Record<string, unknown> }
+    : {};
+};
 
 const numberOf = (r: object): { number?: number } => {
   const n = (r as { number?: unknown }).number;

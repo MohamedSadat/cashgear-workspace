@@ -9326,7 +9326,8 @@
           },
           "access": {
             "type": "string"
-          }
+          },
+          "layout": { }
         }
       },
       "PageSiteDto": {
@@ -10488,7 +10489,8 @@
               "string"
             ],
             "format": "int64"
-          }
+          },
+          "layout": { }
         }
       },
       "RowRemindersDto": {

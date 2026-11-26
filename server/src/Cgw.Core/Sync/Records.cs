@@ -49,12 +49,14 @@ public sealed record PageDto(
     int DocEpoch,
     int DocSchemaVersion,
     /// <summary>The caller's level on this page.</summary>
-    string Access)
+    string Access,
+    /// <summary>Phase 19: the page's layout as the device set it, else null (it prints by the default).</summary>
+    System.Text.Json.JsonElement? Layout = null)
 {
     public static PageDto From(Page p, string access) =>
         new(p.Id, p.WorkspaceId, p.SectionId, p.ParentPageId, p.OrderKey, p.Kind, p.Title, p.Icon, p.CoverAssetId, p.IsTemplate,
             p.TemplateOfPageId, p.Version, p.CreatedAt, p.UpdatedAt, p.TrashedAt, p.TrashRootId, p.Restricted, p.DocHeadSeq,
-            p.DocEpoch, p.DocSchemaVersion, access);
+            p.DocEpoch, p.DocSchemaVersion, access, Json.Layout(p.Layout));
 }
 
 /// <summary>A database (db/types.ts <c>DatabaseRecord</c>); its properties are JSON, sent as they are stored.</summary>
@@ -108,14 +110,16 @@ public sealed record RowDto(
     /// <summary>Phase 16: the form view whose answer added the row, else null.</summary>
     Guid? FormId = null,
     /// <summary>Phase 17: the row's number in its database (a unique id shows it), else null.</summary>
-    long? Number = null)
+    long? Number = null,
+    /// <summary>Phase 19: the row's page's layout, else null.</summary>
+    System.Text.Json.JsonElement? Layout = null)
 {
     public static RowDto From(Page p, DatabaseRow r, string access) =>
         new(p.Id, p.WorkspaceId, p.SectionId, p.ParentPageId, p.OrderKey, "row", p.Title, p.Icon, p.CoverAssetId, p.IsTemplate,
             p.TemplateOfPageId, p.Version, p.CreatedAt, p.UpdatedAt, p.TrashedAt, p.TrashRootId, false, p.DocHeadSeq,
             p.DocEpoch, p.DocSchemaVersion, access, r.DatabaseId, Json.Element(r.Values, "{}"), Json.Element(r.PropertyVersions, "{}"),
             Json.Element(r.Computed, "{}"), r.ComputedVersion, p.CreatedBy == Guid.Empty ? null : p.CreatedBy, p.UpdatedBy == Guid.Empty ? null : p.UpdatedBy,
-            p.FormId, r.Number);
+            p.FormId, r.Number, Json.Layout(p.Layout));
 }
 
 internal static class Json
@@ -126,6 +130,10 @@ internal static class Json
         using var document = System.Text.Json.JsonDocument.Parse(string.IsNullOrEmpty(json) ? fallback : json);
         return document.RootElement.Clone();
     }
+
+    /// <summary>Phase 19: a page's stored layout as an object of the answer, or null.</summary>
+    public static System.Text.Json.JsonElement? Layout(string? json) =>
+        string.IsNullOrEmpty(json) ? null : Element(json, "{}");
 }
 
 public sealed record FavouriteDto(Guid WorkspaceId, Guid PageId, string OrderKey);

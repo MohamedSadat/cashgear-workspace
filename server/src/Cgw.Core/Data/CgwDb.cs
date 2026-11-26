@@ -208,6 +208,8 @@ public sealed class CgwDb(DbContextOptions<CgwDb> options, TenantScope tenant)
             e.Property(x => x.Title).HasMaxLength(1000);
             e.Property(x => x.SearchTitle).HasMaxLength(1000);
             e.Property(x => x.Icon).HasMaxLength(64);
+            // Phase 19: a layout is at most 4,000 characters as JSON (PageLayouts.MaxJson).
+            e.Property(x => x.Layout).HasMaxLength(4000);
             e.Property(x => x.DocStateHash).HasMaxLength(64).IsUnicode(false);
             // Access over the whole workspace (Access.AllLevelsAsync: the feed, the tree, search)
             // reads pages and databases, never rows: a database of 50,000 rows costs it nothing.

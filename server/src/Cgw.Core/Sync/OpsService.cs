@@ -286,6 +286,8 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
                 if (payload.TryGetProperty("isTemplate", out var template) && template.ValueKind is JsonValueKind.True or JsonValueKind.False)
                     page.IsTemplate = template.GetBoolean();
                 if (Has(payload, "templateOfPageId")) page.TemplateOfPageId = OptionalId(payload, "templateOfPageId");
+                // Phase 19: only an edit that names the layout changes it (an older build's never does).
+                if (Has(payload, "layout")) page.Layout = PageLayouts.FromPayload(payload);
                 page.Version++;
                 page.UpdatedAt = now;
                 page.UpdatedBy = member.UserId;
@@ -512,6 +514,7 @@ public sealed class OpsService(CgwDb db, Access access, AssetService assets, Cha
             CoverAssetId = cover,
             IsTemplate = p.TryGetProperty("isTemplate", out var t) && t.ValueKind == JsonValueKind.True,
             TemplateOfPageId = OptionalId(p, "templateOfPageId"),
+            Layout = Has(p, "layout") ? PageLayouts.FromPayload(p) : null,
             Version = 1,
             CreatedBy = member.UserId,
             UpdatedBy = member.UserId,

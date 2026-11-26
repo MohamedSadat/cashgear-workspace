@@ -68,6 +68,12 @@ export interface PageRecord {
   isTemplate: boolean;
   /** The template this page was made from, for display. */
   templateOfPageId: Id | null;
+  /**
+   * Phase 19: how the page prints and is written to Word (layout.ts, `@cgw/workspace/layout`):
+   * JSON the server keeps as it is given, keys a build does not know included. Absent or null, the
+   * page prints by the default layout; an older build never sends it, so its edits keep it.
+   */
+  layout?: Readonly<Record<string, unknown>> | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -205,7 +211,7 @@ export interface Op<T extends string, P> {
 }
 
 export type PageUpdate = Partial<
-  Pick<PageRecord, 'title' | 'icon' | 'coverAssetId' | 'isTemplate' | 'templateOfPageId'>
+  Pick<PageRecord, 'title' | 'icon' | 'coverAssetId' | 'isTemplate' | 'templateOfPageId' | 'layout'>
 >;
 
 export interface PageMove {

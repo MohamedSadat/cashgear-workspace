@@ -406,6 +406,35 @@ export function describeLocalStore(name: string, factory: StoreFactory) {
       await store.close();
     });
 
+    it("keeps a page's layout as it was set, through edits that do not send it (Phase 19)", async () => {
+      const store = await factory();
+      const { ws, a, b } = await seedTree(store);
+      const layout = {
+        size: 'letter',
+        orientation: 'landscape',
+        margins: 'wide',
+        header: { start: '{title}', center: '', end: '{date}' },
+        footer: { start: '', center: 'صفحة {page} من {pages}', end: '' },
+        // A key a later build may add is kept as it is.
+        columns: { count: 2 },
+      };
+      await store.applyLocalOp(op('page.update', ws.id, a.id, { layout }));
+      await store.applyLocalOp(op('page.update', ws.id, a.id, { title: 'Alpha 3' }));
+      expect(await store.getPage(a.id)).toMatchObject({ title: 'Alpha 3', layout, version: 3 });
+      expect((await store.readMirror(ws.id)).pages.find((p) => p.id === a.id)?.layout).toEqual(
+        layout,
+      );
+      // Null takes it off (the page prints by the default again); a list or a string is refused.
+      await store.applyLocalOp(op('page.update', ws.id, a.id, { layout: null }));
+      expect((await store.getPage(a.id))?.layout).toBeNull();
+      for (const wrong of [[1], 'a4', { big: 'x'.repeat(5000) }])
+        await expect(
+          store.applyLocalOp(op('page.update', ws.id, b.id, { layout: wrong as never })),
+        ).rejects.toMatchObject({ code: 'invalid' });
+      expect((await store.getPage(b.id))?.layout ?? null).toBeNull();
+      await store.close();
+    });
+
     it('moves a page, refuses a cycle, and changes nothing when a batch fails', async () => {
       const store = await factory();
       const { ws, section, a, b, c, d } = await seedTree(store);

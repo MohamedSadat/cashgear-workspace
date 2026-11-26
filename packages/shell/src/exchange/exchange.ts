@@ -20,6 +20,9 @@
 // block is pointed at it, and the caller makes it on the server once the workspace is there; a
 // local import keeps the blocks as they are and counts what it skipped. Versions 1 and 2 still
 // read.
+//
+// Phase 19: a page's entry may hold its `layout` (how it prints), an optional key in version 3
+// (an older reader leaves it); an import keeps it when it passes the layout's check.
 import { remapRefs, toMarkdown, workbookRefs, type DocJSON } from '@cgw/doc';
 import { FIRST_PARTY, pluginText } from '@cgw/plugins';
 import {
@@ -46,6 +49,7 @@ import {
   type ViewRecord,
   type WorkspaceRecord,
 } from '@cgw/workspace';
+import { checkLayout } from '@cgw/workspace/layout';
 import type { WorkspaceSession } from '../session';
 import type { ZipRequest } from './zip.worker';
 
@@ -64,6 +68,7 @@ export type ManifestPage = Pick<
   | 'icon'
   | 'coverAssetId'
   | 'isTemplate'
+  | 'layout'
 > & {
   /** Version 2: `page` (a version 1 page has none), `database` or `row`. */
   kind?: PageKind;
@@ -339,6 +344,7 @@ export async function buildExport(
     icon: page.icon,
     coverAssetId: page.coverAssetId,
     isTemplate: page.isTemplate,
+    ...(page.layout ? { layout: page.layout } : {}),
   });
   for (const page of pages) {
     const base = paths.get(page.id)!;
@@ -632,6 +638,10 @@ export async function readExportWith(
     coverAssetId: p.coverAssetId ? (assetIds.get(p.coverAssetId) ?? null) : null,
     isTemplate: p.isTemplate,
     templateOfPageId: null,
+    // Phase 19: kept when it is a layout (an export's file may have been edited by hand).
+    ...(p.layout !== undefined && p.layout !== null && checkLayout(p.layout) === null
+      ? { layout: p.layout }
+      : {}),
     version: 1,
     createdAt: now,
     updatedAt: now,
