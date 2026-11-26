@@ -136,18 +136,37 @@ API's host and no token is in JavaScript (Q5).
 ## Production as installed
 
 Installed 2026-11-14 (0.5.0); updated to 0.10.0 on 2026-11-19 with `install.ps1`, which also
-installed the Sites process, and to 0.12.0 on 2026-11-21 (Phase 11's migrations, the passkeys'
-relying party `workspace-api.cashgearerp.com`). The web app deploys itself on every push, the server
-does not: check `GET /api/v1/version` against the release when something new fails in production
-(from 2026-11-20 to 2026-11-21 the 0.11 and 0.12 web apps ran against the 0.10.0 API). Names only;
-no setting here is a secret.
+installed the Sites process, to 0.12.0 on 2026-11-21 (Phase 11's migrations, the passkeys' relying
+party `workspace-api.cashgearerp.com`), and to 0.18.0 on 2026-11-26 (Phases 13 to 18's migrations,
+the local embedding model, a site's own host names; PROGRESS.md, After 0.18.0: production). The web
+app deploys itself on every push, the server does not: check `GET /api/v1/version` against the
+release when something new fails in production (from 2026-11-20 to 2026-11-21 the 0.11 and 0.12 web
+apps ran against the 0.10.0 API, and from 2026-11-22 to 2026-11-26 the 0.13 to 0.18 web apps against
+the 0.12.0 API). Names only; no setting here is a secret.
 
-An update, as done for 0.12.0: the package copied onto the host over Remote Desktop's clipboard
-(no drive is redirected) and its hash compared, a copy-only backup verified with `RESTORE
-VERIFYONLY`, then `install.ps1` from an administrator's PowerShell with its parameters read back
-from the API app pool's environment and `CGW_SMTP_PASSWORD` set from it in that session, so no
-setting is typed again; the app pools' and the worker's variables compared with a copy taken
-before.
+An update, as done for 0.12.0 and 0.18.0:
+1. Copy the package onto the host over Remote Desktop's clipboard (no drive is redirected), into
+   `C:\CashGearWorkspace\packages`, and compare its hash.
+2. Take a copy-only backup and verify it with `RESTORE VERIFYONLY`.
+3. Run `install.ps1` from an administrator's PowerShell, with its parameters read back from the API
+   app pool's environment, its HTTPS binding and the worker's environment.
+   `CGW_SMTP_PASSWORD` and `CGW_SITES_CERT_PASSWORD` are set from those environments in that
+   session, so no setting is typed again.
+4. Compare the app pools' and the worker's variables with a copy taken before.
+
+From 0.18.0, scripts beside the packages do steps 3 and 4 (not in the repo):
+- `cgw-install.ps1 -Package <unpacked package> [-LocalModel <zip>] [-CustomDomains -AgreeToAcmeTerms] [-DryRun]`
+  runs step 3.
+- `cgw-snap.ps1` and `cgw-compare.ps1` take and compare the copies, with secrets shown only as a
+  short hash.
+- `cgw-live.ps1` reads the host names' certificates, reminders, the mail queue, webhook deliveries
+  and runs.
+
+An update that stops at "Copying api failed (9)" met a `w3wp` of the API pool still alive after the
+pool read `Stopped` (0.18.0's first run). End it (`Get-CimInstance Win32_Process -Filter
+"name='w3wp.exe'"` names its pool after `-ap`) and run `install.ps1` again: the migrations already
+applied are skipped. On the host, `sqlcmd` needs `-I` for writes to a table with a filtered index
+(`QUOTED_IDENTIFIER`).
 
 | Part | Where |
 | --- | --- |
@@ -158,6 +177,9 @@ before.
 | Blob Storage | Storage account `cashgearworkspace` (Spain Central, Standard LRS, no public access, soft delete and container soft delete 30 days, versioning), container `workspace`, CORS as in step 3 |
 | Blob identity | App registration `cashgear-workspace-api` with Storage Blob Data Contributor and Storage Blob Delegator on that account only; its certificate made on the host, PFX in `C:\CashGearWorkspace\secrets` (expires 2028-11-14; the app registration accepts it until 2027-11-14, so upload it again or make a new one before then) |
 | Sites | Site and app pool `CashGearWorkspaceSites` (from 2026-11-19), bound to `pages.cashgearerp.com` and `plugins.cashgearerp.com`, both pointed at the host by DNS |
+| A site's own host names | `-CustomDomains` from 2026-11-26, Let's Encrypt's production directory (its terms agreed by the owner), no contact address. Certificates: `C:\CashGearWorkspace\certificates`. Binding: the task `\Cash Gear Workspace\Site bindings`, its log `C:\CashGearWorkspace\logs\site-bindings.log`. ACME's path on Default Web Site goes to `pages.`. The certificates' password is only in the worker's environment, made on the host and read back by the next update. `docs.test.cashgearerp.com` serves the test workspace "Live checks"' site. After the switch from `-AcmeStaging` to the production directory, its live staging certificate was replaced only once its `CertificateRenewAt` was set to now by SQL (the worker renews with a third of a certificate's life left) |
+| DNS | cashgearerp.com at Squarespace (Google Cloud DNS's name servers; its edits ask for the owner's authenticator code). A wildcard `*` A record leads to the host, but a site's own name still needs its own `CNAME` to `pages.cashgearerp.com`: the proof's `TXT` record at `_cashgear-workspace.<name>` makes the name exist, and a wildcard covers no existing name. Squarespace's console appends the zone to a record's name: type `_cashgear-workspace.docs.test`, not the full name |
+| Local models | `voyage-4-nano` in `C:\CashGearWorkspace\models\voyage-4-nano` (from 2026-11-26, `cgw-local-model-voyage-4-nano-587d8d6.zip`), offered as "On this server". Not installed: the completion model, Cash Gear's subscription keys, and Paddle (billing off) |
 | Mail | `smtp.gmail.com:587` as `info@cashgearerp.com` (the ERP's account), with its own Google app password named "Cash Gear Workspace", entered on the host only. Gmail answers a wrong one with `535 5.7.8` (in the event log as "A confirm mail was not sent: AuthenticationException…"); test a new password from the host (an SMTP `AUTH` alone sends nothing) before storing it in the app pool's and the worker's `Smtp__Password` |
 
 ## Configuration

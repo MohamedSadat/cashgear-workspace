@@ -2041,6 +2041,87 @@ Benchmarks (`bench/phase18.mjs`: the webhook's in CI's Windows job; the local mo
 | The same in Arabic, the whole answer | On the host 60 s; on the reference machine 90 s | Not in CI | 80.2 s (median 79.5 s; 522 tokens); the host's 54.6 to 55.5 s |
 | The initial JavaScript | 350 kB (Phase 1) | 348.7 kB | 348.7 kB |
 
+## After 0.18.0: production
+
+- 2026-11-26, about 00:08 to 01:15 UTC: 0.18.0 installed in production over Remote Desktop, then the
+  live checks owed since 0.14.0 run on it (decided 2026-11-25, DECISIONS.md, After 0.18.0). The
+  package was built from `v0.18.0` (`11e9ca8`), unpacked by `git archive` under `target/`:
+  `cgw-server-0.18.0.zip`, 166,696,625 bytes, SHA-256 `55AA0C04…C325A8`, the same on the host.
+  `server-publish.mjs` writes the checkout's `git rev-parse HEAD` into `manifest.json`, which under
+  `target/` is `main`'s, so the manifest was set to the tag's commit before zipping. The embedding
+  model went with it: `cgw-local-model-voyage-4-nano-587d8d6.zip`, 599,824,352 bytes, SHA-256
+  `21B35CEA…3DC3C3`. Each file in it matched the hash pinned in `LocalModelOptions.cs` before the
+  copy, and the zip's hash matched on the host. The completion model, Cash Gear's subscription keys
+  and Paddle were not installed (your choice): billing stays off (`/version` `billing: false`).
+- Backup `CashGearWorkspace-pre-0.18.0-20261126.bak`: 12 MB, copy-only, with checksums; `RESTORE
+  VERIFYONLY` found it valid. `install.ps1` ran with its parameters read back from the API app pool's
+  environment, its HTTPS binding and the worker's environment. It applied the twelve migrations
+  `Phase13Plugins` to `Phase18Billing`.
+- **The first run stopped at the copy.** robocopy answered 9 for `api`: `Cgw.Api.dll` and
+  `Cgw.Core.dll` were held by a `w3wp` of the API pool, started at 00:09:53 UTC, still running two
+  minutes after the pool read `Stopped`. `install.ps1` waits for the pool's state, not its process.
+  That process was ended and the script run again: no migration left, the copy, the model unpacked
+  to `C:\CashGearWorkspace\models\voyage-4-nano`, health 200. The API and the sites were down from
+  about 00:09:50 to 00:13 UTC.
+- Afterwards `GET /api/v1/version` answers `0.18.0` (`propertyTypes` 22, `viewTypes` 8, `stepKinds`
+  7, `billing` false). `/health/ready` is `Healthy` and the sites' `/health/live` 200. The plugins
+  host gives its 404 page. `PUT /api/v1/account/notification-settings` and `DELETE
+  /api/v1/account/devices/{id}` reach the API (401 without a session).
+- The variables against the copy taken before:
+  - **API app pool:** 30 unchanged, 4 added (`Ai__LocalModel__Path`, `Sites__Acme__AgreeToTerms`,
+    `Sites__Acme__Directory`, `Sites__CertificateStore`).
+  - **Sites app pool:** 15 unchanged, 2 added (`Api__PublicUrl`, `Sites__PublicUrl`).
+  - **Worker:** 30 unchanged, the API's 4 added, and `Sites__CertificatePassword`, made at random on
+    the host and never shown.
+
+  Every job's `LastOkAt` was within two minutes of the start, with no `LastError`.
+  `rowFilesFill:done` was set at 00:12:45 UTC, so the 2026-12-14 deadline is met; the index holds no
+  row: no row in production names a file. The worker logs seven EF Core warnings at start: a query
+  with `Skip`/`Take` and no `OrderBy` (10102). Settings → AI now offers search by meaning "On this
+  server (voyage-4-nano)": its package passed the server's check.
+- The live checks ran in a new workspace of your account, "Live checks", with a Tasks database.
+- **A site at its own host name: passed.** `docs.test.cashgearerp.com` was added in Settings →
+  Publishing and proven by its `TXT` record at Squarespace (cashgearerp.com's DNS, on Google Cloud
+  DNS's name servers). It was then given to the site `live-checks`. Three things went wrong on the
+  way:
+  - The console appends the zone to a record's name, so the full name typed became
+    `….cashgearerp.com.cashgearerp.com`.
+  - The value was retyped with a capital I for a lowercase L.
+  - The host has a wildcard `*.cashgearerp.com` A record, so no `CNAME` seemed needed. But the
+    `TXT` record at `_cashgear-workspace.docs.test` makes `docs.test` a name that exists, and a
+    wildcard covers no existing name (RFC 4592). The host's resolver answered no address, so the
+    first order failed `notPointed` and backed off an hour.
+
+  A `CNAME docs.test → pages.cashgearerp.com`, as the app asks, fixed it. The order then ran:
+  - **Staging** (`-AcmeStaging`): the hour's wait was cleared on that row by SQL. The worker ordered
+    at 01:04:57 UTC (issuer `(STAGING) Ersatz Emmer YR2`), the binding task bound it at 01:05:43,
+    and the site answered 200 there. Its slug's address answered 302 to it.
+  - **Production** (`install.ps1` again without `-AcmeStaging`): only `Sites__Acme__Directory`
+    changed, on the API and the worker; the API and the sites were down about two minutes. The
+    worker renews a live certificate only once a third of its life is left, so a staging
+    certificate would stay about 60 days after the switch. The row's `CertificateRenewAt` was set
+    to now by SQL. Let's Encrypt's certificate (issuer `YR1`, until 2027-02-24, `ACC3B0A0…D63B`) was
+    ordered at 01:13:22 and bound at 01:14:10, replacing the staging one, which was removed from
+    the store. Windows validates its chain; https answers 200, http 308 to https.
+- **A webhook to a public receiver: passed.** The webhook "Live check receiver" pointed at a
+  webhook.site address; the rule "Live check webhook" (a row is added) sent Task and Status. The row
+  "Live check 1", added at 00:55:42 UTC, was posted from 85.9.202.36 at 00:55:44, 622 bytes, with
+  `user-agent: CashGearWorkspace-Webhook/1.0`, `x-cgw-signature: v1=…`, `x-cgw-timestamp`,
+  `x-cgw-delivery` and `x-cgw-webhook`. It was delivered with 200 on the first attempt. The
+  signature was not checked against the secret, which is shown once and was not read.
+- **A form link on the host: passed.** A form view on Tasks, its link made in Share form. Its page on
+  `pages.cashgearerp.com/_form/…` answers 200 with no script, `form-action 'self'
+  https://workspace-api.cashgearerp.com` and `X-Robots-Tag: noindex`; the first request after the
+  restart took 2.3 s. An answer posted by plain HTTP, with no script, went through the Sites
+  process's 307 to the API's `POST /api/v1/forms/{token}`, then a 303 to the thank-you page (200,
+  "Thank you. Your answer was sent."). The row "Live check form answer" showed in the open tab, the
+  form's count read 1, and the row started the rule above: delivered 00:57:09.
+- **A reminder's mail to a real inbox: passed.** A row's Due set to 02:45 Africa/Cairo (00:45 UTC),
+  "Remind me" at the time. The inbox notice came at 00:45:00 and was left unread; its mail was
+  queued at 01:00:19 (the 15 minutes of `Mail__NotificationDelaySeconds`) and sent at 01:00:26
+  through `smtp.gmail.com` on the first attempt. It reached your inbox.
+- Still owed: the live test in Paddle's sandbox (yours, OPERATIONS.md, Billing through Paddle).
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
