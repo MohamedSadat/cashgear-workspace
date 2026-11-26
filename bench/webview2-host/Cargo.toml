@@ -11,3 +11,6 @@ rust-version.workspace = true
 # The versions Tauri 2.12 already builds.
 tao = "=0.37.2"
 wry = "=0.57.2"
+# Phase 19's print spike: WebView2's own PrintToPdf (the versions wry 0.57 builds).
+webview2-com = "=0.39.1"
+windows = { version = "0.62", features = ["Win32_Foundation"] }

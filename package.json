@@ -72,6 +72,7 @@
     "azurite": "3.37.0",
     "eslint": "10.14.0",
     "globals": "17.14.0",
+    "pdfjs-dist": "6.5.438",
     "prettier": "3.9.10",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.2",

@@ -538,6 +538,8 @@ name = "cgw-webview2-host"
 version = "0.18.0"
 dependencies = [
  "tao",
+ "webview2-com",
+ "windows",
  "wry",
 ]
 

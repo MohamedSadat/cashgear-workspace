@@ -1,0 +1,36 @@
+name: Print spike
+# Phase 19's print spike on the Mac (DECISIONS.md, 2026-11-26: Phase 19): WKWebView prints the
+# spike's pages to PDF files with no panel, and pdf.js reads them back. Run by hand
+# (`gh workflow run print-spike.yml`); Chrome, Edge and WebView2 run on Windows
+# (`bench/print-spike/run.mjs`, `webview2.mjs`).
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  wkwebview:
+    name: WKWebView prints the spike's pages
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.11.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node bench/print-spike/judge-dir.mjs --write target/print-spike/www
+      - name: Print with WKWebView
+        timeout-minutes: 10
+        run: swift bench/print-spike/wkwebview.swift target/print-spike/www target/print-spike/out
+      - run: node bench/print-spike/judge-dir.mjs --judge target/print-spike/out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: print-spike-wkwebview
+          path: target/print-spike/out/
+          if-no-files-found: warn

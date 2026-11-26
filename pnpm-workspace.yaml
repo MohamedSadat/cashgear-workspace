@@ -11,3 +11,7 @@ allowBuilds:
   '@cashgear/ui@https://codeload.github.com/MohamedSadat/CashGear.React.UI/tar.gz/4a7d0b8edb5fd7b1c40168be290cbb7d5c3c231a': true
 patchedDependencies:
   '@tiptap/y-tiptap@3.3.0': patches/@tiptap__y-tiptap@3.3.0.patch
+# Phase 19: pdfjs-dist (the specs' PDF reader) offers @napi-rs/canvas; installed, jsdom would take it
+# and give every unit test a real canvas. Text and images are read without one.
+overrides:
+  'pdfjs-dist>@napi-rs/canvas': '-'

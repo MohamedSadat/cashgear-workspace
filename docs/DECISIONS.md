@@ -2176,3 +2176,30 @@ without keeping something.
 | Which changes order anew | Any change of directory, back to staging too; a failed order keeps the certificate live and follows the backoff (1 h, 6 h, then daily), as a renewal does | The directory named is the one the operator wants certificates from |
 | What else keeps it | `site.domain.certificate`'s audit detail names the directory; a name whose proof is lost loses it with its certificate; the API never shows it | Says where each certificate came from without a new screen |
 | Version | None: in the next release, its migration run by the next install | Not a phase |
+
+## 2026-11-26: Phase 19
+
+Phase 19's questions were put to you in one batch when it started (`IMPLEMENTATION_PLAN.md`, Phase
+19: Word, PDF and print, sized against 0.18.0 on 2026-11-25). The question tool takes four at a
+time, so "PDF on the desktop" was asked with "Where it is made", and "ERP blocks" with "Blocks
+that are not text". Read again against `main` (`6f7d5fb`) before asking: nothing writes OOXML or
+prints; `CgChart` draws SVG and gives it back by `getSvg()` with its styles inlined, so a chart can
+be drawn into the print view and a Word file without the editor; the lockfile already holds
+`webview2-com` 0.39.1 and `objc2-web-kit` 0.3.2 (through wry 0.57), the crates a direct PDF would
+need.
+
+### Answered by you
+
+| Question | Answer |
+| --- | --- |
+| Where it is made, and PDF on the desktop | On the device from the local store, offline too, as the workspace export is. Word is written in a worker. PDF comes from the browser's print engine, through the print dialog's Save as PDF, on the web and the desktop; if the spike finds WebView2's `PrintToPdf` works, the Windows app saves straight to a file instead. Nothing is sent to the server |
+| What is exported | The page alone, or with its sub-pages (each after a page break, at most 200), from a page's menu and a row's (a row's properties as a table first). Comments are left out and toggles are open. A mention is its text; a page mention links to the page's address in the app |
+| Blocks that are not text, and ERP blocks | A database block is a table of its view's rows: its filter, sort and shown properties, a board or list grouped as it groups; at most 1,000 rows, then a line saying how many more. A chart view is its chart; a sheet embed its picture, fetched if the device lacks it; a plugin block its text line; an image or file the device lacks while offline a placeholder, named in a notice after. An ERP block is a placeholder naming its list or report, as every output so far |
+| The layout | Kept on the page, so every reader prints it the same way: A4 or Letter (A4 for new pages), portrait or landscape; margins narrow, normal or wide; a header and a footer of text with the page's title, the date and page numbers. The Word file gets the same section. Page setup is in a page's menu, for whoever can edit the page |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| Version | `v0.19.0` | One version per phase |
+| The old build | v0.18.0 served on 4264 for `old-build.spec.ts` | The next free port below 4265 |
