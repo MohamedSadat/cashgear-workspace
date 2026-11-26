@@ -15,7 +15,7 @@ import {
   type TextContext,
 } from '@cgw/doc';
 import { insertFiles } from './actions';
-import { isBlock, pasteBlocks, withoutIds } from './blocks';
+import { isBlock, isBody, pasteBlocks, withoutIds } from './blocks';
 import { blockSelectionKey, blockSelectionSlice } from './blockSelection';
 import type { EditorHost } from './host';
 
@@ -95,11 +95,24 @@ function writeClipboard(
   );
 }
 
-/** Every block in a pasted slice loses its id, so the id plugin mints new ones (D4). */
-function freshIds(slice: Slice): Slice {
+/**
+ * Every block in a pasted slice loses its id, so the id plugin mints new ones (D4). Bodies at the
+ * slice's top (lines of plain text, bare paragraphs of HTML, as ProseMirror reads them beside the
+ * caret's body) each go in a block of their own, one level more open: a block holds one body, and
+ * a body placed as it was became a second body of the caret's block.
+ */
+function freshIds(slice: Slice, schema: Schema): Slice {
   const nodes: PMNode[] = [];
-  slice.content.forEach((node) => nodes.push(withoutIds(node)));
-  return new Slice(Fragment.from(nodes), slice.openStart, slice.openEnd);
+  slice.content.forEach((node) =>
+    nodes.push(withoutIds(isBody(node) ? schema.nodes.block.create(null, node) : node)),
+  );
+  const wrapped = (node: PMNode | null, open: number) =>
+    node && isBody(node) && open > 0 ? open + 1 : open;
+  return new Slice(
+    Fragment.from(nodes),
+    wrapped(slice.content.firstChild, slice.openStart),
+    wrapped(slice.content.lastChild, slice.openEnd),
+  );
 }
 
 /**
@@ -137,7 +150,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
       new Plugin({
         key: new PluginKey('cgwClipboard'),
         props: {
-          transformPasted: (slice) => freshIds(slice),
+          transformPasted: (slice, view) => freshIds(slice, view.state.schema),
           clipboardTextSerializer: (slice, view) => {
             const doc = sliceAsDoc(slice, view.state.schema);
             return (doc.content?.length ?? 0) > 1
@@ -193,6 +206,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
                 if (parsed.format === FORMAT)
                   slice = freshIds(
                     Slice.fromJSON(schema, parsed.slice as Parameters<typeof Slice.fromJSON>[1]),
+                    schema,
                   );
               } catch {
                 // Not ours after all: fall through to HTML.
@@ -221,7 +235,7 @@ export const Clipboard = Extension.create<{ host: () => EditorHost }>({
               );
               return true;
             }
-            pasteSlice(view, freshIds(new Slice(doc.content, 0, 0)), host);
+            pasteSlice(view, freshIds(new Slice(doc.content, 0, 0), schema), host);
             return true;
           },
           handleDrop: (view, event) => {

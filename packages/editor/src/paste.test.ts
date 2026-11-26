@@ -266,6 +266,24 @@ describe('pasting blocks at the caret', () => {
     expect(shape(editor.state.doc)).toEqual(['al', 'p', 'q', 'ega']);
   });
 
+  it('lines of plain text and bare paragraphs of HTML: the first joins the caret, the rest are blocks', () => {
+    const { editor, caret } = setup();
+    caret(1, 2);
+    paste(editor, new Map([['text/plain', 'first line\nsecond line']]));
+    // Each line a block of its own, never a second body of the caret's block.
+    expect(shape(editor.state.doc)).toEqual(['alpha', 'omfirst line', 'second lineega']);
+    caret(2, 11);
+    paste(editor, new Map([['text/html', '<p>one</p><p>two</p><h2>three</h2>']]));
+    expect(shape(editor.state.doc)).toEqual([
+      'alpha',
+      'omfirst line',
+      'second lineone',
+      'two',
+      'threeega',
+    ]);
+    expect(new Set(blockIds(editor.state.doc)).size).toBe(5);
+  });
+
   it('in code, copied blocks go in as their text', () => {
     const { editor, list } = setup(docOf(paragraph('alpha'), build.code(null, 'let a;')));
     const body = blocks.firstBody(list()[1])!;
