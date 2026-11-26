@@ -2207,6 +2207,50 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
 | Tracked: the whole print to the dialog's "Save as PDF" printer, the file written | None | 1,893 ms (first 1,920 ms); 546 kB | 2,967 ms (first 3,225 ms); 546 kB |
 | The initial JavaScript | 350 kB (Phase 1) | 349.6 kB | 349.6 kB |
 
+## After 0.19.0: CI side by side
+
+- 2026-11-26: CI's one Windows job ran about 150 minutes of steps one after another. It is now split
+  into jobs that run at once (`4bbc6a3`; DECISIONS.md, 2026-11-26: CI after 0.19.0, the web app
+  first). The desktop app is no longer built or tested in CI (your choice), `macos.yml` runs only
+  when started by hand (`8b84897`), and `release.yml` is unchanged.
+- The first run of the new layout, [run 45849410797](https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45849410797)
+  on `8b84897`, was green in 19.9 minutes. The two runs before it were the last of the old layout.
+
+| | Before | After |
+| --- | --- | --- |
+| Push to the last job's end | 150.3 min (run 45738149579, `6f7d5fb`); 141.9 min for a6e8cb0's Windows job (run 45822385856, the same specs as after) | 19.9 min |
+| Longest job | Build and test (Windows), 150.0 min | Budgets, Phases 7 to 19, 19.6 min |
+| Runner minutes, the sum of jobs | 168.5: Windows 150.0, server 17.6, licences 0.9 | 186.9: ten Windows jobs 170.7, server 15.2, licences 1.0 |
+| Browser e2e, Chrome and Edge | 484 tests in one Playwright run (a6e8cb0): 467 passed, 1 flaky, 16 skipped | 484 tests over six shards and the old builds' job: 467 passed, 1 flaky, 16 skipped |
+
+- **The jobs after, in minutes:**
+  - checks and unit tests 9.1;
+  - browser e2e, Chrome's shards 15.9, 16.2 and 18.7 (their tests 11.7, 10.4 and 13.1);
+  - Edge's shards 18.0, 15.6 and 19.4 (tests 13.1, 9.7 and 13.3);
+  - the old builds 18.8 (their spec 5.7, the rest making v0.2.0 to v0.18.0);
+  - kill tests and the budgets of Phases 1 to 6, 19.4;
+  - the budgets of Phases 7 to 19, 19.6.
+
+  Each Windows job spends about 4 to 5 minutes before its own work: set-up about 1, `cgw-ydoc` and
+  the server about 3, the web build about half a minute. Ten jobs repeating it are the extra runner
+  minutes, which a public repository does not pay for.
+- **The same tests ran.** The 484 tests match the last run of the old layout by project, file and
+  title, and the same 16 are skipped: the desktop app's specs (`desktop-cloud`, `desktop-sheet`),
+  the Windows app's PDF and the live Voyage test. The old builds' spec ran its 32 tests, none
+  skipped. The flaky test passed on its retry: the automations' signed webhook in Chrome (before,
+  the v0.4.0 build's case).
+- **Left out, as you chose:** the desktop's release build (2.8 min in run 45738149579), its smoke
+  test, its e2e specs (22.6 min), its kill tests while typing (1.5), during a store migration (1.1)
+  and during sync (2.2), and the budgets' `--desktop` parts.
+- **Every budget gate found the last green run on main's figures.** That was a6e8cb0's run, in its
+  one artifact `phase-verification`, read by the pattern `phase-verification*`.
+  - None could compare: the earlier budgets ran on an AMD EPYC 9V74, the later on an Intel Xeon
+    Platinum 8573C, and the last run on main on an AMD EPYC 9V45. So each gate checked budgets only,
+    as the gates have done since Phase 1 whenever the processor changes.
+  - GitHub's Windows runners drew four processors in three runs (run 45738149579 an AMD EPYC 7763).
+  - Each budget job draws its own runner and compares with the same job's figures of the last run,
+    so a figure is compared as often as before the split.
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)

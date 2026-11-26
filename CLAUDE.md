@@ -150,9 +150,9 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP; Phase 19: `--pdf <file>` prints it by `PrintToPdf` |
 | `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
 | `bench/results/` | What runs write; not committed; CI uploads it |
-| `.github/workflows/ci.yml` | Licence gates on Ubuntu; build, test, desktop smoke, kill tests, Phase 1 budgets and the Phase 0 harnesses on Windows |
+| `.github/workflows/ci.yml` | On push to `main`, every job side by side (about 20 minutes from 0.19.0): the licence gates and the server's tests and budgets on Ubuntu; on Windows the checks and unit tests (with S3, S5, S7), the browser e2e in three shards a browser (`--project`, `--shard`), the old builds' spec with the builds (`CGW_E2E_WITHOUT_OLD_BUILDS` keeps it out of the shards), and the kill tests and budgets in two jobs (Phases 1 to 6 with the Chrome kill tests and S6; 7 to 19), their figures the artifacts `phase-verification-early` and `-later` that the next run's gates read. Set-up in `.github/actions/setup` and `server-stack`. From 0.19.0 no desktop build or test (the web app first) |
 | `.github/workflows/release.yml` | On a `v*` tag: release check, installer test, signed NSIS installer and update, the universal Mac app (signed and notarised once the `APPLE_*` secrets exist), one `latest.json`, a drafted GitHub release |
-| `.github/workflows/macos.yml` | On push to `main`: the native crates' tests on macOS, the acceptance run through the test-only bridge (`scripts/macos-acceptance.mjs`), and the release-shaped universal build with its checks |
+| `.github/workflows/macos.yml` | By hand only from 0.19.0 (Actions, macOS, Run workflow): the native crates' tests on macOS, the acceptance run through the test-only bridge (`scripts/macos-acceptance.mjs`), and the release-shaped universal build with its checks |
 | `docs/` | Plan, design, decisions, progress; Phase 12's `SCREEN_READERS.md` (the database grid's script by hand for NVDA, Narrator and VoiceOver: the keys and what each must say) |
 
 ## Commands
@@ -1101,3 +1101,17 @@ Added as they are found, grouped by phase.
   processes too, found by `-ap "<pool>"` on their command line, and ends one still running at the
   deadline. A test without IIS: a copy of `powershell.exe` named `w3wp.exe` carrying `-ap "<name>"`
   stands in for a pool's process.
+
+### After 0.19.0
+
+- GitHub's Windows runners come with different processors (AMD EPYC 7763, 9V45, 9V74, Intel Xeon
+  Platinum 8573C in three runs), and each budget job draws its own. A gate compares with last main
+  only on the same `machine.cpu`, so most runs check budgets only ("budgets only" in the log;
+  Phase 19 prints no line for it). A missing artifact reads "No run on main to compare with".
+- Playwright's `--shard` splits a project's files by their count of tests, not by time: before
+  changing the number of shards, check each shard's minutes against a run's `browser-tests.json`.
+  `old-build.spec.ts` skips a build it cannot find, so a
+  shard without the builds would show its 32 tests as skipped and pass: CI leaves it out there
+  (`testIgnore` by `CGW_E2E_WITHOUT_OLD_BUILDS`) and runs it in a job with the builds.
+- `gh run download --pattern` puts each artifact in a folder of its own: the budget jobs find
+  `phaseN.json` by `Get-ChildItem -Recurse`, whichever artifact holds it.
