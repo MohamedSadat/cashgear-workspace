@@ -114,6 +114,18 @@ body {
   min-inline-size: 0;
 }
 
+/* CgBreadcrumb's current crumb shrinks at half the rate of the others (`flex-shrink: 0.5`). Once
+   they are at nothing it is the only one left to shrink, and flex layout then gives up only half
+   the space it must (a sum of factors under 1): the title ran out of the trail over the save
+   status (for Track U). The others give way twice as fast instead, and the current one wholly. */
+.cgw-breadcrumbs li {
+  flex-shrink: 2;
+}
+
+.cgw-breadcrumbs li:last-child {
+  flex-shrink: 1;
+}
+
 .cgw-page-area {
   flex: 1;
   min-block-size: 0;
@@ -258,6 +270,47 @@ body {
 
 .cgw-frame[data-layout='narrow'] .cgw-topbar {
   min-block-size: 48px;
+}
+
+/* On a phone the top bar's items give way, not the frame: wider than the window, they made the
+   drawer's application area scroll sideways and cut off "Page actions" at its edge. The
+   breadcrumbs give way first, cutting their crumbs with an ellipsis (the library's); the save and
+   sync status break into two lines at most, an ellipsis past those, and the save status, the
+   shortest, keeps its width; the buttons keep theirs. */
+.cgw-frame[data-layout='narrow'] .cgw-topbar-content {
+  gap: 4px;
+}
+
+.cgw-frame[data-layout='narrow'] .cgw-breadcrumbs {
+  flex-shrink: 4;
+}
+
+/* The sidebar's button keeps a touch target's width, not the library's padding and the gap beside
+   the label only a screen reader has. */
+.cgw-frame[data-layout='narrow'] .cgw-topbar > .cgw-icon-button {
+  gap: 0;
+  min-inline-size: 44px;
+  padding-inline: 10px;
+}
+
+.cgw-frame[data-layout='narrow'] .cgw-save-status,
+.cgw-frame[data-layout='narrow'] .cgw-sync-status {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  /* Its longest word: clipped, it would shrink to nothing. */
+  min-inline-size: min-content;
+  max-inline-size: 5rem;
+  padding-inline: 0;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: normal;
+  text-wrap: balance;
+}
+
+.cgw-frame[data-layout='narrow'] .cgw-save-status {
+  flex-shrink: 0;
 }
 
 .cgw-frame[data-layout='narrow'] .cgw-page-area {
