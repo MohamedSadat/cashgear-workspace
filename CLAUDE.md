@@ -150,7 +150,7 @@ What exists. Packages planned for later phases are in `docs/ARCHITECTURE.md`.
 | `bench/webview2-host` (crate `cgw-webview2-host`) | A WebView2 window on any URL, driven by Playwright over CDP; Phase 19: `--pdf <file>` prints it by `PrintToPdf` |
 | `bench/sheet-embed` | Sheet's deployed app in a sandboxed iframe (S9) |
 | `bench/results/` | What runs write; not committed; CI uploads it |
-| `.github/workflows/ci.yml` | On push to `main`, every job side by side (about 20 minutes from 0.19.0): the licence gates and the server's tests and budgets on Ubuntu; on Windows the checks and unit tests (with S3, S5, S7), the browser e2e in three shards a browser (`--project`, `--shard`), the old builds' spec with the builds (`CGW_E2E_WITHOUT_OLD_BUILDS` keeps it out of the shards), and the kill tests and budgets in two jobs (Phases 1 to 6 with the Chrome kill tests and S6; 7 to 19), their figures the artifacts `phase-verification-early` and `-later` that the next run's gates read. Set-up in `.github/actions/setup` and `server-stack`. From 0.19.0 no desktop build or test (the web app first) |
+| `.github/workflows/ci.yml` | On push to `main`, every job side by side (about 20 minutes from 0.19.0): the licence gates and the server's tests and budgets on Ubuntu; on Windows the checks and unit tests (with S3, S5, S7), the browser e2e in three shards a browser (`--project`, `--shard`), each then its share of the budgets of Phases 7 to 19 (the matrix's `include`, `pN`), the old builds' spec with the builds (`CGW_E2E_WITHOUT_OLD_BUILDS` keeps it out of the shards) then Phases 9 and 19, and the kill tests with the budgets of Phases 1 to 6 and S6; each budget-running job's figures in an artifact `phase-verification-<job>` that the next run's gates read. Set-up in `.github/actions/setup` (TEMP and TMP on D:) and `server-stack` (`CGW_E2E_SQL_DIR` on D:). From 0.19.0 no desktop build or test (the web app first) |
 | `.github/workflows/release.yml` | On a `v*` tag: release check, installer test, signed NSIS installer and update, the universal Mac app (signed and notarised once the `APPLE_*` secrets exist), one `latest.json`, a drafted GitHub release |
 | `.github/workflows/macos.yml` | By hand only from 0.19.0 (Actions, macOS, Run workflow): the native crates' tests on macOS, the acceptance run through the test-only bridge (`scripts/macos-acceptance.mjs`), and the release-shaped universal build with its checks |
 | `docs/` | Plan, design, decisions, progress; Phase 12's `SCREEN_READERS.md` (the database grid's script by hand for NVDA, Narrator and VoiceOver: the keys and what each must say) |
@@ -1105,13 +1105,23 @@ Added as they are found, grouped by phase.
 ### After 0.19.0
 
 - GitHub's Windows runners come with different processors (AMD EPYC 7763, 9V45, 9V74, Intel Xeon
-  Platinum 8573C in three runs), and each budget job draws its own. A gate compares with last main
-  only on the same `machine.cpu`, so most runs check budgets only ("budgets only" in the log;
+  Platinum 8573C and 8370C on 2026-11-26 alone), and each job draws its own. A gate compares with last
+  main only on the same `machine.cpu`, so most runs check budgets only ("budgets only" in the log;
   Phase 19 prints no line for it). A missing artifact reads "No run on main to compare with".
+- A young Windows runner's C: drive is slow and uneven at heavy writes: in a job's first 6 to 9
+  minutes a 50,000-row import passed 30 s and form answers took 14 s, and later still ran three
+  times the old job's. LocalDB makes its databases and the browsers their profiles (in TEMP) under
+  the runner's profile on C:; the workspace is on D:. CI sets TEMP and TMP to `RUNNER_TEMP` and
+  `CGW_E2E_SQL_DIR` to a folder there, and runs the budgets of Phases 7 to 19 after the specs. A new
+  writing-heavy step goes after them too, or writes on D:. LocalDB keeps tempdb in its instance
+  folder: a `MODIFY FILE` is undone when the instance starts.
+- A process a step starts in the background (`Start-Process`) does not outlive the step on
+  GitHub's Windows runners: the benches after the "Server stack for the benchmarks" step each start
+  their own ("Starting the server stack" in the log), as they did in the one job before 0.19.0.
 - Playwright's `--shard` splits a project's files by their count of tests, not by time: before
   changing the number of shards, check each shard's minutes against a run's `browser-tests.json`.
-  `old-build.spec.ts` skips a build it cannot find, so a
-  shard without the builds would show its 32 tests as skipped and pass: CI leaves it out there
-  (`testIgnore` by `CGW_E2E_WITHOUT_OLD_BUILDS`) and runs it in a job with the builds.
+  `old-build.spec.ts` skips a build it cannot find, so a shard without the builds would show its 32
+  tests as skipped and pass: CI leaves it out there (`testIgnore` by `CGW_E2E_WITHOUT_OLD_BUILDS`)
+  and runs it in a job with the builds.
 - `gh run download --pattern` puts each artifact in a folder of its own: the budget jobs find
   `phaseN.json` by `Get-ChildItem -Recurse`, whichever artifact holds it.

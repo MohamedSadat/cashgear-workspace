@@ -2213,32 +2213,67 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
   into jobs that run at once (`4bbc6a3`; DECISIONS.md, 2026-11-26: CI after 0.19.0, the web app
   first). The desktop app is no longer built or tested in CI (your choice), `macos.yml` runs only
   when started by hand (`8b84897`), and `release.yml` is unchanged.
-- The first run of the new layout, [run 45849410797](https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45849410797)
-  on `8b84897`, was green in 19.9 minutes. The two runs before it were the last of the old layout.
+- The layout as it stands, after the changes below (`faac764`, `b58d5cc`):
+  [run 45878117895](https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45878117895) on
+  `b58d5cc`, green in 20.5 minutes. The first run of the split,
+  [run 45849410797](https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45849410797) on
+  `8b84897`, was green in 19.9 minutes. The two runs before it were the last of the old layout.
 
-| | Before | After |
+| | Before | After (run 45878117895) |
 | --- | --- | --- |
-| Push to the last job's end | 150.3 min (run 45738149579, `6f7d5fb`); 141.9 min for a6e8cb0's Windows job (run 45822385856, the same specs as after) | 19.9 min |
-| Longest job | Build and test (Windows), 150.0 min | Budgets, Phases 7 to 19, 19.6 min |
-| Runner minutes, the sum of jobs | 168.5: Windows 150.0, server 17.6, licences 0.9 | 186.9: ten Windows jobs 170.7, server 15.2, licences 1.0 |
+| Push to the last job's end | 150.3 min (run 45738149579, `6f7d5fb`); 141.9 min for a6e8cb0's Windows job (run 45822385856, the same specs as after) | 20.5 min |
+| Longest job | Build and test (Windows), 150.0 min | Server (Ubuntu), 20.4 min; on Windows, Chrome's third shard, 19.1 min |
+| Runner minutes, the sum of jobs | 168.5: Windows 150.0, server 17.6, licences 0.9 | 166.6: nine Windows jobs 145.2, server 20.4, licences 1.0 |
 | Browser e2e, Chrome and Edge | 484 tests in one Playwright run (a6e8cb0): 467 passed, 1 flaky, 16 skipped | 484 tests over six shards and the old builds' job: 467 passed, 1 flaky, 16 skipped |
 
-- **The jobs after, in minutes:**
-  - checks and unit tests 9.1;
-  - browser e2e, Chrome's shards 15.9, 16.2 and 18.7 (their tests 11.7, 10.4 and 13.1);
-  - Edge's shards 18.0, 15.6 and 19.4 (tests 13.1, 9.7 and 13.3);
-  - the old builds 18.8 (their spec 5.7, the rest making v0.2.0 to v0.18.0);
-  - kill tests and the budgets of Phases 1 to 6, 19.4;
-  - the budgets of Phases 7 to 19, 19.6.
+- **The jobs after, in minutes (run 45878117895):**
+  - checks and unit tests 7.0;
+  - Chrome's shards with their budgets: 18.5 (Phases 8, 18), 16.7 (12, 17, 13) and 19.1 (14);
+  - Edge's: 17.8 (7), 17.7 (16, 10) and 16.4 (15);
+  - the old builds with Phases 9 and 19, 15.7;
+  - kill tests and the budgets of Phases 1 to 6, 16.5.
 
   Each Windows job spends about 4 to 5 minutes before its own work: set-up about 1, `cgw-ydoc` and
-  the server about 3, the web build about half a minute. Ten jobs repeating it are the extra runner
-  minutes, which a public repository does not pay for.
+  the server about 3, the web build about half a minute.
 - **The same tests ran.** The 484 tests match the last run of the old layout by project, file and
   title, and the same 16 are skipped: the desktop app's specs (`desktop-cloud`, `desktop-sheet`),
   the Windows app's PDF and the live Voyage test. The old builds' spec ran its 32 tests, none
   skipped. The flaky test passed on its retry: the automations' signed webhook in Chrome (before,
   the v0.4.0 build's case).
+- **The budgets of Phases 7 to 19 in a job of their own failed three of five runs.** They had run
+  70 minutes and more into the one job; now they started on a runner a few minutes old. Every
+  failure was in the job's first 6 to 9 minutes; every heavy bench from 8.8 minutes on passed:
+  - run 45853760649: Phase 12's seed of 50,000 rows past its 30 s request timeout at 8.4 minutes
+    (8 to 12.5 s in the eight green runs before); on its re-run, Phase 8's paste on the server
+    5,554 ms against its 5,000 at 6.0 (2.4 to 3.7 s in every run of the one job);
+  - run 45858984098, with the heaviest moved last (`50d7d20`): Phase 16's answers p95 14,002 ms
+    against 300 at 7.7 minutes.
+  - On one processor (AMD EPYC 9V74), the one job against the new: Phase 9's site seed 9.0 s to
+    16.7 s, its 50,000-row import 8.5 s to 13.3 s, while the browser's figures held. The job
+    beside, whose Phase 4 imports 50,000 rows 14 minutes in, kept 10.5 s (11.4 s on an Intel Xeon
+    8573C).
+- **After the specs (`faac764`)** they start 11 minutes and more into a runner. Run 45866161725
+  still failed: Phase 16's answers p95 372 ms against 300 at 15.8 minutes (76 to 133 ms on that
+  processor, an AMD EPYC 7763, in the one job), and one of the Chrome kill test's 25 runs during
+  sync "not saved 2 s after the last key" at 6.5 minutes.
+- **The heavy writes on D: (`b58d5cc`, your choice).** LocalDB made its databases, and the
+  browsers their profiles in TEMP, under the runner's profile on C:; the workspace was already on
+  D:. With TEMP, TMP and each fresh e2e database's files on D: (a folder made by
+  `scripts/server-stack.mjs` from `CGW_E2E_SQL_DIR`), on the same processors:
+
+  | Figure | Before | On D: | The one job |
+  | --- | --- | --- | --- |
+  | Phase 9's 50,000-row timeline import, 9V74 | 14.8 s | 6.1 s | 8.5 s |
+  | Phase 9's, 7763 | 15.1 s | 7.6 s | |
+  | Phase 12's 50,000-row chart import, 7763 | 10.4 s, 10.9 s | 7.7 s | 11.2 to 12.4 s |
+  | Phase 16's answers p95, 7763 | 372 ms, 217 ms | 110 ms | 76 to 133 ms |
+  | Phase 4's 50,000-row import, 9V45 | 10.7 s | 7.3 s | 9.5 s |
+  | Phase 8's paste on the server, 9V74 | 2.9 s | 2.6 s | 3.2 s |
+
+  Both runs since (45875119601, 45878117895) passed every budget and kill test. 45875119601 failed
+  in Chrome's first shard on `automations.spec.ts` alone: rows refused "Not an order key", as
+  `bench/phase15-seed.mjs`'s `addRow` makes an order key from `Date.now()` in base 36, and one
+  ending in `0` is refused (one row in 36); run 45869211395 failed on it too.
 - **Left out, as you chose:** the desktop's release build (2.8 min in run 45738149579), its smoke
   test, its e2e specs (22.6 min), its kill tests while typing (1.5), during a store migration (1.1)
   and during sync (2.2), and the budgets' `--desktop` parts.
@@ -2248,8 +2283,8 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
     Platinum 8573C, and the last run on main on an AMD EPYC 9V45. So each gate checked budgets only,
     as the gates have done since Phase 1 whenever the processor changes.
   - GitHub's Windows runners drew four processors in three runs (run 45738149579 an AMD EPYC 7763).
-  - Each budget job draws its own runner and compares with the same job's figures of the last run,
-    so a figure is compared as often as before the split.
+  - Each job that runs budgets draws its own runner and compares with the figures that job wrote in
+    the last run, so a figure is compared as often as before the split.
 
 ## Track U: `CashGear.React.UI`
 
