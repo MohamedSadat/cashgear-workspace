@@ -168,6 +168,126 @@ test.describe('layout with a tall sidebar', () => {
   }
 });
 
+const PHONES = [
+  { width: 375, height: 812 },
+  { width: 320, height: 640 },
+];
+
+/** The top bar's words in each language the spec walks. */
+const TOP_BAR = {
+  en: {
+    name: 'English',
+    toggle: /^(Show|Hide) the sidebar$/,
+    actions: 'Page actions',
+    favourite: 'Add to favourites',
+  },
+  ar: {
+    name: 'Arabic',
+    toggle: /^(إظهار|إخفاء) الشريط الجانبي$/,
+    actions: 'إجراءات الصفحة',
+    favourite: 'إضافة إلى المفضلة',
+  },
+} as const;
+
+/** How far the drawer's application area (CgDrawer's `main`, which scrolls) runs past its width. */
+const sideways = (page: Page) =>
+  page.locator('.cgw-frame > main').evaluate((main) => main.scrollWidth - main.clientWidth);
+
+/**
+ * What runs out of its place in the top bar: an item whose content is wider than its box (the
+ * breadcrumbs' last crumb, drawn over the save status), or one drawn over the next. None when the
+ * bar fits.
+ */
+function topBarSpills(page: Page) {
+  return page.locator('.cgw-topbar').evaluate((bar) => {
+    const name = (e: Element) => `${e.tagName.toLowerCase()}.${[...e.classList].join('.')}`;
+    const items = [...bar.children, ...bar.querySelector('.cgw-topbar-content')!.children]
+      .filter((e) => !e.classList.contains('cgw-topbar-content'))
+      .map((e) => ({ e, box: e.getBoundingClientRect() }))
+      .filter(({ box }) => box.width > 0)
+      .sort((a, b) => a.box.left - b.box.left);
+    const spills: string[] = [];
+    for (const { e } of items)
+      if (e.scrollWidth > e.clientWidth + 1)
+        spills.push(`${name(e)} is ${e.scrollWidth - e.clientWidth}px wider than its box`);
+    for (let i = 1; i < items.length; i++)
+      if (items[i].box.left < items[i - 1].box.right - 1)
+        spills.push(`${name(items[i - 1].e)} is drawn over ${name(items[i].e)}`);
+    return spills;
+  });
+}
+
+// Until 2026-11-27 the top bar on a phone (its breadcrumbs, save and sync status, star and "Page
+// actions") was wider than the window: the drawer's application area scrolled sideways, and
+// "Page actions" and the touch toolbar's end were cut off at the window's edge. From 375 pixels
+// down, a long title's crumb also ran out of the breadcrumbs over the status labels.
+test.describe('the top bar on a phone', () => {
+  test.use({ hasTouch: true });
+
+  for (const language of ['en', 'ar'] as const)
+    for (const size of PHONES)
+      test(`fits the window at ${size.width}x${size.height} in ${TOP_BAR[language].name}`, async ({
+        page,
+      }) => {
+        const errors = watchErrors(page);
+        const words = TOP_BAR[language];
+        await page.setViewportSize(size);
+        await createWorkspace(page);
+        await toggle(page).click();
+        await drawer(page)
+          .getByRole('button', { name: /^Add a page in/ })
+          .first()
+          .click();
+        await expect(drawer(page)).toHaveAttribute('aria-hidden', 'true');
+        await expect(page.getByLabel('Page title')).toBeFocused();
+        // A title longer than the window: the breadcrumbs must give way, not the frame.
+        await page.getByLabel('Page title').fill('A page whose title is far longer than a phone');
+        await page.keyboard.press('Enter');
+        await expect(editor(page)).toBeFocused();
+        await page.keyboard.type('Typed on a phone');
+        await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
+        if (language === 'ar') {
+          await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
+          await page.reload();
+          await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+          await expect(editor(page)).toContainText('Typed on a phone');
+        }
+
+        const bar = page.locator('.cgw-topbar');
+        const sidebar = bar.getByRole('button', { name: words.toggle });
+        const actions = bar.getByRole('button', { name: words.actions, exact: true });
+        await expect(bar.getByTestId('sync-status')).toHaveAttribute('data-state', 'localOnly');
+        await expect.poll(() => sideways(page)).toBe(0);
+        await expect.poll(() => topBarSpills(page)).toEqual([]);
+        await expect.poll(() => place(sidebar)).toBe('shown');
+        await expect.poll(() => place(actions)).toBe('shown');
+        await expect
+          .poll(() => place(bar.getByRole('button', { name: words.favourite, exact: true })))
+          .toBe('shown');
+        await expect.poll(() => place(bar.getByRole('navigation'))).toBe('shown');
+
+        // The touch toolbar spans the window, not more: it scrolls along its own line.
+        await editor(page).click();
+        const tools = page.locator('.cgw-touchbar');
+        await expect(tools).toBeVisible();
+        await expect.poll(() => place(tools)).toBe('shown');
+        await expect.poll(() => sideways(page)).toBe(0);
+
+        // Both buttons take a press where they are drawn.
+        await press(page, actions);
+        const menu = page.getByRole('menu', { name: words.actions });
+        await expect(menu).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+        await press(page, sidebar);
+        await expect(drawer(page)).toHaveAttribute('aria-hidden', 'false');
+        await page.keyboard.press('Escape');
+        await expect(drawer(page)).toHaveAttribute('aria-hidden', 'true');
+        expect(await framesScrolled(page)).toEqual([]);
+        expect(errors).toEqual([]);
+      });
+});
+
 /**
  * Each top-level block's text, and whether it is drawn: a press at its body's centre reaches the
  * body. A block whose contents `content-visibility` skips keeps its height but draws nothing and
