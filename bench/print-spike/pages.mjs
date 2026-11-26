@@ -262,6 +262,28 @@ document.body.dataset.paged = String(pages.length);
 <script>${script}</script></body></html>`;
 }
 
+/** Which fonts write Arabic's own letters into a PDF's text: one line in each, named first. */
+export const PROBE_FONTS = [
+  'Geeza Pro',
+  'Tahoma',
+  'Arial',
+  'system-ui',
+  'Al Nile',
+  'Baghdad',
+  'Damascus',
+  'Times New Roman',
+  'Noto Naskh Arabic',
+  'Segoe UI',
+];
+export function fontsPage() {
+  const lines = PROBE_FONTS.map(
+    (font, i) =>
+      `<p style="font-family: '${font}'"><span dir="ltr">F${i}</span> <span dir="rtl">${ARABIC}</span></p>`,
+  ).join('\n');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Fonts</title>
+<style>@page { size: A4; margin: 20mm; } body { font-size: 12pt; }</style></head><body>${lines}</body></html>`;
+}
+
 /** Every spike page and image, by file name. */
 export function spikeFiles() {
   const files = {};
@@ -272,6 +294,7 @@ export function spikeFiles() {
     files[`main-fixed-${size}.html`] = mainPage(size, { fixed: true });
     files[`paged-${size}.html`] = pagedPage(size);
   }
+  files['fonts-a4-portrait.html'] = fontsPage();
   for (let i = 1; i <= IMAGES; i++) files[`image${i}.png`] = png(600, 900, COLOURS[i - 1]);
   return files;
 }

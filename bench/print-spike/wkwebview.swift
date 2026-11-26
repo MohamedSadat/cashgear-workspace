@@ -35,6 +35,8 @@ for size in ["a4-portrait", "letter-landscape"] {
   // The fallback: pages cut by script, each a box of the paper's size, the print info's margins 0.
   jobs.append(Job(page: "paged-\(size)", size: size, mode: "cssMargins"))
 }
+// Which of the Mac's fonts write Arabic's own letters into the PDF's text.
+jobs.append(Job(page: "fonts-a4-portrait", size: "a4-portrait", mode: "layout"))
 
 final class Runner: NSObject, NSApplicationDelegate, WKNavigationDelegate {
   var window: NSWindow!
