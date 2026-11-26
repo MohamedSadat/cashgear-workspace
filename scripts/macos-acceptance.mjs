@@ -692,6 +692,93 @@ async function main() {
     results.steps.newPageOffline = { saved: true, serverReachable: await listening(5280) };
     log('A new page, saved with no server');
 
+    // 4b. Phase 19: the page saved as a PDF with no panel. WKWebView draws no `@page` margin boxes,
+    // so the print view is cut into A4 pages by script, each with its number at its foot, and an
+    // NSPrintOperation of the paper's size writes them to CGW_SAVE_DIR.
+    step = Date.now();
+    const arabicLine = 'يكتب هذا السطر من اليمين إلى اليسار';
+    await app.press('Enter');
+    await app.evaluate((arabic) => {
+      const blocks = Array.from({ length: 90 }, (_, i) => ({
+        type: 'block',
+        content: [
+          {
+            type: 'textBody',
+            attrs: i % 10 === 0 ? { kind: 'heading', level: 2 } : { kind: 'paragraph' },
+            content: [
+              {
+                type: 'text',
+                text: i % 3 === 0 ? `${arabic} ${i}` : `Line ${i} of a page printed on the Mac.`,
+              },
+            ],
+          },
+        ],
+      }));
+      const data = new DataTransfer();
+      data.setData(
+        'application/x-cgw-slice+json',
+        JSON.stringify({
+          format: 'cgw-slice',
+          slice: { content: blocks, openStart: 0, openEnd: 0 },
+        }),
+      );
+      document
+        .querySelector('.cgw-page .cgw-editor')
+        .dispatchEvent(
+          new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+        );
+      return true;
+    }, arabicLine);
+    await app.waitForText(EDITOR, literal('Line 89 of a page printed on the Mac.'), {
+      timeoutMs: 30_000,
+    });
+    await app.waitForText(SAVE_STATUS, 'Saved', { timeoutMs: 30_000 });
+    await app.click({ role: 'button', name: 'Page actions' });
+    await app.click({ role: 'menuitem', name: 'Save as PDF…' });
+    const savedDir = join(work, 'saved');
+    const pdfName = await until(
+      'the PDF to be saved',
+      () => existsSync(savedDir) && readdirSync(savedDir).find((f) => f.endsWith('.pdf')),
+      120_000,
+    );
+    let pdfSize = -1;
+    await until(
+      'the PDF to be written',
+      () => {
+        const size = statSync(join(savedDir, pdfName)).size;
+        const still = size > 0 && size === pdfSize;
+        pdfSize = size;
+        return still;
+      },
+      30_000,
+      500,
+    );
+    const { readPdf } = await import('../bench/print-spike/check.mjs');
+    const { pages } = await readPdf(readFileSync(join(savedDir, pdfName)));
+    const pdfText = pages.map((p) => p.lines.map((l) => l.text).join('\n')).join('\n');
+    // The Mac's fonts write two Arabic letters as their Persian forms in a PDF's text (DECISIONS.md,
+    // 2026-11-26): folded back before the Arabic is compared.
+    const folded = pdfText.replace(/ی/g, 'ي').replace(/ھ/g, 'ه');
+    const savePdf = {
+      seconds: (Date.now() - step) / 1000,
+      file: pdfName,
+      pages: pages.length,
+      a4: pages.every((p) => Math.abs(p.width - 595.28) < 2 && Math.abs(p.height - 841.89) < 2),
+      numbered: pages.every((p, i) => p.lines.at(-1)?.text === String(i + 1)),
+      lastLine: pdfText.includes('Line 89 of a page printed on the Mac.'),
+      arabicInOrder: folded.includes(`${arabicLine} 0`),
+    };
+    results.steps.savePdf = savePdf;
+    if (
+      !savePdf.a4 ||
+      !savePdf.numbered ||
+      !savePdf.lastLine ||
+      !savePdf.arabicInOrder ||
+      pages.length < 2
+    )
+      throw new Error(`The PDF saved on the Mac: ${JSON.stringify(savePdf)}`);
+    log(`Saved as a PDF with no panel: ${pages.length} A4 pages, each numbered`);
+
     // 5. Deep links: to an app that is not running, then to the running one.
     await quit(app);
     step = Date.now();
