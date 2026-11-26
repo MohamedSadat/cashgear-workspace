@@ -32,6 +32,8 @@ for size in ["a4-portrait", "letter-landscape"] {
       jobs.append(Job(page: "\(page)-\(size)", size: size, mode: mode))
     }
   }
+  // The fallback: pages cut by script, each a box of the paper's size, the print info's margins 0.
+  jobs.append(Job(page: "paged-\(size)", size: size, mode: "cssMargins"))
 }
 
 final class Runner: NSObject, NSApplicationDelegate, WKNavigationDelegate {
@@ -64,7 +66,7 @@ final class Runner: NSObject, NSApplicationDelegate, WKNavigationDelegate {
   }
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.print() }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self.print() }
   }
 
   func print() {

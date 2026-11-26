@@ -56,10 +56,11 @@ const COLOURS = [
 ];
 
 /**
- * The fonts: the generic `sans-serif` (Arial here) writes Arabic's initial yeh as the Farsi letter
- * in a PDF's text; Segoe UI and Tahoma write the Arabic one.
+ * The fonts: the generic `sans-serif` (Arial on Windows) writes Arabic's initial yeh as the Farsi
+ * letter in a PDF's text, and the Mac's system font writes Arabic as dotless letters and its dots
+ * apart; Segoe UI (Windows) and Tahoma (both) write the letters themselves.
  */
-export const FONT = 'system-ui, "Segoe UI", Tahoma, sans-serif';
+export const FONT = '"Segoe UI", Tahoma, "Geeza Pro", system-ui, sans-serif';
 
 /** Size names as `@page` takes them. */
 export const SIZES = {
@@ -75,7 +76,8 @@ export const SIZES = {
 export function printCss(size, { fixed = false } = {}) {
   // The page's content box's height: an image is never taller (it would be cut over two pages).
   const [, h] = SIZES[size].points;
-  const contentMm = (h / 72) * 25.4 - 40;
+  // Less a little, for the figure's own margins: WebKit cuts what is taller than what is left.
+  const contentMm = (h / 72) * 25.4 - 40 - 12;
   const boxes = fixed
     ? ''
     : `
@@ -94,7 +96,9 @@ export function printCss(size, { fixed = false } = {}) {
 .pv figure img { display: block; width: auto; height: auto; max-width: 120mm; max-height: ${contentMm.toFixed(1)}mm; }
 .pv table { border-collapse: collapse; width: 100%; }
 .pv thead { display: table-header-group; }
-.pv tr { break-inside: avoid; }
+.pv tr, .pv td > div { break-inside: avoid; page-break-inside: avoid; }
+.pv table { table-layout: fixed; }
+.pv col.name { width: 30mm; }
 .pv td, .pv th { border: 0.5pt solid #888; padding: 3pt 5pt; vertical-align: top; text-align: start; }
 ${
   fixed
@@ -122,10 +126,12 @@ export function printBody({ fixed = false } = {}) {
     );
   }
   parts.push('<h2>A table of three-line rows</h2>');
-  parts.push('<table><thead><tr><th>Name</th><th>Lines</th></tr></thead><tbody>');
+  parts.push(
+    '<table><colgroup><col class="name"><col></colgroup><thead><tr><th>Name</th><th>Lines</th></tr></thead><tbody>',
+  );
   for (let r = 1; r <= ROWS; r++)
     parts.push(
-      `<tr><td>Row ${r}</td><td>Row ${r} line one<br>Row ${r} line two<br>Row ${r} line three</td></tr>`,
+      `<tr><td><div>Row ${r}</div></td><td><div>Row ${r} line one<br>Row ${r} line two<br>Row ${r} line three</div></td></tr>`,
     );
   parts.push('</tbody></table>');
   parts.push(`<p dir="rtl">${ARABIC} في النهاية.</p>`);
@@ -173,6 +179,89 @@ export function mainPage(size, options = {}) {
 </body></html>`;
 }
 
+/**
+ * The fallback for an engine that draws no margin boxes (WebKit): the print view laid out at the
+ * content's width, then cut into page boxes of the paper's size by script, each with its header
+ * and footer drawn in its margins and its number; `@page`'s margin is 0 and the print info's too.
+ * Units are the flow's children, a table's rows each (in a table of their own per page, its header
+ * row again, its columns fixed so they line up), a heading kept with what follows it.
+ */
+export function pagedPage(size) {
+  const [w, h] = SIZES[size].points.map((pt) => (pt / 72) * 25.4);
+  const css = printCss(size).replace(
+    /@page \{[^]*?\n\}/,
+    `@page { size: ${SIZES[size].css}; margin: 0; }`,
+  ).concat(`
+.pv-measure { position: absolute; inset-inline-start: -100000px; top: 0; width: ${(w - 36).toFixed(2)}mm; }
+.pv-page { position: relative; width: ${w.toFixed(2)}mm; height: ${(h - 0.6).toFixed(2)}mm; overflow: hidden;
+  break-after: page; page-break-after: always; }
+.pv-page:last-child { break-after: auto; page-break-after: auto; }
+.pv-band { position: absolute; inset-inline: 18mm; display: flex; gap: 4mm; font: 9pt ${FONT}; color: #333; }
+.pv-band > span { flex: 1; } .pv-band > .c { text-align: center; } .pv-band > .e { text-align: end; }
+.pv-head { top: 8mm; } .pv-foot { bottom: 8mm; }
+.pv-body { position: absolute; top: 20mm; inset-inline: 18mm; height: ${(h - 40).toFixed(2)}mm; overflow: hidden; }
+.pv-body > :first-child { margin-top: 0; }`);
+  const script = `
+(async () => {
+await Promise.all([...document.images].map((i) => i.decode().catch(() => undefined)));
+const MM = 96 / 25.4;
+const contentH = ${(h - 40).toFixed(2)} * MM;
+const flow = document.querySelector('.pv-measure');
+const outer = (el) => {
+  const s = getComputedStyle(el);
+  return el.getBoundingClientRect().height + parseFloat(s.marginTop) + parseFloat(s.marginBottom);
+};
+const units = [];
+for (const el of [...flow.children]) {
+  if (el.tagName === 'TABLE') {
+    const head = outer(el.tHead);
+    for (const tr of [...el.tBodies[0].rows]) units.push({ table: el, tr, h: tr.getBoundingClientRect().height, head });
+  } else units.push({ el, h: outer(el), keep: /^H[1-6]$/.test(el.tagName) });
+}
+const pages = [];
+let body = null, used = 0, table = null;
+const newPage = () => {
+  const page = document.createElement('div');
+  page.className = 'pv-page';
+  page.innerHTML = '<div class="pv-band pv-head"><span>Spike header start</span><span class="c">${ARABIC_HEADER}</span><span class="e">2026-11-26</span></div><div class="pv-body"></div><div class="pv-band pv-foot"><span></span><span class="c"></span><span class="e"></span></div>';
+  document.querySelector('.pv-pages').append(page);
+  pages.push(page);
+  body = page.querySelector('.pv-body');
+  used = 0;
+  table = null;
+};
+newPage();
+units.forEach((u, i) => {
+  let need = u.h + (u.tr && (!table || table.source !== u.table) ? u.head : 0);
+  if (u.keep && units[i + 1]) need += units[i + 1].h;
+  if (used > 0 && used + need > contentH) newPage();
+  if (u.tr) {
+    if (!table || table.source !== u.table) {
+      table = u.table.cloneNode(false);
+      table.source = u.table;
+      table.append(u.table.querySelector('colgroup').cloneNode(true), u.table.tHead.cloneNode(true), document.createElement('tbody'));
+      body.append(table);
+      used += u.head;
+    }
+    table.tBodies[0].append(u.tr);
+    used += u.h;
+  } else {
+    table = null;
+    body.append(u.el);
+    used += u.h;
+  }
+});
+pages.forEach((page, i) => { page.querySelector('.pv-foot .c').textContent = 'Page ' + (i + 1) + ' of ' + pages.length; });
+flow.remove();
+document.body.dataset.paged = String(pages.length);
+})();
+`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Paged print spike</title>
+<style>html, body { margin: 0; } ${css}</style></head>
+<body><div class="pv-pages pv"></div><main class="pv pv-measure">${printBody()}</main>
+<script>${script}</script></body></html>`;
+}
+
 /** Every spike page and image, by file name. */
 export function spikeFiles() {
   const files = {};
@@ -181,6 +270,7 @@ export function spikeFiles() {
     files[`frame-${size}.html`] = framePage(size);
     files[`main-${size}.html`] = mainPage(size);
     files[`main-fixed-${size}.html`] = mainPage(size, { fixed: true });
+    files[`paged-${size}.html`] = pagedPage(size);
   }
   for (let i = 1; i <= IMAGES; i++) files[`image${i}.png`] = png(600, 900, COLOURS[i - 1]);
   return files;

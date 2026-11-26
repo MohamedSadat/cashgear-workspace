@@ -53,7 +53,7 @@ for (const channel of ['chrome', 'msedge']) {
   const browser = await chromium.launch({ channel });
   const page = await browser.newPage();
   for (const size of Object.keys(SIZES))
-    for (const name of [`doc-${size}`, `main-${size}`, `main-fixed-${size}`]) {
+    for (const name of [`doc-${size}`, `main-${size}`, `main-fixed-${size}`, `paged-${size}`]) {
       await page.goto(`${base}/${name}.html`);
       await page.waitForFunction(() => [...document.images].every((i) => i.complete));
       const bytes = await page.pdf({ preferCSSPageSize: true, printBackground: true });
