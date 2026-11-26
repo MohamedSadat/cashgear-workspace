@@ -2273,3 +2273,18 @@ while the server's job took 18 and the licence gates 1. Evidence in PROGRESS.md 
 | The budgets' figures | An artifact a budget-running job (`phase-verification-early`, `-chrome-1` to `-edge-3`, `-old-builds`); each downloads every `phase-verification*` of the last green run on main (the single one before the split too, and `-later` between) | Each figure is still gated against the last green run on main on the same processor |
 | Shared set-up | Two composite actions, `.github/actions/setup` (pnpm, Node, Rust and its cache, .NET, the packages) and `.github/actions/server-stack` (LocalDB, `cgw-ydoc`, the server built) | Every Windows job takes them (nine a run); one place to change a version |
 | Rust's cache | The checks keep the one job's key (`windows`, `shared-key`); the jobs building only `cgw-ydoc` share `ffi` | The first run after the split starts warm where the build is large |
+
+## 2026-11-26: Layout bugs reported by hand
+
+Three bugs reported by hand, two with screenshots (a desktop browser and an iPhone): Settings gone
+from the sidebar's foot when its tree is long; on a phone, the items of a numbered list typed one by
+one blank until the screen scrolled; the screen cut off beside Settings once reached with a long
+tree. `tests/e2e/layout.spec.ts` holds each.
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| The sidebar's foot | The Sidebar's own column takes what the frame's column leaves under it (`flex: 1 1 0`) and scrolls on its own when even its fixed rows have no room; the sidebar and the drawer's panel clip with `overflow: clip`, not `hidden` | At the frame column's full height it pushed the account, Workbooks and Settings out of a sidebar that clips. A box with `overflow: hidden` is still a scroller: a press or a focus on what it clipped scrolled it, and the sidebar's top was then cut off (the third bug). CgDrawer's panel is 1 px narrower than its content, so a press in the drawer scrolled it sideways (for Track U) |
+| WebKit's blank blocks | The top-level block holding the caret is `content-visibility: visible` (one decoration, `is-caret`); every other block keeps `auto` (D26) | WebKit (Safari, iOS, the Mac app's WKWebView) never measures how near the viewport a block made while it holds the caret is, nor when the caret leaves; a block that becomes `auto` again once the caret has left is measured. Not chosen: `auto` off in WebKit by its user agent, which would lose D26 there |
+| The WebKit spec | It runs where Playwright's WebKit is installed, or one named by `CGW_E2E_WEBKIT`, from the chrome project only; CI installs no WebKit, so it skips there | The configured browsers are Chrome and Edge; adding WebKit to CI is its own change |

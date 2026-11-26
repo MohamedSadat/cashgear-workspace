@@ -803,7 +803,9 @@ Targets, validated in Phase 0 and then gated in CI.
 How the budgets are met:
 
 - **Rendering.** Plain DOM node views for common blocks; `content-visibility: auto` with a size
-  hint on top-level blocks; heavy node views mounted lazily. Nothing is drawn per block on every
+  hint on top-level blocks, but `visible` on the one holding the caret (one decoration: WebKit never
+  measured a block made while it held the caret, and left it blank); heavy node views mounted
+  lazily. Nothing is drawn per block on every
   change: the block handle is one floating element (spike S6 measured a widget per block at about
   95 ms a keystroke on a 5,000-block page). React state is kept out of the
   typing path: the editor is not re-rendered by React on each transaction.
