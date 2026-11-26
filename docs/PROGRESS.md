@@ -2285,6 +2285,18 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
   - GitHub's Windows runners drew four processors in three runs (run 45738149579 an AMD EPYC 7763).
   - Each job that runs budgets draws its own runner and compares with the figures that job wrote in
     the last run, so a figure is compared as often as before the split.
+- **2026-11-27: Playwright's WebKit on CI** (`f431a9f`). Until then `layout.spec.ts`'s WebKit case
+  skipped on CI, which installed no browser. Each Chrome shard now lists its own files (`playwright
+  test --list`), and the one holding the file installs WebKit 27.2 (`webkit-2388`, Playwright
+  1.65's). `605d2bd` added `keyboard.spec.ts`'s WebKit case to the same step. On CI a missing WebKit
+  fails the case rather than skipping it.
+  - [Run 45905261578](https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45905261578)
+    on `f431a9f`, green in 20.3 minutes: the case passed in Chrome's second shard (3.5 s).
+  - The step took 9 s in that shard (the list about 3 s, then WebKit, FFmpeg and Winldd downloaded
+    in about 5 s) and 3 s in each other Chrome shard (the list only). That is under a quarter of a
+    minute on the job, about 0.3 runner-minutes a run.
+  - Chrome's second shard took 17.0 minutes, against 19.1 in the run before (45902821866): the
+    runner's own spread is larger than what the step adds.
 
 ## After 0.19.0: pasting blocks
 
