@@ -24,7 +24,8 @@
 //                                              v0.6.0 on 4275, v0.7.0 on 4274, v0.8.0 on
 //                                              4272, v0.9.0 on 4271, v0.10.0 on 4270, v0.14.0
 //                                              on 4269, v0.15.0 on 4267, v0.16.0 on 4266,
-//                                              v0.17.0 on 4265 (4273 is this build's preview;
+//                                              v0.17.0 on 4265, v0.18.0 on 4264 (4273 is this
+//                                              build's preview;
 //                                              4268 the passkey specs' build)
 // The API a build talks to is fixed at build time: VITE_CGW_API, 127.0.0.1:5280 (the e2e stack,
 // which must allow each build's origin: scripts/server-stack.mjs) unless set.
@@ -57,6 +58,8 @@ export const OLD_BUILDS = {
   // Phase 18: completions on this server's own model, and a workspace's plan, neither of which
   // 0.17.0 knows.
   'v0.17.0': { port: 4265 },
+  // Phase 19: a page's layout (Page setup), which 0.18.0 neither reads nor sends.
+  'v0.18.0': { port: 4264 },
 };
 export const OLD_TAG = 'v0.2.0';
 export const originOf = (tag = OLD_TAG) => `http://127.0.0.1:${OLD_BUILDS[tag].port}`;

@@ -1785,3 +1785,105 @@ test('the v0.17.0 build uses AI on the server’s own model and shows a paid pla
   await oldContext.close();
   await api.dispose();
 });
+
+// Phase 19 (v0.18.0 on :4264, no `layout` known): a page whose layout this build set (Page setup's
+// Letter, landscape, wide margins, a header and a footer, and a key a later build may add). The
+// v0.18.0 build renames it and gives it an icon, sending no layout; the server keeps the layout.
+test('the v0.18.0 build edits a page with a layout, and the server keeps its layout', async ({
+  browser,
+}) => {
+  test.setTimeout(240000);
+  const OLD = await serve('v0.18.0');
+  const account = await newAccount('Layout and v0.18.0');
+  const api = await apiSession(account);
+  const workspaceId = uuidv7();
+  await api.post('/api/v1/workspaces', {
+    id: workspaceId,
+    name: 'Layouts v0.18.0',
+    timeZone: 'UTC',
+  });
+  const now = new Date().toISOString();
+  const sectionId = uuidv7();
+  const pageId = uuidv7();
+  const layout = {
+    size: 'letter',
+    orientation: 'landscape',
+    margins: 'wide',
+    header: { start: '{title}', center: '', end: '{date}' },
+    footer: { start: '', center: 'Page {page} of {pages}', end: '' },
+    columns: { count: 2 },
+  };
+  await push(api, workspaceId, [
+    opOf(workspaceId, 'section.create', sectionId, {
+      id: sectionId,
+      workspaceId,
+      name: 'Shared',
+      orderKey: 'a0',
+      visibility: 'workspace',
+      version: 1,
+      createdAt: now,
+    }),
+    opOf(workspaceId, 'page.create', pageId, {
+      id: pageId,
+      workspaceId,
+      sectionId,
+      parentPageId: null,
+      orderKey: 'a1',
+      kind: 'page',
+      title: 'Quarterly report',
+      icon: null,
+      coverAssetId: null,
+      isTemplate: false,
+      templateOfPageId: null,
+      layout,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      trashedAt: null,
+      trashRootId: null,
+    }),
+  ]);
+  const pageOf = async () =>
+    (
+      (await api.get(`/api/v1/workspaces/${workspaceId}/tree`)).pages as {
+        id: string;
+        title: string;
+        icon: string | null;
+        layout?: unknown;
+      }[]
+    ).find((p) => p.id === pageId)!;
+  expect((await pageOf()).layout).toEqual(layout);
+
+  const oldContext = await browser.newContext({ baseURL: OLD });
+  const old = await oldContext.newPage();
+  const oldErrors: string[] = [];
+  old.on('pageerror', (error) => oldErrors.push(error.message));
+  const updates: { type: string; payload: Record<string, unknown> }[] = [];
+  old.on('request', (request) => {
+    if (request.method() !== 'POST' || !/\/ops$/.test(request.url())) return;
+    for (const op of (request.postDataJSON()?.ops ?? []) as typeof updates)
+      if (op.type === 'page.update') updates.push(op);
+  });
+  await old.goto(`${OLD}/`);
+  await signIn(old, account, `${OLD}/`);
+  await signedIn(old, account);
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await old
+    .getByRole('tree', { name: 'Pages' })
+    .getByRole('treeitem', { name: /Quarterly report/ })
+    .click({ timeout: 30000 });
+  await old.getByLabel('Page title').fill('Quarterly report, renamed');
+  await old.getByLabel('Page title').press('Enter');
+  await expect(syncStatus(old)).toHaveText('Synced', { timeout: 30000 });
+  await expect.poll(() => updates.length, { timeout: 30000 }).toBeGreaterThan(0);
+  // The old build sends only what it knows: never a layout.
+  expect(updates.every((op) => !('layout' in op.payload))).toBe(true);
+  expect(oldErrors).toEqual([]);
+  await oldContext.close();
+
+  await expect
+    .poll(async () => (await pageOf()).title, { timeout: 30000 })
+    .toBe('Quarterly report, renamed');
+  expect((await pageOf()).layout).toEqual(layout);
+  await api.dispose();
+});
