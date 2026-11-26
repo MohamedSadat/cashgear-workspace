@@ -511,6 +511,13 @@ process now also needs `Sites__PublicUrl`, which `install.ps1` gives it; without
 is served as the sites' own, as before. A site's own host names stay off until `install.ps1
 -CustomDomains` (above).
 
+Version 0.19.0's migration (`Phase19PageLayout`) adds one column, `Pages.Layout` (`nvarchar(4000)`,
+null), in a transaction like the others; nothing is filled. There is no new setting, job or process:
+Word files, prints and PDFs are made on the device. The server only keeps a page's layout as a
+device set it, and an older web app's edits keep it. Install the server before the web app: an older
+API takes the change but not the layout (it reads no key it does not know), so the next record it
+sends takes the layout off the device again.
+
 Version 0.17.0's migrations (`Phase17Workflows`, `Phase17UniqueIds`, `Phase17Reminders`) add
 `AutomationApprovals` and `RowReminders`, the columns of a waiting run (`AutomationRuns.Definition`,
 `Place`, `WaitKind`, `WaitUntil`, `WaitedAt`, `TakenAt`, `Context`, with the filtered index

@@ -625,6 +625,14 @@ Automations), not held in either local store, so the store's schema stays 4.
   is the server's: the answer to its first `page.create`, and the feed's, carry `number`; until then
   (a row made offline) the cell shows "—". A build before 0.17.0 keeps the property as it is stored.
 
+**A page's layout** (Phase 19): a page's print layout (DATA_MODEL.md, "A page's layout") is a field
+of its record, sent with `page.create` and `page.update` as the device set it (null takes it off), kept
+by the server as given and brought back by the tree, the feed and a database's rows. An update that
+does not name it keeps it, so an older build's edits never drop it, and the stores keep it in the
+page's JSON (no schema change). An older server takes the change and leaves the layout (it reads no
+key it does not know), so its next record of the page takes the layout off the device. Word files, prints and PDFs are not operations: they are made on the device and
+nothing of them is sent.
+
 **Access changes from moves** (Phase 2): the server writes an `access` change when a page with
 pages under it moves, when a move or a fallback (a restore or create whose parent has gone) makes
 a page `Restricted` to keep its access, and when pages cross between a shared and a private

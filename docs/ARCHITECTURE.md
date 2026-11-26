@@ -233,6 +233,8 @@ interface WorkspacePlatform {
   onDeepLink?(open: (hash: string) => void): () => void;                            // desktop
   updates?: PlatformUpdates;                                                         // desktop
   onCloseRequested?(flush: () => Promise<void>): () => void;
+  print?(job: PrintJob): Promise<'printed' | 'saved' | 'cancelled' | 'dialog'>;    // Phase 19, desktop
+  printMode?: 'css' | 'paged';                                                       // Phase 19
 }
 
 type AuthPlatform =
@@ -424,6 +426,44 @@ sizes), a board's card and a list's line count them, and a timeline draws depend
 `number`. Their words come with them (`database.automations`, `database.tasks`, merged with the
 first of them drawn); the desktop's SQLite store is imported when the desktop opens it, so the web
 app's initial JavaScript holds none of it (348.6 kB of 350 at 0.17.0).
+
+### Word, PDF and print (Phase 19)
+
+A page, or a row, leaves as a Word file, a print or a PDF, made on the device from what it holds,
+offline too: nothing goes anywhere but to the file the person saves or the printer.
+
+- **What is read.** `packages/shell/src/print/collect.ts` reads the page's content from its
+  document, its sub-pages when asked (at most 200, in the tree's order), the pictures they hold from
+  the store, a database block's view through `@cgw/database/out` (`viewOut`: the view's rows as a
+  table, at most 1,000 and then "Rows not shown: n"; a chart view as its chart, drawn off screen by
+  `ChartCanvas` in the light theme and read as SVG; a form view named), a row's properties
+  (`rowProperties`), a sheet block's kept picture and a plugin block's line. An ERP block is a
+  placeholder naming its connector ("Cash Gear ERP: vendors (its data is not exported)"): nothing of
+  the ERP is read. The result is `@cgw/doc/out`'s `OutInput`, plain data with its words translated.
+- **Word.** `writeDocx` (`packages/doc/src/out/docx.ts`) writes WordprocessingML's parts by hand,
+  pure: styles (never bold by a heading's style alone), numbering, a table of contents as a field,
+  the layout's header and footer, check boxes, pictures and tables. `print/docx.worker.ts` zips them
+  with fflate. It is held to Phase 8's reader by a round trip (`docx.test.ts`) and to OOXML by
+  DocumentFormat.OpenXml's validator over `packages/doc/vectors/docx-vectors.json` in the server's
+  tests (`DocxVectorTests`).
+- **Print.** `printView` (`packages/doc/src/out/print.ts`) draws the same input as HTML and CSS of
+  its own, never the editor's DOM. The shell mounts it in the app's own document
+  (`.cgw-print-root`; under print media everything else is hidden) and prints with
+  `window.print()`. In Chromium (Chrome, Edge, WebView2) the mode is `css`: the paper, margins,
+  header and footer by `@page`, a named page and its margin boxes (sides swapped in Arabic). WebKit
+  (Safari, WKWebView) draws no margin boxes, so the mode is `paged`: `print/paginate.ts` measures the
+  content and cuts it into boxes of a page each, the bands drawn in every one.
+- **Save as PDF.** On the web the browser's dialog and its "Save as PDF", which the app says first.
+  On the desktop `platform.print(job)` (`print_page`, `apps/desktop/src-tauri/src/print.rs`): on
+  Windows WebView2's `PrintToPdf` writes the file the person chose, with the job's paper and
+  margins and no header of WebView2's own, and Print is `window.print()`; on macOS an
+  `NSPrintOperation` over the WKWebView, its print info from the job, saves to the file chosen
+  without a panel, or shows the print panel for Print.
+- **Page setup.** `print/PageSetup.tsx` edits the page's `layout` (DATA_MODEL.md, "A page's
+  layout") with a preview of a page. The page's menu and a row's have Page setup…, Export to Word,
+  Print… and Save as PDF…. All of it loads when first used (`PrintDialogs`, lazily from
+  `PageView`), its words a section (`print`), so the initial JavaScript holds none of it (349.6 kB of
+  350 at 0.19.0).
 
 ## The backend
 

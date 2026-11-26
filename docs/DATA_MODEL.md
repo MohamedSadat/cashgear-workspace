@@ -245,7 +245,7 @@ workspace (a test fails if a table with `WorkspaceId` lacks it).
 | Table | Key fields | Notes |
 | --- | --- | --- |
 | `Sections` | `Id`, `WorkspaceId`, `Name`, `OrderKey`, `Visibility`, `OwnerUserId`, `Version` | `Visibility` is `workspace` or `private` |
-| `Pages` | `Id`, `WorkspaceId`, `SectionId`, `ParentPageId` (null at the top of a section), `OrderKey`, `Kind`, `Title`, `SearchTitle`, `Icon`, `CoverAssetId`, `Version`, `DocSeq`, `DocHeadSeq`, `DocSchemaVersion`, `DocEpoch`, `Restricted`, `TemplateOfPageId`, `IsTemplate`, `CreatedBy`, `UpdatedBy`, `UpdatedAt`, `TrashedAt`, `TrashedBy`, `TrashRootId`, `DeletedAt` | `Kind` is `page`, `database` or `row`. `Version` rises on every metadata change. `DocSeq` is the last document sequence given out, `DocHeadSeq` the validated head pulls serve up to (Q20). `SearchTitle` is the normalised title. A page deleted for good stays as a tombstone (`DeletedAt`, no title) so a push gets 410; the worker purges its document |
+| `Pages` | `Id`, `WorkspaceId`, `SectionId`, `ParentPageId` (null at the top of a section), `OrderKey`, `Kind`, `Title`, `SearchTitle`, `Icon`, `CoverAssetId`, `Version`, `DocSeq`, `DocHeadSeq`, `DocSchemaVersion`, `DocEpoch`, `Restricted`, `TemplateOfPageId`, `IsTemplate`, `CreatedBy`, `UpdatedBy`, `UpdatedAt`, `TrashedAt`, `TrashedBy`, `TrashRootId`, `DeletedAt`, `Layout` (Phase 19) | `Kind` is `page`, `database` or `row`. `Version` rises on every metadata change. `DocSeq` is the last document sequence given out, `DocHeadSeq` the validated head pulls serve up to (Q20). `SearchTitle` is the normalised title. A page deleted for good stays as a tombstone (`DeletedAt`, no title) so a push gets 410; the worker purges its document |
 | `PageAncestors` | (`PageId`, `AncestorPageId`), `Depth` | A closure table, kept by the server in the same transaction as a move. Gives "all descendants" and "all ancestors" in one indexed read, for permissions, trash and breadcrumbs. Rows of databases are not in it (Databases) |
 | `Favourites` | (`UserId`, `PageId`), `OrderKey` | Per user |
 | `PageVisits` | (`UserId`, `PageId`), `LastVisitedAt` | Recent pages, capped per user |
@@ -265,6 +265,30 @@ Tree rules, enforced by the server:
 Large workspaces: the client mirrors `Pages` metadata for the workspace (about 200 bytes a page,
 so 10,000 pages is about 2 MB) and draws the sidebar from the mirror with a virtualised tree. No
 document is loaded to draw the tree.
+
+### A page's layout (Phase 19)
+
+How a page prints and is written to Word: the page record's optional `layout`, JSON the device's
+Page setup writes and every reader prints by. Absent or null, the page prints by the default: A4,
+portrait, normal margins, no header, its number at the foot's centre.
+
+| Key | Values | Notes |
+| --- | --- | --- |
+| `size` | `a4`, `letter` | The paper |
+| `orientation` | `portrait`, `landscape` | |
+| `margins` | `narrow`, `normal`, `wide` | As Word names them: 12.7 mm all round; 25.4 mm; 25.4 mm at the top and foot and 50.8 mm at the sides |
+| `header`, `footer` | `{ start, center, end }`, each text of at most 200 characters on one line | `{title}`, `{date}`, `{page}` and `{pages}` in the text are the page's title, the day it is made, its number and the count of pages; a band the page sets is used as set, a band it does not set is the default's |
+
+Any key may be absent (the default's is used); keys a build does not know are kept, and Page setup
+changes only those it shows. At most 4,000 characters as JSON. The rules are
+`packages/workspace/src/layout.ts` (`@cgw/workspace/layout`), held with the server's port
+(`Cgw.Core/Sync/PageLayouts.cs`) to `packages/workspace/vectors/page-layout-vectors.json`.
+
+The server keeps it in `Pages.Layout` (`nvarchar(4000)`, migration `Phase19PageLayout`) as given,
+written as JavaScript writes it; `page.create` and `page.update` take it, null takes it off, and an
+edit that does not name it keeps it (an older build's edits never send it). `PageDto` and `RowDto`
+carry it to the tree, the feed and a database's rows. The local stores keep it in a page's JSON:
+no store schema change. The server never reads it.
 
 ### Documents
 
@@ -938,6 +962,12 @@ workspace's records as creates. A workspace made while signed in is uploaded at 
   as version 1), every sheet block pointed at it; done signed out, it stays on the device, its
   blocks unchanged, and the report counts the workbooks skipped. The app and the server's export
   write the same manifest.
+- From Phase 19 a page's entry in the manifest may hold its `layout` (an optional key of version 3;
+  an older reader leaves it). An import keeps it when it passes the layout's check.
+- From Phase 19 a page (or a row) leaves the workspace on its own as a Word file, a print or a PDF,
+  made on the device from the local store, offline too (ARCHITECTURE.md, "Word, PDF and print").
+  Nothing of it reaches the server but the page's layout; an ERP block is a placeholder naming its
+  connector, and nothing of the ERP is read for a file.
 - Deleting a workspace marks it deleted, removes access at once, and purges rows and blobs after
   30 days (the worker's `purgeWorkspaces` job). Its audit rows stay: the log is append-only.
 - Deleting a page for good (from the trash) leaves a tombstone row; the worker purges its
