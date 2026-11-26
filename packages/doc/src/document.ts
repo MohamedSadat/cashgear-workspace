@@ -12,8 +12,10 @@ import { migrate, type MigrationResult } from './migrations';
 import { watchMoves, type MoveConflict } from './moves';
 import { CONTENT, LOAD, MIGRATE, MOVES, REMOTE, META, documentVersion } from './names';
 import { SCHEMA_VERSION, documentSchema } from './schema';
+import { replayLog, retryPending } from './log';
 
 export { CONTENT, LOAD, META, MIGRATE, MOVES, REMOTE, documentVersion } from './names';
+export { retryPending } from './log';
 
 /**
  * What a page's document tells its owner (the shell), as it happens.
@@ -103,26 +105,6 @@ const defaults = {
   historyEvery: { updates: 200, ms: 10 * 60_000 },
   historyKeep: 50,
 };
-
-type YStore = { pendingStructs: { update: Uint8Array } | null; pendingDs: Uint8Array | null };
-const yStore = (doc: Y.Doc) => (doc as unknown as { store: YStore }).store;
-
-/**
- * Yjs 13.6.33 can hold updates as pending after everything they need has arrived, depending on
- * order (S1; bench/editor/fixtures/yjs-pending-order.json). Applying the pending update once more
- * integrates them. Returns whether anything was pending before and after.
- */
-export function retryPending(
-  doc: Y.Doc,
-  origin: unknown = LOAD,
-): { before: boolean; after: boolean } {
-  const store = yStore(doc);
-  const before = !!store.pendingStructs || !!store.pendingDs;
-  if (store.pendingStructs) Y.applyUpdateV2(doc, store.pendingStructs.update, origin);
-  // Yjs keeps its pending delete set in the V2 encoding too.
-  if (store.pendingDs) Y.applyUpdateV2(doc, store.pendingDs, origin);
-  return { before, after: !!store.pendingStructs || !!store.pendingDs };
-}
 
 /** A new page's document: the meta map stamped, and the given content if any. */
 export function stampMeta(doc: Y.Doc, pageId: Id): void {
@@ -218,17 +200,7 @@ export class PageDocument {
     const stored = await store.loadDoc(pageId);
     const doc = new Y.Doc({ gc: true });
     if (options.clientId) doc.clientID = options.clientId;
-    const bad: number[] = [];
-    doc.transact(() => {
-      if (stored.snapshot) Y.applyUpdate(doc, stored.snapshot, LOAD);
-      for (const update of stored.updates) {
-        try {
-          Y.applyUpdate(doc, update.data, LOAD);
-        } catch {
-          bad.push(update.localSeq);
-        }
-      }
-    }, LOAD);
+    const bad = replayLog(doc, stored);
     const pending = retryPending(doc);
     // Yjs takes a fresh client id when an update it is given writes as its own ("another client
     // seems to be using it"). Here that is this device's own log, written as the session's id,
