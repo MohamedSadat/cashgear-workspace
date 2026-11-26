@@ -15,9 +15,10 @@ name: macOS
 # APPLE_SIGNING_IDENTITY; APPLE_API_ISSUER, APPLE_API_KEY_ID, APPLE_API_KEY (the App Store Connect
 # API key's .p8 text); CGW_MACOS_API_BASE, CGW_MACOS_TEST_EMAIL, CGW_MACOS_TEST_PASSWORD (the
 # deployed API and its CI test account).
+# From 2026-11-26 it runs only when started by hand (Actions, macOS, Run workflow): the web app
+# comes first and the desktop apps are not built or tested on each push (DECISIONS.md, CI after
+# 0.19.0). The release workflow still builds the Mac app on a version tag.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
