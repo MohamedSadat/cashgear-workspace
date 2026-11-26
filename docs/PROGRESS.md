@@ -2286,6 +2286,24 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
   - Each job that runs budgets draws its own runner and compares with the figures that job wrote in
     the last run, so a figure is compared as often as before the split.
 
+## After 0.19.0: pasting blocks
+
+- 2026-11-26: Phase 19's two paste findings were one cause. A block may hold blocks and bodies
+  (`block > (body | block)*`), and ProseMirror fits a closed slice into the deepest node that takes
+  it, so every paste of whole blocks (blocks copied, Markdown, HTML starting with a picture) went in
+  as children of the block holding the caret, and in an empty block without its body. The bench's
+  2,000 blocks pasted into a new page were all there, nested in its one block, which its count of
+  the document's children read as nothing. Nothing in the editor depends on a paste's size: in
+  Chrome, the bench's 2,000 blocks went in whole by our format and by HTML (0.6 to 1.4 s). Lines of
+  plain text, and bare paragraphs of HTML, became more bodies of the caret's block.
+- Whole blocks now go in by `pasteBlocks` (`blocks.ts`), placed as Enter splits a block
+  (`4736bf2`), and a pasted slice's top-level bodies each in a block of their own (`265bebd`).
+  `packages/editor/src/paste.test.ts` holds them: 1,500 blocks copied and pasted land whole beside
+  the others with new ids, HTML of 1,500 too; the last block's end, an empty last block, a block's
+  start and middle, open and closed parents, a selection, code, lines of text; and two editors over
+  one page, the other showing the same ids and minting none. `editor.spec.ts`'s copy and paste
+  checks the copies are top-level.
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)

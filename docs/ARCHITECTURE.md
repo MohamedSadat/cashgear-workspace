@@ -272,7 +272,10 @@ the API: the typed client (`@cgw/api`) authenticated by the platform's `auth`, t
   are valid in the target, and the children.
 - **Clipboard.** Copy writes our own format (with fresh-id marking), HTML and plain text. Paste
   prefers our format, then HTML through the schema's parser, then Markdown, then plain text.
-  Pasted blocks always get new ids.
+  Pasted blocks always get new ids. Whole blocks (blocks copied, Markdown, HTML that starts with a
+  picture) go beside the block holding the caret, never inside it, placed as Enter splits it: in
+  an empty block's place, above a block from its start, else after the head with the text after
+  the caret in a block of its own; each pasted line of text is a block of its own.
 - **Undo.** Yjs `UndoManager`, tracking only the local user's changes.
 - **Keyboard.** Everything reachable without a mouse: arrows across blocks, Tab and Shift+Tab to
   indent, Alt+Shift+arrows to move a block, Esc to select the block, Ctrl+/ for the block menu.

@@ -1074,8 +1074,12 @@ Added as they are found, grouped by phase.
   renames it: watch the folder and read it on every change (`tests/e2e/pdf.ts`'s `kioskBrowser`).
 - `pdfjs-dist` brings `@napi-rs/canvas` as optional, and with it jsdom finds a canvas and every
   component test changes: `pnpm-workspace.yaml` overrides it away (`'pdfjs-dist>@napi-rs/canvas': '-'`).
-- A paste of about 1,000 blocks or more puts in nothing, and a paste at a caret in a page's last
-  block nests what it pastes inside that block: `bench/phase19.mjs` fills its page by one editor
+- A block may hold blocks and bodies (`block > (body | block)*`), and ProseMirror fits a closed
+  slice into the deepest node that takes it: a replace of whole blocks at a caret makes them
+  children of the caret's block (in an empty one, without its body), and lines of text read beside
+  a body became more bodies of it. Until 2026-11-26 every paste of copied blocks did so, and a
+  2,000-block paste, nested, read as nothing to a count of the document's children. Whole blocks
+  go in by `pasteBlocks` (`blocks.ts`). `bench/phase19.mjs` fills its page by one editor
   transaction (`view.dispatch(state.tr.replaceWith(0, size, content))`).
 - Leaving a page before its lazily loaded out dialog has mounted stops the export: a spec or a bench
   waits for the dialog before it moves on.
