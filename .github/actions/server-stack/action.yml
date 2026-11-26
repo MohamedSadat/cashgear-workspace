@@ -20,6 +20,11 @@ runs:
           Add-Content $env:GITHUB_PATH (Split-Path $tool)
         } else { $tool = $tool.Source }
         & $tool create MSSQLLocalDB -s
+        # The e2e database's files on the runner's D: drive, not under the profile on C:, where a
+        # young runner's heavy writes ran slow and uneven (PROGRESS.md, After 0.19.0):
+        # scripts/server-stack.mjs makes each fresh database there. (LocalDB keeps tempdb in its
+        # instance folder: a MODIFY FILE is undone when it starts.)
+        "CGW_E2E_SQL_DIR=$(Join-Path $env:RUNNER_TEMP 'cgw-sql')" >> $env:GITHUB_ENV
         & $tool info MSSQLLocalDB
     - run: cargo build -p cgw-ydoc --profile ffi
       shell: bash

@@ -15,6 +15,14 @@ inputs:
 runs:
   using: composite
   steps:
+    # On Windows, TEMP and TMP are the runner's temp folder on D: for every later step, so the
+    # browsers' profiles (the kill tests', Playwright's) are written there and not under the profile
+    # on C:, where a young runner's heavy writes ran slow and uneven (PROGRESS.md, After 0.19.0).
+    - if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+        "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
     - uses: pnpm/action-setup@v4
       with:
         version: 12.11.2

@@ -145,6 +145,22 @@ if (e2e) {
       });
   if (sqlcmd && sqlcmd.status !== 0)
     console.warn('Could not drop the last e2e database:', sqlcmd.stderr);
+  // CI (.github/actions/server-stack): CGW_E2E_SQL_DIR puts the fresh database's files in a folder
+  // of their own, on the runner's D: drive, where LocalDB would make them under the profile on C:.
+  // The API's migrations then fill it as they would a database they made.
+  const folder = process.env.CGW_E2E_SQL_DIR;
+  if (folder && sqlcmd && sqlcmd.status === 0) {
+    mkdirSync(folder, { recursive: true });
+    const file = (name) => join(folder, name).replaceAll("'", "''");
+    const create = `CREATE DATABASE [${database}] ON (NAME = N'${database}', FILENAME = N'${file(`${database}.mdf`)}') LOG ON (NAME = N'${database}_log', FILENAME = N'${file(`${database}_log.ldf`)}')`;
+    const made = spawnSync(
+      'sqlcmd',
+      ['-S', '(localdb)\\MSSQLLocalDB', '-E', '-C', '-b', '-Q', create],
+      { encoding: 'utf8' },
+    );
+    if (made.status !== 0)
+      console.warn(`Could not make the e2e database in ${folder}:`, made.stdout, made.stderr);
+  }
 }
 mkdirSync(join(data, 'azurite'), { recursive: true });
 mkdirSync(mail, { recursive: true });
