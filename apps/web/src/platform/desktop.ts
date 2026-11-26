@@ -88,6 +88,18 @@ export const desktopPlatform: WorkspacePlatform = {
   saveFile: async (name, data) => {
     await invoke('save_file', data, { headers: { 'x-file-name': encodeURIComponent(name) } });
   },
+  // Phase 19 (apps/desktop/src-tauri/src/print.rs): Save as PDF straight to a file, by WebView2's
+  // PrintToPdf on Windows and an NSPrintOperation on the Mac; Print is WebView2's own dialog on
+  // Windows, AppKit's print panel on the Mac (WKWebView ignores `window.print()`).
+  print: async (job) => {
+    const answer = await invoke<'printed' | 'saved' | 'cancelled' | 'dialog'>('print_page', {
+      job,
+    });
+    if (answer === 'dialog') window.print();
+    return answer;
+  },
+  // WKWebView draws no `@page` margin boxes: the Mac app's print view is cut into pages by script.
+  printMode: /Mac OS X|Macintosh/.test(navigator.userAgent) ? 'paged' : 'css',
   // The release feed, through the app's own commands (apps/desktop/src-tauri/src/updates.rs).
   updates: {
     version: async () => (await invoke<{ version: string }>('app_info')).version,

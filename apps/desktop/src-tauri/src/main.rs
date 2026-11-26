@@ -14,6 +14,7 @@ mod auth;
 // Test builds only (`--features e2e-bridge`): never in a release (build.rs).
 #[cfg(feature = "e2e-bridge")]
 mod bridge;
+mod print;
 mod sheet;
 mod updates;
 
@@ -294,6 +295,7 @@ fn main() {
             auth::auth_sign_out,
             sheet::sheet_app_installed,
             sheet::sheet_app_open,
+            print::print_page,
             #[cfg(feature = "e2e-bridge")]
             bridge::e2e_bridge_reply
         ])
