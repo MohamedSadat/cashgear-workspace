@@ -443,16 +443,27 @@ offline too: nothing goes anywhere but to the file the person saves or the print
   (`rowProperties`), a sheet block's kept picture and a plugin block's line. An ERP block is a
   placeholder naming its connector ("Cash Gear ERP: vendors (its data is not exported)"): nothing of
   the ERP is read. The result is `@cgw/doc/out`'s `OutInput`, plain data with its words translated.
+- **Where it is read (after 0.19.0).** A page's content never comes to the main thread: the shell
+  reads each page's stored log from the store (an open page writes what it holds first) and posts it
+  to the page out's worker (`print/out.worker.ts`; one page out at a time, kept a minute for the
+  next). There `assemble.ts` replays it (`@cgw/doc/out`'s `readContent`: what opening the page to
+  read does, a bad update named for the store's quarantine), turns it to JSON and walks it for what
+  only the main thread can resolve: the files its pictures show, the pages and people it names, its
+  blocks that are not text. The main thread resolves those (the store's bytes, the mirror's titles,
+  `viewOut`, whose rows become text in slices of 4 ms, the sheets' pictures, the plugins' lines) and
+  sends them back, and the worker puts each page's content back into the input and makes the file or
+  the view. Until then the replay of a page of 2,000 blocks, its JSON and the walk held the main
+  thread for about 80 ms at once, and the input's copy to the worker for 12 ms more.
 - **Word.** `writeDocx` (`packages/doc/src/out/docx.ts`) writes WordprocessingML's parts by hand,
   pure: styles (never bold by a heading's style alone), numbering, a table of contents as a field,
-  the layout's header and footer, check boxes, pictures and tables. `print/docx.worker.ts` zips them
+  the layout's header and footer, check boxes, pictures and tables. The page out's worker zips them
   with fflate. It is held to Phase 8's reader by a round trip (`docx.test.ts`) and to OOXML by
   DocumentFormat.OpenXml's validator over `packages/doc/vectors/docx-vectors.json` in the server's
   tests (`DocxVectorTests`).
 - **Print.** `printView` (`packages/doc/src/out/print.ts`) draws the same input as HTML and CSS of
-  its own, never the editor's DOM. The shell mounts it in the app's own document
-  (`.cgw-print-root`; under print media everything else is hidden) and prints with
-  `window.print()`. In Chromium (Chrome, Edge, WebView2) the mode is `css`: the paper, margins,
+  its own, never the editor's DOM (after 0.19.0 in the page out's worker). The shell mounts it in
+  the app's own document (`.cgw-print-root`; under print media everything else is hidden) and prints
+  with `window.print()`. In Chromium (Chrome, Edge, WebView2) the mode is `css`: the paper, margins,
   header and footer by `@page`, a named page and its margin boxes (sides swapped in Arabic). WebKit
   (Safari, WKWebView) draws no margin boxes, so the mode is `paged`: `print/paginate.ts` measures the
   content and cuts it into boxes of a page each, the bands drawn in every one.

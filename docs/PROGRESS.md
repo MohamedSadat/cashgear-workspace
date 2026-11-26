@@ -2304,6 +2304,79 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
   one page, the other showing the same ids and minting none. `editor.spec.ts`'s copy and paste
   checks the copies are top-level.
 
+## After 0.19.0: a page out read off the main thread
+
+- 2026-11-26: Phase 19's follow-up (its notes, "Typing during an export"). Exporting a page to Word,
+  or printing it, read the page's document on the main thread. The page out's worker now reads
+  each page and makes the file there (`99bc720`, `65dce9f`), a database block's rows are turned
+  to text in slices that give the main thread back (`2422aa6`), and `bench/phase19.mjs`'s key frame
+  is a budget of a frame, 33 ms (`fbed688`). ARCHITECTURE.md's "Word, PDF and print" says how.
+- **What held the main thread.** A trace and CPU profile of Export to Word while keys were typed on
+  another page (Chrome, an unminified build of 0.19.0, the bench's page of 2,000 blocks, 20
+  pictures and a 1,000-row database block) showed two long tasks of the export's own:
+  - 82 ms at once: `PageDocument.open` replaying the page's stored log into Yjs (54 to 60 ms),
+    `fragmentToJSON` (13.5 ms) and `collect.ts`'s walk of the JSON (5.8 ms);
+  - 21 ms: the input's structured copy to `docx.worker.ts` (11.8 ms) and `viewOut` turning the
+    database's 1,000 rows to text (6.5 ms).
+- **What it is now.** `collect.ts` reads each page's stored log from the store (an open page writes
+  what it holds first) and posts it to the worker (`print/out.worker.ts`, was `docx.worker.ts`).
+  There `assemble.ts` replays it (`@cgw/doc/out`'s `readContent`, the replay `PageDocument.open`
+  does, now `log.ts`'s `replayLog`), turns it to JSON, and walks it for what only the main thread
+  can resolve: the files its pictures show, the pages and people it names, its blocks that are not
+  text. The main thread resolves those and sends them back, and the worker puts the content back and
+  writes the Word file, or draws the print view's HTML. The page's content never reaches the main
+  thread. A bad update is still quarantined, as opening the page does. The worker is kept for the
+  next page out for a minute: a new worker's start and its first replay in a cold engine added about
+  150 ms to a print. The longest main-thread task of an export is now `viewOut`'s text, 6.7 to
+  10 ms in the profile, which is cut into 4 ms slices.
+- **The same file.** `assemble.test.ts` runs a page out through `collect` with the worker's work on
+  the test's thread: the worker gets stored logs and never content, and its Word file equals, byte
+  for byte, the one made from the content as the main thread read it until now. `read.test.ts`
+  holds `readContent` to `PageDocument.open`'s content, with a snapshot, a later update and one
+  that will not apply, and the pending-order fixture. `out.test.ts` holds the sliced rows equal to
+  the whole, grouped and not. Unit tests: 4,227 passed in `pnpm test` (6 skipped), and
+  `pnpm check --no-server` passed. `print.spec.ts` passes in Chrome and Edge, 16 cases (the Windows
+  app's 2 skipped on the web): Word in English and Arabic offline, read back by Phase 8's reader;
+  the print and Save as PDF read by pdf.js; the Axe and Arabic walks.
+- **The 250 ms waits were Chrome's spell checker.** The Phase 19 bench's key frames of 7.9 to
+  267 ms (291.9 ms in this session's first run) were not the export. With the page's main thread
+  idle, no frame came for up to 300 ms: the GPU process was compiling the pipeline for Chrome's
+  first spelling mark, its red wavy line (`GPUTask` on `CrGpuMain`, 297 ms, a Dawn worker task
+  under it). A control run did the same page switch and typing with no export, and its run 1 of 7
+  showed the same 297 ms stall: the spell checker marked a word at 469 ms, and the GPU task began at
+  485. The bench typed six characters a call and began its sentence again each run, so a run's
+  first word followed the last run's half word ("jum", then "the"); clicking into the editor also
+  left a half word behind. It now types whole words and carries the sentence on from run to run,
+  and Ctrl+End puts the caret after what earlier runs typed.
+- **The bench catches little of the old read.** The export starts when its dialog opens, on the big
+  page, and the bench must switch pages before it types. On the reference machine the old 82 ms task
+  ended before the first key in most runs, so the bench's before and after differ less than the
+  profile. The budget holds what is left: everything of the export after the switch.
+
+| Figure (`bench/phase19.mjs`, reference machine; each the median or p95 of three runs after a first) | 0.19.0, the bench as it was | 0.19.0, whole words | After |
+| --- | --- | --- | --- |
+| The keys' next frame p95, three bench runs | 291.9, 17.6, 17.9 ms | 29.3, 17.1, 21.7 ms | 16, 18.1, 17.6 ms |
+| The keys' work p95 (Phase 1's, 8 ms) | 9.9, 4.5, 3.3 ms | 5.0, 4.7, 6.1 ms | 6.6, 4.6, 4.2 ms |
+| Export to Word to the download (3 s) | 514, 566, 518 ms | 536, 554, 530 ms | 359, 398, 429 ms |
+| Print to `window.print()` laid out (3 s) | 607.6, 622.1, 653.8 ms | 630.5, 593.9, 622.9 ms | 659, 639.7, 673.3 ms |
+| The export's longest main-thread task (profile) | 82 ms | 82 ms | 6.7 to 10 ms, now in 4 ms slices |
+| The page out's worker | 41.5 kB (`docx.worker`) | | 178.5 kB (389 before the workers' tree shaking, below) |
+| The initial JavaScript (350 kB) | 349.6 kB | | 349.6 kB |
+
+- **The worker's size.** Reading a page's JSON through the binding's one function brought the
+  editor's extensions, which are built at module level, and ProseMirror whole: 389 kB, parsed and run
+  at every page out. Neither `@cgw/doc` nor ProseMirror's packages declare themselves free of side
+  effects, though they are. `vite.config.ts` now takes them as free of side effects in the workers
+  only (`worker.rolldownOptions.treeshake`, `f88aa7e`). The page out's worker is 178.5 kB.
+  `import.worker` lost only an unused `PluginKey`, and the app's own chunks are as they were.
+- **Times.** Export to Word is faster, 359 to 429 ms against 530 to 554 ms: the worker kept from
+  the last run starts warm, and the main thread no longer copies the page's JSON to it. A first page
+  out in a session pays for the worker's start, 888 to 904 ms against 863 to 917 ms. Print to
+  `window.print()` is 640 to 673 ms against 594 to 631 ms: the read and the view's HTML are made in
+  the worker, while the main thread is free.
+- **The budget.** `wordKeyFrameP95`'s budget is 33 ms. CI's runner measured 11.4 ms for it in
+  Phase 19's run, so it is not widened there; its slack against the last run on main is 10 ms.
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
