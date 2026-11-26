@@ -63,6 +63,9 @@ describe('catalogues', () => {
       'ai.modelVoyage4',
       'ai.modelVoyage4Large',
       'ai.modelVoyage4Lite',
+      // Phase 19: Word and PDF, in the page menu.
+      'workspace.exportWord',
+      'workspace.savePdf',
     ]);
     for (const [key, text] of arabic) {
       if (allowed.has(key) || key.startsWith('keywords.')) continue;

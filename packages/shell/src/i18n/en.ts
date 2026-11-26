@@ -78,6 +78,11 @@ export const en = {
     makeTemplate: 'Use as a template',
     notTemplate: 'Stop using as a template',
     moveToTrash: 'Move to trash',
+    // Phase 19: the page menu's way out (the rest of their words load with them, section `print`).
+    pageSetup: 'Page setup…',
+    exportWord: 'Export to Word',
+    print: 'Print…',
+    savePdf: 'Save as PDF…',
     favourites: 'Favourites',
     recent: 'Recent',
     newFromTemplate: 'New from template',

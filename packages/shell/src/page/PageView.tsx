@@ -51,6 +51,8 @@ const RowProperties = lazy(() =>
 );
 // The AI panel (Phase 7): its own chunk, loaded when it first opens.
 const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiPanel })));
+// Phase 19: Page setup, Word, print and PDF: their own chunk, loaded when first asked for.
+const PrintDialogs = lazy(() => import('../print/PrintDialogs'));
 
 export interface PageViewProps {
   session: WorkspaceSession;
@@ -500,6 +502,8 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
   const readOnly = newer || viewOnly;
   // A notice's "Open the page history" may have come before the page was on screen.
   const [history, setHistory] = useState(false);
+  // Phase 19: Page setup, or the export's dialog (Word, print, PDF), as the page's menu asked.
+  const [asked, setAsked] = useState<'word' | 'print' | 'pdf' | 'setup' | null>(null);
   const [editor, setEditor] = useState<BlockEditor | null>(null);
   useEffect(() => {
     if (takeHistoryRequest(page.id)) setHistory(true);
@@ -524,11 +528,19 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
         together ? accountWorkbooks(cloud, page.workspaceId) : undefined,
       ).catch((error: unknown) => console.error('Export failed:', error));
     };
+    const onOut = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{ pageId: string; kind: 'word' | 'print' | 'pdf' | 'setup' }>
+      ).detail;
+      if (detail.pageId === page.id) setAsked(detail.kind);
+    };
     pageEvents.addEventListener('history', onHistory);
     pageEvents.addEventListener('export', onExport);
+    pageEvents.addEventListener('out', onOut);
     return () => {
       pageEvents.removeEventListener('history', onHistory);
       pageEvents.removeEventListener('export', onExport);
+      pageEvents.removeEventListener('out', onOut);
     };
   }, [page.id, page.workspaceId, session, platform, t, databases, together, collab, cloud]);
 
@@ -617,6 +629,17 @@ function LoadedPage({ session, page, doc, onEditor }: PageViewProps & { doc: Pag
             onEditor?.(editor, editor ? doc : null);
           }}
         />
+        {asked && (
+          <Suspense fallback={null}>
+            <PrintDialogs
+              session={session}
+              page={page}
+              editable={!viewOnly}
+              asked={asked}
+              onClose={() => setAsked(null)}
+            />
+          </Suspense>
+        )}
         {history && (
           <HistoryDialog
             session={session}

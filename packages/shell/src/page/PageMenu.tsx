@@ -14,6 +14,14 @@ import { PointMenu } from '../sidebar/RowMenu';
 
 export const pageEvents = new EventTarget();
 
+/** Phase 19's menu items, by what they ask the page's view for (`out` events). */
+const OUT_LABELS = {
+  setup: 'workspace.pageSetup',
+  word: 'workspace.exportWord',
+  print: 'workspace.print',
+  pdf: 'workspace.savePdf',
+} as const;
+
 /** Pages whose history was asked for (by a notice) before the page was on screen. */
 const historyWanted = new Set<Id>();
 
@@ -126,6 +134,18 @@ export function PageMenu({
                       pageEvents.dispatchEvent(new CustomEvent('export', { detail: page.id })),
                   },
                 ]),
+            // Phase 19: a page or a row as a Word file, printed, or a PDF; its layout for editors.
+            ...(database
+              ? []
+              : (['setup', 'word', 'print', 'pdf'] as const)
+                  .filter((kind) => kind !== 'setup' || editable)
+                  .map((kind) => ({
+                    label: t(OUT_LABELS[kind]),
+                    onSelect: () =>
+                      pageEvents.dispatchEvent(
+                        new CustomEvent('out', { detail: { pageId: page.id, kind } }),
+                      ),
+                  }))),
             ...(editable && !row && !database
               ? [
                   {

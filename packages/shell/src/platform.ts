@@ -87,6 +87,16 @@ export interface WorkspacePlatform {
   requestPersistence?(): Promise<boolean>;
   /** Saves bytes to a file the user picks (a download in a browser). */
   saveFile(suggestedName: string, bytes: Uint8Array, type: string): Promise<void>;
+  /**
+   * Phase 19, the desktop: prints the document as print media shows it (the print view is in it),
+   * or saves it as a PDF to a file the person names with no print dialog (the Windows app's
+   * WebView2 `PrintToPdf`, the Mac app's `NSPrintOperation`). `dialog`: the engine's own print
+   * dialog opened, and says when it closes (`afterprint`). Without it the shell calls
+   * `window.print()`, and Save as PDF is the dialog's own printer.
+   */
+  print?(job: PrintJob): Promise<'printed' | 'saved' | 'cancelled' | 'dialog'>;
+  /** How the print view is laid out here: `css` (Chromium's margin boxes), `paged` (WebKit). */
+  printMode?: 'css' | 'paged';
   /** The desktop window is closing: `flush` runs first. */
   onCloseRequested?(flush: () => Promise<void>): () => void;
   /**
@@ -103,6 +113,18 @@ export interface WorkspacePlatform {
    * takes it before any route and never navigates to it. Returns the unsubscribe.
    */
   onDeepLink?(open: (hash: string) => void): () => void;
+}
+
+/** Phase 19: a print or a PDF of the print view, as the layout sets it (millimetres). */
+export interface PrintJob {
+  /** A PDF to a file, else a print through the system's dialog. */
+  pdf: boolean;
+  /** The file's suggested name (`Report.pdf`). */
+  name: string;
+  /** The view was cut into pages by script: the print's margins are 0. */
+  paged: boolean;
+  paper: { width: number; height: number };
+  margins: { block: number; inline: number };
 }
 
 export interface UpdateInfo {

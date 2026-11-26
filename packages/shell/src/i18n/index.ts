@@ -15,6 +15,7 @@ import type { aiPlanEn } from '../ai/planWords';
 import type { siteDomainsEn } from '../cloud/domainsWords';
 import type { automationsEn } from '../automations/words';
 import type { billingEn } from '../ai/billingWords';
+import type { printEn } from '../print/words';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -34,6 +35,7 @@ interface Sections {
   siteDomains: typeof siteDomainsEn;
   automations: typeof automationsEn;
   billing: typeof billingEn;
+  print: typeof printEn;
 }
 
 declare module 'i18next' {

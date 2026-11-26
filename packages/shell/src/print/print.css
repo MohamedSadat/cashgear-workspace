@@ -1,0 +1,66 @@
+/* Phase 19: Page setup and the export's dialog (the print view's own rules come with it, `.pv`). */
+.cgw-print-setup,
+.cgw-print-out {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-inline-size: min(560px, 80vw);
+}
+
+.cgw-print-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+}
+
+.cgw-print-band {
+  border: 1px solid var(--cg-color-border, #d0d0d0);
+  border-radius: 6px;
+  margin: 0;
+  padding: 8px 12px 12px;
+}
+
+.cgw-print-band legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.cgw-print-places {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cgw-print-place {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.cgw-print-place .cgw-input {
+  inline-size: 100%;
+}
+
+.cgw-print-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cgw-print-note,
+.cgw-print-preview {
+  margin: 0;
+}
+
+.cgw-print-error {
+  color: var(--cg-color-danger, #b42318);
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .cgw-print-places {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

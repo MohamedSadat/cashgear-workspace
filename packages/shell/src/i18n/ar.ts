@@ -72,6 +72,11 @@ export const ar: Catalogue = {
     makeTemplate: 'استخدامها قالبًا',
     notTemplate: 'إيقاف استخدامها قالبًا',
     moveToTrash: 'نقل إلى المهملات',
+    // Phase 19: the page menu's way out (the rest of their words load with them, section `print`).
+    pageSetup: 'إعداد الصفحة…',
+    exportWord: 'تصدير إلى Word',
+    print: 'طباعة…',
+    savePdf: 'حفظ بصيغة PDF…',
     favourites: 'المفضلة',
     recent: 'الأخيرة',
     newFromTemplate: 'جديد من قالب',
