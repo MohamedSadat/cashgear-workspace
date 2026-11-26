@@ -1,6 +1,6 @@
 {
   "name": "@cgw/plugins",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "Plugin blocks (INTEGRATIONS.md, Plugin blocks): the BlockDefinition interface, props read and merged so unknown props survive, the first-party chart and kanban over a database view, drawn into a plugin block's frame; from Phase 10 plugin-frame.1 and third-party plugins in sandboxed frames. Given a host; never saves, loads or calls the network.",

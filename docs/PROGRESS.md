@@ -28,7 +28,7 @@ test name, a measurement, or a commit. The tasks behind each milestone are in
 | Phase 16: Forms | Done, 2026-11-24 (0.16.0; proven on loopback in CI and on the e2e stack; a form link on the production host, and installing it, are yours) | `phase-16`, `v0.16.0` |
 | Phase 17: Workflows and tasks | Done, 2026-11-25 (0.17.0; proven in CI and on the e2e stack; a reminder's mail to a real inbox, and installing it, are yours) | `phase-17`, `v0.17.0` |
 | Phase 18: AI, further | Done, 2026-11-25 (0.18.0; proven against the mock Paddle in CI and on the e2e stack, the local model measured here and on the host; the live test in Paddle's sandbox, and installing it, are yours) | `phase-18`, `v0.18.0` |
-| Phase 19: Word, PDF and print | Planned 2026-11-25 | |
+| Phase 19: Word, PDF and print | Done, 2026-11-26 (0.19.0; proven in CI in Chrome, Edge and the Windows app, and on the Mac; installing it is yours) | `phase-19`, `v0.19.0` |
 | Phase 20: Suggested edits | Planned 2026-11-25 | |
 | Track U: `CashGear.React.UI` components | U1 to U17 and the follow-ups done in `CashGear.React.UI` (2026-11-16), U18 the timeline (2026-11-17), U19 lanes (2026-11-20), U21 recurrence and U20 links between bars (2026-11-25), on its branch `claude/cashgear-react-ui-library-xq8tsz`, pinned at `4a7d0b8` | |
 | Track S: Cash Gear Sheet embed and cloud workbooks | S1 to S5 done in `cashgear-sheet` (2026-11-13 and 14), S6 Sheet's desktop app by deep link (2026-11-17) | |
@@ -2121,6 +2121,91 @@ Benchmarks (`bench/phase18.mjs`: the webhook's in CI's Windows job; the local mo
   queued at 01:00:19 (the 15 minutes of `Mail__NotificationDelaySeconds`) and sent at 01:00:26
   through `smtp.gmail.com` on the first attempt. It reached your inbox.
 - Still owed: the live test in Paddle's sandbox (yours, OPERATIONS.md, Billing through Paddle).
+
+## Phase 19: Word, PDF and print
+
+Done 2026-11-26. CI run for the evidence below: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45822385856 (commit `a6e8cb0`, every job green, the Server job on its second attempt: 467 browser e2e cases passed, one of them on a retry (Chrome's v0.4.0 build, whose first attempt read a page's derived document before the worker had made it), 16 skipped; the desktop app's 66 passed; every kill test 25 of 25 and the migration's 10 of 10; every phase's budgets. The Server job's first attempt flagged Phase 2's push at 34 ms and compaction at 91.2 ms p95, within their 200 ms budgets but against the last run's 5 and 48.6, with no server code changed since `74a4245`, whose run measured 5 and 52.6; 7 and 46.8 on the second attempt); the Mac's: https://github.com/MohamedSadat/cashgear-workspace/actions/runs/45822385847 (the same commit, green). Local results are from the reference machine (Windows 10 19045, Intel Xeon E5-2680 v3, Chrome, Edge, WebView2, Word 16 (Microsoft 365), SQL Server LocalDB 2025, Azurite). Answers and defaults are in `DECISIONS.md` (2026-11-26: Phase 19, with the spike's results and the defaults picked while building it); the design in `ARCHITECTURE.md` (Word, PDF and print; the platform's `print`), `DATA_MODEL.md` (a page's layout, `Pages.Layout`, the export's `layout`), `SYNC_DESIGN.md` (the layout in `page.create` and `page.update`) and `OPERATIONS.md` (0.19.0's migration); what changed for users in `CHANGELOG.md` (0.19.0).
+
+Milestones
+
+- [x] M19.1 A page's layout. Commits `f345eb2` (the record's `layout` end to end: the rules in
+      `@cgw/workspace/layout` and their C# port held to one set of vectors, the planner's shape
+      check, both stores and the conformance suite, `sync/http.ts`, `PageDto` and `RowDto`,
+      `Pages.Layout` and `Phase19PageLayout`, `page.create` and `page.update`, the API's types, the
+      export's manifest and import, a template's copy), `ba5e895` (Page setup in the page's and a
+      row's menu, with its preview, in English and Arabic)
+- [x] M19.2 Word. Commits `291a31a` (`writeDocx` in `@cgw/doc/out`, pure, over every block, inline
+      node and mark of schema 6; its round trip through Phase 8's reader; its vectors under
+      DocumentFormat.OpenXml's validator), `95451e8` (a database block's view and a row's properties
+      for a page out, a chart view's chart as SVG), `ba5e895` ("Export to Word" in the page's and a
+      row's menu, the parts zipped in a worker, saved by `saveFile`, what was left out in a notice)
+- [x] M19.3 Print and PDF. The spike: `1baa80a`, `157f106`, `74a4245` (DECISIONS.md, Phase 19:
+      a frame of its own prints nothing in WebView2's `PrintToPdf` or WKWebView, and WebKit draws no
+      margin boxes, so the print view is in the app's own document, by `@page` in Chromium and in
+      pages cut by script in WebKit). Commits `291a31a` (`printView`), `ba5e895` (Print… and Save as
+      PDF…, the print root, WebKit's pages), `1368b81` (the desktop's `print_page`: WebView2's
+      `PrintToPdf` and the Mac's `NSPrintOperation`, each to the file chosen with no dialog)
+- Specs, budgets and docs: `7db7fd5` (`print.spec.ts`, `old-build.spec.ts`'s v0.18.0 case),
+  `66053a2` (`bench/phase19.mjs`, CI's step, the Mac's acceptance step), `a6e8cb0` (the design), and
+  this evidence with the release
+
+Notes
+
+- **Where the plan changed.** The plan drew the print view in a frame of its own; the spike found
+  WebView2's `PrintToPdf` saves only the top document and WKWebView prints only its main frame, so
+  it is a root of the app's own document that only print media shows. WebKit draws no `@page`
+  margin boxes, so the Mac app (and Safari) lay the view out and cut it into pages by script, each
+  with its header, footer and number. Both are in DECISIONS.md with the spike's table.
+- **Fonts.** In a PDF's text, Arial writes Arabic's initial yeh as the Farsi letter, and the Mac's
+  Tahoma writes heh and yeh as their Persian letters: the print names Segoe UI, Tahoma, Geeza Pro
+  before the system's, and the Mac's acceptance check folds those two back before comparing.
+- **Word by hand.** The three vectors (every block in English and in Arabic on A4, and in English on
+  Letter landscape with wide margins and no header) open in Word 16 with no repair: 3, 3 and 4
+  pages, 86 paragraphs, 3 tables, 3 pictures and 8 fields each; A4 595.3 × 841.9 pt, Letter
+  landscape 792 × 612 pt; the Arabic file's paragraphs right to left (64 of 86, the rest the page's
+  English lines and empty table cells), its header the sub-page's title and the date in Arabic, every
+  footer "1 / n". Word's own PDF export over COM never returned with Word hidden, so it is not a
+  check here.
+- **Typing during an export.** The keys typed on another page while a page is written to Word are
+  within Phase 1's budget (the work per key), but a key's next frame can wait while the page's
+  document is read on the main thread: its p95 over the few keys an export of half a second holds
+  was 7.9 to 267 ms here, tracked and not budgeted. A follow-up is proposed: read a page out in a
+  worker.
+- **What building it found.** A paste of about 1,000 blocks or more puts in nothing, and a paste at
+  a caret in a page's last block nests what it pastes inside that block: the bench fills its page by
+  one editor transaction, and a follow-up is proposed for the paste. `pdfjs-dist`'s optional
+  `@napi-rs/canvas` gave jsdom a canvas, which every component test would have felt: it is overridden
+  away. Phase 8's reader trimmed a code line's indent, which the round trip found (`291a31a`). The
+  Windows app's spec waited on a folder the app makes with its first file, and read a narrow A4
+  cell's wrapped words as one line (`7db7fd5`). CI run 45801352080 (`74a4245`, before this phase's
+  last commits) failed two cases and a bench that pass here on this phase's server:
+  `tasks.spec.ts`'s timeline in Chrome, `realtime.spec.ts`'s keys at 300 ms in Chrome, and the
+  Phase 10 bench's search by meaning after a change (96.7 ms, within its 300 ms budget but more than
+  half again the last run's 33.2 ms; its runs before were 33 to 70 ms).
+- **The initial JavaScript** is 349.6 kB of 350 (0.18.0: 348.7). Everything of this phase loads
+  when first used: the writer, the print view, the dialogs and their words.
+
+Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| A page holding every block type, in English and in Arabic, is exported to Word on the device, offline too; the file passes OOXML's validator and opens in Word; read back by Phase 8's reader it gives the same blocks, marks and directions, apart from its listed losses | Pass | `print.spec.ts` (Chrome, Edge, the Windows app): a page of every block (headings, marks and colours, a page and a date mention and a person, bulleted, numbered and check lists nested, a quote, a callout, a toggle, code, a table with merged cells, a picture, a file, a bookmark, a page link, a database block, a sheet's picture, an ERP block, a chart block, both directions) exported with the network off, the file read back by `readDocx` with its blocks, marks and directions, and the notice naming the one picture the device lacks; the same page in Arabic, right to left. `docx.test.ts`: the English and the Arabic pages back as written apart from the listed losses (the title and icon as the title, a toggle as a paragraph and a callout with its icon first, no divider, text colour, code's language, a table's widths, an image's width and alignment, files, bookmarks, mentions and dates as text with their links kept); XML text made safe. `DocxVectorTests.Every_file_the_writer_writes_passes_the_OOXML_validator` (three vectors, Microsoft 365's schemas), with `The_validator_finds_a_part_written_out_of_the_schemas_order` as its control. The three vectors in Word 16, above |
+| A page printed in Chrome, Edge, the Windows app and the Mac app has every block and the page's size, orientation, margins, header, footer and page numbers; a database block's rows are a table up to its limit; no image or table row is split over two pages | Pass | `print.spec.ts`'s print in Chrome and Edge for real (headed, `--kiosk-printing`, the dialog's "Save as PDF"), the page set by Page setup to Letter, landscape and narrow margins, its title and the date at the head and "Page {page} of {pages}" at the foot (the preview saying so first): every page 792 × 612 pt with the title and "Page n of N", every block's text, each of the database block's rows on one page and once, the picture drawn whole and once, nothing over a page's head or foot, and the layout read back after a reload. The Windows app: Save as PDF of the same page by WebView2's `PrintToPdf`, A4, each page numbered. The Mac app: `macos-acceptance.mjs`'s `savePdf` (run 45822385847), a page of 90 lines in English and Arabic saved through the app's menu with no panel, A4, each page numbered, its last line on the last page. `print.test.ts`: every block of a page and its sub-page drawn with nothing lazy, a band's start on the right in Arabic, the paged mode's bands. The database block's limit: `viewOut`'s 1,000 rows and its line, by the bench's 1,000-row block. The spike's PDFs in each engine (DECISIONS.md) |
+| A PDF saved from the web and from the desktop holds the page's text as text, with Arabic shaped and in order | Pass | `print.spec.ts`'s Arabic page saved as a PDF in Chrome and Edge, after the dialog's line naming "Save as PDF": its lines read by pdf.js, Arabic in its order; the Windows app's PDF read the same way; the Mac's acceptance run's Arabic line in order (Tahoma's two Persian letters folded) |
+| No ERP row is in any file unless you choose so; nothing reaches the server but the layout; an older build's edit keeps a page's layout | Pass | An ERP block is "Cash Gear ERP: vendors (its data is not exported)" in the Word file and the print (`print.spec.ts`, `docx.test.ts`); `collect.ts` reads nothing of the ERP. The Word export runs with the network off; the print and PDF are the browser's or the desktop's own. `PageLayoutTests` (kept through edits that do not name it, taken off by null, refused when it fails its check, a row's page its own); the conformance suite's layout case on both stores; `old-build.spec.ts`'s v0.18.0 case (Chrome, Edge): that build renames a page and gives it an icon, and the server keeps the layout this build set |
+| Page setup, the export's notices and the print view pass Axe and are checked in Arabic, light and dark (print in light) | Pass | `print.spec.ts`'s four walks (Chrome, Edge): Page setup and the export's dialog under Axe, in English and Arabic, light and dark, with no English on the Arabic screens; the export's notice is the app's own, its words in both catalogues (`print.test.ts`); the print view draws in colours of its own, dark on white whatever the app's theme (`printView`'s stylesheet), as the spec's PDFs show |
+
+Also: `layout.test.ts` (the vectors, the default for a page with none, a band as set, keys not known kept by Page setup, a place cut into text and fields), the shell's `exchange/layout.test.ts` (the export's entry and the import, a layout an edited file made wrong left out, a template's copy) and `print.test.ts` (Chromium's margin boxes or pages cut by script by the browser, a file's name made safe, the notice's words, sub-pages in the tree's order), `sections.test.ts` (the `print` section held to the catalogues' rules). Unit: 4,212 tests in `pnpm test` (6 skipped); server: 552 server tests (531 passed, 21 skipped: the benches and the real-provider tests).
+
+Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median of three after a first)
+
+| Budget | Limit | CI | Local |
+| --- | --- | --- | --- |
+| A page of 2,000 blocks, 20 pictures and a database block of 1,000 rows to a Word file, from the menu's click to the download | 3 s | 359 ms (first 589 ms); 70 kB | 576 ms (first 815 ms); 70 kB |
+| Keys typed on another page meanwhile, the editor's work per key p95 (Phase 1's) | 8 ms (16 on CI's runner) | 2.5 ms; the next frame p95 11.4 ms, tracked | 4.2 ms; the next frame p95 222.5 ms, tracked (above) |
+| The same page's print view laid out and the print dialog asked for (`window.print()`, its pictures loaded) | 3 s | 294 ms | 572.5 ms |
+| Tracked: the whole print to the dialog's "Save as PDF" printer, the file written | None | 1,893 ms (first 1,920 ms); 546 kB | 2,967 ms (first 3,225 ms); 546 kB |
+| The initial JavaScript | 350 kB (Phase 1) | 349.6 kB | 349.6 kB |
 
 ## Track U: `CashGear.React.UI`
 

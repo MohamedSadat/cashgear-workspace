@@ -2692,33 +2692,34 @@ Proposed defaults, logged with the answers:
 
 *M19.1 A page's layout*
 
-- [ ] The page record's `layout` end to end: the planner, both stores, sync, `PageDto`, the `Pages`
+- [x] The page record's `layout` end to end: the planner, both stores, sync, `PageDto`, the `Pages`
       column and its migration, `page.update`, the API's types, and the export's manifest and
       import. Page setup in the page's menu, in English and in Arabic.
 
 *M19.2 Word*
 
-- [ ] The writer in `@cgw/doc`, covering every block, inline node and mark:
+- [x] The writer in `@cgw/doc`, covering every block, inline node and mark:
       - directions;
       - numbered and bulleted lists by `numbering.xml`, and check items;
       - callouts and toggles;
       - tables with merges and widths, and images with their sizes;
       - links, and a table of contents as Word's field;
       - the layout's section, with its header and footer.
-- [ ] Database blocks, sheet pictures and placeholders, given by the shell.
-- [ ] "Export to Word" in a page's and a row's menu, saved by `saveFile`.
-- [ ] Held to Phase 8's reader by a round trip, and to OOXML by `DocumentFormat.OpenXml`'s validator
+- [x] Database blocks, sheet pictures and placeholders, given by the shell.
+- [x] "Export to Word" in a page's and a row's menu, saved by `saveFile`.
+- [x] Held to Phase 8's reader by a round trip, and to OOXML by `DocumentFormat.OpenXml`'s validator
       run over the writer's vectors in the server's tests.
 
 *M19.3 Print and PDF*
 
-- [ ] The spike.
-- [ ] The print view, in a frame of its own:
+- [x] The spike.
+- [x] The print view, in a frame of its own (the spike moved it into the app's own document,
+      DECISIONS.md, Phase 19):
       - every block drawn, with no lazy or virtualised part;
       - databases as tables;
       - the layout's `@page`, header, footer and page numbers;
       - breaks kept out of images and table rows.
-- [ ] "Print" and "Save as PDF" in a page's and a row's menu, on the web, the Windows app and the
+- [x] "Print" and "Save as PDF" in a page's and a row's menu, on the web, the Windows app and the
       Mac app, as the spike decides.
 
 **Acceptance criteria**

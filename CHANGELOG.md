@@ -4,6 +4,32 @@ Every release of Cash Gear Workspace, newest first. Versions follow semantic ver
 version across the app, its crates and its packages. The release workflow takes each release's
 notes from its section here.
 
+## [0.19.0] - 2026-11-26
+
+Pages that leave the workspace as documents: Word files, PDFs and prints, made on your device.
+
+- **Export to Word.** A page's menu, and a row's, has "Export to Word": the page, and its sub-pages
+  if you choose (up to 200, each starting a new page), as a Word file made on your device, offline
+  too. Every block comes as the page shows it, in English and in Arabic, right to left where the page
+  is: headings, lists and check lists numbered as Word numbers them, quotes, callouts, toggles
+  (open), code, tables with their merged cells, pictures at their size, links, dates and mentions,
+  and a table of contents Word keeps up to date. A database block is a table of its view's rows (up
+  to 1,000, then a line saying how many more), a chart view its chart, a sheet its picture. Nothing
+  of Cash Gear ERP is written: an ERP block is a line naming its list or report. A picture this
+  device does not have is named in its place, and the export says what it left out.
+- **Print and Save as PDF.** "Print…" and "Save as PDF…" print the same page in its own layout, with
+  every block drawn (nothing left out because it was far down the page), no picture or table row cut
+  in two, and a table's header row on every page. In the browser, Save as PDF opens the print
+  dialog with its "Save as PDF" printer. The Windows and Mac apps save the PDF straight to the file
+  you choose, with no print dialog. A PDF's text is text you can search and copy, Arabic too.
+- **Page setup.** Whoever can edit a page sets how it prints: A4 or Letter, portrait or landscape,
+  narrow, normal or wide margins, and a header and a footer with text at their start, centre and
+  end, which can hold the page's title, the date, the page's number and the count of pages. A page
+  is A4 with its number at the foot until you change it. The layout is kept with the page, so
+  everyone prints it the same way, and the Word file gets it too.
+- **Older versions.** 0.18.0 and earlier keep a page's layout when they edit the page; they offer
+  none of this.
+
 ## [0.18.0] - 2026-11-25
 
 AI that never leaves your server, and Cash Gear's AI subscription paid for.
