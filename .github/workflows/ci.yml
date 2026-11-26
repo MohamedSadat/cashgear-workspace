@@ -173,12 +173,17 @@ jobs:
             bench/results/
             !bench/results/phase2-corpus/
 
-  # Until 0.19.0 everything below was one Windows job of about 150 minutes. It is now six kinds of
+  # Until 0.19.0 everything below was one Windows job of about 150 minutes. It is now four kinds of
   # job side by side, each on a runner of its own that builds what it needs itself (a web build
-  # takes under a minute, the server about two), so no job waits on another: the checks; the browser
-  # e2e as three shards each of Chrome and Edge; the old builds' spec; and the kill tests and
-  # budgets in two jobs. The desktop app is not built or tested here from 2026-11-26 (the web app
-  # first, DECISIONS.md): the release workflow still builds it on a version tag.
+  # takes under a minute, the server about two), so no job waits on another: the checks; the
+  # browser e2e as three shards each of Chrome and Edge, each then a share of the budgets of
+  # Phases 7 to 19; the old builds' spec, then Phases 9 and 19; and the kill tests with the budgets
+  # of Phases 1 to 6.
+  # The budgets of Phases 7 to 19 run after the specs, 11 minutes and more into a runner: in a job
+  # of their own, the server's bulk writes in a runner's first 6 to 9 minutes ran slow and uneven
+  # (a 50,000-row import past 30 s, 14 s answers), failing three of five runs (PROGRESS.md, After
+  # 0.19.0). The desktop app is not built or tested here from 2026-11-26 (the web app first,
+  # DECISIONS.md): the release workflow still builds it on a version tag.
   checks:
     name: Checks and unit tests (Windows)
     runs-on: windows-latest
@@ -220,9 +225,12 @@ jobs:
   # are sharded apart: each shard is a third of one browser's files with its own e2e server stack
   # and mocks (Playwright's webServer, fresh on CI). Browser tests use the runner's installed Chrome
   # and Edge. Phase 5's specs start the mock Sheet and the mock ERP; Phase 6's (realtime.spec.ts,
-  # comments.spec.ts) recycle the stack's API through its control port (127.0.0.1:5289).
+  # comments.spec.ts) recycle the stack's API through its control port (127.0.0.1:5289). Then each
+  # shard runs the budgets its `include` names (`pN`), the longest shards (about 19 minutes) the
+  # fewest, every bench with its own server stack, gated against the budgets and, on the same
+  # processor, the last green run on main's figures; each shard's go in its own artifact.
   e2e:
-    name: Browser e2e (${{ matrix.project }}, ${{ matrix.shard }} of 3)
+    name: Browser e2e (${{ matrix.project }}, ${{ matrix.shard }} of 3) and budgets ${{ matrix.phases }}
     runs-on: windows-latest
     timeout-minutes: 60
     strategy:
@@ -230,6 +238,35 @@ jobs:
       matrix:
         project: [chrome, edge]
         shard: [1, 2, 3]
+        include:
+          - project: chrome
+            shard: 1
+            phases: 8, 18
+            p8: true
+            p18: true
+          - project: chrome
+            shard: 2
+            phases: 12, 17, 13
+            p12: true
+            p17: true
+            p13: true
+          - project: chrome
+            shard: 3
+            phases: 14
+            p14: true
+          - project: edge
+            shard: 1
+            phases: 7
+            p7: true
+          - project: edge
+            shard: 2
+            phases: 16, 10
+            p16: true
+            p10: true
+          - project: edge
+            shard: 3
+            phases: 15
+            p15: true
     env:
       # The old builds' spec runs in its own job, beside the builds it needs.
       CGW_E2E_WITHOUT_OLD_BUILDS: '1'
@@ -244,6 +281,96 @@ jobs:
       # no IP address as its relying party); Playwright serves it on localhost:4268.
       - run: node scripts/web-localhost.mjs --build
       - run: pnpm test:e2e --project=${{ matrix.project }} --shard=${{ matrix.shard }}/3
+      - name: The last run on main's budget figures
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          if ($run) {
+            gh run download $run --pattern 'phase-verification*' --dir bench/previous-run
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json', 'phase15.json', 'phase16.json', 'phase17.json', 'phase18.json', 'phase19.json') {
+              $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
+              if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
+            }
+          }
+      # Phase 7's (bench/phase7.mjs): the review of 500 changed ERP records less the ERP's dry
+      # run, and the first AI token less the provider's own time, in Chrome against a server stack,
+      # the mock ERP and the mock provider it starts.
+      - name: Phase 7 budgets, gated against the budgets and the last run on main
+        if: matrix.p7
+        run: pnpm bench:phase7
+      # Phase 8's (bench/phase8.mjs): a paste of 1,000 cells into a synced table (shown, and on
+      # the server) and a 1,000-page Notion export imported on the device, in Chrome against a
+      # server stack it starts. The server's CPU per push against 0.7.0 is measured on the reference
+      # machine (bench/phase8-server.mjs), as it needs 0.7.0 built beside this build.
+      - name: Phase 8 budgets, gated against the budgets and the last run on main
+        if: matrix.p8
+        run: pnpm bench:phase8
+      # Phase 10's (bench/phase10.mjs --no-server): the review of 500 changed customers less the
+      # ERP's dry run, and typing between ten third-party plugin frames, in Chrome against a
+      # server stack it starts (its plugins host on localhost:5291) and the mocks. The server's
+      # retrieval by meaning runs in the server job.
+      - name: Phase 10 budgets, gated against the budgets and the last run on main
+        if: matrix.p10
+        run: pnpm bench:phase10 -- --no-server
+      # Phase 12's (bench/phase12.mjs): a chart view of 50,000 rows by count (its first bars), and
+      # pinning a 5,000-row database whose rows all have documents while typing on another page
+      # (until every document is on the device, and the keystroke budget meanwhile), in Chrome
+      # against a server stack it starts. The ERP's first page of a 100,000-record connector is
+      # Track E10's own measure, taken in the ERP's repository.
+      - name: Phase 12 budgets, gated against the budgets and the last run on main
+        if: matrix.p12
+        run: pnpm bench:phase12
+      # Phase 13's (bench/phase13.mjs --no-server): typing between ten networked plugin frames, each
+      # reaching the mock host it was allowed (tests/mocks/net/server.mjs), in Chrome against a
+      # server stack it starts. The server's retrieval at 1,000,000 chunks runs in the server job.
+      - name: Phase 13 budgets, gated against the budgets and the last run on main
+        if: matrix.p13
+        run: pnpm bench:phase13 -- --no-server
+      # Phase 14's (bench/phase14.mjs --no-server): a published page of 2,000 blocks at its own host
+      # name (a `*.localhost` name proven in the DNS stand-in, its certificate from the mock ACME
+      # server), read over HTTP from the Sites process's cache, against a server stack it starts. The
+      # server's file check at 50,000 rows runs in the server job.
+      - name: Phase 14 budgets, gated against the budgets and the last run on main
+        if: matrix.p14
+        run: pnpm bench:phase14 -- --no-server
+      # Phase 15's (bench/phase15.mjs --no-server): a rule's first step after the change that starts
+      # it, shown in an open tab, and a paste of 1,000 cells starting a rule in each row (every run
+      # done, typing on another page meanwhile), in Chrome against a server stack it starts. The
+      # server's date triggers at 50,000 rows run in the server job; the processor time per push with
+      # ten rules is bench/phase8-server.mjs's, taken locally.
+      - name: Phase 15 budgets, gated against the budgets and the last run on main
+        if: matrix.p15
+        run: pnpm bench:phase15 -- --no-server
+      # Phase 16's (bench/phase16.mjs): a form link's page, first byte from the Sites process's
+      # cache; an answer by the link to its row in an open tab; and 50 answers a second across five
+      # links for a minute (the answer route's time, typing on another page meanwhile); in Chrome
+      # against a server stack it starts.
+      - name: Phase 16 budgets, gated against the budgets and the last run on main
+        if: matrix.p16
+        run: pnpm bench:phase16
+      # Phase 17's (bench/phase17.mjs --no-server): the first rows of a 50,000-row table with 10,000
+      # parents nesting their sub-items, and a 50,000-row timeline with 10,000 dependencies (first
+      # bars and a drag), in Chrome against a server stack it starts (relations seeded by sqlcmd).
+      - name: Phase 17 budgets, gated against the budgets and the last run on main
+        if: matrix.p17
+        run: pnpm bench:phase17 -- --no-server
+      # Phase 18's (bench/phase18.mjs): a paid checkout's webhooks to the workspace's allowance shown,
+      # against a server stack it starts and the mock Paddle (started if not running). The local
+      # completion model's budget needs the real package and is run by hand (--local-model).
+      - name: Phase 18 budgets, gated against the budgets and the last run on main
+        if: matrix.p18
+        run: pnpm bench:phase18
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase-verification-${{ matrix.project }}-${{ matrix.shard }}
+          path: |
+            bench/results/
+            !bench/results/phase3-corpus/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -266,9 +393,9 @@ jobs:
   # (Phase 17: rules that wait and ask, a unique id and roles, kept), v0.17.0 (Phase 18: an answer
   # of the server's own model read to its end, and a paid plan's allowance) and v0.18.0 (Phase 19:
   # a page's layout, kept by its edits). A build that fails fails its step, so the spec never skips
-  # one here.
+  # one here. Then the budgets of Phases 9 and 19, as the e2e shards run theirs.
   old-builds:
-    name: Browser e2e, the old builds (Chrome and Edge)
+    name: Browser e2e, the old builds (Chrome and Edge), and budgets 9, 19
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -284,6 +411,39 @@ jobs:
           git fetch --tags --force
           node scripts/old-build.mjs
       - run: pnpm test:e2e tests/e2e/old-build.spec.ts
+      - name: The last run on main's budget figures
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+          if ($run) {
+            gh run download $run --pattern 'phase-verification*' --dir bench/previous-run
+            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json', 'phase15.json', 'phase16.json', 'phase17.json', 'phase18.json', 'phase19.json') {
+              $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
+              if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
+            }
+          }
+      # Phase 9's (bench/phase9.mjs): a published page of 2,000 blocks read from the Sites process
+      # (localhost:5290) over HTTP, fresh and from its cache, and a timeline over 50,000 rows in
+      # Chrome (its first bars and a drag), against a server stack it starts.
+      - name: Phase 9 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase9
+      # Phase 19's (bench/phase19.mjs): a page of 2,000 blocks, 20 pictures and a database block of
+      # 1,000 rows on the device, to a Word file (typing on another page meanwhile) and to its print
+      # view laid out with the print dialog asked for; and, tracked, the whole print to "Save as
+      # PDF" (Chrome headed with --kiosk-printing). No server.
+      - name: Phase 19 budgets, gated against the budgets and the last run on main
+        run: pnpm bench:phase19
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase-verification-old-builds
+          path: |
+            bench/results/
+            !bench/results/phase3-corpus/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -380,126 +540,6 @@ jobs:
         if: always()
         with:
           name: phase-verification-early
-          path: |
-            bench/results/
-            !bench/results/phase3-corpus/
-
-  # The budgets of Phases 7 to 19, gated as above, against a server stack of their own.
-  budgets-later:
-    name: Budgets, Phases 7 to 19 (Windows)
-    runs-on: windows-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-        with:
-          rust-cache-key: ffi
-      - uses: ./.github/actions/server-stack
-      - run: pnpm build
-      - name: Server stack for the benchmarks
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force bench/results | Out-Null
-          Start-Process -FilePath node -ArgumentList 'scripts/server-stack.mjs','--e2e' -RedirectStandardOutput bench/results/server-stack.log -RedirectStandardError bench/results/server-stack.err.log -WindowStyle Hidden
-          for ($i = 0; $i -lt 300; $i++) {
-            try { if ((Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:5280/health/live).StatusCode -eq 200) { exit 0 } } catch { }
-            Start-Sleep -Seconds 2
-          }
-          Get-Content bench/results/server-stack.log -Tail 50
-          exit 1
-      - name: The last run on main's budget figures
-        if: github.ref == 'refs/heads/main'
-        continue-on-error: true
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $run = gh run list --workflow CI --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId'
-          if ($run) {
-            gh run download $run --pattern 'phase-verification*' --dir bench/previous-run
-            foreach ($name in 'phase1.json', 'phase2.json', 'phase3.json', 'phase4.json', 'phase5.json', 'phase6.json', 'phase7.json', 'phase8.json', 'phase9.json', 'phase10.json', 'phase12.json', 'phase13.json', 'phase14.json', 'phase15.json', 'phase16.json', 'phase17.json', 'phase18.json', 'phase19.json') {
-              $found = Get-ChildItem bench/previous-run -Recurse -Filter $name | Select-Object -First 1
-              if ($found) { New-Item -ItemType Directory -Force bench/previous | Out-Null; Copy-Item $found.FullName "bench/previous/$name" }
-            }
-          }
-      # In this order from 2026-11-26: the benches that write the most to the server (Phase 9's
-      # and 12's seeds of 50,000 rows, Phase 8's paste) last. On a runner a few minutes old the
-      # server's bulk writes ran slow and uneven (a 50,000-row import past 30 s against 8 to 12.5;
-      # Phase 8's paste over its budget), as they never did 70 minutes into the one job before
-      # 0.19.0 or 14 minutes into the job beside (PROGRESS.md, After 0.19.0).
-      # Phase 19's (bench/phase19.mjs): a page of 2,000 blocks, 20 pictures and a database block of
-      # 1,000 rows on the device, to a Word file (typing on another page meanwhile) and to its print
-      # view laid out with the print dialog asked for; and, tracked, the whole print to "Save as
-      # PDF" (Chrome headed with --kiosk-printing). No server.
-      - name: Phase 19 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase19
-      # Phase 18's (bench/phase18.mjs): a paid checkout's webhooks to the workspace's allowance shown,
-      # against the server stack above and the mock Paddle (started if not running). The local
-      # completion model's budget needs the real package and is run by hand (--local-model).
-      - name: Phase 18 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase18
-      # Phase 13's (bench/phase13.mjs --no-server): typing between ten networked plugin frames, each
-      # reaching the mock host it was allowed (tests/mocks/net/server.mjs), in Chrome against the
-      # server stack above. The server's retrieval at 1,000,000 chunks runs in the server job.
-      - name: Phase 13 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase13 -- --no-server
-      # Phase 14's (bench/phase14.mjs --no-server): a published page of 2,000 blocks at its own host
-      # name (a `*.localhost` name proven in the DNS stand-in, its certificate from the mock ACME
-      # server), read over HTTP from the Sites process's cache, against the server stack above. The
-      # server's file check at 50,000 rows runs in the server job.
-      - name: Phase 14 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase14 -- --no-server
-      # Phase 7's (bench/phase7.mjs): the review of 500 changed ERP records less the ERP's dry
-      # run, and the first AI token less the provider's own time, in Chrome against the server
-      # stack above, the mock ERP and the mock provider it starts.
-      - name: Phase 7 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase7
-      # Phase 10's (bench/phase10.mjs --no-server): the review of 500 changed customers less the
-      # ERP's dry run, and typing between ten third-party plugin frames, in Chrome against the
-      # server stack above (its plugins host on localhost:5291) and the mocks. The server's
-      # retrieval by meaning runs in the server job.
-      - name: Phase 10 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase10 -- --no-server
-      # Phase 17's (bench/phase17.mjs --no-server): the first rows of a 50,000-row table with 10,000
-      # parents nesting their sub-items, and a 50,000-row timeline with 10,000 dependencies (first
-      # bars and a drag), in Chrome against the server stack above (relations seeded by sqlcmd).
-      - name: Phase 17 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase17 -- --no-server
-      # Phase 16's (bench/phase16.mjs): a form link's page, first byte from the Sites process's
-      # cache; an answer by the link to its row in an open tab; and 50 answers a second across five
-      # links for a minute (the answer route's time, typing on another page meanwhile); in Chrome
-      # against the server stack above.
-      - name: Phase 16 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase16
-      # Phase 15's (bench/phase15.mjs --no-server): a rule's first step after the change that starts
-      # it, shown in an open tab, and a paste of 1,000 cells starting a rule in each row (every run
-      # done, typing on another page meanwhile), in Chrome against the server stack above. The
-      # server's date triggers at 50,000 rows run in the server job; the processor time per push with
-      # ten rules is bench/phase8-server.mjs's, taken locally.
-      - name: Phase 15 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase15 -- --no-server
-      # Phase 9's (bench/phase9.mjs): a published page of 2,000 blocks read from the Sites process
-      # (localhost:5290) over HTTP, fresh and from its cache, and a timeline over 50,000 rows in
-      # Chrome (its first bars and a drag), against the server stack above.
-      - name: Phase 9 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase9
-      # Phase 8's (bench/phase8.mjs): a paste of 1,000 cells into a synced table (shown, and on
-      # the server) and a 1,000-page Notion export imported on the device, in Chrome against the
-      # server stack above. The server's CPU per push against 0.7.0 is measured on the reference
-      # machine (bench/phase8-server.mjs), as it needs 0.7.0 built beside this build.
-      - name: Phase 8 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase8
-      # Phase 12's (bench/phase12.mjs): a chart view of 50,000 rows by count (its first bars), and
-      # pinning a 5,000-row database whose rows all have documents while typing on another page
-      # (until every document is on the device, and the keystroke budget meanwhile), in Chrome
-      # against the server stack above. The ERP's first page of a 100,000-record connector is
-      # Track E10's own measure, taken in the ERP's repository.
-      - name: Phase 12 budgets, gated against the budgets and the last run on main
-        run: pnpm bench:phase12
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: phase-verification-later
           path: |
             bench/results/
             !bench/results/phase3-corpus/
