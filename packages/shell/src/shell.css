@@ -44,18 +44,34 @@ body {
   padding: 0;
 }
 
+/* It clips without being a scroller (`clip`, not `hidden`): a press or a focus on something past
+   its edge would otherwise scroll it, and the sidebar's top would stay cut off. */
 .cgw-sidebar {
   block-size: 100%;
   background: var(--cg-surface-subtle);
   border-inline-end: 1px solid var(--cg-border);
   box-sizing: border-box;
   overflow: hidden;
+  overflow: clip;
 }
 
 .cgw-sidebar-inner {
   display: flex;
   flex-direction: column;
   block-size: 100%;
+}
+
+/* The sidebar's own column (Sidebar.tsx) sits in the frame's (WorkspaceApp.tsx), above the account,
+   Workbooks and Settings: it takes the room they leave, and its tree scrolls. At the frame column's
+   full height, as both columns had, it pushed them out of the sidebar, which clips: Settings was
+   gone whenever the tree was taller than its room, and a press or a focus on it scrolled the
+   clipped sidebar instead, cutting off its top. When even its fixed rows have no room, it scrolls
+   on its own and the foot stays. */
+.cgw-sidebar-inner > .cgw-sidebar-inner {
+  flex: 1 1 0;
+  block-size: auto;
+  min-block-size: 0;
+  overflow: hidden auto;
 }
 
 .cgw-sidebar-header {
@@ -224,6 +240,13 @@ body {
 .cgw-drawer .cgw-sidebar {
   block-size: 100%;
   border-inline-end: 0;
+}
+
+/* CgDrawer's panel gives its content the drawer's whole width inside its own border, 1 px more than
+   it has: a press or a focus in the drawer scrolled the panel sideways (for Track U). Clipped, it
+   cannot scroll. (The frame's class too: the library's panel class sets `overflow`.) */
+.cgw-frame > .cgw-drawer {
+  overflow: clip;
 }
 
 /* CgDrawer's overlay mode lays its application area out as a block of its content's height, and the
