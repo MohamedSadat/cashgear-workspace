@@ -2342,3 +2342,25 @@ Seen in screenshots of a new page at 375x812: the top bar (breadcrumbs, save and
 | The status labels on a phone | Two lines at most (5rem wide, balanced, an ellipsis past two lines), their longest word their least width | "On this device only" and "على هذا الجهاز فقط" read whole on two lines. Not chosen: one line cut by an ellipsis, which kept "On this de…", or a label hidden in its calm state, which would make the bar jump as saving and syncing come and go |
 | The breadcrumbs' last crumb | Every crumb shrinks at a factor of at least 1 (the others 2, the current 1, as the library's 1 and 0.5), in every layout | With the library's 0.5, once the other crumbs are at nothing flex layout takes only half the space the current one must give up, and it ran out of the trail (for Track U). Where there is room nothing changes: the wide layout measured the same before and after |
 | The sidebar's button on a phone | 44 pixels wide, no gap beside its label only a screen reader has | It was 55; the 11 pixels go to the title |
+
+## 2026-11-27: Settings in tabs, Recent optional, voice notes, install icons
+
+Asked by the user: organise Settings in sections or tabs, make the sidebar's Recent pages optional,
+allow adding a voice note, and add an app icon if there was none. Answers (recommended option first,
+each chosen):
+
+| Question | Answer |
+| --- | --- |
+| How Settings is organised | Tabs on the start side (on top on a phone), each with its own address (`#/settings/ai`): General, Account, Members, AI, Publishing, Integrations, Data. Not chosen: one page with a contents list; tabs across the top everywhere |
+| Where the choice to show Recent is kept | On this device (`localStorage`, as the theme and language), shown by default. Not chosen: with the account (a server field) |
+| How a voice note lives in a page | The existing `file` block, which plays an `audio/*` asset; recorded from the slash menu. No schema version, so older builds show it as a file. Not chosen: a new voice-note node (schema 7) |
+| The app icon | The existing design (the favicon and the desktop's icons) kept, the web app made installable: a manifest, 192, 512 and maskable PNGs, the apple-touch-icon, `theme-color`. Not chosen: a new design |
+
+### Defaults picked (say if any should change)
+
+| Choice | Default | Reason |
+| --- | --- | --- |
+| A tab with nothing to show | Account, Members, AI, Publishing and Integrations are shown only signed in with a cloud (and a workspace, but Account); an address naming a hidden or unknown tab opens General | No tab is ever empty; an old link to `#/settings` still opens Settings |
+| Recent hidden | Only the sidebar's list goes; visits are still recorded, so the palette's Recent and opening the last page are as before. A palette command shows or hides it too | The person asked about the navigation pane; the palette's list is asked for |
+| A voice note's length and type | At most 15 minutes; the first of `audio/webm;codecs=opus`, `audio/mp4`, `audio/ogg;codecs=opus` the browser records, stored without `;codecs` | 15 minutes of Opus is about 2 MB, far under the 25 MB asset limit; Safari records only MP4 |
+| The microphone | Asked only when Record is pressed; `Permissions-Policy: microphone=(self)` | The app's own origin only, never a frame (Sheet, plugins) |
