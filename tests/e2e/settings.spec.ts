@@ -56,9 +56,18 @@ test.describe('Settings in tabs', () => {
     const errors = watchErrors(page);
     await createWorkspace(page);
     await page.setViewportSize({ width: 1280, height: 800 });
+    // Never throws: as the window narrows the tabs are drawn again, and a box is null meanwhile
+    // (expect.poll fails at once on a throw).
     const side = async () => {
-      const list = (await page.getByRole('tab', { name: /General|عام/ }).boundingBox())!;
-      const panel = (await page.getByRole('tabpanel').boundingBox())!;
+      const list = await page
+        .getByRole('tab', { name: /General|عام/ })
+        .boundingBox({ timeout: 1000 })
+        .catch(() => null);
+      const panel = await page
+        .getByRole('tabpanel')
+        .boundingBox({ timeout: 1000 })
+        .catch(() => null);
+      if (!list || !panel) return 'none';
       if (list.y + list.height <= panel.y + 1) return 'top';
       return list.x < panel.x ? 'left' : 'right';
     };
