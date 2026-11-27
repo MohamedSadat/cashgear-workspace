@@ -243,7 +243,7 @@ test('the mail settings: on, a daily summary or off, in English and Arabic, and 
 }) => {
   test.setTimeout(120_000);
   const t = (current = await team(page, browser, ['Olive']));
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/account');
   const section = page.getByTestId('mail-settings');
   await expect(section.getByRole('heading', { name: 'Email notifications' })).toBeVisible();
   const group = section.getByRole('group', { name: 'Send me mail' });

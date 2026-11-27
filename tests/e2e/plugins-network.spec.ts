@@ -48,7 +48,7 @@ const rowOf = (page: Page, type: string) => settings(page).locator(`tr[data-plug
 
 /** Settings → Plugins → Add (or a row's Update), up to the review dialog; returns it. */
 async function review(page: Page, path: string, updateOf?: string) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   await expect(settings(page)).toBeVisible({ timeout: 30000 });
   const chooser = page.waitForEvent('filechooser');
   if (updateOf)
@@ -165,7 +165,7 @@ test('a plugin reaches the hosts an admin approved and no other; a new host in a
   expect((await seen()).every((r) => r.host === 'localhost:4288')).toBe(true);
 
   // Allowed in its row (rows and network named together): now it reaches both, never example.com.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   await rowOf(page, 'vendor.ping').getByTestId('plugin-allow').click();
   const allow = page.getByRole('alertdialog', { name: 'Allow Ping to connect' });
   await expect(allow).toContainText(
@@ -181,7 +181,7 @@ test('a plugin reaches the hosts an admin approved and no other; a new host in a
   expect((await seen()).some((r) => r.host === '127.0.0.1:4288')).toBe(true);
 
   // Its network stopped: neither host is reached any more.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   await rowOf(page, 'vendor.ping').getByTestId('plugin-stop-network').click();
   await expect(rowOf(page, 'vendor.ping').locator('[data-hosts="waiting"]')).toHaveText(
     'Waiting for approval: localhost:4288, 127.0.0.1:4288',
@@ -228,7 +228,7 @@ test('an added, updated, switched or removed plugin reaches a member’s open ta
       };
 
     // Turned off: the member's block says so.
-    await owner.goto('/#/settings');
+    await owner.goto('/#/settings/integrations');
     await settings(owner).getByRole('button', { name: 'Turn off Notes' }).click();
     await expect(pluginBlock(member)).toContainText('Notes is turned off in this workspace.', {
       timeout: 30000,
@@ -241,7 +241,7 @@ test('an added, updated, switched or removed plugin reaches a member’s open ta
     await owner.getByTestId('plugins-confirm').click();
     await expect.poll(async () => (await stateOf()).plugin?.version, { timeout: 30000 }).toBe(2);
     // Removed: the block says the plugin isn't installed.
-    await owner.goto('/#/settings');
+    await owner.goto('/#/settings/integrations');
     await settings(owner).getByRole('button', { name: 'Remove Notes' }).click();
     await owner.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
     await expect(pluginBlock(member)).toContainText(

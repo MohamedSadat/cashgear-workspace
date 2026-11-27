@@ -987,7 +987,7 @@ test('the v0.9.0 build shows a third-party plugin block as a placeholder, sends 
   ).find((w) => w.name === 'Plugins v0.9.0')!.id;
 
   // Install the reference plugin in Settings.
-  await now.goto('/#/settings');
+  await now.goto('/#/settings/integrations');
   const section = now.getByTestId('plugins-settings');
   await expect(section).toBeVisible({ timeout: 30000 });
   const chooser = now.waitForEvent('filechooser');

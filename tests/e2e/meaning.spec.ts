@@ -66,7 +66,7 @@ test('on, the palette and ask find pages by meaning, in English, in Arabic and a
   await restrict(t, hidden, []);
 
   // Settings, as the owner: the key goes once and is never shown again; AI's completions stay off.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   const settings = page.getByTestId('embeddings-settings');
   await expect(settings.getByTestId('embeddings-key-state')).toHaveText('No key is set.');
   await settings.getByLabel('Voyage AI API key').fill(VOYAGE_KEY);

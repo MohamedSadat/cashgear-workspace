@@ -33,6 +33,7 @@ import { chartScene, chartScreens } from './chart';
 import { gridScene, gridScreens } from './grid';
 import { erp12Scene, erp12Screens } from './erp12';
 import { planScene, planScreens } from './plan';
+import { everySettingsTab } from './settings';
 import { ar as dbAr, en as dbEn } from '../../packages/database/src/i18n/catalogues';
 
 /** The shell's "New database" in the sidebar's ▦ menu. */
@@ -93,9 +94,9 @@ test.describe('accessibility', () => {
         problems.push(...(await axe(page, 'block menu')));
         await page.keyboard.press('Escape');
 
-        await page.goto('/#/settings');
-        await expect(page.locator('#cgw-settings-title')).toBeVisible();
-        problems.push(...(await axe(page, 'settings')));
+        await everySettingsTab(page, async (tab) => {
+          problems.push(...(await axe(page, `settings: ${tab}`)));
+        });
 
         await page.goto('/#/trash');
         await expect(page.locator('.cgw-trash, .cgw-empty').first()).toBeVisible();
@@ -397,7 +398,7 @@ test.describe('accessibility of workbooks and ERP data', () => {
           await page.goto('/#/workbooks');
           await expect(page.getByTestId('workbooks-table')).toBeVisible({ timeout: 30000 });
           problems.push(...(await axe(page, 'workbook list')));
-          await page.goto('/#/settings');
+          await page.goto('/#/settings/integrations');
           await expect(page.getByTestId('erp-settings').getByTestId('erp-links')).toBeVisible({
             timeout: 30000,
           });

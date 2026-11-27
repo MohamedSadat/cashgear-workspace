@@ -99,8 +99,18 @@ describe('routes', () => {
       { kind: 'page' as const, pageId: id, blockId: 'Ab3dEf6hIj9L' },
       { kind: 'trash' as const },
       { kind: 'settings' as const },
+      { kind: 'settings' as const, tab: 'ai' as const },
+      { kind: 'settings' as const, tab: 'integrations' as const },
     ])
       expect(parseRoute(routeHash(route))).toEqual(route);
+  });
+
+  it("reads Settings' tab, General for none or one it does not know", () => {
+    expect(parseRoute('#/settings/account')).toEqual({ kind: 'settings', tab: 'account' });
+    expect(parseRoute('#/settings/general')).toEqual({ kind: 'settings' });
+    expect(parseRoute('#/settings/nothing')).toEqual({ kind: 'settings' });
+    expect(routeHash({ kind: 'settings', tab: 'general' })).toBe('#/settings');
+    expect(routeHash({ kind: 'settings', tab: 'data' })).toBe('#/settings/data');
   });
 
   it('ignore what is not a page id', () => {

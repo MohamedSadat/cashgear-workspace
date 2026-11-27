@@ -69,7 +69,7 @@ export async function pickPrincipal(
 
 /** Settings → Members → Groups, read. */
 export async function groupsSettings(page: Page) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/members');
   const section = page.getByTestId('groups-settings');
   await expect(section).toBeVisible({ timeout: 30000 });
   return section;

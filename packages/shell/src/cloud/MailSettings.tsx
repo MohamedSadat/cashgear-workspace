@@ -86,7 +86,7 @@ export function MailSettingsSection({ api }: { api: MailSettingsApi }) {
           : '';
   return (
     <section aria-labelledby="cgw-mail-title" data-testid="mail-settings">
-      <h3 id="cgw-mail-title">{t('mail.title')}</h3>
+      <h2 id="cgw-mail-title">{t('mail.title')}</h2>
       <p className="cgw-muted" id="cgw-mail-intro">
         {t('mail.intro')}
       </p>

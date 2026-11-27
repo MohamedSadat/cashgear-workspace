@@ -158,7 +158,7 @@ test('a workspace is linked from the ERP client, and the link ticket is never in
     expect(erp).toEqual([
       expect.objectContaining({ linkId: links[0].erpLinkId, workspaceId, revokedAt: null }),
     ]);
-    await page.goto('/#/settings');
+    await page.goto('/#/settings/integrations');
     const settings = page.getByTestId('erp-settings');
     await expect(settings.getByTestId('erp-links')).toContainText('Kit Trading');
     await expect(settings).toContainText(`Linked by ${account.name}`);

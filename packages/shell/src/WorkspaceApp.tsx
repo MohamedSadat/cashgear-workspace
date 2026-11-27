@@ -30,6 +30,7 @@ import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
 // The palette loads with the frame: keys typed straight after Ctrl+K must reach its field.
 import { Palette } from './search/Palette';
 import { ThemeController } from './theme';
+import { recentPreference } from './sidebarPrefs';
 import { normaliseText, type Id, type RowRecord } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
 import { Cloud, type CloudNotice } from './cloud/cloud';
@@ -329,6 +330,14 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
           keywords: () => [t('keywords.language')],
           run: () => setLanguage(language),
         })),
+        {
+          id: 'app.recent',
+          group: 'app' as const,
+          label: () =>
+            t(recentPreference().getShown() ? 'commands.recentHide' : 'commands.recentShow'),
+          keywords: () => [t('keywords.recent')],
+          run: () => recentPreference().setShown(!recentPreference().getShown()),
+        },
       ),
     [services, t, setLanguage],
   );
@@ -692,7 +701,12 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
             <ErpLinkRoute session={session} services={erp} />
           ) : route.kind === 'settings' ? (
             <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>
-              <Settings onLanguage={setLanguage} session={session} updates={updates} />
+              <Settings
+                onLanguage={setLanguage}
+                session={session}
+                updates={updates}
+                tab={route.tab}
+              />
             </Suspense>
           ) : route.kind === 'workbooks' ? (
             <Suspense fallback={<div className="cgw-page-loading">{t('app.loading')}</div>}>

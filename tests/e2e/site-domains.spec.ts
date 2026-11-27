@@ -116,7 +116,7 @@ test('a site at a host name its workspace proved, by a certificate from ACME, it
 
   // Settings → Publishing: the name added, its record shown, set at "DNS", verified.
   const host = `guide-${Date.now().toString(36)}.localhost`;
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/publishing');
   const domains = page.getByTestId('site-domains');
   await expect(domains).toBeVisible({ timeout: 30000 });
   await domains.getByLabel('Host name').fill(host);
@@ -170,7 +170,7 @@ test('a site at a host name its workspace proved, by a certificate from ACME, it
   expect((await at(`nobody-${Date.now().toString(36)}.localhost`, '/')).status).toBe(404);
 
   // Settings shows it without a reload: serving the page, its certificate live.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/publishing');
   await expect(domains.locator(`[data-host="${host}"]`).getByTestId('domain-state')).toHaveText(
     'Serves “Field guide”',
     { timeout: 30000 },

@@ -38,7 +38,7 @@ const providerCalls = async () =>
   ).requests.length;
 
 async function chooseLocal(page: Page, label: string) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   const settings = aiSettings(page);
   await expect(settings.getByTestId('ai-key-source')).toBeVisible({ timeout: 30_000 });
   await settings.getByTestId('ai-key-source').getByRole('radio', { name: label }).check();

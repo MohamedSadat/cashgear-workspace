@@ -113,7 +113,7 @@ async function passkeys(page: Page) {
 
 /** Settings' own Sign out: this browser's device ends. */
 async function signOut(page: Page) {
-  await page.goto(`${APP}/#/settings`);
+  await page.goto(`${APP}/#/settings/account`);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(
     page
@@ -141,12 +141,12 @@ async function addFromSettings(page: Page, name: string) {
   await passkeysSection(page).getByRole('button', { name: 'Add a passkey' }).click();
   await page.waitForURL((url) => url.origin === API && url.pathname === '/account/passkeys/new');
   const asked = new URL(page.url());
-  expect(asked.searchParams.get('return')).toBe(`${APP}/#/settings`);
+  expect(asked.searchParams.get('return')).toBe(`${APP}/#/settings/account`);
   expect(asked.searchParams.get('lang')).toBe('en');
   await expect(page.getByRole('heading', { name: 'Add a passkey' })).toBeVisible();
   await page.getByLabel('Name, to tell your passkeys apart').fill(name);
   await page.getByRole('button', { name: 'Add a passkey' }).click();
-  await page.waitForURL(`${APP}/#/settings`, { timeout: 30000 });
+  await page.waitForURL(`${APP}/#/settings/account`, { timeout: 30000 });
 }
 
 test('a passkey added from Settings signs in on its own, and once removed is refused', async ({
@@ -160,7 +160,7 @@ test('a passkey added from Settings signs in on its own, and once removed is ref
 
   // Adding one: Settings → Account's "Add a passkey" opens the API's page in this tab, with this
   // app's Settings as `return`; within ten minutes of the sign-in it adds at once, then comes back.
-  await page.goto(`${APP}/#/settings`);
+  await page.goto(`${APP}/#/settings/account`);
   await expect(passkeysSection(page).getByText('No passkeys yet.')).toBeVisible({ timeout: 20000 });
   await addFromSettings(page, 'Virtual key');
   const made = await authenticator.credentials();
@@ -184,7 +184,7 @@ test('a passkey added from Settings signs in on its own, and once removed is ref
   expect((await authenticator.credentials())[0].signCount).toBeGreaterThan(0);
 
   // Removed in Settings → Account (asked first), it stops at once.
-  await page.goto(`${APP}/#/settings`);
+  await page.goto(`${APP}/#/settings/account`);
   await expect(listed(page, 'Virtual key')).toContainText('Last used', { timeout: 20000 });
   await listed(page, 'Virtual key').getByRole('button', { name: 'Remove Virtual key' }).click();
   const ask = page.getByRole('alertdialog', { name: 'Remove the passkey “Virtual key”?' });
@@ -297,7 +297,7 @@ test('Settings’ passkeys pass Axe in both themes and languages, and the Arabic
   const account = await newAccount('Walk Wafa');
   await signInWithPassword(page, account);
   await signedIn(page, account);
-  await page.goto(`${APP}/#/settings`);
+  await page.goto(`${APP}/#/settings/account`);
   await addFromSettings(page, 'Virtual key');
   const problems: string[] = [];
   const english: string[] = [];

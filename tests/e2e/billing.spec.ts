@@ -40,7 +40,7 @@ const subscriptions = async () =>
 
 /** The plan's part of Settings → AI, once it has read the plans. */
 async function openPlans(page: Page) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   await expect(billing(page).locator('[data-plan="team"]')).toBeVisible({ timeout: 30_000 });
 }
 

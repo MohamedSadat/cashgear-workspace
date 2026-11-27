@@ -204,7 +204,7 @@ test('an invited member sees the workspace; signing out hides it, signing in aga
   await workspaceHere(page, 'Team space');
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 30000 });
   const member = await newAccount('Member');
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/members');
   await page.getByLabel('Email address').fill(member.email);
   await page.getByRole('button', { name: 'Invite', exact: true }).click();
   await expect(page.getByText(`Invitation sent to ${member.email}.`)).toBeVisible();
@@ -227,7 +227,7 @@ test('an invited member sees the workspace; signing out hides it, signing in aga
 
   // Signing out (2026-11-21): the account's workspace stays on this device but is not shown to
   // whoever uses it next; the first run's screen is, with its Sign in.
-  await second.goto('/#/settings');
+  await second.goto('/#/settings/account');
   await second.getByRole('button', { name: 'Sign out' }).click();
   // Signed out before the app is loaded again: a load while the sign-out is still on its way can
   // ask who is signed in before the server has ended the session, and the pass's 401 after it
@@ -260,7 +260,7 @@ test("another account signed in on the same browser sees none of the first's wor
   const planned = page.url();
 
   // Signed out without removing, then another account signs in on the same browser.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/account');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();
   const second = await newAccount('Second');
@@ -280,7 +280,7 @@ test("another account signed in on the same browser sees none of the first's wor
   await expect(page.getByText('Only for the first account')).toHaveCount(0);
 
   // The second signs out; the first signs in again: the page is there, from this device.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/account');
   await page.getByRole('button', { name: 'Sign out' }).click();
   // Signed out before the sign-in page is asked for (its form's token follows the sign-out).
   await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();
@@ -290,7 +290,7 @@ test("another account signed in on the same browser sees none of the first's wor
   await expect(editor(page)).toContainText('Only for the first account');
 
   // Signing out with "remove": the first account's workspace leaves the device; the server keeps it.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/account');
   await page.getByTestId('sign-out-remove').check();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible({
@@ -346,7 +346,7 @@ test('a guest sees only the page shared with them; a view link opens it read-onl
 
   // A guest joins: nothing is shared with them yet.
   const guest = await newAccount('Guest');
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/members');
   await page.getByLabel('Email address').fill(guest.email);
   await page.getByLabel('Role').selectOption('guest');
   await page.getByRole('button', { name: 'Invite', exact: true }).click();

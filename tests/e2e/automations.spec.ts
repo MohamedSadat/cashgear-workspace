@@ -215,7 +215,7 @@ test('a webhook added in Settings is called signed, and its receiver checks it',
   test.setTimeout(180_000);
   await fetch(`${NET}/__mock/reset`, { method: 'POST' });
   await openDatabase(page);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   const section = page.locator('.cgw-automations-settings');
   await expect(section.getByRole('heading', { name: 'Automations' })).toBeVisible({
     timeout: 30_000,

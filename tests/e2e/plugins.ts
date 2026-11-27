@@ -40,7 +40,7 @@ export async function pluginScene(page: Page, name: string): Promise<PluginScene
     (await api.get('/api/v1/workspaces')) as { id: string; name: string }[]
   ).find((w) => w.name === space)!.id;
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   const section = page.getByTestId('plugins-settings');
   await expect(section).toBeVisible({ timeout: 30000 });
   const chooser = page.waitForEvent('filechooser');
@@ -88,7 +88,7 @@ export async function pluginScreens(
     timeout: 30000,
   });
   await check('plugin block');
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   const section = page.getByTestId('plugins-settings');
   await expect(section.getByTestId('plugins-list')).toBeVisible({ timeout: 30000 });
   await check('plugins settings');

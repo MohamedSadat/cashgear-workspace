@@ -67,7 +67,7 @@ test('signs in through the browser, syncs a workspace, and a browser sees its pa
   await browser.close();
 
   // Signing out revokes the device's tokens; the pages stay in the app.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/account');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(
     page

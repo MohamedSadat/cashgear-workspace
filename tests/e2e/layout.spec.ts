@@ -161,7 +161,7 @@ test.describe('layout with a tall sidebar', () => {
         await page.mouse.wheel(0, 600);
       await expect.poll(() => place(about)).toBe('shown');
       // Its last line too: the end of the page is reached, not cut off.
-      const end = page.locator('.cgw-settings > :last-child');
+      const end = page.locator('.cgw-settings-panel > :last-child');
       await expect.poll(() => place(end)).toBe('shown');
       expect(errors).toEqual([]);
     });

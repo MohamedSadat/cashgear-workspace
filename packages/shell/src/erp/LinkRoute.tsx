@@ -53,7 +53,7 @@ export function ErpLinkRoute({
             forgetTicket: forgetErpLinkTicket,
             openSettings: (workspaceId) => {
               if (session.workspaceId !== workspaceId) session.switchTo(workspaceId);
-              navigate({ kind: 'settings' }, true);
+              navigate({ kind: 'settings', tab: 'integrations' }, true);
             },
             close: () => navigate({ kind: 'home' }, true),
           }

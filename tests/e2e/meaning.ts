@@ -210,7 +210,7 @@ export async function meaningScreens(
   ).toBeVisible({ timeout: 30000 });
   await check('palette, related by meaning');
   await page.keyboard.press('Escape');
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   await expect(page.getByTestId('embeddings-settings')).toBeVisible({ timeout: 30000 });
   await expect(page.getByTestId('embeddings-progress')).toBeVisible({ timeout: 30000 });
   await check('search by meaning settings');

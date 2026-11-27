@@ -167,14 +167,14 @@ describe('“Add a passkey”', () => {
     );
     expect(await host.add('en')).toBe('left');
     expect(openExternal).not.toHaveBeenCalled();
-    const back = `${location.origin}${location.pathname}#/settings`;
-    expect(back).toBe('http://127.0.0.1/#/settings');
+    const back = `${location.origin}${location.pathname}#/settings/account`;
+    expect(back).toBe('http://127.0.0.1/#/settings/account');
     expect(assign).toHaveBeenCalledWith(
       `http://api.test/account/passkeys/new?lang=en&return=${encodeURIComponent(back)}`,
     );
     const url = new URL(assign.mock.calls[0][0] as string);
     expect(url.origin + url.pathname).toBe('http://api.test/account/passkeys/new');
-    expect(url.searchParams.get('return')).toBe('http://127.0.0.1/#/settings');
+    expect(url.searchParams.get('return')).toBe('http://127.0.0.1/#/settings/account');
     expect(url.searchParams.get('lang')).toBe('en');
   });
 

@@ -138,7 +138,7 @@ export function PublishingSection({
   const sites = publishing?.sites ?? [];
   return (
     <section aria-labelledby="cgw-publishing-title" data-testid="publishing-settings">
-      <h3 id="cgw-publishing-title">{t('publish.settingsTitle')}</h3>
+      <h2 id="cgw-publishing-title">{t('publish.settingsTitle')}</h2>
       <p className="cgw-muted" id="cgw-publishing-intro">
         {t('publish.settingsIntro')}
       </p>

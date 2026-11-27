@@ -135,7 +135,7 @@ test('on, each action sends only what it needs, and its answer enters only on Ac
 }) => {
   current = await team(page, browser, ['Ada']);
   // Settings: the key goes once and is never shown again.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   const settings = page.getByTestId('ai-settings');
   await expect(settings).toContainText('No key is set.');
   await settings.getByLabel('Anthropic API key').fill(KEY);

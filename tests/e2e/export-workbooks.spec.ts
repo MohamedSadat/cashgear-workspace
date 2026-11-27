@@ -47,7 +47,7 @@ const workbooksOf = async (api: Api, workspaceId: string) =>
 
 /** Settings → Your data → Export workspace, saved where the test can read it. */
 async function exportWorkspace(page: Page, path: string) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export workspace' }).click();
   await (await download).saveAs(path);
@@ -56,7 +56,7 @@ async function exportWorkspace(page: Page, path: string) {
 
 /** Settings → Your data → Import an export, of this file. */
 async function importExport(page: Page, path: string) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Import an export' }).click();
   await (await chooser).setFiles(path);
@@ -132,7 +132,7 @@ test('a workspace exported with its workbooks imports into a new synced workspac
 
     // Imported signed out: on this device, its blocks as they were, the workbook skipped.
     expect(errors).toEqual([]);
-    await page.goto('/#/settings');
+    await page.goto('/#/settings/account');
     // This browser's own Sign out, after the device list's (the test's API session is a device).
     await page.getByRole('button', { name: 'Sign out' }).last().click();
     await expect(page.getByRole('button', { name: 'Sign in to sync' }).first()).toBeVisible();

@@ -81,7 +81,11 @@ export function passkeysHost(
     add: async (language) => {
       if (cloud.platform.kind === 'web') {
         assign(
-          passkeyPageUrl(api.baseUrl, language, `${location.origin}${location.pathname}#/settings`),
+          passkeyPageUrl(
+            api.baseUrl,
+            language,
+            `${location.origin}${location.pathname}#/settings/account`,
+          ),
         );
         return 'left';
       }

@@ -134,7 +134,7 @@ export async function phase7Screens(
   await check('AI panel with a proposal');
   await panel.getByRole('button', { name: ai.discard, exact: true }).click();
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   await expect(page.getByTestId('ai-settings').getByTestId('ai-key-state')).toBeVisible({
     timeout: 30000,
   });

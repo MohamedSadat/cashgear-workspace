@@ -25,7 +25,7 @@ test('a page shared to view opens read-only and switches when edit is given', as
   await expect(syncStatus(page)).toHaveText('Synced', { timeout: 20000 });
   const sharedUrl = page.url();
   const guest = await newAccount('Guest');
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/members');
   await page.getByLabel('Email address').fill(guest.email);
   await page.getByLabel('Role').selectOption('guest');
   await page.getByRole('button', { name: 'Invite', exact: true }).click();

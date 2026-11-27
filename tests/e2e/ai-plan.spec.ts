@@ -41,7 +41,7 @@ test('a workspace on Cash Gear’s subscription uses AI with no key of its own, 
   await fetch(`${MOCK_AI}/__mock/reset`, { method: 'POST' });
   current = await team(page, browser, ['Plan owner'], { workspace: 'Plan space' });
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   const settings = aiSettings(page);
   await expect(settings.getByTestId('ai-key-source')).toBeVisible({ timeout: 30000 });
   await settings
@@ -74,7 +74,7 @@ test('a workspace on Cash Gear’s subscription uses AI with no key of its own, 
   expect((await providerRequests()).filter((r) => r.action === 'summarise')).toHaveLength(1);
 
   // The month's use, counted against the allowance.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   await expect(aiSettings(page).getByTestId('ai-allowance')).toHaveText(
     /^This month: [1-9][\d,]* of 1,000,000 tokens used\.$/,
     { timeout: 30000 },
@@ -91,7 +91,7 @@ test('search by meaning on this server: no key, and no text leaves the host for 
   current = await team(page, browser, ['Local owner'], { workspace: 'Local space' });
   const before = (await mockEmbeddings.calls()).length;
 
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   const embeddings = page.getByTestId('embeddings-settings');
   await expect(embeddings.getByTestId('embeddings-source')).toBeVisible({ timeout: 30000 });
   await embeddings.getByRole('radio', { name: 'On this server (voyage-4-nano)' }).check();
@@ -112,7 +112,7 @@ test('search by meaning on this server: no key, and no text leaves the host for 
     'Parcels leave the warehouse every morning by courier.',
   ]);
   await waitSaved(page);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   await expect(embeddings.getByTestId('embeddings-progress')).toHaveText(
     /^Pages ready for search by meaning: (\d+) of \1\.$/,
     { timeout: 120000 },

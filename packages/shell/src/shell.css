@@ -150,6 +150,40 @@ body {
   font-size: 1rem;
 }
 
+/* After 0.19.0: Settings in tabs, the list on the start side beside a panel of the old column's
+   width; on a phone the list runs across the top and the panel takes the whole width. */
+.cgw-settings:has(.cgw-settings-tabs) {
+  max-inline-size: calc(720px + 14rem);
+}
+
+.cgw-settings-tabs {
+  border: 0;
+  background: transparent;
+}
+
+.cgw-settings-tabs[data-position='left'] {
+  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+  align-items: start;
+}
+
+.cgw-settings-tabs[data-position='left'] > :first-child {
+  position: sticky;
+  inset-block-start: 0;
+  background: transparent;
+}
+
+.cgw-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-inline-size: 720px;
+}
+
+.cgw-settings-panel > :first-child,
+.cgw-settings-panel > :first-child > h2:first-child {
+  margin-block-start: 0;
+}
+
 .cgw-icon-button {
   flex: none;
 }

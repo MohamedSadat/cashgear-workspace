@@ -67,8 +67,8 @@ export const SSO_WORDS = {
  * app routes by the hash, so going to the same address would not read the section again.
  */
 export async function ssoSettings(page: Page) {
-  if (new URL(page.url()).hash === '#/settings') await page.reload();
-  else await page.goto('/#/settings');
+  if (new URL(page.url()).hash === '#/settings/members') await page.reload();
+  else await page.goto('/#/settings/members');
   const section = page.getByTestId('sso-settings');
   await expect(section.getByTestId('sso-provider-form')).toBeVisible({ timeout: 30000 });
   return section;

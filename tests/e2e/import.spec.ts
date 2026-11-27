@@ -46,7 +46,7 @@ const report = (page: Page) => page.getByTestId('import-report');
 
 /** Settings → Your data → Import from Markdown, Notion or Word, with a kind chosen. */
 async function openImport(page: Page, kind: 'Markdown' | 'A Notion export' | 'A Word document') {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   await page.getByRole('button', { name: 'Import from Markdown, Notion or Word' }).click();
   await expect(panel(page)).toBeVisible();
   await panel(page)
@@ -402,7 +402,7 @@ test.describe('import', () => {
     await page.getByLabel('اسم مساحة العمل').fill('استيراد');
     await page.keyboard.press('Enter');
     await expect(editor(page)).toBeVisible();
-    await page.goto('/#/settings');
+    await page.goto('/#/settings/data');
     await page.getByRole('button', { name: 'استيراد من ماركداون أو نوشن أو وورد' }).click();
     const dialog = panel(page);
     await expect(dialog).toBeVisible();

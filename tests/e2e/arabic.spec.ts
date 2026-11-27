@@ -14,6 +14,7 @@ import { chartScene, chartScreens } from './chart';
 import { gridScene, gridScreens } from './grid';
 import { ERP12_THEIRS, englishIn, erp12Scene, erp12Screens } from './erp12';
 import { planScene, planScreens } from './plan';
+import { everySettingsTab } from './settings';
 import {
   REAL_ERP,
   REAL_SHEET,
@@ -193,9 +194,9 @@ test('the Arabic interface is right to left, with no English of its own', async 
   found.push(...(await english(page, 'row menu')));
   await page.keyboard.press('Escape');
 
-  await page.goto('/#/settings');
-  await expect(page.locator('#cgw-settings-title')).toBeVisible();
-  found.push(...(await english(page, 'settings')));
+  await everySettingsTab(page, async (tab) => {
+    found.push(...(await english(page, `settings: ${tab}`)));
+  });
 
   await page.goto('/#/trash');
   await expect(page.locator('.cgw-page-area')).toBeVisible();
@@ -288,7 +289,7 @@ test('the Arabic workbook and ERP screens have no English of their own', async (
     await page.goto('/#/workbooks');
     await expect(page.getByTestId('workbooks-table')).toBeVisible({ timeout: 30000 });
     found.push(...(await english(page, 'workbook list', theirs)));
-    await page.goto('/#/settings');
+    await page.goto('/#/settings/integrations');
     await expect(page.getByTestId('erp-settings').getByTestId('erp-links')).toBeVisible({
       timeout: 30000,
     });

@@ -46,7 +46,7 @@ const frameOf = (page: import('@playwright/test').Page) =>
 
 /** Settings → Plugins → Add, with the bundle at `path`; waits for the list to hold `name`. */
 async function addPlugin(page: import('@playwright/test').Page, path: string, name: string) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   const section = page.getByTestId('plugins-settings');
   await expect(section).toBeVisible({ timeout: 30000 });
   const chooser = page.waitForEvent('filechooser');
@@ -245,7 +245,7 @@ test('a missing, a turned-off and a newer plugin draw a placeholder, and the doc
   expect(before).toContain('vendor.notes');
 
   // Turned off: the block says so, and the document is unchanged.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   await page
     .getByTestId('plugins-settings')
     .getByRole('button', { name: 'Turn off Notes' })
@@ -258,7 +258,7 @@ test('a missing, a turned-off and a newer plugin draw a placeholder, and the doc
   await expect(frameOf(page).locator('#status')).toHaveCount(0);
 
   // Removed: the block says the plugin isn't installed.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/integrations');
   await page.getByTestId('plugins-settings').getByRole('button', { name: 'Remove Notes' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
   await expect(page.getByTestId('plugins-none')).toBeVisible({ timeout: 30000 });

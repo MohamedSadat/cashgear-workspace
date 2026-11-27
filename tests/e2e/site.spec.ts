@@ -460,7 +460,7 @@ test('turning publishing off takes every site of the workspace down, and refuses
   for (const address of [one.address, two.address]) expect(await statusOf(address)).toBe(200);
 
   // Settings: the live sites, then the switch off, after asking.
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/publishing');
   const section = page.getByTestId('publishing-settings');
   await expect(section.getByTestId('publishing-sites').getByRole('row')).toHaveCount(3);
   await section.getByLabel('Allow publishing pages to the web').click();
@@ -478,7 +478,7 @@ test('turning publishing off takes every site of the workspace down, and refuses
   const dialog = await publishView(page);
   await expect(dialog.getByTestId('publish-reason')).toContainText('turned off');
   await close(dialog);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/publishing');
   await section.getByLabel('Allow publishing pages to the web').click();
   await expect(section.getByLabel('Allow publishing pages to the web')).toBeChecked();
   await expect(section.getByTestId('publishing-none')).toBeVisible();

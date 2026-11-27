@@ -212,15 +212,18 @@ test('a person of a verified domain signs in through the workspace’s provider 
   await expect(
     ada.page.getByRole('button', { name: new RegExp(escapeRegExp(space)) }).first(),
   ).toBeVisible({ timeout: 30000 });
-  await ada.page.goto(`${APP}/#/settings`);
+  await ada.page.goto(`${APP}/#/settings/account`);
   const password = ada.page.getByTestId('password-settings');
   await expect(password).toContainText(
     `This account has no password: it signs in through your organisation’s account. You can set one too, by a link sent to ${adaEmail}.`,
     { timeout: 30000 },
   );
-  // A member is not shown single sign-on at all.
   await expect(ada.page.getByTestId('passkeys-settings')).toBeVisible();
+  // A member is not shown single sign-on at all (it is the Members tab's, after 0.19.0).
+  await ada.page.getByRole('tab', { name: 'Members' }).click();
+  await expect(ada.page.getByTestId('members')).toBeVisible({ timeout: 30000 });
   await expect(ada.page.getByTestId('sso-settings')).toHaveCount(0);
+  await ada.page.getByRole('tab', { name: 'Account' }).click();
   await password.getByRole('button', { name: 'Set a password', exact: true }).click();
   await expect(password.getByTestId('password-status')).toHaveText(
     `A link to set a password is on its way to ${adaEmail}. Open it, choose a password, then sign in with it whenever you like.`,
@@ -279,7 +282,7 @@ test('a person of a verified domain signs in through the workspace’s provider 
   await signedIn(patBrowser.page, pat);
   // Pat's account has a password the domain no longer takes: Settings says the organisation signs
   // it in, and offers none.
-  await patBrowser.page.goto(`${APP}/#/settings`);
+  await patBrowser.page.goto(`${APP}/#/settings/account`);
   await expect(patBrowser.page.getByTestId('password-organisation')).toHaveText(
     'Your organisation signs this account in through its own sign-in: a password does not sign it in.',
     { timeout: 30000 },

@@ -99,7 +99,7 @@ test.afterEach(async ({ page }) => {
   launched = null;
   // The desktop keeps its sign-in in the keychain (a name per test): signed out, and revoked.
   if (desktop && !page.isClosed()) {
-    await page.goto('/#/settings').catch(() => {});
+    await page.goto('/#/settings/account').catch(() => {});
     await page
       .getByRole('button', { name: 'Sign out' })
       .click({ timeout: 5000 })
@@ -138,7 +138,7 @@ test('offline: the app starts, pinned pages open, edits and a new page are saved
   await page
     .getByRole('menuitem', { name: 'Make available offline, with the pages inside' })
     .click();
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   await expect(page.getByTestId('offline-progress')).toHaveText(
     'All 2 pages kept offline are on this device.',
     { timeout: 30000 },
@@ -332,7 +332,7 @@ const wordsOf = (title: string) => `The words of ${title}, kept offline.`;
 
 /** Settings → Your data → Import from Markdown, Notion or Word: a Notion export, to its report. */
 async function importNotion(page: Page, file: { name: string; bytes: Uint8Array }) {
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   await page.getByRole('button', { name: 'Import from Markdown, Notion or Word' }).click();
   const panel = page.getByRole('dialog', { name: 'Import pages' });
   await panel.getByRole('radio', { name: /^A Notion export/ }).check();
@@ -400,7 +400,7 @@ test("a pinned database holds every row's page: they open offline, and Settings 
   await expect(rowOf(fullPage(page), 'Row 01')).toBeVisible({ timeout: 30000 });
   await pageActions(page).click();
   await page.getByRole('menuitem', { name: 'Make available offline', exact: true }).click();
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   await expect(page.getByTestId('offline-rows-progress')).toHaveText(
     `All ${ROW_COUNT} row pages in the databases kept offline are on this device.`,
     { timeout: 60000 },
@@ -437,7 +437,7 @@ test("a pinned database holds every row's page: they open offline, and Settings 
   // In Arabic too, with the numbers as the language writes them; Axe finds nothing in either.
   if (!desktop) {
     const problems: string[] = [];
-    await page.goto('/#/settings');
+    await page.goto('/#/settings/data');
     await expect(page.getByTestId('offline-rows-progress')).toBeVisible({ timeout: 20000 });
     problems.push(...(await axe(page, 'settings, row pages offline (en)')));
     await page.evaluate(() => localStorage.setItem('cgw-language', 'ar'));
@@ -472,7 +472,7 @@ test('Axe finds nothing on the offline screens, in both languages and themes', a
   await expect(syncStatus(other.page)).toHaveText('Synced', { timeout: 30000 });
   await other.context.close();
   await expect(row(page, 'Made elsewhere')).toBeVisible({ timeout: 20000 });
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   await expect(page.getByTestId('offline-progress')).toHaveText(/^All 1 pages kept offline/, {
     timeout: 30000,
   });
@@ -517,7 +517,7 @@ test('Axe finds nothing on the offline screens, in both languages and themes', a
         },
         [theme, language],
       );
-      await page.goto('/#/settings');
+      await page.goto('/#/settings/data');
       await page.reload();
       await expect(page.locator('#cgw-offline-title')).toBeVisible({ timeout: 20000 });
       await expect(page.getByTestId('storage-usage')).toBeVisible();

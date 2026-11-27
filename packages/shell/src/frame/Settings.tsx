@@ -1,13 +1,18 @@
-import { CgRadioGroup } from '@cashgear/ui';
-import { lazy, Suspense } from 'react';
+import { CgRadioGroup, CgSwitch, CgTabs, type CgTabDescriptor } from '@cashgear/ui';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell, useThemePreference } from '../context';
 import { LANGUAGES, type Language } from '../i18n';
+import { useSection } from '../i18n/sections';
 import type { ThemePreference } from '../theme';
 import { DataPanel } from '../exchange/DataPanel';
 import type { WorkspaceSession } from '../session';
+import { navigate, type SettingsTab } from '../route';
+import { recentPreference, useRecentShown } from '../sidebarPrefs';
 import { UpdateCheck, type UpdatesState } from './Updates';
-import { AccountSettings, MembersSettings, useCloud } from '../cloud/CloudUi';
+import { useNarrowScreen } from './Frame';
+import { settingsTabsWords } from './settingsWords';
+import { AccountSettings, MembersSettings, useAccount, useCloud } from '../cloud/CloudUi';
 import { GroupsSection } from '../cloud/GroupsSettings';
 import { PasskeysSection } from '../cloud/PasskeysSettings';
 import { PasswordSection } from '../cloud/PasswordSettings';
@@ -31,98 +36,163 @@ const PluginsSettings = lazy(() =>
   import('../plugins/PluginsSettings').then((m) => ({ default: m.PluginsSettings })),
 );
 
+/**
+ * Settings in tabs (after 0.19.0, DECISIONS.md 2026-11-27), each at its own address
+ * (`#/settings/{tab}`). A tab is listed only when it has something to show: those of a synced
+ * workspace only while signed in. An address naming one not listed shows General, and the tab it
+ * names once it is (the account read at start, say).
+ */
 export function Settings({
   onLanguage,
   session,
   updates,
+  tab: asked = 'general',
 }: {
   onLanguage: (language: Language) => void;
   session: WorkspaceSession;
   updates: UpdatesState;
+  tab?: SettingsTab;
 }) {
+  useSection(settingsTabsWords);
   const { t, i18n } = useTranslation();
   const { theme, platform } = useShell();
   const preference = useThemePreference();
+  const recentShown = useRecentShown();
+  const narrow = useNarrowScreen();
   const cloud = useCloud();
-  return (
-    <section className="cgw-settings" aria-labelledby="cgw-settings-title">
-      <h1 id="cgw-settings-title">{t('settings.title')}</h1>
-      <h2>{t('settings.appearance')}</h2>
-      <CgRadioGroup<ThemePreference>
-        legend={t('theme.label')}
-        orientation="horizontal"
-        value={preference}
-        onValueChange={(value) => theme.setPreference(value)}
-        options={[
-          { value: 'system', label: t('theme.system') },
-          { value: 'light', label: t('theme.light') },
-          { value: 'dark', label: t('theme.dark') },
-        ]}
-      />
-      <CgRadioGroup<Language>
-        legend={t('language.label')}
-        orientation="horizontal"
-        value={i18n.language as Language}
-        onValueChange={onLanguage}
-        options={LANGUAGES.map((language) => ({
-          value: language,
-          label: <span lang={language}>{t(`language.${language}`)}</span>,
-        }))}
-      />
-      {cloud && (
+  const account = useAccount(cloud);
+  const workspace = session.current;
+  const signedIn = !!cloud && !!account;
+  const inWorkspace = signedIn && !!session.workspaceId;
+  const synced = inWorkspace && !!workspace && !workspace.localOnly;
+
+  const panels: Record<SettingsTab, ReactNode | null> = {
+    general: (
+      <>
+        <h2>{t('settings.appearance')}</h2>
+        <CgRadioGroup<ThemePreference>
+          legend={t('theme.label')}
+          orientation="horizontal"
+          value={preference}
+          onValueChange={(value) => theme.setPreference(value)}
+          options={[
+            { value: 'system', label: t('theme.system') },
+            { value: 'light', label: t('theme.light') },
+            { value: 'dark', label: t('theme.dark') },
+          ]}
+        />
+        <CgRadioGroup<Language>
+          legend={t('language.label')}
+          orientation="horizontal"
+          value={i18n.language as Language}
+          onValueChange={onLanguage}
+          options={LANGUAGES.map((language) => ({
+            value: language,
+            label: <span lang={language}>{t(`language.${language}`)}</span>,
+          }))}
+        />
+        <CgSwitch
+          label={t('workspace.showRecent')}
+          checked={recentShown}
+          onCheckedChange={(checked) => recentPreference().setShown(checked)}
+          data-testid="show-recent"
+        />
+        <h2>{t('settings.about')}</h2>
+        <p data-testid="host-info">
+          {t(platform.kind === 'desktop' ? 'frame.platformDesktop' : 'frame.platformWeb')}{' '}
+          {t('app.version', { version: updates.version ?? __CGW_VERSION__ })}
+        </p>
+        <UpdateCheck updates={updates} />
+      </>
+    ),
+    // Signed out, the account's tab offers the sign-in.
+    account: cloud ? (
+      <>
         <AccountSettings
           cloud={cloud}
           passwordSection={<PasswordSection cloud={cloud} />}
           passkeys={<PasskeysSection cloud={cloud} />}
           signOut={<SignOutSection cloud={cloud} />}
         />
-      )}
-      {cloud && <MailSettings cloud={cloud} />}
-      {cloud && session.workspaceId && (
-        <MembersSettings
-          cloud={cloud}
-          session={session}
-          groups={(members) => <GroupsSection cloud={cloud} session={session} members={members} />}
-        />
-      )}
-      {cloud && session.workspaceId && <SsoSection cloud={cloud} session={session} />}
-      {cloud && session.workspaceId && (
+        <MailSettings cloud={cloud} />
+      </>
+    ) : null,
+    members:
+      cloud && inWorkspace ? (
+        <>
+          <MembersSettings
+            cloud={cloud}
+            session={session}
+            groups={(members) => (
+              <GroupsSection cloud={cloud} session={session} members={members} />
+            )}
+          />
+          <SsoSection cloud={cloud} session={session} />
+        </>
+      ) : null,
+    ai: inWorkspace ? <AiSettingsSection session={session} /> : null,
+    publishing:
+      cloud && synced ? (
         <Suspense fallback={null}>
           <PublishingSettings cloud={cloud} session={session} />
         </Suspense>
-      )}
-      {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
-      {/* With no workspace shown (signed out, every one here synced), an export can still be
-          brought back: the panel then offers its import alone. */}
-      <DataPanel session={session} />
-      {cloud && session.workspaceId && <ErpSettingsSection session={session} />}
-      {cloud && session.workspaceId && <AiSettingsSection session={session} />}
-      {cloud && session.workspaceId && (
-        <Suspense fallback={null}>
-          <PluginsSettings cloud={cloud} session={session} />
-        </Suspense>
-      )}
-      {cloud && session.workspaceId && (
-        <Suspense fallback={null}>
-          <AutomationsSettings cloud={cloud} session={session} />
-        </Suspense>
-      )}
-      {cloud && session.workspaceId && (
+      ) : null,
+    integrations:
+      cloud && synced ? (
         <>
-          <h2>{t('sheets.screenTitle')}</h2>
-          <p>
-            <a href="#/workbooks" data-testid="settings-workbooks">
-              {t('sheets.settingsLink')}
-            </a>
-          </p>
+          <ErpSettingsSection session={session} />
+          <Suspense fallback={null}>
+            <PluginsSettings cloud={cloud} session={session} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <AutomationsSettings cloud={cloud} session={session} />
+          </Suspense>
+          <section aria-labelledby="cgw-workbooks-settings-title">
+            <h2 id="cgw-workbooks-settings-title">{t('sheets.screenTitle')}</h2>
+            <p>
+              <a href="#/workbooks" data-testid="settings-workbooks">
+                {t('sheets.settingsLink')}
+              </a>
+            </p>
+          </section>
         </>
-      )}
-      <h2>{t('settings.about')}</h2>
-      <p data-testid="host-info">
-        {t(platform.kind === 'desktop' ? 'frame.platformDesktop' : 'frame.platformWeb')}{' '}
-        {t('app.version', { version: updates.version ?? __CGW_VERSION__ })}
-      </p>
-      <UpdateCheck updates={updates} />
+      ) : null,
+    data: (
+      <>
+        {session.workspaceId && <OfflineSettings cloud={cloud} session={session} />}
+        {/* With no workspace shown (signed out, every one here synced), an export can still be
+            brought back: the panel then offers its import alone. */}
+        <DataPanel session={session} />
+      </>
+    ),
+  };
+
+  const shown = (Object.keys(panels) as SettingsTab[]).filter((key) => panels[key] !== null);
+  const active: SettingsTab = shown.includes(asked) ? asked : 'general';
+  const tabs: CgTabDescriptor[] = shown.map((key) => ({
+    key,
+    text: t(`settingsTabs.${key}`),
+    content: key === active ? <div className="cgw-settings-panel">{panels[key]}</div> : null,
+  }));
+
+  return (
+    <section className="cgw-settings" aria-labelledby="cgw-settings-title">
+      <h1 id="cgw-settings-title">{t('settings.title')}</h1>
+      <CgTabs
+        className="cgw-settings-tabs"
+        tabs={tabs}
+        activeKey={active}
+        onActiveKeyChange={(key) => {
+          if (key && key !== active) navigate({ kind: 'settings', tab: key as SettingsTab });
+        }}
+        // The library's tab lists are laid out by a grid, so "left" is the start side in
+        // Arabic too.
+        position={narrow ? 'top' : 'left'}
+        scrollMode={narrow ? 'native' : 'none'}
+        contentMode="active-only"
+        ariaLabel={t('settingsTabs.label')}
+        labels={{ previousTabs: t('settingsTabs.previous'), nextTabs: t('settingsTabs.next') }}
+      />
     </section>
   );
 }

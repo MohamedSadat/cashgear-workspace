@@ -119,14 +119,17 @@ test.describe('narrow screens', () => {
   test('Settings scrolls to its end', async ({ page }) => {
     const errors = watchErrors(page);
     await createWorkspace(page);
-    await page.goto('/#/settings');
-    const about = page.getByRole('heading', { name: 'About' });
-    await expect(about).toBeAttached();
-    await expect(about).not.toBeInViewport();
+    // Settings is in tabs (after 0.19.0): the longest of a workspace on this device only is Data,
+    // and a short phone leaves its end below the fold.
+    await page.setViewportSize({ width: 390, height: 520 });
+    await page.goto('/#/settings/data');
+    const end = page.locator('.cgw-settings-panel > :last-child');
+    await expect(end).toBeAttached();
+    await expect(end).not.toBeInViewport({ ratio: 1 });
     // A wheel, as a finger: a script's scroll would move even a clipped box.
-    await page.mouse.move(195, 420);
+    await page.mouse.move(195, 300);
     for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 600);
-    await expect(about).toBeInViewport();
+    await expect(end).toBeInViewport({ ratio: 1 });
     expect(errors).toEqual([]);
   });
 

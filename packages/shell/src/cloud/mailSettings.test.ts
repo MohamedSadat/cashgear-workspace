@@ -86,7 +86,7 @@ describe('mail settings', () => {
     const container = render(fake.api);
     await until(() => !!radio(container, 'on'), 'the choices');
     expect(radio(container, 'on').checked).toBe(true);
-    expect(container.querySelector('h3')!.textContent).toBe('Email notifications');
+    expect(container.querySelector('h2')!.textContent).toBe('Email notifications');
     expect(container.querySelector('legend')!.textContent).toBe('Send me mail');
     const labels = [...container.querySelectorAll('label')].map((l) => l.textContent);
     expect(labels).toEqual([
@@ -152,7 +152,7 @@ describe('mail settings', () => {
   it('reads in Arabic', async () => {
     const container = render(fakeApi('on').api, 'ar');
     await until(() => !!radio(container, 'on'), 'the choices');
-    expect(container.querySelector('h3')!.textContent).toBe('إشعارات البريد الإلكتروني');
+    expect(container.querySelector('h2')!.textContent).toBe('إشعارات البريد الإلكتروني');
     expect([...container.querySelectorAll('label')].map((l) => l.textContent)).toEqual([
       'عن كل إشارة وردّ، مرة كل ١٥ دقيقة على الأكثر',
       'ملخصًا يوميًا',

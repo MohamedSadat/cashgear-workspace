@@ -38,7 +38,7 @@ export async function planScene(
   const account = await newAccount(name);
   const space = `${name} space`;
   await signedInWorkspace(page, account, space, null, signer);
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   const ai = page.getByTestId('ai-settings');
   await ai
     .getByTestId('ai-key-source')
@@ -56,6 +56,7 @@ export async function planScene(
   await on.check();
   await expect(on).toBeChecked({ timeout: 30000 });
 
+  await page.goto('/#/settings/integrations');
   await review(page, BUNDLES.network);
   await page.getByTestId('plugins-confirm').click();
   await expect(settings(page).getByTestId('plugins-list')).toContainText('Ping', {
@@ -90,11 +91,13 @@ export async function planScreens(
   check: (screen: string) => Promise<void>,
 ) {
   const cancel = language === 'ar' ? 'إلغاء' : 'Cancel';
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/ai');
   await expect(page.getByTestId('ai-allowance')).toBeVisible({ timeout: 30000 });
   await expect(page.getByTestId('embeddings-local')).toBeVisible({ timeout: 30000 });
+  await check('settings: the subscription, this server’s model');
+  await page.goto('/#/settings/integrations');
   await expect(settings(page).locator('[data-hosts="waiting"]')).toBeVisible({ timeout: 30000 });
-  await check('settings: the subscription, this server’s model, a plugin’s hosts');
+  await check('settings: a plugin’s hosts');
 
   // The plugin's own name in the app's language (its manifest names it in both).
   await review(page, BUNDLES.networkV2, language === 'ar' ? /^تحديث تنبيه/ : /^Update Ping/);

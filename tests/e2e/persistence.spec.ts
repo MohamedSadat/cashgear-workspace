@@ -34,7 +34,7 @@ test.describe('local persistence', () => {
     await newPage(page, 'Report');
     await page.keyboard.type('Quarterly figures');
     await waitSaved(page);
-    await page.goto('/#/settings');
+    await page.goto('/#/settings/data');
     let path = testInfo.outputPath('export.zip');
     if (desktop) {
       // The desktop saves through its own command; in tests it writes to CGW_SAVE_DIR instead of

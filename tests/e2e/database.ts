@@ -394,7 +394,7 @@ export function signers() {
 /** The desktop keeps its sign-in in the keychain (a name per test): signed out, and revoked. */
 export async function signOutDesktop(page: Page) {
   if (!desktop || page.isClosed()) return;
-  await page.goto('/#/settings').catch(() => {});
+  await page.goto('/#/settings/account').catch(() => {});
   await page
     .getByRole('button', { name: 'Sign out' })
     .click({ timeout: 15000 })

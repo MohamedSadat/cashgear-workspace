@@ -152,7 +152,7 @@ export function AccountButton({ cloud }: { cloud: Cloud }) {
         type="button"
         className="cgw-button cgw-account-button"
         aria-label={t('cloud.accountMenu', { name: account.displayName })}
-        onClick={() => navigate({ kind: 'settings' })}
+        onClick={() => navigate({ kind: 'settings', tab: 'account' })}
       >
         {account.displayName}
       </button>
