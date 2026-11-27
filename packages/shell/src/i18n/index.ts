@@ -17,6 +17,7 @@ import type { automationsEn } from '../automations/words';
 import type { billingEn } from '../ai/billingWords';
 import type { printEn } from '../print/words';
 import type { settingsTabsEn } from '../frame/settingsWords';
+import type { voiceEn } from '../page/voice/words';
 
 export { ar, en };
 export { directionOf, flatten, LANGUAGES, type Catalogue, type Language } from './catalogue';
@@ -38,6 +39,7 @@ interface Sections {
   billing: typeof billingEn;
   print: typeof printEn;
   settingsTabs: typeof settingsTabsEn;
+  voice: typeof voiceEn;
 }
 
 declare module 'i18next' {

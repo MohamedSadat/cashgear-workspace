@@ -26,6 +26,7 @@ export type BlockActionName =
   | 'table'
   | 'image'
   | 'file'
+  | 'voiceNote'
   | 'bookmark'
   | 'childPage'
   | 'pageLink'
@@ -200,6 +201,18 @@ export const BLOCK_ACTIONS: readonly BlockAction[] = [
     apply: async (editor, host) => {
       const files = (await host.assets?.pick([])) ?? [];
       await insertFiles(editor, host, files, 'file');
+    },
+  },
+  {
+    // After 0.19.0: a voice note, recorded by the host and kept as a file block, which plays an
+    // audio file (nodeviews/atoms.ts); no schema version.
+    name: 'voiceNote',
+    glyph: 'mic',
+    turnInto: false,
+    available: (host) => !!host.voice && !!host.assets,
+    apply: async (editor, host) => {
+      const file = await host.voice?.record();
+      if (file && !editor.isDestroyed) await insertFiles(editor, host, [file], 'file');
     },
   },
   {

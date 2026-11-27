@@ -316,6 +316,14 @@ export interface EditorHost {
     pick(accept: string[]): Promise<File[]>;
     open(assetId: string): void;
   };
+  /**
+   * After 0.19.0: a voice note, recorded by the host (its dialog asks for the microphone), as an
+   * audio file to store as any other; null when the person cancels or nothing was recorded. The
+   * editor never touches the device's microphone. Absent: no "Voice note" in the menus.
+   */
+  voice?: {
+    record(): Promise<File | null>;
+  };
   /** Pages, by id: titles resolved when drawn (D6). */
   pages?: {
     title(pageId: string): string | undefined;

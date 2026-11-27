@@ -19,6 +19,7 @@ import { takeThreadRequest, threadEvents } from '../collab/threads';
 import { useShell } from '../context';
 import { useDatabaseHost } from '../database/context';
 import { canAsk, requestDatabasePick, requestNewDatabase } from '../database/dialogs';
+import { voiceHost } from './voice/request';
 import type { ShellDatabaseHost } from '../database/host';
 import { emptyRowsOps, newDatabaseOps } from '../database/make';
 import { mountDatabase } from '../database/mount';
@@ -219,6 +220,8 @@ function usePageHost(session: WorkspaceSession, page: AnyPage): EditorHost {
         },
       }),
       locale: language,
+      // After 0.19.0: "Voice note", where this browser can record.
+      voice: voiceHost(),
       databases: databases
         ? {
             mount: (element: HTMLElement, options: DatabaseMountOptions) =>

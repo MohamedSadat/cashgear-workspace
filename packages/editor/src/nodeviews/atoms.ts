@@ -30,14 +30,17 @@ export function formatBytes(bytes: number, locale?: string): string {
     value /= 1024;
     unit++;
   }
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: unit ? 1 : 0 }).format(value)} ${units[unit]}`;
+  // An empty `lang` (a page that set none) is the default locale, not an error.
+  return `${new Intl.NumberFormat(locale || undefined, { maximumFractionDigits: unit ? 1 : 0 }).format(value)} ${units[unit]}`;
 }
 
 /** Inputs inside a node view take their own keys and clicks; ProseMirror leaves them alone. */
 const ownsEvent = (dom: HTMLElement) => (event: Event) => {
   const target = event.target as HTMLElement | null;
   return (
-    !!target && dom.contains(target) && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)
+    !!target &&
+    dom.contains(target) &&
+    /^(INPUT|TEXTAREA|SELECT|BUTTON|AUDIO)$/.test(target.tagName)
   );
 };
 
@@ -182,10 +185,38 @@ export function fileView(host: () => EditorHost): NodeViewRenderer {
     button.type = 'button';
     const name = el('span', 'cgw-file-name');
     const size = el('span', 'cgw-file-size');
-    button.append(el('span', 'cgw-file-icon', '📎'), name, size);
+    const icon = el('span', 'cgw-file-icon', '📎');
+    button.append(icon, name, size);
     dom.append(button);
     /** The asset whose record was asked of the host, once per asset. */
     let asked = '';
+    // After 0.19.0: an audio file (a voice note) plays here too, its bytes asked of the host once
+    // per asset, as an image's are.
+    let player: HTMLAudioElement | null = null;
+    let playing = '';
+    const drawPlayer = (assetId: string | null, audio: boolean, label: string) => {
+      if (!assetId || !audio) {
+        player?.remove();
+        player = null;
+        playing = '';
+        return;
+      }
+      if (!player) {
+        player = el('audio', 'cgw-file-player');
+        player.controls = true;
+        player.preload = 'metadata';
+        dom.append(player);
+      }
+      player.setAttribute('aria-label', label);
+      if (playing === assetId) return;
+      playing = assetId;
+      const audioElement = player;
+      void host()
+        .assets?.url(assetId)
+        .then((url) => {
+          if (playing === assetId && url) audioElement.src = url;
+        });
+    };
     const draw = () => {
       const assetId = node.attrs.assetId as string | null;
       const info = assetId ? host().assets?.info(assetId) : undefined;
@@ -193,6 +224,10 @@ export function fileView(host: () => EditorHost): NodeViewRenderer {
       name.textContent = info?.fileName ?? strings?.assetMissing ?? '';
       size.textContent = info ? formatBytes(info.sizeBytes, document.documentElement.lang) : '';
       dom.dataset.missing = String(!info);
+      const audio = !!info && info.contentType.startsWith('audio/');
+      dom.dataset.audio = String(audio);
+      icon.textContent = audio ? '🎙' : '📎';
+      drawPlayer(assetId, audio, info?.fileName ?? '');
       button.setAttribute(
         'aria-label',
         `${strings?.openFile ?? ''} ${info?.fileName ?? ''}`.trim(),

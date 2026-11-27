@@ -12,6 +12,7 @@ import { automationsWords } from '../automations/words';
 import { billingWords } from '../ai/billingWords';
 import { printWords } from '../print/words';
 import { settingsTabsWords } from '../frame/settingsWords';
+import { voiceWords } from '../page/voice/words';
 import { ar } from './ar';
 import { flatten } from './catalogue';
 import { en } from './en';
@@ -31,6 +32,7 @@ const SECTIONS: Section[] = [
   billingWords,
   printWords,
   settingsTabsWords,
+  voiceWords,
 ];
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]).sort();

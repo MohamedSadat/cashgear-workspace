@@ -257,6 +257,66 @@
   gap: 8px;
 }
 
+/* After 0.19.0: the voice note's recorder (page/voice/VoiceRecorder.tsx). */
+.cgw-voice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-inline-size: min(26rem, 80vw);
+}
+
+.cgw-voice p {
+  margin: 0;
+}
+
+.cgw-voice-problem {
+  color: var(--cg-danger-text);
+}
+
+.cgw-voice-limit {
+  color: var(--cg-text-secondary);
+  font-size: 0.875em;
+}
+
+.cgw-voice-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cgw-voice-dot {
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  background: var(--cg-danger-text);
+}
+
+.cgw-voice-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.25rem;
+}
+
+.cgw-voice-meter {
+  --cgw-voice-level: 0;
+  flex: 1;
+  block-size: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+      to right,
+      var(--cg-accent) calc(var(--cgw-voice-level) * 100%),
+      transparent 0
+    )
+    var(--cg-surface-subtle);
+}
+
+.cgw-voice-meter:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+.cgw-voice-preview {
+  inline-size: 100%;
+}
+
 .cgw-input {
   padding: 7px 10px;
   border: 1px solid var(--cg-border);
