@@ -125,6 +125,20 @@ describe('paths, types and Notion’s names', () => {
     expect(sniff(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
   });
 
+  it('keeps recorded audio as the server does (a voice note, after 0.19.0)', () => {
+    const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81]);
+    const mp4 = new Uint8Array([0, 0, 0, 0x20, ...new TextEncoder().encode('ftypM4A '), 0, 0]);
+    const ogg = new Uint8Array([...new TextEncoder().encode('OggS'), 0, 2, 0, 0]);
+    expect(sniff(ogg)).toBe('audio/ogg');
+    expect(contentTypeOf('Voice note.ogg', ogg)).toBe('audio/ogg');
+    expect(contentTypeOf('Voice note.m4a', mp4)).toBe('audio/mp4');
+    expect(contentTypeOf('Voice note.weba', webm)).toBe('audio/webm');
+    expect(contentTypeOf('Voice note.webm', webm)).toBe('video/webm');
+    // A name that does not fit its bytes is not kept as audio.
+    expect(contentTypeOf('fake.m4a', ogg)).toBeNull();
+    expect(contentTypeOf('fake.ogg', webm)).toBeNull();
+  });
+
   it('takes Notion’s ids off names and reads its dates and cells', () => {
     expect(notionName('Tasks 0123456789abcdef0123456789abcdef')).toEqual({
       name: 'Tasks',

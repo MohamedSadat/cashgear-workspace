@@ -128,11 +128,14 @@ public static class SitesHost
     /// <summary>Set on an answer of a plugin's file: it carries the plugin's own headers, not a site's.</summary>
     public const string PluginFileKey = "cgw.pluginFile";
 
-    /// <summary>The policy: nothing but the one stylesheet, and images from the site and the blob account.</summary>
+    /// <summary>
+    /// The policy: nothing but the one stylesheet, and images and (after 0.19.0, a voice note) audio
+    /// from the site and the blob account.
+    /// </summary>
     public static string ContentSecurityPolicy(BlobStore blob)
     {
         var account = blob.Container.Uri.GetLeftPart(UriPartial.Authority);
-        return $"default-src 'none'; style-src {SiteStyle.Hash}; img-src 'self' {account}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+        return $"default-src 'none'; style-src {SiteStyle.Hash}; img-src 'self' {account}; media-src 'self' {account}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
     }
 
     /// <summary>Every answer's headers, set as it starts; a cookie never leaves, whatever set it.</summary>

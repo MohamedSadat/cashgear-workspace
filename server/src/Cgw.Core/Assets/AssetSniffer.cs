@@ -22,6 +22,7 @@ public static class AssetSniffer
         if (b.Length >= 4 && b[0] == 0x50 && b[1] == 0x4B && b[2] is 0x03 or 0x05 && b[3] is 0x04 or 0x06) return "application/zip";
         if (b.Length >= 12 && b[4..8].SequenceEqual("ftyp"u8)) return "video/mp4";
         if (b.Length >= 4 && b[..4].SequenceEqual(new byte[] { 0x1A, 0x45, 0xDF, 0xA3 })) return "video/webm";
+        if (b.Length >= 4 && b[..4].SequenceEqual("OggS"u8)) return "audio/ogg";
         if (b.Length >= 3 && (b[..3].SequenceEqual("ID3"u8) || (b[0] == 0xFF && (b[1] & 0xE0) == 0xE0))) return "audio/mpeg";
         return Text(b) ? "text/plain" : null;
     }
@@ -61,6 +62,10 @@ public static class AssetSniffer
                 or "application/vnd.openxmlformats-officedocument.presentationml.presentation" => sniffed == "application/zip",
             "text/plain" or "text/csv" or "text/markdown" or "application/json" => sniffed == "text/plain",
             "image/svg+xml" => sniffed == "text/plain" && Encoding.UTF8.GetString(head[..Math.Min(head.Length, 4096)]).Contains("<svg", StringComparison.OrdinalIgnoreCase),
+            // After 0.19.0: a recorded voice note. WebM and MP4 hold sound or pictures alike, so
+            // their containers are what the bytes show.
+            "audio/webm" => sniffed == "video/webm",
+            "audio/mp4" => sniffed == "video/mp4",
             _ => sniffed == declared,
         };
     }

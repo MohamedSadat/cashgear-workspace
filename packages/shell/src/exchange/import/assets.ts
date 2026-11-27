@@ -24,7 +24,19 @@ const FILE_TYPES = new Set([
   'audio/wav',
   'video/mp4',
   'video/webm',
+  // After 0.19.0: what browsers record a voice note in.
+  'audio/webm',
+  'audio/mp4',
+  'audio/ogg',
 ]);
+
+/** Audio named by its extension, kept as audio when its container is what the bytes show. */
+const AUDIO_BY_EXTENSION: Record<string, [type: string, container: string]> = {
+  weba: ['audio/webm', 'video/webm'],
+  m4a: ['audio/mp4', 'video/mp4'],
+  ogg: ['audio/ogg', 'audio/ogg'],
+  opus: ['audio/ogg', 'audio/ogg'],
+};
 
 const starts = (b: Uint8Array, sig: number[], at = 0) =>
   b.length >= at + sig.length && sig.every((v, i) => b[at + i] === v);
@@ -67,6 +79,7 @@ export function sniff(b: Uint8Array): string | null {
     return 'application/zip';
   if (starts(b, ascii('ftyp'), 4)) return 'video/mp4';
   if (starts(b, [0x1a, 0x45, 0xdf, 0xa3])) return 'video/webm';
+  if (starts(b, ascii('OggS'))) return 'audio/ogg';
   if (starts(b, ascii('ID3')) || (b.length >= 3 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0))
     return 'audio/mpeg';
   return isText(b) ? 'text/plain' : null;
@@ -88,6 +101,8 @@ export function contentTypeOf(path: string, bytes: Uint8Array): string | null {
   const sniffed = sniff(bytes);
   if (!sniffed) return null;
   const extension = /\.([a-z0-9]+)$/i.exec(path)?.[1].toLowerCase() ?? '';
+  const audio = AUDIO_BY_EXTENSION[extension];
+  if (audio) return sniffed === audio[1] ? audio[0] : null;
   const named = BY_EXTENSION[extension];
   if (named) {
     if (named.startsWith('application/vnd.openxml'))

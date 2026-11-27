@@ -250,6 +250,35 @@ public sealed partial class SiteRendererTests(ServerFixture server)
     }
 
     [Fact]
+    public void A_voice_note_plays_by_the_browser_s_own_controls_beside_its_download_link()
+    {
+        var voice = Guid.Parse("01936f6e-0000-7000-8000-0000000000f8");
+        static JsonObject Block(string id, JsonNode body) => new() { ["type"] = "block", ["attrs"] = new JsonObject { ["id"] = id }, ["content"] = new JsonArray(body) };
+        var json = new JsonObject
+        {
+            ["type"] = "doc",
+            ["content"] = new JsonArray(
+                Block("VoiceNote001", new JsonObject { ["type"] = "file", ["attrs"] = new JsonObject { ["assetId"] = voice.ToString() } }),
+                Block("PictureFile1", new JsonObject { ["type"] = "file", ["attrs"] = new JsonObject { ["assetId"] = Picture.ToString() } })),
+        }.ToJsonString();
+        var basis = Page(json, "en");
+        var assets = new Dictionary<Guid, Asset>(basis.Assets)
+        {
+            [voice] = new() { Id = voice, FileName = "Voice note 2026-11-27 09.05.webm", ContentType = "audio/webm", Status = AssetStatus.Ready },
+        };
+        var html = SiteRenderer.Render(new SitePage { Site = basis.Site, Scope = basis.Scope, Page = basis.Page, Json = json, Assets = assets });
+        var file = SiteRenderer.FileUrl(basis.Base, voice);
+        Assert.Contains($"<audio controls preload=\"none\" src=\"{file}\" aria-label=\"Voice note 2026-11-27 09.05.webm\"></audio>", html);
+        Assert.Contains($"href=\"{file}\" download>Voice note 2026-11-27 09.05.webm</a>", html);
+        // A file of any other type is a download only.
+        Assert.Single(AudioTag().Matches(html));
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [GeneratedRegex("<audio ")]
+    private static partial Regex AudioTag();
+
+    [Fact]
     public void A_database_page_draws_its_first_view_with_pages_of_rows()
     {
         var page = Page("""{"type":"doc","content":[]}""", "en", PageOf(Database, "Tasks", PageKinds.Database, Root));

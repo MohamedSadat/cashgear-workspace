@@ -25,7 +25,15 @@ public static class AssetTypes
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "image/svg+xml", "audio/mpeg", "audio/wav", "video/mp4", "video/webm",
+        // After 0.19.0: what browsers record a voice note in (Chrome and Edge, Safari, Firefox's fallback).
+        "audio/webm", "audio/mp4", "audio/ogg",
     ];
+
+    /// <summary>
+    /// Audio a page plays (a voice note, after 0.19.0): served inline with its own type, which a
+    /// browser only ever plays, never runs.
+    /// </summary>
+    public static readonly HashSet<string> Audio = ["audio/mpeg", "audio/wav", "audio/webm", "audio/mp4", "audio/ogg"];
 
     public static bool Allowed(string type) => Images.Contains(type) || Files.Contains(type);
 }
@@ -117,8 +125,9 @@ public sealed class AssetService(CgwDb db, BlobStore blob, Access access, TimePr
     /// <summary>The signed read URL, once the caller's right to it is settled (a member's, or a share link's).</summary>
     public async Task<AssetUrlDto> SignedUrlAsync(Asset asset, CancellationToken ct = default)
     {
-        var inline = AssetTypes.Images.Contains(asset.ContentType);
-        // Images only as images; everything else as a download with a type the browser will not run.
+        var inline = AssetTypes.Images.Contains(asset.ContentType) || AssetTypes.Audio.Contains(asset.ContentType);
+        // Images only as images, audio only as audio; everything else as a download with a type the
+        // browser will not run.
         var type = inline ? asset.ContentType : "application/octet-stream";
         var url = await blob.ReadUrlAsync(asset.BlobKey, type, inline ? null : asset.FileName, ct: ct);
         return new AssetUrlDto(url.ToString(), clock.GetUtcNow() + BlobStore.ReadLifetime, type, inline);

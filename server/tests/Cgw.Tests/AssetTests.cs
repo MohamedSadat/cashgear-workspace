@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using Cgw.Core.Assets;
 using Cgw.Core.Blob;
 using Cgw.Core.Data;
 using Cgw.Core.Previews;
@@ -87,6 +88,48 @@ public sealed class AssetTests(ServerFixture server)
         Assert.Equal("asset.typeNotAllowed", (await exe.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         var big = await ws.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws.Id}/assets", new { id = Guid.CreateVersion7(), fileName = "big.png", contentType = "image/png", sizeBytes = 26L * 1024 * 1024 });
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, big.StatusCode);
+    }
+
+    /// <summary>The heads of what browsers record a voice note in (after 0.19.0).</summary>
+    private static readonly byte[] Webm = [0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81, 0x01, 0x42, 0xF7, 0x81];
+    private static readonly byte[] Mp4 = [0, 0, 0, 0x20, .. "ftypM4A "u8.ToArray(), 0, 0, 0, 0];
+    private static readonly byte[] Ogg = [.. "OggS"u8.ToArray(), 0, 2, 0, 0, 0, 0, 0, 0];
+
+    [Theory]
+    [InlineData("audio/webm", "webm", true)]
+    [InlineData("audio/mp4", "mp4", true)]
+    [InlineData("audio/ogg", "ogg", true)]
+    [InlineData("audio/webm", "ogg", false)]
+    [InlineData("audio/ogg", "webm", false)]
+    [InlineData("audio/mp4", "png", false)]
+    [InlineData("audio/webm", "png", false)]
+    public void Recorded_audio_fits_its_container_and_nothing_else(string declared, string bytes, bool fits)
+    {
+        var head = bytes switch { "webm" => Webm, "mp4" => Mp4, "ogg" => Ogg, _ => Png };
+        Assert.Equal(fits, AssetSniffer.Fits(declared, head));
+        Assert.True(AssetTypes.Allowed(declared));
+    }
+
+    [Fact]
+    public async Task A_voice_note_uploads_is_checked_and_plays_inline_with_its_own_type()
+    {
+        var ws = await Ws.Create(server);
+        var id = await Upload(ws, Webm, "audio/webm;codecs=opus", "Voice note 2026-11-27 09.05.webm");
+        await server.RunJob<AssetCheckJob>();
+        var asset = await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/assets/{id}");
+        Assert.Equal("ready", asset.GetProperty("status").GetString());
+        Assert.Equal("audio/webm", asset.GetProperty("contentType").GetString());
+        var url = await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/assets/{id}/url");
+        Assert.True(url.GetProperty("inline").GetBoolean());
+        var read = await Blob.GetAsync(url.GetProperty("url").GetString());
+        Assert.Equal(Webm, await read.Content.ReadAsByteArrayAsync());
+        Assert.Equal("audio/webm", read.Content.Headers.ContentType?.MediaType);
+        Assert.NotEqual("attachment", read.Content.Headers.ContentDisposition?.DispositionType);
+
+        // Declared as audio, but not its container: never served.
+        var fake = await Upload(ws, Png, "audio/mp4", "fake.m4a");
+        await server.RunJob<AssetCheckJob>();
+        Assert.Equal("quarantined", (await ws.Client.GetFromJsonAsync<JsonElement>($"/api/v1/assets/{fake}")).GetProperty("status").GetString());
     }
 
     [Fact]

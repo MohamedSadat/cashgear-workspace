@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Cgw.Core.Assets;
 using Cgw.Core.Data;
 using Cgw.Core.Databases;
 using Cgw.Core.Documents;
@@ -484,7 +485,11 @@ public static class SiteRenderer
                     var name = page.Assets.TryGetValue(asset, out var known) ? known.FileName : words.File;
                     h.Raw("<p");
                     MarkId();
-                    h.Raw("><a class=\"file\"").Attr("href", FileUrl(page.Base, asset)).Raw(" download>").Text(name).Raw("</a></p>\n");
+                    h.Raw("><a class=\"file\"").Attr("href", FileUrl(page.Base, asset)).Raw(" download>").Text(name).Raw("</a>");
+                    // After 0.19.0: audio (a voice note) plays here too, by the browser's own controls.
+                    if (known is not null && AssetTypes.Audio.Contains(known.ContentType))
+                        h.Raw("<br><audio controls preload=\"none\"").Attr("src", FileUrl(page.Base, asset)).Attr("aria-label", name).Raw("></audio>");
+                    h.Raw("</p>\n");
                     return;
                 }
                 case "bookmark":
