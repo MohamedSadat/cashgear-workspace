@@ -1104,7 +1104,7 @@ async function main() {
     );
     Object.assign(result, { server });
     await app.evaluate(() => {
-      location.hash = '#/settings';
+      location.hash = '#/settings/account';
       return true;
     });
     // The account's own Sign out (after the devices list, whose rows have one each), which also

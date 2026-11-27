@@ -259,9 +259,12 @@ test('the mail settings: on, a daily summary or off, in English and Arabic, and 
     .analyze();
   expect(english.violations.map((v) => v.id)).toEqual([]);
 
+  // The language is chosen on Settings' General tab; mail is on Account.
+  await page.goto('/#/settings');
   await page.getByRole('radio', { name: 'العربية' }).check();
-  await expect(section.getByRole('heading', { name: 'إشعارات البريد الإلكتروني' })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+  await page.goto('/#/settings/account');
+  await expect(section.getByRole('heading', { name: 'إشعارات البريد الإلكتروني' })).toBeVisible();
   await expect(section.getByRole('radio', { name: 'ملخصًا يوميًا' })).toBeChecked();
   await section.getByRole('radio', { name: 'لا ترسل' }).check();
   await expect(section.getByTestId('mail-settings-status')).toHaveText('تم الحفظ.');

@@ -578,7 +578,7 @@ export const en = {
     makeAvailableSubtree: 'Make available offline, with the pages inside',
     addSubtree: 'Also keep the pages inside offline',
     remove: 'Stop keeping offline',
-    removeLabel: 'Stop keeping “{{title}}” offline',
+    removeLabel: 'Stop keeping offline: “{{title}}”',
     inherited: 'Kept offline with “{{title}}”',
     pinnedSubtree: 'With the pages inside',
     pinnedPage: 'This page only',

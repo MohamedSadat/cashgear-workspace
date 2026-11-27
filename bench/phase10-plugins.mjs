@@ -145,7 +145,7 @@ async function typeKeys(page, text) {
 
 /** Installs the plugin through Settings (a networked one's host allowed as it is added). */
 async function installPlugin(page, bundle) {
-  await page.goto(`${APP}/#/settings`);
+  await page.goto(`${APP}/#/settings/integrations`);
   const section = page.getByTestId('plugins-settings');
   await section.waitFor({ timeout: 30000 });
   const chooser = page.waitForEvent('filechooser');

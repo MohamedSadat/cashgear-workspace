@@ -94,6 +94,7 @@ test('a voice note is recorded from the slash menu into a file block that plays'
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await page.keyboard.type('/voice');
+  await expect(page.getByRole('listbox').getByRole('option').first()).toHaveText(/Voice note/);
   await page.keyboard.press('Enter');
   await recorder(page).getByRole('button', { name: 'Cancel' }).click();
   await expect(recorder(page)).toBeHidden();

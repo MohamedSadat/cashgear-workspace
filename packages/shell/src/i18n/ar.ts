@@ -553,7 +553,7 @@ export const ar: Catalogue = {
     makeAvailableSubtree: 'إتاحة دون اتصال مع الصفحات التي بداخلها',
     addSubtree: 'إتاحة الصفحات التي بداخلها دون اتصال أيضًا',
     remove: 'إيقاف الإتاحة دون اتصال',
-    removeLabel: 'إيقاف إتاحة «{{title}}» دون اتصال',
+    removeLabel: 'إيقاف الإتاحة دون اتصال: «{{title}}»',
     inherited: 'متاحة دون اتصال مع «{{title}}»',
     pinnedSubtree: 'مع الصفحات التي بداخلها',
     pinnedPage: 'هذه الصفحة فقط',

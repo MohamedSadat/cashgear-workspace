@@ -648,7 +648,7 @@ async function desktop(owner, workspaceName, pageId, members) {
     log('Desktop: typing in the first paragraph while 19 others type');
     const figures = await keystrokes(page, members, errors);
     // Signed out, so the test keychain name holds nothing.
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/account'));
     await page
       .getByRole('button', { name: 'Sign out' })
       .click({ timeout: 15000 })

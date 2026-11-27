@@ -417,7 +417,7 @@ test("a pinned database holds every row's page: they open offline, and Settings 
   // opens with its words.
   const net = await network(page, context);
   await net.off();
-  await page.goto('/#/settings');
+  await page.goto('/#/settings/data');
   await page.reload();
   await signedIn(page, account);
   await expect(syncStatus(page)).toHaveText(/^Offline/, { timeout: 20000 });

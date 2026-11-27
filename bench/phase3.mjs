@@ -597,7 +597,7 @@ async function desktop(account) {
     );
     // The test's sign-in leaves the keychain.
     app = await start({ offline: false });
-    await app.page.goto(new URL('#/settings', app.page.url()).toString());
+    await app.page.goto(new URL('#/settings/account', app.page.url()).toString());
     await app.page
       .getByRole('button', { name: 'Sign out' })
       .click({ timeout: 15000 })

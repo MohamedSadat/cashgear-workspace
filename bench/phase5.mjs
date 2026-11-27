@@ -718,7 +718,7 @@ async function desktop(account, api) {
     );
     logControl(keys);
     // Signed out, so the test keychain name holds nothing.
-    await page.evaluate(() => (location.hash = '#/settings'));
+    await page.evaluate(() => (location.hash = '#/settings/account'));
     await page
       .getByRole('button', { name: 'Sign out' })
       .click({ timeout: 15000 })

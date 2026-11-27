@@ -32,7 +32,7 @@ async function oneRun(page, app, fixture, run) {
     await page.keyboard.press('Enter');
     await page.locator('.cgw-editor').first().waitFor();
   }
-  await page.goto(`${app}/#/settings`);
+  await page.goto(`${app}/#/settings/data`);
   await page.getByRole('button', { name: 'Import from Markdown, Notion or Word' }).click();
   const dialog = page.getByRole('dialog', { name: 'Import pages' });
   await dialog.getByRole('radio', { name: /^A Notion export/ }).check();
