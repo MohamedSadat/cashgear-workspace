@@ -2389,6 +2389,53 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
 - **The budget.** `wordKeyFrameP95`'s budget is 33 ms. CI's runner measured 11.4 ms for it in
   Phase 19's run, so it is not widened there; its slack against the last run on main is 10 ms.
 
+## After 0.19.0: Settings in tabs, Recent optional, voice notes, install icons
+
+- 2026-11-27: asked by the user, decided the same day (DECISIONS.md).
+- **Settings in tabs** (`3fbdd60`, `b24dceb`):
+  - The library's `CgTabs` on the start side, across the top on a phone: General, Account,
+    Members, AI, Publishing, Integrations and Data, each at `#/settings/{tab}`.
+  - A tab is listed only when it has something to show.
+  - Every spec that opened `#/settings` opens the tab holding what it looks for (61 visits in 31
+    files), and the Axe and Arabic walks go through every tab (`tests/e2e/settings.ts`).
+  - `settings.spec.ts` checks the addresses, Back, a tab not listed opening General, and the list's
+    side (left, right in Arabic, top on a phone), in Chrome and Edge.
+- **Recent optional** (`3fbdd60`, `b24dceb`): Settings → General's "Show recent pages in the
+  sidebar", kept on this device. `settings.spec.ts` hides it, reloads, finds the palette still
+  listing the page, and shows it again.
+- **Voice notes** (`de79d04`, `9ea3144`, `6af3883`, `9db8c48`):
+  - "Voice note" in the slash menu records with the browser's microphone, plays back, and inserts
+    an audio file in a file block, which plays any audio.
+  - The server takes `audio/webm`, `audio/mp4` and `audio/ogg`, each checked against its container.
+    It serves audio inline with its type, and a site plays it with no script.
+  - The library's `mic`, `record` and `stop` icons are Track U22.
+  - Tests:
+    - `AssetTests` covers the types and a mislabelled file.
+    - `SiteRendererTests` covers the site's player.
+    - `voice.test.ts` and `recording.test.ts` are unit tests.
+    - `voice.spec.ts` uses Chrome's and Edge's fake microphone. A two-second note plays, after a
+      reload too; Cancel keeps nothing; the recorder passes Axe and the Arabic walk.
+  - Its synced case (another device plays the note) needs a server stack with this build's audio
+    types. Locally the stack was another session's older build, which refuses audio, so it is
+    left to CI.
+  - The Mac's microphone description and entitlement have not been run on a Mac.
+- **Install icons** (`5f28d3b`):
+  - `manifest.webmanifest` with 192, 512 and maskable 512 px icons, the apple-touch-icon and
+    `theme-color`, drawn from the existing favicon by `scripts/web-icons.mjs`.
+  - The preview serves the manifest as `application/manifest+json` and each icon as `image/png`,
+    with no console error.
+- **The first screen**:
+  - 0.19.0's last commit measured 349.9 kB (358,310 bytes), and this work first took it to
+    351.5 kB.
+  - It is now 358,265 bytes, 350.0 kB by `bench/phase1.mjs`'s rounding (`b24dceb` says how).
+  - The budget is full: the next first-screen addition needs a cut first.
+- **Checks**:
+  - Unit tests: 4,023 passed under `packages`.
+  - Server: `AssetTests`, `SiteRendererTests` and `SiteTests`, 49 passed.
+  - Typecheck, lint and format pass.
+  - Chrome passed `settings.spec.ts`, `voice.spec.ts` (on the device), `layout.spec.ts`,
+    `narrow.spec.ts`, and the smoke, Arabic, Axe, pages and editor cases touching Settings.
+
 ## Track U: `CashGear.React.UI`
 
 - [x] U1 Command menu (`CgCommandMenu`, library `e20f701`)
@@ -2414,6 +2461,7 @@ Benchmarks (`bench/phase19.mjs`, in CI's Windows job and here; each the median o
 - [x] U18 A timeline (`CgTimeline`: lines and lanes on a date axis, zoom by day, week, month and quarter, pointer and keyboard moves and resizes, right to left, virtualised for 50,000 items; library `0490cbd`, pushed 2026-11-17; Workspace `0e08a62`). Left for Track U: bringing the lines to the first item of the days shown, `scrollToItem` to the top, a `startCreate`, a mark for today's line
 - [x] U19 A bar moved to another lane (`CgTimeline`'s `moveBetweenLanes`: drag onto a lane's lines or header, Alt+ArrowUp and Alt+ArrowDown, the lane in `onItemMove`'s details; library `d493b4c`, 2026-11-20, with R0 to R9; Workspace `49e72c2`, `1259f87`). Then every button a field draws at least 24 px high and the calendar's heading named by what it shows (library `9f5a208`, 2026-11-20; Workspace `f46aad7`)
 - [x] U21 Recurrence: `CgRecurrenceFields` and its arithmetic (`cgNextOccurrence`, `cgOccurrencesBetween`, `cgSummarizeRecurrence`, `cgValidateRecurrence`) exported on their own, the scheduler drawing them (library `6cfbeb5`, 2026-11-25; Workspace `a9a2dc6`, `1443ab7`)
+- [x] U22 `mic`, `record` and `stop` icons for voice notes, from the same pinned Fluent set (library `dd2e053`, 2026-11-27; Workspace `3d4673c`)
 - [x] U20 Links between a timeline's bars (`CgTimeline`'s `links`: arrows routed round bars, mirrored right to left, dashed in the danger colour for a conflict, named in each bar's description; library `4a7d0b8`, 2026-11-25; Workspace `a9a2dc6`, `c561fd9`)
 
 Started 2026-11-16 in a session of its own in `CashGear.React.UI`, on
