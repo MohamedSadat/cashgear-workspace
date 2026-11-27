@@ -45,6 +45,8 @@ const csp = [
   // Tiptap adds its own small stylesheet at run time.
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
+  // After 0.19.0: a voice note plays from its bytes on the device (blob:) or a signed address.
+  `media-src 'self' blob: ${blob}`,
   `connect-src 'self' ${api} ${apiSocket} ${blob} ${erpApi}`,
   `frame-src ${sheet} ${plugins}`,
   "object-src 'none'",
@@ -56,7 +58,9 @@ const headers = {
   'Content-Security-Policy': csp,
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  // The microphone for a voice note, asked only when Record is pressed; the app's own origin
+  // only, never a frame (Sheet, plugins).
+  'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',
 };
 
 /**

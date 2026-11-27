@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged by Tauri into the Mac app's own Info.plist (after 0.19.0): why it asks for the
+     microphone, shown by macOS the first time a voice note is recorded. -->
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Cash Gear Workspace records a voice note into a page when you ask it to.</string>
+</dict>
+</plist>
