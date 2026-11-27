@@ -89,16 +89,23 @@ test('a voice note is recorded from the slash menu into a file block that plays'
   );
   await plays(page);
 
-  // Cancel keeps nothing.
-  await editor(page).locator('[data-block] .cgw-body').last().click();
+  // Cancel keeps nothing. From the line typed first, a step at a time as a person types: just
+  // after a reload, keys 6 ms apart raced the page's start on CI's runners (run 46000298559: the
+  // caret left the new line between "/" and "voice").
+  const before = editor(page).getByText('Before the note');
+  await before.click();
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
-  await page.keyboard.type('/voice');
+  await expect(editor(page).locator('[data-block].is-caret')).toHaveText('');
+  await page.keyboard.type('/');
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await page.keyboard.type('voice');
   await expect(page.getByRole('listbox').getByRole('option').first()).toHaveText(/Voice note/);
   await page.keyboard.press('Enter');
   await recorder(page).getByRole('button', { name: 'Cancel' }).click();
   await expect(recorder(page)).toBeHidden();
   await expect(editor(page).locator('[data-body="file"]')).toHaveCount(1);
+  await expect(before).toHaveText('Before the note');
   expect(errors).toEqual([]);
 });
 
