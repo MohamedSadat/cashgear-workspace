@@ -105,11 +105,11 @@ describe('routes', () => {
       expect(parseRoute(routeHash(route))).toEqual(route);
   });
 
-  it("reads Settings' tab, General for none or one it does not know", () => {
+  it("reads Settings' tab as the address names it (Settings shows General for one it does not list)", () => {
     expect(parseRoute('#/settings/account')).toEqual({ kind: 'settings', tab: 'account' });
-    expect(parseRoute('#/settings/general')).toEqual({ kind: 'settings' });
-    expect(parseRoute('#/settings/nothing')).toEqual({ kind: 'settings' });
-    expect(routeHash({ kind: 'settings', tab: 'general' })).toBe('#/settings');
+    expect(parseRoute('#/settings')).toEqual({ kind: 'settings' });
+    expect(parseRoute('#/settings/nothing')).toEqual({ kind: 'settings', tab: 'nothing' });
+    expect(routeHash({ kind: 'settings' })).toBe('#/settings');
     expect(routeHash({ kind: 'settings', tab: 'data' })).toBe('#/settings/data');
   });
 

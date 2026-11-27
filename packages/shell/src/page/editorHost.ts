@@ -47,8 +47,6 @@ export class ToggleState {
 }
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'];
-/** The audio the file block plays (what browsers record, and the server's other audio). */
-const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav'];
 export const ASSET_LIMIT_BYTES = 25 * 1024 * 1024;
 
 async function sha256(bytes: Uint8Array): Promise<string> {
@@ -74,7 +72,7 @@ export function assetUrl(session: WorkspaceSession, assetId: Id): Promise<string
       // keeps its type, or Safari will not play it (a voice note, after 0.19.0).
       const type =
         record &&
-        (IMAGE_TYPES.includes(record.contentType) || AUDIO_TYPES.includes(record.contentType))
+        (IMAGE_TYPES.includes(record.contentType) || record.contentType.startsWith('audio/'))
           ? record.contentType
           : 'application/octet-stream';
       return URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));

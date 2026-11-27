@@ -116,24 +116,4 @@ test.describe('Recent pages in the sidebar', () => {
     await expect(recent.getByRole('link', { name: /Visited page/ })).toBeVisible();
     expect(errors).toEqual([]);
   });
-
-  test('the palette shows and hides it', async ({ page }) => {
-    const errors = watchErrors(page);
-    await createWorkspace(page);
-    await newPage(page, 'Visited page');
-    await waitSaved(page);
-    const recent = page.getByRole('region', { name: 'Recent' });
-    await expect(recent).toBeVisible();
-    const run = async (name: string) => {
-      await page.keyboard.press('Control+KeyK');
-      const palette = page.getByRole('dialog');
-      await palette.getByRole('combobox').fill(name);
-      await palette.getByRole('option', { name }).click();
-    };
-    await run('Hide recent pages in the sidebar');
-    await expect(recent).toHaveCount(0);
-    await run('Show recent pages in the sidebar');
-    await expect(recent).toBeVisible();
-    expect(errors).toEqual([]);
-  });
 });

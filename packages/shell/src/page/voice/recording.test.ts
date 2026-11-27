@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  canRecordAudio,
   elapsedText,
   keptType,
   MAX_RECORDING_MS,
@@ -8,6 +7,7 @@ import {
   recordingType,
   voiceFileName,
 } from './recording';
+import { listenForVoice, requestVoiceNote, voiceHost } from './request';
 
 describe("a voice note's recording", () => {
   it('records Opus in WebM where it can, else MP4 (Safari), else Opus in Ogg, else what the browser chooses', () => {
@@ -49,14 +49,24 @@ describe("a voice note's recording", () => {
     expect(elapsedText(-5)).toBe('0:00');
   });
 
-  it('needs a microphone API and MediaRecorder', () => {
-    const getUserMedia = () => {};
-    expect(
-      canRecordAudio({ navigator: { mediaDevices: { getUserMedia } }, MediaRecorder: class {} }),
-    ).toBe(true);
-    expect(canRecordAudio({ navigator: { mediaDevices: { getUserMedia } } })).toBe(false);
-    expect(canRecordAudio({ navigator: {}, MediaRecorder: class {} })).toBe(false);
-    expect(canRecordAudio({})).toBe(false);
+  it('is offered only with a microphone API and MediaRecorder', () => {
+    vi.stubGlobal('MediaRecorder', undefined);
+    expect(voiceHost()).toBeUndefined();
+    vi.stubGlobal('MediaRecorder', class {});
+    vi.stubGlobal('navigator', { mediaDevices: undefined });
+    expect(voiceHost()).toBeUndefined();
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: () => {} } });
+    expect(voiceHost()?.record).toBe(requestVoiceNote);
+    vi.unstubAllGlobals();
+  });
+
+  it('answers null at once with no recorder listening, else the recorder answers', async () => {
+    expect(await requestVoiceNote()).toBeNull();
+    const file = new File(['x'], 'Voice note.webm', { type: 'audio/webm' });
+    const stop = listenForVoice((answer) => answer(file));
+    expect(await requestVoiceNote()).toBe(file);
+    stop();
+    expect(await requestVoiceNote()).toBeNull();
   });
 
   it('says why the microphone could not be had', () => {

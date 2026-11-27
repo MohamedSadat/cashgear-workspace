@@ -20,6 +20,9 @@ import { useShell } from '../context';
 import { useDatabaseHost } from '../database/context';
 import { canAsk, requestDatabasePick, requestNewDatabase } from '../database/dialogs';
 import { voiceHost } from './voice/request';
+import { VoiceDialogs } from './voice/VoiceDialogs';
+import { voiceWords } from './voice/words';
+import { useSection } from '../i18n/sections';
 import type { ShellDatabaseHost } from '../database/host';
 import { emptyRowsOps, newDatabaseOps } from '../database/make';
 import { mountDatabase } from '../database/mount';
@@ -108,7 +111,9 @@ export function PageView({ session, page, onEditor }: PageViewProps) {
   const state = usePageDoc(session, page.id);
   const { t } = useTranslation();
   const services = useShell();
-  // The block commands come with the editor; the palette lists them while a page is open.
+  // The block commands come with the editor; the palette lists them while a page is open. "Voice
+  // note"'s words are a section, loaded with the page (after 0.19.0).
+  useSection(voiceWords);
   useEffect(() => registerBlockCommands(services, t), [services, t]);
   if (state.status === 'loading') return <div className="cgw-page-loading">{t('app.loading')}</div>;
   if (state.status === 'error') {
@@ -123,7 +128,11 @@ export function PageView({ session, page, onEditor }: PageViewProps) {
     );
   }
   return (
-    <LoadedPage key={page.id} session={session} page={page} doc={state.doc} onEditor={onEditor} />
+    <>
+      <LoadedPage key={page.id} session={session} page={page} doc={state.doc} onEditor={onEditor} />
+      {/* After 0.19.0: the voice note's recorder, listening while a page's editor can ask. */}
+      <VoiceDialogs />
+    </>
   );
 }
 

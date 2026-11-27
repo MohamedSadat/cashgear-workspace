@@ -2,7 +2,13 @@
 // the block menu all list them from here, in the interface language, found by words in both. From
 // Phase 7 also the plugin blocks (`@cgw/plugins`): chart and kanban, inserted with their
 // definition's version and drawn by `EditorHost.plugins`.
-import { BLOCK_ACTIONS, insertPluginBlock, type SlashItem } from '@cgw/editor';
+import {
+  BLOCK_ACTIONS,
+  insertPluginBlock,
+  type BlockActionName,
+  type SlashItem,
+} from '@cgw/editor';
+import { voiceAr, voiceEn } from './voice/words';
 import { FIRST_PARTY } from '@cgw/plugins';
 import type { TFunction } from 'i18next';
 import type { ShellServices } from '../context';
@@ -12,18 +18,23 @@ import { en } from '../i18n/en';
 /** A plugin block's command id: `block.plugin:cashgear.chart`. */
 const PLUGIN_PREFIX = 'block.plugin:';
 
+/**
+ * A block's words in both languages: the start catalogues', but "Voice note"'s, which are the voice
+ * section's (after 0.19.0: loaded with a page, not on the first screen).
+ */
+function blockWords(name: BlockActionName): string[] {
+  if (name === 'voiceNote')
+    return [voiceEn.keywords, voiceAr.keywords, voiceEn.block, voiceAr.block];
+  return [en.blockKeywords[name], ar.blockKeywords[name], en.blocks[name], ar.blocks[name]];
+}
+
 export function registerBlockCommands(services: ShellServices, t: TFunction): () => void {
   return services.commands.register(
     ...BLOCK_ACTIONS.map((action) => ({
       id: `block.${action.name}`,
       group: 'block' as const,
-      label: () => t(`blocks.${action.name}`),
-      keywords: () => [
-        en.blockKeywords[action.name],
-        ar.blockKeywords[action.name],
-        en.blocks[action.name],
-        ar.blocks[action.name],
-      ],
+      label: () => t(action.name === 'voiceNote' ? 'voice.block' : `blocks.${action.name}`),
+      keywords: () => blockWords(action.name),
       // Offered where the editor can do it: "Database" needs a page that may hold one, "Linked
       // view" a host that can choose one (`BlockAction.available`).
       when: () => {

@@ -1,5 +1,5 @@
 import { CgRadioGroup, CgSwitch, CgTabs, type CgTabDescriptor } from '@cashgear/ui';
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShell, useThemePreference } from '../context';
 import { LANGUAGES, type Language } from '../i18n';
@@ -8,9 +8,8 @@ import type { ThemePreference } from '../theme';
 import { DataPanel } from '../exchange/DataPanel';
 import type { WorkspaceSession } from '../session';
 import { navigate, type SettingsTab } from '../route';
-import { recentPreference, useRecentShown } from '../sidebarPrefs';
+import { recentHidden, setRecentShown } from './recentSwitch';
 import { UpdateCheck, type UpdatesState } from './Updates';
-import { useNarrowScreen } from './Frame';
 import { settingsTabsWords } from './settingsWords';
 import { AccountSettings, MembersSettings, useAccount, useCloud } from '../cloud/CloudUi';
 import { GroupsSection } from '../cloud/GroupsSettings';
@@ -36,6 +35,15 @@ const PluginsSettings = lazy(() =>
   import('../plugins/PluginsSettings').then((m) => ({ default: m.PluginsSettings })),
 );
 
+/** The frame's narrow layout (a phone, Frame.tsx's NARROW): the tab list across the top. */
+const NARROW = '(max-width: 767px)';
+const narrowNow = () => matchMedia(NARROW).matches;
+function onNarrow(listener: () => void) {
+  const list = matchMedia(NARROW);
+  list.addEventListener('change', listener);
+  return () => list.removeEventListener('change', listener);
+}
+
 /**
  * Settings in tabs (after 0.19.0, DECISIONS.md 2026-11-27), each at its own address
  * (`#/settings/{tab}`). A tab is listed only when it has something to show: those of a synced
@@ -57,8 +65,8 @@ export function Settings({
   const { t, i18n } = useTranslation();
   const { theme, platform } = useShell();
   const preference = useThemePreference();
-  const recentShown = useRecentShown();
-  const narrow = useNarrowScreen();
+  const [recentShown, showRecent] = useState(() => !recentHidden());
+  const narrow = useSyncExternalStore(onNarrow, narrowNow);
   const cloud = useCloud();
   const account = useAccount(cloud);
   const workspace = session.current;
@@ -69,16 +77,16 @@ export function Settings({
   const panels: Record<SettingsTab, ReactNode | null> = {
     general: (
       <>
-        <h2>{t('settings.appearance')}</h2>
+        <h2>{t('settingsTabs.appearance')}</h2>
         <CgRadioGroup<ThemePreference>
-          legend={t('theme.label')}
+          legend={t('settingsTabs.theme')}
           orientation="horizontal"
           value={preference}
           onValueChange={(value) => theme.setPreference(value)}
           options={[
-            { value: 'system', label: t('theme.system') },
-            { value: 'light', label: t('theme.light') },
-            { value: 'dark', label: t('theme.dark') },
+            { value: 'system', label: t('settingsTabs.themeSystem') },
+            { value: 'light', label: t('settingsTabs.themeLight') },
+            { value: 'dark', label: t('settingsTabs.themeDark') },
           ]}
         />
         <CgRadioGroup<Language>
@@ -92,15 +100,22 @@ export function Settings({
           }))}
         />
         <CgSwitch
-          label={t('workspace.showRecent')}
+          label={t('settingsTabs.showRecent')}
           checked={recentShown}
-          onCheckedChange={(checked) => recentPreference().setShown(checked)}
+          onCheckedChange={(checked) => {
+            setRecentShown(checked);
+            showRecent(checked);
+          }}
           data-testid="show-recent"
         />
-        <h2>{t('settings.about')}</h2>
+        <h2>{t('settingsTabs.about')}</h2>
         <p data-testid="host-info">
-          {t(platform.kind === 'desktop' ? 'frame.platformDesktop' : 'frame.platformWeb')}{' '}
-          {t('app.version', { version: updates.version ?? __CGW_VERSION__ })}
+          {t(
+            platform.kind === 'desktop'
+              ? 'settingsTabs.platformDesktop'
+              : 'settingsTabs.platformWeb',
+          )}{' '}
+          {t('settingsTabs.version', { version: updates.version ?? __CGW_VERSION__ })}
         </p>
         <UpdateCheck updates={updates} />
       </>
@@ -151,7 +166,7 @@ export function Settings({
             <h2 id="cgw-workbooks-settings-title">{t('sheets.screenTitle')}</h2>
             <p>
               <a href="#/workbooks" data-testid="settings-workbooks">
-                {t('sheets.settingsLink')}
+                {t('settingsTabs.workbooksLink')}
               </a>
             </p>
           </section>
@@ -183,7 +198,11 @@ export function Settings({
         tabs={tabs}
         activeKey={active}
         onActiveKeyChange={(key) => {
-          if (key && key !== active) navigate({ kind: 'settings', tab: key as SettingsTab });
+          if (key && key !== active)
+            navigate({
+              kind: 'settings',
+              tab: key === 'general' ? undefined : (key as SettingsTab),
+            });
         }}
         // The library's tab lists are laid out by a grid, so "left" is the start side in
         // Arabic too.

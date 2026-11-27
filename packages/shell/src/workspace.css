@@ -257,6 +257,11 @@
   gap: 8px;
 }
 
+/* After 0.19.0: the sidebar's Recent pages hidden on this device (sidebarPrefs.ts). */
+[data-cgw-recent='hidden'] .cgw-side-recent {
+  display: none;
+}
+
 /* After 0.19.0: the voice note's recorder (page/voice/VoiceRecorder.tsx). */
 .cgw-voice {
   display: flex;

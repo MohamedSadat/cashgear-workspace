@@ -1,5 +1,5 @@
-// The recorder, drawn once inside the frame when the editor asks for a voice note: its screen is
-// loaded then (`VoiceRecorder`), never with the app.
+// The recorder, drawn when the editor asks for a voice note: mounted with an open page
+// (`PageView`, never on the first screen), the recorder itself loaded only when asked.
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { listenForVoice, type VoiceRequest } from './request';
 
@@ -10,17 +10,18 @@ const VoiceRecorder = lazy(() =>
 export function VoiceDialogs() {
   const [request, setRequest] = useState<VoiceRequest | null>(null);
   const current = useRef<VoiceRequest | null>(null);
-  useEffect(
-    () =>
-      listenForVoice((next) => {
-        // One at a time: an earlier one still open is cancelled.
-        current.current?.answer(null);
-        current.current = next;
-        setRequest(next);
-      }),
-    [],
-  );
-  useEffect(() => () => current.current?.answer(null), []);
+  useEffect(() => {
+    const stop = listenForVoice((next) => {
+      // One at a time: an earlier one still open is cancelled.
+      current.current?.(null);
+      current.current = next;
+      setRequest(() => next);
+    });
+    return () => {
+      stop();
+      current.current?.(null);
+    };
+  }, []);
   if (!request) return null;
   return (
     <Suspense fallback={null}>
@@ -28,7 +29,7 @@ export function VoiceDialogs() {
         onDone={(file) => {
           current.current = null;
           setRequest(null);
-          request.answer(file);
+          request(file);
         }}
       />
     </Suspense>

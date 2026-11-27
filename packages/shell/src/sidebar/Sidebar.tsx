@@ -10,7 +10,7 @@ import { Dialog } from '../Dialog';
 import { navigate, parseRoute, routeHash, useHash } from '../route';
 import type { WorkspaceSession } from '../session';
 import { pageGlyph } from '../database/make';
-import { useRecentShown } from '../sidebarPrefs';
+import { applyRecent } from '../sidebarPrefs';
 import { PageTree } from './PageTree';
 import { PointMenu } from './RowMenu';
 
@@ -87,11 +87,11 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
   const [creating, setCreating] = useState(false);
   const workspaceId = session.workspaceId;
   const trashedRows = useTrashedRowCount(session, workspaceId);
-  // Recent can be hidden on this device (Settings → General); visits are recorded either way.
-  const recentShown = useRecentShown();
+  // Recent can be hidden on this device (Settings → General): by CSS, from <html>'s attribute.
+  useState(applyRecent);
   if (!workspaceId) return null;
   const favourites = session.mirror.favouritesOf(workspaceId);
-  const recent = recentShown ? session.mirror.recentOf(workspaceId, 5) : [];
+  const recent = session.mirror.recentOf(workspaceId, 5);
   const templateList = session.mirror.templatesOf(workspaceId);
   // Pages trashed with what is under them, and rows trashed on their own.
   const trashCount = session.mirror.trash(workspaceId).length + trashedRows;
@@ -151,7 +151,7 @@ export function Sidebar({ session, activePageId, onSearch, onError }: SidebarPro
           </section>
         )}
         {recent.length > 0 && (
-          <section className="cgw-side-group" aria-label={t('workspace.recent')}>
+          <section className="cgw-side-group cgw-side-recent" aria-label={t('workspace.recent')}>
             <h2 className="cgw-side-heading">{t('workspace.recent')}</h2>
             {recent.map((page) => (
               <PageLink

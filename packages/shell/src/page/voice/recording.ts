@@ -53,17 +53,6 @@ export function elapsedText(ms: number): string {
   return `${Math.floor(seconds / 60)}:${two(seconds % 60)}`;
 }
 
-/** Whether this browser can record at all: a microphone API and MediaRecorder. */
-export function canRecordAudio(scope: {
-  navigator?: { mediaDevices?: { getUserMedia?: unknown } };
-  MediaRecorder?: unknown;
-}): boolean {
-  return (
-    typeof scope.MediaRecorder === 'function' &&
-    typeof scope.navigator?.mediaDevices?.getUserMedia === 'function'
-  );
-}
-
 /** Why a microphone could not be had, from getUserMedia's error. */
 export function microphoneProblem(error: unknown): 'denied' | 'none' | 'failed' {
   const name = (error as { name?: string } | null)?.name;

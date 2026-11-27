@@ -30,8 +30,6 @@ import { TrashView, TRASH_RETENTION_DAYS } from './TrashView';
 // The palette loads with the frame: keys typed straight after Ctrl+K must reach its field.
 import { Palette } from './search/Palette';
 import { ThemeController } from './theme';
-import { recentPreference } from './sidebarPrefs';
-import { VoiceDialogs } from './page/voice/VoiceDialogs';
 import { normaliseText, type Id, type RowRecord } from '@cgw/workspace';
 import type { PageDocument } from '@cgw/doc';
 import { Cloud, type CloudNotice } from './cloud/cloud';
@@ -331,14 +329,6 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
           keywords: () => [t('keywords.language')],
           run: () => setLanguage(language),
         })),
-        {
-          id: 'app.recent',
-          group: 'app' as const,
-          label: () =>
-            t(recentPreference().getShown() ? 'commands.recentHide' : 'commands.recentShow'),
-          keywords: () => [t('keywords.recent')],
-          run: () => recentPreference().setShown(!recentPreference().getShown()),
-        },
       ),
     [services, t, setLanguage],
   );
@@ -695,7 +685,6 @@ function Workspace({ session, cloud }: { session: WorkspaceSession; cloud: Cloud
             />
           )}
           <DatabaseDialogs session={session} host={databases} />
-          <VoiceDialogs />
           <WorkbookDialogs session={session} cloud={cloud} databases={databases} />
           {route.kind === 'invite' && cloud ? (
             <InviteView cloud={cloud} session={session} token={route.token} />

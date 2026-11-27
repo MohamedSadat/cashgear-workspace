@@ -30,11 +30,6 @@ function subscribeNarrow(listener: () => void) {
 
 const isNarrow = () => matchMedia(NARROW).matches;
 
-/** Whether the frame is in its narrow layout (a phone), followed as the window resizes. */
-export function useNarrowScreen(): boolean {
-  return useSyncExternalStore(subscribeNarrow, isNarrow);
-}
-
 function savedLayout(): CgSplitterState | undefined {
   try {
     const saved = JSON.parse(localStorage.getItem(layoutKey) ?? 'null') as CgSplitterState | null;

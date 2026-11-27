@@ -1,5 +1,6 @@
 // Routing by page id, in the URL's hash so it works from a static host and from Tauri's own
-// protocol alike: #/p/{pageId}, #/p/{pageId}/{blockId}, #/trash, #/settings (after 0.19.0 with its tab, #/settings/{tab}), from Phase 2
+// protocol alike: #/p/{pageId}, #/p/{pageId}/{blockId}, #/trash, #/settings (after 0.19.0 also
+// #/settings/{tab}), from Phase 2
 // #/invite/{token} (a workspace invitation) and #/s/{token} (a page shared by link), and from
 // Phase 3 #/recovered (pages made of changes the server would not take), from Phase 5 #/workbooks
 // (the workspace's workbooks) and #/erp-link (Cash Gear ERP's link screen; its ticket is taken out
@@ -20,22 +21,9 @@ export type Route =
   | { kind: 'invite'; token: string }
   | { kind: 'shared'; token: string; pageId?: string };
 
-/** Settings' tabs, in order (frame/Settings.tsx): `#/settings/{tab}`, General when none. */
-export const SETTINGS_TABS = [
-  'general',
-  'account',
-  'members',
-  'ai',
-  'publishing',
-  'integrations',
-  'data',
-] as const;
-export type SettingsTab = (typeof SETTINGS_TABS)[number];
-
-function settingsTab(id: string | undefined): SettingsTab | undefined {
-  return (SETTINGS_TABS as readonly string[]).includes(id ?? '') ? (id as SettingsTab) : undefined;
-}
-
+/** Settings' tabs (frame/Settings.tsx): `#/settings/{tab}`, General when none. */
+export type SettingsTab =
+  'general' | 'account' | 'members' | 'ai' | 'publishing' | 'integrations' | 'data';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BLOCK = /^[0-9A-Za-z]{12}$/;
 /** 32 random bytes, base64url (invites and share links). */
@@ -56,9 +44,8 @@ export function parseRoute(hash: string): Route {
   if (kind === 'trash') return { kind: 'trash' };
   if (kind === 'recovered') return { kind: 'recovered' };
   if (kind === 'settings') {
-    // General is the bare address, so an unknown tab reads as it too.
-    const tab = settingsTab(id);
-    return tab && tab !== 'general' ? { kind: 'settings', tab } : { kind: 'settings' };
+    // General is the bare address; Settings shows it too for a tab it does not list.
+    return { kind: 'settings', tab: id as SettingsTab | undefined };
   }
   if (kind === 'workbooks') return { kind: 'workbooks' };
   if (kind === 'inbox') return { kind: 'inbox' };
@@ -76,7 +63,7 @@ export function routeHash(route: Route): string {
     case 'recovered':
       return '#/recovered';
     case 'settings':
-      return route.tab && route.tab !== 'general' ? `#/settings/${route.tab}` : '#/settings';
+      return `#/settings${route.tab ? `/${route.tab}` : ''}`;
     case 'workbooks':
       return '#/workbooks';
     case 'inbox':

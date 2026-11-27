@@ -20,7 +20,6 @@ export const en = {
     title: 'Cash Gear Workspace',
     loading: 'Loading…',
     storeFailed: 'The local store could not be opened.',
-    version: 'Version {{version}}',
     tooOldTitle: 'This app is older than the data on this device.',
     tooOldBody: 'Update the app; nothing on this device was changed.',
   },
@@ -28,12 +27,6 @@ export const en = {
     label: 'Language',
     en: 'English',
     ar: 'العربية',
-  },
-  theme: {
-    label: 'Theme',
-    system: 'System',
-    light: 'Light',
-    dark: 'Dark',
   },
   frame: {
     sidebar: 'Sidebar',
@@ -50,8 +43,6 @@ export const en = {
     emptyTitle: 'No page is open',
     emptyBody: 'Choose a page in the sidebar, or create one.',
     notFound: 'This page does not exist on this device.',
-    platformWeb: 'Web',
-    platformDesktop: 'Desktop',
   },
   workspace: {
     welcome: 'Welcome to Cash Gear Workspace',
@@ -85,7 +76,6 @@ export const en = {
     savePdf: 'Save as PDF…',
     favourites: 'Favourites',
     recent: 'Recent',
-    showRecent: 'Show recent pages in the sidebar',
     newFromTemplate: 'New from template',
     switch: 'Workspaces',
     createAnother: 'Create a workspace',
@@ -248,7 +238,6 @@ export const en = {
     table: 'Table',
     image: 'Image',
     file: 'File',
-    voiceNote: 'Voice note',
     bookmark: 'Web bookmark',
     childPage: 'Page',
     pageLink: 'Link to page',
@@ -275,7 +264,6 @@ export const en = {
     table: 'table grid rows columns',
     image: 'image picture photo img',
     file: 'file attachment upload',
-    voiceNote: 'voice note audio record recording microphone',
     bookmark: 'bookmark url link web embed',
     childPage: 'page subpage new',
     pageLink: 'link mention page reference',
@@ -763,8 +751,6 @@ export const en = {
   },
   settings: {
     title: 'Settings',
-    appearance: 'Appearance',
-    about: 'About',
   },
   // Phase 6: who is on a page (collab/Avatars.tsx), comments (collab/CommentsPanel.tsx) and the
   // inbox (collab/InboxView.tsx).
@@ -871,12 +857,9 @@ export const en = {
     themeSystem: 'Follow the system theme',
     languageEnglish: 'Switch to English',
     languageArabic: 'Switch to Arabic',
-    recentShow: 'Show recent pages in the sidebar',
-    recentHide: 'Hide recent pages in the sidebar',
   },
   keywords: {
     sidebar: 'sidebar panel tree',
-    recent: 'recent pages history sidebar',
     settings: 'settings preferences options',
     theme: 'theme dark light colour color appearance',
     language: 'language english arabic',
@@ -1006,7 +989,6 @@ export const en = {
     restoreNamed: 'Restore {{name}}',
     restored: '{{name}} is restored.',
     refused: 'Your access does not allow that.',
-    settingsLink: 'See and manage the workspace’s workbooks',
     // Phase 9: a workbook's history (sheet/WorkbookHistory.tsx).
     history: 'Version history',
     historyNamed: 'Version history: {{name}}',
