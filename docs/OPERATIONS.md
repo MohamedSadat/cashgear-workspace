@@ -138,7 +138,9 @@ API's host and no token is in JavaScript (Q5).
 Installed 2026-11-14 (0.5.0); updated to 0.10.0 on 2026-11-19 with `install.ps1`, which also
 installed the Sites process, to 0.12.0 on 2026-11-21 (Phase 11's migrations, the passkeys' relying
 party `workspace-api.cashgearerp.com`), and to 0.18.0 on 2026-11-26 (Phases 13 to 18's migrations,
-the local embedding model, a site's own host names; PROGRESS.md, After 0.18.0: production). The web
+the local embedding model, a site's own host names; PROGRESS.md, After 0.18.0: production), and on
+2026-11-28 to 0.19.0 at `5119c49` (`SiteCertificateDirectory` and `Phase19PageLayout`, voice notes'
+audio; every app pool and worker variable unchanged). The web
 app deploys itself on every push, the server does not: check `GET /api/v1/version` against the
 release when something new fails in production (from 2026-11-20 to 2026-11-21 the 0.11 and 0.12 web
 apps ran against the 0.10.0 API, and from 2026-11-22 to 2026-11-26 the 0.13 to 0.18 web apps against
@@ -167,7 +169,10 @@ after the pool read `Stopped`. From the release after 0.18.0, `install.ps1` wait
 processes as well as its state. It finds them by `-ap "<pool>"` on their command line, and at the
 deadline (the pool's `shutdownTimeLimit` and 30 s) it ends one still running, with a warning. With
 0.18.0's own script, end it by hand (`Get-CimInstance Win32_Process -Filter "name='w3wp.exe'"` names
-its pool after `-ap`) and run `install.ps1` again: the migrations already applied are skipped. On
+its pool after `-ap`) and run `install.ps1` again: the migrations already applied are skipped. In
+0.19.0's run the API pool's old process overran its shutdown and was ended at the deadline as meant;
+the script also counted exited `w3wp`s whose handles something still held (no threads, no memory, no
+command line left; one was 0.18.0's process ended by hand), which cost only the wait. On
 the host, `sqlcmd` needs `-I` for writes to a table with a filtered index (`QUOTED_IDENTIFIER`).
 
 | Part | Where |
